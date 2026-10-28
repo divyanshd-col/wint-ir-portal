@@ -6,8 +6,17 @@ import DateRangePicker from '@/components/quality/DateRangePicker';
 export type Period = '7' | '30' | 'custom';
 
 export const TL_TEAMS: Record<string, string[]> = {
-  'Team Gokul': ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'],
-  'Team Vaishnavi': ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'],
+  'Team Gokul': [
+    'Dheeraj Bhojwani', 'Ramita Kapoor', 'Aahan Thaker', 'Aahan', 'Paritosh Ashiya', 'Sahil Joshi',
+    'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal', 'Dhanush', 'Samir', 'SM Naik', 'Nandani',
+    'Shruti', 'Sravanthi', 'Togarana Akash'
+  ],
+  'Team Vaishnavi': [
+    'Antara Chakrabarty', 'Mahek Bihani', 'Kriya Maniyar', 'Vaishnavi', 'Shrey Jain', 'Ishaan Kapoor',
+    'Harshita Dhona', 'Diya Sharma', 'Richa Mishra', 'Sreeram', 'Saiyam Rastogi', 'Sujal Dadwani',
+    'Aravind', 'Swati Singh', 'Deshna Dugar', 'Renessa', 'Sahil Goyal', 'Shreya Mundada',
+    'Swetha Jayakumar', 'Tanisha Mittal', 'Vishal Yadav'
+  ],
 };
 
 export const ALL_PCG_AGENTS = [
@@ -39,6 +48,10 @@ export interface PcgMemberAnalyticsProps {
     trend: string;
     complianceFlags: number;
     topWeakness: string;
+  }>;
+  teamLeads?: Array<{
+    tlName: string;
+    rms: string[];
   }>;
 }
 
@@ -89,6 +102,7 @@ export default function PcgMemberAnalyticsDashboard({
   calls = [],
   activePersona = 'tl',
   rmScorecards = [],
+  teamLeads = [],
 }: PcgMemberAnalyticsProps) {
   const [period, setPeriod] = useState<Period>('7');
   const [customFrom, setCustomFrom] = useState('');
@@ -136,10 +150,13 @@ export default function PcgMemberAnalyticsDashboard({
   const rmScorecard = rmScorecards.find(s => s.rmName.toLowerCase() === effectiveRm.toLowerCase());
   const rmCalls = calls.filter(c => c.rmName.toLowerCase() === effectiveRm.toLowerCase());
   const rmAnswered = rmCalls.filter(c => c.isAnswered);
-  const rmAvgIqs = rmScorecard?.overallScore ?? (rmAnswered.length > 0
-    ? rmAnswered.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnswered.length
-    : 87.4);
-  const callsVol = rmScorecard?.totalCalls ?? (rmCalls.length > 0 ? rmCalls.length : 7);
+  const rmEvaluated = rmAnswered.filter(c => c.iqsScore != null && c.iqsScore > 0);
+  const rmAvgIqs: number | null = (rmScorecard?.overallScore && rmScorecard.overallScore > 0)
+    ? rmScorecard.overallScore
+    : (rmEvaluated.length > 0
+      ? Math.round(rmEvaluated.reduce((acc, c) => acc + (c.iqsScore || 0), 0) / rmEvaluated.length)
+      : null);
+  const callsVol = rmScorecard?.totalCalls ?? rmCalls.length;
   const callsIqs = rmAvgIqs;
 
   // Canonical 11 PCG Call Quality Parameters across 3 Skill Groups (Process Skills 50%, Communication 30%, Customer Service 20%)
@@ -157,18 +174,6 @@ export default function PcgMemberAnalyticsDashboard({
     { key: 'Simplifying', label: 'Simplifying Answers', weight: 10, deptScore: 93 },
   ];
 
-  const AGENT_PARAMETER_SCORES: Record<string, Record<string, number>> = {
-    'Yaashvi Arora': { CallOpening: 98, CallClosing: 96, TechnicalLegal: 99, AllQuestions: 98, Expectation: 96, Process: 97, Grammar: 98, Fillers: 95, EnergyTone: 97, ActiveListening: 96, Simplifying: 97 },
-    'Aditya R': { CallOpening: 97, CallClosing: 95, TechnicalLegal: 98, AllQuestions: 97, Expectation: 95, Process: 96, Grammar: 97, Fillers: 94, EnergyTone: 96, ActiveListening: 95, Simplifying: 96 },
-    'Aahan Thaker': { CallOpening: 96, CallClosing: 94, TechnicalLegal: 98, AllQuestions: 96, Expectation: 94, Process: 95, Grammar: 96, Fillers: 93, EnergyTone: 95, ActiveListening: 95, Simplifying: 95 },
-    'Aravind': { CallOpening: 96, CallClosing: 94, TechnicalLegal: 97, AllQuestions: 95, Expectation: 94, Process: 95, Grammar: 96, Fillers: 92, EnergyTone: 95, ActiveListening: 94, Simplifying: 94 },
-    'Dhanush': { CallOpening: 95, CallClosing: 93, TechnicalLegal: 96, AllQuestions: 94, Expectation: 92, Process: 94, Grammar: 95, Fillers: 91, EnergyTone: 93, ActiveListening: 93, Simplifying: 93 },
-    'Sujal Dadwani': { CallOpening: 95, CallClosing: 92, TechnicalLegal: 96, AllQuestions: 93, Expectation: 92, Process: 94, Grammar: 94, Fillers: 91, EnergyTone: 94, ActiveListening: 93, Simplifying: 92 },
-    'Samskriti Rao': { CallOpening: 94, CallClosing: 92, TechnicalLegal: 95, AllQuestions: 93, Expectation: 91, Process: 93, Grammar: 94, Fillers: 90, EnergyTone: 93, ActiveListening: 92, Simplifying: 92 },
-    'Antara Chakrabarty': { CallOpening: 94, CallClosing: 91, TechnicalLegal: 95, AllQuestions: 92, Expectation: 91, Process: 93, Grammar: 93, Fillers: 89, EnergyTone: 92, ActiveListening: 92, Simplifying: 91 },
-    'Swati Singh': { CallOpening: 92, CallClosing: 90, TechnicalLegal: 93, AllQuestions: 90, Expectation: 88, Process: 91, Grammar: 92, Fillers: 86, EnergyTone: 90, ActiveListening: 89, Simplifying: 89 },
-    'Gaurav Nautiyal': { CallOpening: 91, CallClosing: 89, TechnicalLegal: 92, AllQuestions: 89, Expectation: 87, Process: 90, Grammar: 91, Fillers: 85, EnergyTone: 89, ActiveListening: 88, Simplifying: 88 },
-  };
 
   // Derive live parameter scores from rmAnswered calls if available
   const callParamAverages: Record<string, number> = useMemo(() => {
@@ -199,43 +204,22 @@ export default function PcgMemberAnalyticsDashboard({
     if (callParamAverages[key] !== undefined) {
       return callParamAverages[key];
     }
-    const scores = AGENT_PARAMETER_SCORES[rm];
-    if (scores && scores[key] !== undefined) return scores[key];
-    const delta = (callsIqs - 85) * 0.4;
-    return Math.min(100, Math.max(50, Math.round(fallbackBase + delta)));
+    return null;
   };
 
   const wowWeeks = ['2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'];
   const wowWeekLabels = ['SEP 21 – 27', 'SEP 28 – OCT 4', 'OCT 5 – 11', 'OCT 12 – 18', 'OCT 19 – 25'];
 
   const wowMetrics = (() => {
-    if (wowChannel !== 'calls') {
+    if (wowChannel !== 'calls' || callsVol === 0 || callsIqs == null || callsIqs === 0) {
       return [
         { name: 'IQS', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
         { name: 'Volume', vals: [null, null, null, null, null] as (number | null)[], isPct: false },
       ];
     }
-    if (wowCategory === '13_pitching') {
-      return [
-        { name: 'IQS', vals: [91.5, 94.0, 92.8, 95.0, callsIqs >= 85 ? Math.min(100, callsIqs + 3) : 88.0] as (number | null)[], isPct: true },
-        { name: 'Volume', vals: [6, 4, 8, 5, Math.max(1, Math.round(callsVol * 0.5))] as (number | null)[], isPct: false },
-      ];
-    }
-    if (wowCategory === 'upselling') {
-      return [
-        { name: 'IQS', vals: [84.0, 87.5, 86.2, 88.0, callsIqs >= 85 ? callsIqs : 82.0] as (number | null)[], isPct: true },
-        { name: 'Volume', vals: [4, 3, 5, 4, Math.max(1, Math.round(callsVol * 0.3))] as (number | null)[], isPct: false },
-      ];
-    }
-    if (wowCategory === 'support') {
-      return [
-        { name: 'IQS', vals: [88.0, 90.5, 89.0, 91.5, callsIqs >= 85 ? Math.min(100, callsIqs + 1) : 85.0] as (number | null)[], isPct: true },
-        { name: 'Volume', vals: [2, 2, 2, 2, Math.max(1, Math.round(callsVol * 0.2))] as (number | null)[], isPct: false },
-      ];
-    }
     return [
-      { name: 'IQS', vals: [85.7, 88.0, 84.8, 86.7, callsIqs] as (number | null)[], isPct: true },
-      { name: 'Volume', vals: [12, 9, 15, 11, callsVol] as (number | null)[], isPct: false },
+      { name: 'IQS', vals: [null, null, null, null, callsIqs] as (number | null)[], isPct: true },
+      { name: 'Volume', vals: [null, null, null, null, callsVol] as (number | null)[], isPct: false },
     ];
   })();
 
@@ -547,7 +531,9 @@ export default function PcgMemberAnalyticsDashboard({
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 24, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text, #111111)' }}>{callsIqs.toFixed(1)}%</span>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text, #111111)' }}>
+                {callsIqs != null ? `${callsIqs.toFixed(1)}%` : '—'}
+              </span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
             </div>
             <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
@@ -1019,129 +1005,14 @@ export default function PcgMemberAnalyticsDashboard({
             <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontStyle: 'italic' }}>
               Chat quality evaluation is not yet implemented for PCG. AI insights will appear here once enabled.
             </div>
+          ) : callsVol === 0 || callsIqs == null || callsIqs === 0 ? (
+            <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontStyle: 'italic' }}>
+              No evaluated call data available for {effectiveRm} in this time period. AI coaching insights will populate once calls are evaluated.
+            </div>
           ) : (
-            <>
-              {/* AI Narrative Analysis Paragraph */}
-              <p style={{ fontSize: 14, color: 'var(--qa-text, #111111)', lineHeight: 1.6, margin: '0 0 18px', maxWidth: 860 }}>
-                {effectiveRm} demonstrated strong performance over the last {periodLabel || '7 days'}, achieving an IQS of{' '}
-                {callsIqs.toFixed(1)}% across {callsVol} evaluated calls. He maintained consistent pitch structure across key investment categories
-                including 13% Club Pitching and Portfolio Upselling. While overall quality remains high, his lowest performing parameter was Secondary
-                Liquidity Disclaimer at 85.7%.
-              </p>
-
-              {/* Badges: STRENGTH, WATCH, TIP */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* Strength */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '14px 16px',
-                    background: 'var(--qa-card, #ffffff)',
-                    border: '1px solid var(--qa-border, #E4E4E7)',
-                    borderRadius: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      height: 20,
-                      padding: '0 8px',
-                      borderRadius: 999,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      background: 'var(--qa-text, #111111)',
-                      color: '#ffffff',
-                    }}
-                  >
-                    STRENGTH
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    Achieved a perfect 100.0% score in Identity Verification, Call Opening, and Clear Return vs Risk Positioning without promising guaranteed returns.
-                  </span>
-                </div>
-
-                {/* Watch */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '14px 16px',
-                    background: 'var(--qa-card, #ffffff)',
-                    border: '1px solid var(--qa-border, #E4E4E7)',
-                    borderRadius: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      height: 20,
-                      padding: '0 8px',
-                      borderRadius: 999,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      background: 'var(--qa-fill-med, #E4E4E7)',
-                      color: 'var(--qa-text, #111111)',
-                    }}
-                  >
-                    WATCH
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    Secondary Liquidity Disclaimer was the lowest-performing parameter at 85.7% compared to all other evaluated areas.
-                  </span>
-                </div>
-
-                {/* Tip */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '14px 16px',
-                    background: 'var(--qa-card, #ffffff)',
-                    border: '1px solid var(--qa-border, #E4E4E7)',
-                    borderRadius: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      height: 20,
-                      padding: '0 8px',
-                      borderRadius: 999,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      background: 'transparent',
-                      border: '1px solid var(--qa-border, #E4E4E7)',
-                      color: 'var(--qa-text, #111111)',
-                    }}
-                  >
-                    TIP
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    State the secondary market window upfront and establish a firm calendar callback slot before concluding the call.
-                  </span>
-                </div>
-              </div>
-
-              <p style={{ marginTop: 14, fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)', fontStyle: 'italic', marginBottom: 0 }}>
-                Generated from RM {agentInitials(effectiveRm)} {effectiveRm}'s evaluated calls · {periodLabel || '7 days'}
-              </p>
-            </>
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--qa-text, #111111)', fontSize: 13 }}>
+              Evaluated call data recorded for {effectiveRm}: Average IQS of {callsIqs.toFixed(1)}% across {callsVol} calls in this period.
+            </div>
           )}
         </div>
       </section>

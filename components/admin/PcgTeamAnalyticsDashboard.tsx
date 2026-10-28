@@ -6,7 +6,7 @@ import DateRangePicker from '@/components/quality/DateRangePicker';
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export type Channel = 'chats' | 'calls' | 'emails';
-export type Period  = '7' | '30' | 'custom';
+export type Period = '7' | '30' | 'custom';
 
 export interface ChannelStats {
   pickup_rate?: number | null;
@@ -86,86 +86,6 @@ function fmtDateDisplay(iso: string) {
   const d = new Date(iso + 'T00:00:00Z');
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
-
-// ── Default Mock Dataset Matching PCG Teams ───────────────────────────────────────
-
-const GOKUL_AGENTS: AgentData[] = [
-  {
-    name: 'Yaashvi Arora',
-    ini: 'YA',
-    tl: 'Gokul',
-    chats: { pickup_rate: 95.0, iqs: 96, volume: 45, params: { issue_resolution: 96, accuracy: 97, expectation: 97, dissatisfaction: 93, personalization: 96, empathy: 97, escalation: 97, readability: 97, greeting: 96, recap: 85 } },
-    calls: { pickup_rate: 94.0, iqs: 91, volume: 68, params: { CallOpening: 98, CallClosing: 96, TechnicalLegal: 99, AllQuestions: 98, Expectation: 96, Process: 97, Grammar: 98, Fillers: 95, EnergyTone: 97, ActiveListening: 96, Simplifying: 97 } },
-    emails: null,
-  },
-  {
-    name: 'Aahan Thaker',
-    ini: 'AT',
-    tl: 'Gokul',
-    chats: { pickup_rate: 92.5, iqs: 94, volume: 60, params: { issue_resolution: 94, accuracy: 95, expectation: 95, dissatisfaction: 89, personalization: 94, empathy: 95, escalation: 95, readability: 95, greeting: 94, recap: 80 } },
-    calls: { pickup_rate: 91.5, iqs: 88, volume: 74, params: { CallOpening: 96, CallClosing: 94, TechnicalLegal: 98, AllQuestions: 96, Expectation: 94, Process: 95, Grammar: 96, Fillers: 93, EnergyTone: 95, ActiveListening: 95, Simplifying: 95 } },
-    emails: null,
-  },
-  {
-    name: 'Dhanush',
-    ini: 'D',
-    tl: 'Gokul',
-    chats: { pickup_rate: 88.0, iqs: 90, volume: 50, params: { issue_resolution: 91, accuracy: 92, expectation: 91, dissatisfaction: 86, personalization: 91, empathy: 92, escalation: 92, readability: 92, greeting: 91, recap: 76 } },
-    calls: { pickup_rate: 87.0, iqs: 86, volume: 58, params: { CallOpening: 95, CallClosing: 93, TechnicalLegal: 96, AllQuestions: 94, Expectation: 92, Process: 94, Grammar: 95, Fillers: 91, EnergyTone: 93, ActiveListening: 93, Simplifying: 93 } },
-    emails: null,
-  },
-  {
-    name: 'Samskriti Rao',
-    ini: 'SR',
-    tl: 'Gokul',
-    chats: { pickup_rate: 86.5, iqs: 88, volume: 40, params: { issue_resolution: 89, accuracy: 90, expectation: 90, dissatisfaction: 84, personalization: 89, empathy: 90, escalation: 90, readability: 90, greeting: 90, recap: 74 } },
-    calls: { pickup_rate: 85.0, iqs: 85, volume: 52, params: { CallOpening: 94, CallClosing: 92, TechnicalLegal: 95, AllQuestions: 93, Expectation: 91, Process: 93, Grammar: 94, Fillers: 90, EnergyTone: 93, ActiveListening: 92, Simplifying: 92 } },
-    emails: null,
-  },
-  {
-    name: 'Gaurav Nautiyal',
-    ini: 'GN',
-    tl: 'Gokul',
-    chats: { pickup_rate: 84.0, iqs: 86, volume: 35, params: { issue_resolution: 87, accuracy: 88, expectation: 88, dissatisfaction: 82, personalization: 87, empathy: 88, escalation: 88, readability: 88, greeting: 88, recap: 72 } },
-    calls: { pickup_rate: 83.5, iqs: 83, volume: 44, params: { CallOpening: 91, CallClosing: 89, TechnicalLegal: 92, AllQuestions: 89, Expectation: 87, Process: 90, Grammar: 91, Fillers: 85, EnergyTone: 89, ActiveListening: 88, Simplifying: 88 } },
-    emails: null,
-  },
-];
-
-const VAISHNAVI_AGENTS: AgentData[] = [
-  {
-    name: 'Aravind',
-    ini: 'AR',
-    tl: 'Vaishnavi',
-    chats: { pickup_rate: 91.0, iqs: 93, volume: 52, params: { issue_resolution: 93, accuracy: 94, expectation: 94, dissatisfaction: 88, personalization: 93, empathy: 94, escalation: 94, readability: 94, greeting: 93, recap: 79 } },
-    calls: { pickup_rate: 90.0, iqs: 88, volume: 62, params: { CallOpening: 96, CallClosing: 94, TechnicalLegal: 97, AllQuestions: 95, Expectation: 94, Process: 95, Grammar: 96, Fillers: 92, EnergyTone: 95, ActiveListening: 94, Simplifying: 94 } },
-    emails: null,
-  },
-  {
-    name: 'Sujal Dadwani',
-    ini: 'SD',
-    tl: 'Vaishnavi',
-    chats: { pickup_rate: 87.5, iqs: 90, volume: 48, params: { issue_resolution: 90, accuracy: 92, expectation: 91, dissatisfaction: 85, personalization: 90, empathy: 91, escalation: 91, readability: 92, greeting: 90, recap: 76 } },
-    calls: { pickup_rate: 86.5, iqs: 86, volume: 56, params: { CallOpening: 95, CallClosing: 92, TechnicalLegal: 96, AllQuestions: 93, Expectation: 92, Process: 94, Grammar: 94, Fillers: 91, EnergyTone: 94, ActiveListening: 93, Simplifying: 92 } },
-    emails: null,
-  },
-  {
-    name: 'Antara Chakrabarty',
-    ini: 'AC',
-    tl: 'Vaishnavi',
-    chats: { pickup_rate: 85.0, iqs: 88, volume: 44, params: { issue_resolution: 88, accuracy: 90, expectation: 89, dissatisfaction: 83, personalization: 88, empathy: 90, escalation: 89, readability: 90, greeting: 89, recap: 74 } },
-    calls: { pickup_rate: 84.5, iqs: 84, volume: 50, params: { CallOpening: 94, CallClosing: 91, TechnicalLegal: 95, AllQuestions: 92, Expectation: 91, Process: 93, Grammar: 93, Fillers: 89, EnergyTone: 92, ActiveListening: 92, Simplifying: 91 } },
-    emails: null,
-  },
-  {
-    name: 'Swati Singh',
-    ini: 'SS',
-    tl: 'Vaishnavi',
-    chats: { pickup_rate: 84.5, iqs: 87, volume: 46, params: { issue_resolution: 87, accuracy: 89, expectation: 88, dissatisfaction: 82, personalization: 87, empathy: 89, escalation: 88, readability: 89, greeting: 88, recap: 73 } },
-    calls: { pickup_rate: 84.0, iqs: 84, volume: 56, params: { CallOpening: 92, CallClosing: 90, TechnicalLegal: 93, AllQuestions: 90, Expectation: 88, Process: 91, Grammar: 92, Fillers: 86, EnergyTone: 90, ActiveListening: 89, Simplifying: 89 } },
-    emails: null,
-  },
-];
 
 const CHAT_PARAMS: ParamData[] = [
   { key: 'issue_resolution', label: 'Issue Resolution', weight: 25, team_score: 94, cx_score: 92 },
@@ -586,6 +506,8 @@ export default function PcgTeamAnalyticsDashboard({
   onSelectTl,
   onSelectRm,
   onSwitchToMemberAnalytics,
+  teamLeads = [],
+  rmScorecards = [],
 }: PcgTeamAnalyticsProps) {
   const [channel, setChannel] = useState<Channel>('calls');
   const [period, setPeriod] = useState<Period>('30');
@@ -636,10 +558,28 @@ export default function PcgTeamAnalyticsDashboard({
     setShowPicker(false);
   }
 
-  // Active agents based on selected TL
+  // Active agents based on selected TL and real props
   const getActiveAgents = (): AgentData[] => {
-    if (currentTL === 'Vaishnavi') return VAISHNAVI_AGENTS;
-    return GOKUL_AGENTS;
+    if (rmScorecards && rmScorecards.length > 0) {
+      const currentTlData = teamLeads?.find(tl => tl.tlName.toLowerCase() === currentTL.toLowerCase());
+      const filtered = rmScorecards.filter(sc => {
+        return currentTlData ? currentTlData.rms.some(r => r.toLowerCase() === sc.rmName.toLowerCase()) : true;
+      });
+      return filtered.map(sc => ({
+        name: sc.rmName,
+        ini: sc.rmName.split(' ').map((p: string) => p[0]).join('').slice(0, 2).toUpperCase(),
+        tl: currentTL,
+        chats: { pickup_rate: null, iqs: null, volume: 0, params: {} },
+        calls: {
+          pickup_rate: sc.connectRate,
+          iqs: sc.overallScore || null,
+          volume: sc.totalCalls,
+          params: {},
+        },
+        emails: null,
+      }));
+    }
+    return [];
   };
 
   const activeAgents = getActiveAgents();
@@ -660,26 +600,15 @@ export default function PcgTeamAnalyticsDashboard({
         volumeCx: '—',
       };
     }
-    if (currentTL === 'Vaishnavi') {
-      return {
-        pickupTeam: '91.8%',
-        pickupCx: '91.0%',
-        iqsTeam: '85.1%',
-        iqsCx: '85.0%',
-        volumeTeam: '224',
-        volumeCx: '520',
-      };
-    } else {
-      // Gokul
-      return {
-        pickupTeam: '93.2%',
-        pickupCx: '91.0%',
-        iqsTeam: '86.8%',
-        iqsCx: '85.0%',
-        volumeTeam: '296',
-        volumeCx: '520',
-      };
-    }
+    const currentTlData = teamLeads?.find(t => t.tlName.toLowerCase() === currentTL.toLowerCase());
+    return {
+      pickupTeam: currentTlData && currentTlData.totalCalls > 0 ? `${currentTlData.connectRate}%` : '—',
+      pickupCx: '—',
+      iqsTeam: currentTlData && currentTlData.avgScore ? `${currentTlData.avgScore}%` : '—',
+      iqsCx: '—',
+      volumeTeam: currentTlData ? fmtVol(currentTlData.totalCalls) : '—',
+      volumeCx: '—',
+    };
   };
 
   const metrics = getStatMetrics();
@@ -830,10 +759,10 @@ export default function PcgTeamAnalyticsDashboard({
                 {p === '7'
                   ? '7 days'
                   : p === '30'
-                  ? '30 days'
-                  : period === 'custom' && customFrom
-                  ? `${fmtDateDisplay(customFrom)} – ${fmtDateDisplay(customTo)}`
-                  : 'Custom range'}
+                    ? '30 days'
+                    : period === 'custom' && customFrom
+                      ? `${fmtDateDisplay(customFrom)} – ${fmtDateDisplay(customTo)}`
+                      : 'Custom range'}
               </button>
             ))}
           </div>

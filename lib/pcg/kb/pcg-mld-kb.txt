@@ -1,0 +1,61 @@
+﻿What are MLDs and how do they work
+Q: What are Market Linked Debentures (MLDs)?
+A: An MLD (Market Linked Debenture) is a debt security whose return is linked to the performance of an underlying market instrument, such as an index. Unlike a conventional bond, which pays a fixed or predetermined coupon, your return on an MLD depends on its payoff structure and the performance of the underlying, both of which are disclosed on the platform.
+Intent variations: What is an MLD? | What does MLD stand for? | Explain Market Linked Debentures | MLD kya hota hai? | What is a market linked debenture in simple terms? | How is an MLD different from a bond? | Define MLD
+Q: What do you mean by returns being linked to the market?
+A: Your MLD's return is derived from the performance of an underlying market instrument — an index such as the NIFTY 50 or NIFTY Midcap 150. The specific index and structure are disclosed on the platform, along with your MLD's other terms and conditions. Depending on that structure, a rise or fall in the underlying index can change your final payoff.
+Intent variations: How are MLD returns linked to the market? | What does market-linked return mean? | MLD ka return market se kaise juda hota hai? | Which index are MLD returns based on? | How does the underlying index affect my MLD return? | What is the underlying in an MLD?
+Q: How will my returns be calculated?
+A: Your MLD has predefined observation dates and a predefined method for determining the entry and exit levels, as disclosed on the platform. The difference between the entry and exit levels, combined with the payoff structure disclosed on the platform, determines your return.
+Intent variations: How is my MLD return calculated? | How do I calculate MLD returns? | MLD ka return kaise calculate hota hai? | What determines my MLD payoff? | How does the entry and exit level work in an MLD? | What is the payoff formula for an MLD?
+Q: If I buy an MLD three months after its issue or listing, will the entry and exit levels remain the same?
+A: The predefined entry and exit observation levels used to calculate your returns are fixed and do not change based on when you purchase it. The price at which you purchase the MLD in the secondary market can be different from its original issue price, and this can change your effective return.
+Intent variations: If I buy an MLD later, do the levels change? | Do entry and exit levels change if I invest after listing? | Kya MLD ke entry exit level change hote hain agar main baad mein khareedun? | Does buying an MLD in the secondary market change its terms? | Will my return differ if I invest after the issue date?
+Returns, protection, and taxation
+Q: Will I receive monthly interest on an MLD?
+A: MLDs do not pay regular monthly interest like a conventional coupon-paying bond. Your return is determined by the payoff structure disclosed on the platform and is paid at maturity or on the payout date(s) specified there.
+Intent variations: Do MLDs pay monthly interest? | Will I get regular payouts from my MLD? | MLD mein monthly interest milta hai kya? | Does an MLD pay coupons like a bond? | When do I get paid on an MLD? | Is there periodic interest on an MLD?
+Q: Is my capital protected in an MLD?
+A: Capital protection depends on the specific MLD you invest in. Check the Key Information Document (KID) disclosed on the platform — it states whether your MLD offers principal (capital) protection or downside protection, and the conditions that apply. Even when an MLD is principal-protected, repayment still depends on the issuer meeting its obligations.
+Intent variations: Is my capital safe in an MLD? | Are MLDs capital protected? | Kya MLD mein mera principal protected hai? | Do all MLDs guarantee my principal? | What is principal protection in an MLD? | Is my investment amount guaranteed?
+Q: Can I consider an MLD risk-free?
+A: No. MLDs are not risk-free. Key risks include issuer or credit risk, market risk, liquidity risk, and structure or model risk. Even a principal-protected MLD carries issuer or credit risk — the protection is subject to the issuer's ability to meet its repayment obligations.
+Intent variations: Are MLDs risk-free? | Is there any risk in MLD investment? | Kya MLD bilkul risk-free hai? | What risks does an MLD carry? | Is a principal-protected MLD completely safe? | Can I lose money in an MLD?
+Q: Can I sell my MLD anytime?
+A: You can sell your MLD anytime before maturity through the Wint Wealth platform, subject to a buyer being available. You get back your invested amount without any liquidity deduction.
+Intent variations: Can I sell my MLD before maturity? | Is MLD liquid? | Kya main MLD ko maturity se pehle bech sakta hoon? | Can I exit my MLD early? | Is there a secondary market for MLDs? | Will I get my full investment back if I sell early?
+Q: What is the timeline to get my money into my linked bank account if I sell early?
+A: If a buyer is available, your sell order settles in T+0 or T+1 working days, and the sell proceeds are transferred to your demat-linked bank account.
+Intent variations: How long does it take to get money after selling my MLD? | When will I receive my sale proceeds? | MLD bechne ke baad paise kab tak milenge? | What is the settlement time for an MLD sale? | How many days for the payout after I sell my MLD?
+Q: How are MLDs taxed?
+A: MLDs have a specific tax treatment under Section 50AA of the Income-tax Act. For MLDs covered under this provision, your gains on transfer or on redemption or maturity are treated as short-term capital gains, irrespective of your holding period, and taxed at the rate applicable to you. Tax treatment depends on your individual situation, so check with your tax advisor before you invest.
+Intent variations: How are MLDs taxed? | What is the tax on MLD returns? | MLD par tax kaise lagta hai? | Is MLD gain treated as capital gains? | What is Section 50AA? | Do I pay short-term or long-term capital gains tax on MLDs? | Is TDS deducted on MLD returns?
+Structure, security, and ratings
+Q: Are MLDs listed?
+A: Yes. MLDs available on the Wint Wealth platform are listed on a recognised stock exchange, such as NSE or BSE, as specified for the respective security.
+Intent variations: Are MLDs listed on the stock exchange? | Which exchange are MLDs listed on? | Kya MLD stock exchange par listed hote hain? | Are MLDs on NSE or BSE? | Is my MLD tradeable on an exchange?
+Q: Are MLDs senior secured?
+A: The security and ranking of your MLD depend on its specific issue structure. Do not assume an MLD is senior secured by default. Refer to the KID and other issue details disclosed on the platform to check whether your MLD is secured, its security cover, ranking, and other applicable terms.
+Intent variations: Are MLDs senior secured? | Is my MLD secured or unsecured? | Kya MLD senior secured hote hain? | What is the security ranking of an MLD? | Where can I check if my MLD is secured?
+Q: Can I change the entry or exit observation dates based on my preference?
+A: No. The observation dates and methodology to calculate are predefined by the issuer and disclosed on the platform. You cannot change them.
+Intent variations: Can I change the entry or exit date of my MLD? | Can I choose my own observation dates? | Kya main apni marzi se entry exit date choose kar sakta hoon? | Are MLD observation dates negotiable? | Who decides the entry and exit dates for an MLD?
+Q: Are MLDs rated?
+A: MLDs available on the platform are rated by credit rating agencies such as CRISIL and ICRA. The rating reflects the credit quality of the issuer or security. Consider the rating along with the other risks and terms of the MLD before you invest.
+Intent variations: Are MLDs rated? | Which agencies rate MLDs? | Kya MLD ko rating milti hai? | Is there a credit rating for MLDs? | What does the MLD rating tell me?
+Wint Wealth platform and investing
+Q: Does Wint Wealth co-invest in MLDs?
+A: For MLDs offered on the platform, Wint Wealth co-invests 2% alongside you, subject to the applicable product structure and terms.
+Intent variations: Does Wint Wealth invest in the MLD too? | Does Wint Wealth co-invest with me? | Kya Wint Wealth bhi MLD mein invest karta hai? | What is Wint Wealth's skin in the game on MLDs? | How much does Wint Wealth co-invest in an MLD?
+Q: Is due diligence performed on MLDs before they are offered on the platform?
+A: Yes. MLDs offered on the platform go through due diligence across relevant parameters before they are made available to you. Still review the KID, rating, issuer details, structure, risks, liquidity, and other applicable disclosures on the platform before you invest.
+Intent variations: Does Wint Wealth do due diligence on MLDs? | Is MLD verified before being listed on the platform? | Kya MLD par due diligence hoti hai? | How are MLDs vetted before they go live? | What checks happen before an MLD is offered?
+Q: Where can I see my MLD investment after investing?
+A: Once your investment is settled and reflected on the platform, you can view it under Portfolio → MLD section.
+Intent variations: Where can I see my MLD investment? | Where do I track my MLD on the app? | Mera MLD investment kahan dikhega? | How do I check my MLD portfolio? | Where is my MLD holding shown?
+Q: Why should I consider investing in an MLD?
+A: Investing in an MLD is your choice and depends on your investment objectives and risk appetite. You can consider an MLD for portfolio diversification if you want exposure to a predefined market-linked payoff structure and, where applicable, principal or downside protection. Whether an MLD suits you depends on its structure, risks, maturity, and your own objectives.
+Intent variations: Why should I invest in an MLD? | What are the benefits of investing in MLDs? | MLD mein invest kyun karun? | Is MLD good for portfolio diversification? | Who should consider investing in MLDs?
+Q: How can I invest in an MLD?
+A: You can invest in MLDs directly through the Wint Wealth platform. Select the MLD you want to invest in, review the product details, payoff structure, rating, risks, and other applicable terms, and complete the investment process through the platform.
+Intent variations: How do I invest in an MLD? | How can I buy an MLD on Wint Wealth? | MLD mein invest kaise karun? | What is the process to invest in an MLD? | Where do I start to invest in an MLD on the platform?
