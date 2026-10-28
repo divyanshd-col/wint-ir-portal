@@ -13,6 +13,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { randomUUID } from 'crypto';
+import { getDefinedDispositions, findDefinedTopic } from '@/lib/qa-topics';
 import {
   storeAppendIQSFlag,
   storeUpdateIQSFlag,
@@ -1081,6 +1082,19 @@ export async function POST(req: NextRequest) {
           if (!lowerTL.includes((existing.agent_name || '').trim().toLowerCase())) {
             return NextResponse.json({ error: 'Forbidden: You can only act on disputes for your assigned agents' }, { status: 403 });
           }
+        }
+      }
+
+      // An email whose intent is empty or owned by no QA cannot reach a responsible QA: the TL picks a topic, saved as the intent.
+      {
+        const defined = await getDefinedDispositions();
+        const cur = await query<any>(`SELECT intent_l1 FROM email_conversations WHERE id = $1`, [existing.ticket_id]);
+        if (defined.length > 0 && !findDefinedTopic(defined, cur[0]?.intent_l1)) {
+          const picked = findDefinedTopic(defined, body.disposition);
+          if (!picked) {
+            return NextResponse.json({ error: 'topic_required', definedDispositions: defined }, { status: 422 });
+          }
+          await query(`UPDATE email_conversations SET intent_l1 = $1, updated_at = NOW() WHERE id = $2`, [picked, existing.ticket_id]);
         }
       }
 

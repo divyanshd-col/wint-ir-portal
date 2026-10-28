@@ -25,6 +25,7 @@ interface Props {
   flaggedAt?: string | null;
   reviewedAt?: string | null;
   compact?: boolean;
+  flush?: boolean;
 }
 
 function fmtDateTime(iso?: string | null) {
@@ -120,6 +121,7 @@ export function DisputeThread({
   flaggedAt,
   reviewedAt,
   compact = false,
+  flush = false,
 }: Props) {
   const [comments, setComments] = useState<IQSFlagComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,8 +180,8 @@ export function DisputeThread({
       border: '1px solid var(--qa-border, var(--qa-border))',
       borderRadius: compact ? 8 : 12,
       padding: compact ? '12px 14px' : '16px 20px',
-      marginTop: 12,
-      marginBottom: 12,
+      marginTop: flush ? 0 : 12,
+      marginBottom: flush ? 0 : 12,
       boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
     }}>
       <div style={{
