@@ -489,7 +489,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     return true;
   });
 
-  const colCount = 9;
+  const colCount = status === 'pending' ? 7 : 8;
   const totalPages = Math.max(1, Math.ceil(filteredDisputes.length / limit));
   const pagedDisputes = filteredDisputes.slice((page - 1) * limit, page * limit);
 
@@ -654,12 +654,11 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       </div>
     </div>
 
-    <div style={{ overflowX: 'auto' }}>
-    <table style={{ width: '100%', minWidth: status === 'pending' ? 1340 : 1200, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
         {(status === 'pending'
-          ? ['120px', '150px', undefined, '90px', '80px', '110px', '150px', '190px', '230px']
-          : ['120px', '150px', undefined, '90px', '80px', '110px', '150px', '210px', '80px']
+          ? ['12%', '15%', undefined, '10%', '9%', '11%', '14%']
+          : ['12%', '14%', undefined, '9%', '8%', '10%', '13%', '20%']
         ).map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
       </colgroup>
       <thead>
@@ -671,8 +670,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
           <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
           <SortTh k="raised" sort={sort} onSort={toggleSort} style={th}>Raised</SortTh>
-          <th style={th}>{status === 'pending' ? 'Status' : 'Outcome'}</th>
-          <th style={{ ...th, textAlign: 'right' }}>Action</th>
+          {status !== 'pending' && <th style={th}>Outcome</th>}
         </tr>
       </thead>
       <tbody>
@@ -736,53 +734,21 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   <br />
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(d.raisedAt)}</span>
                 </td>
+                {status !== 'pending' && (
                 <td style={{ ...td }}>
-                  <DisputeStatusPill
-                    status={d.status}
-                    raisedByRole={d.raisedByRole}
-                    reviewNote={d.reviewNote}
-                    parameters={d.parameters}
-                  />
-                  {d.reviewNote && (
-                    <div style={{ fontSize: 11, color: 'var(--qa-text-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }} title={d.reviewNote}>
-                      {d.reviewNote}
-                    </div>
-                  )}
-                </td>
-                <td style={{ ...td, textAlign: 'right' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    {status === 'pending' && (
-                      <>
-                        <button
-                          onClick={() => resolveAtTLLevel(d.flagId)}
-                          disabled={actioning === d.flagId}
-                          style={{
-                            height: 28, padding: '0 10px', borderRadius: 8,
-                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                            background: 'var(--qa-card)', color: 'var(--qa-text)',
-                            border: '1px solid var(--qa-border)', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                            opacity: actioning === d.flagId ? 0.6 : 1, whiteSpace: 'nowrap',
-                          }}
-                        >
-                          Resolve
-                        </button>
-                        <button
-                          onClick={() => forwardToQA(d.flagId, topicPick[d.flagId])}
-                          disabled={actioning === d.flagId || (definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && !topicPick[d.flagId])}
-                          style={{
-                            height: 28, padding: '0 12px', borderRadius: 8,
-                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                            background: 'var(--qa-gray-700)', color: '#fff',
-                            border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                            opacity: actioning === d.flagId ? 0.6 : 1, whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {actioning === d.flagId ? '…' : 'Forward to QA'}
-                        </button>
-                      </>
+                    <DisputeStatusPill
+                      status={d.status}
+                      raisedByRole={d.raisedByRole}
+                      reviewNote={d.reviewNote}
+                      parameters={d.parameters}
+                    />
+                    {d.reviewNote && (
+                      <div style={{ fontSize: 11, color: 'var(--qa-text-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }} title={d.reviewNote}>
+                        {d.reviewNote}
+                      </div>
                     )}
-                  </div>
-                </td>
+                  </td>
+                )}
               </tr>
 
               {/* Dispute detail: agent note + challenged params + eval panel */}
@@ -811,6 +777,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                           ))}
                         </div>
                       )}
+                      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                       <DisputeThread
                         flagId={d.flagId}
                         agentNote={d.agentNote}
@@ -824,6 +792,39 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         reviewedAt={(d as any).reviewedAt}
                         compact
                       />
+                        </div>
+                        {status === 'pending' && (
+                          <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 16, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 12 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
+                        <button
+                          onClick={() => resolveAtTLLevel(d.flagId)}
+                          disabled={actioning === d.flagId}
+                          style={{
+                            width: '100%', height: 32, padding: '0 10px', borderRadius: 8,
+                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                            background: 'var(--qa-card)', color: 'var(--qa-text)',
+                            border: '1px solid var(--qa-border)', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
+                            opacity: actioning === d.flagId ? 0.6 : 1, whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Resolve
+                        </button>
+                        <button
+                          onClick={() => forwardToQA(d.flagId, topicPick[d.flagId])}
+                          disabled={actioning === d.flagId || (definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && !topicPick[d.flagId])}
+                          style={{
+                            width: '100%', height: 32, padding: '0 12px', borderRadius: 8,
+                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                            background: 'var(--qa-gray-700)', color: '#fff',
+                            border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
+                            opacity: actioning === d.flagId ? 0.6 : 1, whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {actioning === d.flagId ? '…' : 'Forward to QA'}
+                        </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                   <EvalPanel
@@ -855,7 +856,6 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       )}
       </tbody>
     </table>
-    </div>
 
     {/* Pagination Footer */}
     {totalPages > 1 && (
