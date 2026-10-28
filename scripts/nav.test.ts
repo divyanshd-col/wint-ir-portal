@@ -6,12 +6,12 @@ const labels = (role: string, skills?: string[]) => topTabs(role, skills).map((t
 
 test('admin sees all four tabs, Chat first, with their hrefs', () => {
   assert.deepEqual(topTabs('admin', []).map((t) => [t.label, t.href]), [
-    ['Chat', '/chat'], ['Analytics', '/analytics'], ['Quality', '/quality'], ['Settings', '/settings'],
+    ['Chat', '/chat'], ['MCP', '/analytics'], ['Quality', '/quality'], ['Settings', '/settings'],
   ]);
 });
 
-test('team lead: Chat, Analytics, Quality but no Settings', () => {
-  assert.deepEqual(labels('tl'), ['Chat', 'Analytics', 'Quality']);
+test('team lead: Chat, MCP, Quality but no Settings', () => {
+  assert.deepEqual(labels('tl'), ['Chat', 'MCP', 'Quality']);
 });
 
 test('quality analyst and agent: no Analytics (no analytics access), no Settings', () => {
@@ -21,7 +21,7 @@ test('quality analyst and agent: no Analytics (no analytics access), no Settings
 
 test('explicit skills override the role defaults', () => {
   assert.deepEqual(labels('agent', ['chat:access']), ['Chat']);
-  assert.deepEqual(labels('agent', ['analytics:access', 'settings:manage:access']), ['Analytics', 'Settings']);
+  assert.deepEqual(labels('agent', ['analytics:access', 'settings:manage:access']), ['MCP', 'Settings']);
 });
 
 test('hasNavSkill - admin always passes; others need the skill', () => {

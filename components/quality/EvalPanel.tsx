@@ -55,6 +55,7 @@ export interface EvalPanelProps {
   onDone:        () => void;
   onClose:       () => void;
   colSpan:       number;
+  inset?:        boolean;
   conversationType?: 'bot' | 'agent' | 'hybrid';
 }
 
@@ -160,7 +161,7 @@ export default function EvalPanel({
   parameters, gates, mode, dispute, flagId,
   mobileNumber, reviewedBy, reviewedAt, reviewerRole, reviewNote,
   allowRaiseDispute, onDisputeRaised,
-  onDone, onClose, colSpan, conversationType,
+  onDone, onClose, colSpan, inset, conversationType,
 }: EvalPanelProps) {
 
   // Detect a bot chat by BOT-DISTINCTIVE parameters only. IssueResolution/Accuracy/
@@ -771,10 +772,10 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
     background: 'var(--qa-gray-50)',
   };
   const panelWrap: React.CSSProperties = {
-    width: '100%', maxWidth: '100%',
+    width: inset ? 'auto' : '100%', maxWidth: '100%',
     border: '1px solid var(--qa-border)', borderRadius: 8,
     background: 'var(--qa-card)',
-    margin: '16px auto', boxSizing: 'border-box',
+    margin: inset ? '16px 20px' : '16px auto', boxSizing: 'border-box',
   };
 
   return (

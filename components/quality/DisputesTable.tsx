@@ -273,13 +273,14 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
       {/* Table */}
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
+          <col style={{ width: 120 }} />
+          <col style={{ width: 120 }} />
           <col style={{ width: 140 }} />
           <col style={{ width: 130 }} />
-          <col style={{ width: 140 }} />
           <col style={{ width: 130 }} />
           <col style={{ width: 90 }} />
-          <col style={{ width: 80 }} />
-          <col style={{ width: 140 }} />
+          <col style={{ width: 150 }} />
+          <col style={{ width: 100 }} />
         </colgroup>
         <thead>
           <tr>

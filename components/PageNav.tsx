@@ -60,7 +60,7 @@ function AnalyticsNav({ sessions, activeId, onSelect, onNew, onClose, streaming 
       >
         <Link href="/analytics" className="flex items-center gap-3 flex-1 min-w-0">
           {AnalyticsIcon}
-          Analytics
+          MCP
         </Link>
         <button
           type="button"
@@ -184,7 +184,7 @@ export default function PageNav({ role, isAdmin, skills: propSkills, flags, anal
         {canSeeAnalytics && (
           analytics
             ? <AnalyticsNav {...analytics} />
-            : <NavLink href="/analytics" label="Analytics" icon={AnalyticsIcon} />
+            : <NavLink href="/analytics" label="MCP" icon={AnalyticsIcon} />
         )}
         {showCx && (
           <NavLink
