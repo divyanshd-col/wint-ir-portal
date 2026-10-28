@@ -1,0 +1,2423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wint Wealth | PCG Call Analytics & Quality Portal - Design Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #F4F4F5; }
+    ::-webkit-scrollbar-thumb { background: #D4D4D8; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+  </style>
+</head>
+<body class="bg-[#F8F9FA] text-[#111111] min-h-screen antialiased flex flex-col">
+
+  <!-- TOP NAV BAR -->
+  <header class="bg-white border-b border-[#E4E4E7] sticky top-0 z-30 shadow-2xs">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+      <!-- Brand & Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-[#111111] text-white flex items-center justify-center font-bold text-sm tracking-tighter shadow-sm">
+          W
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm font-extrabold text-[#111111] tracking-tight">Wint Wealth</h1>
+            <span class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+              PCG Portal
+            </span>
+          </div>
+          <p class="text-[11px] text-[#71717A]">Quality Audits, AI Coaching & Telephony Analytics</p>
+        </div>
+      </div>
+
+      <!-- Center Tabs -->
+      <div class="flex items-center gap-1 bg-[#F4F4F5] p-1 rounded-xl border border-[#E4E4E7]">
+        <button id="tab-team-analytics" onclick="setTab('team-analytics')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
+          Team Analytics
+        </button>
+        <button id="tab-member-analytics" onclick="setTab('member-analytics')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
+          Member Analytics
+        </button>
+        <button id="tab-calls" onclick="setTab('calls')" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#111111] shadow-2xs transition-all">
+          Call Audits
+        </button>
+        <button id="tab-scorecard" onclick="setTab('scorecard')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
+          RM Scorecard
+        </button>
+        <button id="tab-rm-performance" onclick="setTab('rm-performance')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
+          RM Performance
+        </button>
+        <button id="tab-disputes" onclick="setTab('disputes')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all flex items-center gap-1.5">
+          <span>Disputes</span>
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+        </button>
+      </div>
+
+      <!-- Right Controls: Persona Switcher -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1.5 text-xs">
+          <span class="text-[#71717A] font-semibold text-[11px]">Role:</span>
+          <select id="role-switcher" onchange="changeRole(this.value)" class="text-xs font-bold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 outline-none cursor-pointer hover:border-zinc-400">
+            <option value="admin">Admin (All Teams & RMs)</option>
+            <option value="tl_gokul">Team Leader (Team Gokul)</option>
+            <option value="tl_vaishnavi">Team Leader (Team Vaishnavi)</option>
+            <option value="agent">Agent / RM (Aahan Thaker)</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-1.5 pl-3 border-l border-[#E4E4E7]">
+          <!-- Moon Icon (Theme Toggle) -->
+          <button type="button" class="w-8 h-8 rounded-lg flex items-center justify-center text-[#71717A] hover:bg-zinc-100 transition-colors" title="Toggle theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          </button>
+
+          <!-- CX-Style Account Button -->
+          <div class="relative" id="prototype-profile-container">
+            <button type="button" onclick="toggleProtoProfileMenu(event)" class="inline-flex items-center gap-1.5 p-1 rounded-full hover:bg-zinc-100 transition-colors cursor-pointer select-none">
+              <span id="user-avatar-text" class="w-7 h-7 rounded-full bg-[#2d9e4f] text-white flex items-center justify-center font-bold text-xs shadow-2xs">S</span>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="text-[#71717A]"><path d="M4 6l4 4 4-4" /></svg>
+            </button>
+
+            <!-- CX-Style Popover Menu -->
+            <div id="proto-profile-dropdown" class="hidden absolute right-0 top-full mt-2 w-60 bg-white rounded-xl shadow-xl border border-[#E4E4E7] p-1.5 z-50 text-left font-sans">
+              <div class="p-2.5 border-b border-[#E4E4E7] mb-1">
+                <div id="proto-user-name" class="text-sm font-semibold text-[#18181B]">Sivaranjini</div>
+                <div id="proto-user-email" class="text-xs text-[#71717A] mt-0.5">sivaranjini@wintwealth.com</div>
+                <span id="proto-user-role-badge" class="inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]">Admin</span>
+              </div>
+              <button type="button" onclick="alert('Signed out')" class="w-full flex items-center gap-2.5 px-2.5 py-2 text-sm text-[#18181B] hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer text-left">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" /></svg>
+                <span>Sign out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-6 py-6 flex-1 space-y-6 w-full">
+
+    <!-- METRICS SUMMARY CARDS -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Total Audited Calls</div>
+        <div class="text-2xl font-black text-[#111111] mt-1" id="metric-total-calls">118</div>
+        <div class="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+          <span>↑ 14%</span> <span class="text-zinc-400 font-normal">vs last 7 days</span>
+        </div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Overall Average IQS</div>
+        <div class="text-2xl font-black text-[#111111] mt-1 flex items-baseline gap-2">
+          <span>87.4%</span>
+          <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Target >85%</span>
+        </div>
+        <div class="text-[11px] text-zinc-500 font-normal mt-1">Across 9 Active RMs</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div id="metric-connect-title" class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Connect Rate</div>
+        <div class="text-2xl font-black text-[#111111] mt-1">68.2%</div>
+        <div class="text-[11px] text-zinc-500 font-normal mt-1">81 Connected • 37 Unanswered</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Compliance Pass Rate</div>
+        <div class="text-2xl font-black text-emerald-700 mt-1">96.8%</div>
+        <div class="text-[11px] text-zinc-500 font-normal mt-1">Gates G1 (No Advice), G2, G3</div>
+      </div>
+    </section>
+
+    <!-- CALLS TAB CONTENT -->
+    <div id="view-calls" class="space-y-4">
+
+      <!-- CATEGORY PILLS BAR -->
+      <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-[#71717A] font-semibold mr-1">Call Category:</span>
+          <button onclick="filterCategory('all')" id="cat-all" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#111111] text-white shadow-sm transition-all">
+            All Categories (<span id="cat-count">118</span>)
+          </button>
+          <button onclick="filterCategory('13_pitching')" id="cat-13_pitching" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F4F4F5] text-[#71717A] hover:text-[#111111] transition-all">
+            13% Club / Pitching
+          </button>
+          <button onclick="filterCategory('upselling')" id="cat-upselling" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F4F4F5] text-[#71717A] hover:text-[#111111] transition-all">
+            Upselling Calls
+          </button>
+          <button onclick="filterCategory('support')" id="cat-support" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F4F4F5] text-[#71717A] hover:text-[#111111] transition-all">
+            General / Support
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-[#71717A]">Date:</span>
+          <select class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 outline-none">
+            <option>Last 7 Days</option>
+            <option>Last 30 Days</option>
+            <option>Custom Range</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- EVALUATED CALL AUDITS TABLE CONTAINER -->
+      <div class="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-2xs">
+        
+        <!-- Table Header & Controls -->
+        <div class="p-4 border-b border-[#E4E4E7] flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-[#111111]" id="table-title">Evaluated Call Audits</h3>
+            <p class="text-xs text-[#71717A] mt-0.5" id="table-subtitle">
+              Showing calls auto-categorised with separate quality parameters
+            </p>
+          </div>
+
+          <!-- Controls: Agent Filter + Search Input -->
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <div id="agent-filter-container" class="flex items-center gap-1.5">
+              <span class="text-xs text-[#71717A] font-semibold">Agent:</span>
+              <select id="agent-filter" onchange="filterAgent(this.value)" class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs cursor-pointer">
+                <option value="all">All Agents (9)</option>
+                <option value="Aahan Thaker">Aahan Thaker</option>
+                <option value="Dhanush">Dhanush</option>
+                <option value="Yaashvi Arora">Yaashvi Arora</option>
+                <option value="Samskriti Rao">Samskriti Rao</option>
+                <option value="Gaurav Nautiyal">Gaurav Nautiyal</option>
+                <option value="Aravind">Aravind</option>
+                <option value="Sujal Dadwani">Sujal Dadwani</option>
+                <option value="Antara Chakrabarty">Antara Chakrabarty</option>
+                <option value="Swati Singh">Swati Singh</option>
+              </select>
+            </div>
+
+            <!-- Min IQS Input -->
+            <input
+              type="number"
+              id="table-min-iqs-input"
+              min="0"
+              max="100"
+              placeholder="Min IQS"
+              oninput="handleMinIqsInput(this.value)"
+              class="w-24 text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 outline-none focus:border-[#111111] shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+
+            <!-- Max IQS Input -->
+            <input
+              type="number"
+              id="table-max-iqs-input"
+              min="0"
+              max="100"
+              placeholder="Max IQS"
+              oninput="handleMaxIqsInput(this.value)"
+              class="w-24 text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 outline-none focus:border-[#111111] shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+
+            <button
+              id="btn-reset-iqs"
+              type="button"
+              onclick="resetIqsFilters()"
+              title="Reset IQS filters"
+              class="hidden text-[11px] font-semibold text-zinc-600 hover:text-black underline px-1 py-1 cursor-pointer"
+            >
+              Reset IQS
+            </button>
+
+            <input
+              type="text"
+              id="search-input"
+              oninput="handleSearch(this.value)"
+              placeholder="Search Call ID or Phone..."
+              class="text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 w-52 outline-none focus:border-[#111111] shadow-2xs bg-white"
+            />
+          </div>
+        </div>
+
+        <!-- Calls Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
+                <th class="py-3 px-4">Call ID</th>
+                <th class="py-3 px-4" id="th-rm-name">RM Name</th>
+                <th class="py-3 px-4">Customer Phone</th>
+                <th class="py-3 px-4">Call Category</th>
+                <th class="py-3 px-4">Duration</th>
+                <th class="py-3 px-4">IQS Score</th>
+                <th class="py-3 px-4">Gates</th>
+                <th class="py-3 px-4">Telephony Status</th>
+                <th class="py-3 px-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="calls-table-body" class="divide-y divide-[#E4E4E7]">
+              <!-- Injected via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TEAM ANALYTICS TAB CONTENT -->
+    <div id="view-team-analytics" class="hidden space-y-6">
+      <!-- Page Header: Title + TL Selector + Channel + Date Range -->
+      <div class="flex items-center justify-between gap-6 flex-wrap mb-6">
+        <div class="flex items-center gap-4 flex-wrap">
+          <h1 class="text-2xl font-semibold text-[#18181B] m-0 whitespace-nowrap">Team Analytics</h1>
+
+          <!-- Viewing TL Selector Dropdown -->
+          <div class="flex items-center gap-1.5 text-[13px] text-[#71717A]">
+            <span>Viewing TL:</span>
+            <select id="ta-tl-select" onchange="onTaTlChange(this.value)" class="h-8 px-3 bg-white border border-[#E4E4E7] rounded-lg text-[13px] font-medium text-[#18181B] outline-none shadow-2xs cursor-pointer hover:border-zinc-400">
+              <option value="Gokul">Gokul</option>
+              <option value="Vaishnavi">Vaishnavi</option>
+            </select>
+          </div>
+
+          <!-- Channel Segment (Chats / Calls / Emails) -->
+          <div class="inline-flex bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg p-0.5 gap-0.5">
+            <button id="ta-ch-chats" onclick="setTaChannel('chats')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
+              <span id="ta-dot-chats" class="w-1.5 h-1.5 rounded-full bg-[#D4D4D8]"></span>
+              Chats
+            </button>
+            <button id="ta-ch-calls" onclick="setTaChannel('calls')" class="h-7 px-3.5 rounded-md text-[13px] font-semibold bg-white text-[#18181B] shadow-xs inline-flex items-center gap-1.5 transition-all">
+              <span id="ta-dot-calls" class="w-1.5 h-1.5 rounded-full bg-[#18181B]"></span>
+              Calls
+            </button>
+            <button id="ta-ch-emails" onclick="setTaChannel('emails')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
+              <span id="ta-dot-emails" class="w-1.5 h-1.5 rounded-full bg-[#D4D4D8]"></span>
+              Emails
+            </button>
+          </div>
+        </div>
+
+        <!-- Time Range Selector -->
+        <div class="inline-flex border border-[#E4E4E7] rounded-lg overflow-hidden bg-white text-[13px]">
+          <button id="ta-p-7" onclick="setTaPeriod('7')" class="h-8 px-3.5 text-[#71717A] hover:text-[#18181B] border-r border-[#E4E4E7] transition-all">7 days</button>
+          <button id="ta-p-30" onclick="setTaPeriod('30')" class="h-8 px-3.5 bg-[#18181B] text-white font-semibold border-r border-[#E4E4E7] transition-all">30 days</button>
+          <button id="ta-p-custom" onclick="setTaPeriod('custom')" class="h-8 px-3.5 text-[#71717A] hover:text-[#18181B] transition-all">Custom range</button>
+        </div>
+      </div>
+
+      <!-- Top Stat Cards (IQS | CALLS HANDLED | PICKUP RATE) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <!-- Card 1: IQS -->
+        <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
+          <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3">IQS</div>
+          <div class="flex items-end gap-4">
+            <div class="flex flex-col gap-1.5">
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Team</span>
+              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-iqs-team">86.8%</span>
+            </div>
+            <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
+            <div class="flex items-baseline gap-1.5 pb-0.5">
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Department</span>
+              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-iqs-cx">85.0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: CALLS HANDLED -->
+        <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
+          <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3" id="ta-stat-vol-title">CALLS HANDLED</div>
+          <div class="flex items-end gap-4">
+            <div class="flex flex-col gap-1.5">
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Team</span>
+              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-vol-team">296</span>
+            </div>
+            <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
+            <div class="flex items-baseline gap-1.5 pb-0.5">
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Department</span>
+              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-vol-cx">520</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: PICKUP RATE -->
+        <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
+          <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3">PICKUP RATE</div>
+          <div class="flex items-end gap-4">
+            <div class="flex flex-col gap-1.5">
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Team</span>
+              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-pickup-team">93.2%</span>
+            </div>
+            <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
+            <div class="flex items-baseline gap-1.5 pb-0.5">
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Department</span>
+              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-pickup-cx">91.0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IQS by Parameter — Your Team -->
+      <section class="mb-8">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-[18px] font-semibold text-[#18181B] m-0">IQS by Parameter — Your Team</h2>
+          <span class="text-[11px] text-[#A1A1AA] italic" id="ta-params-subtitle">
+            30 days · avg across all evaluated chats
+          </span>
+        </div>
+
+        <div class="bg-white border border-[#E4E4E7] rounded-lg overflow-hidden shadow-2xs">
+          <!-- Parameter Box Header -->
+          <div class="py-3.5 px-5 border-b border-[#E4E4E7]">
+            <span class="text-[14px] font-medium text-[#18181B]" id="ta-params-count">
+              10 quality parameters · weighted
+            </span>
+          </div>
+
+          <!-- Legend -->
+          <div class="flex items-center gap-6 px-5 py-2.5 border-b border-[#F4F4F5] text-xs text-[#71717A]">
+            <span class="inline-flex items-center gap-2">
+              <span class="w-[18px] h-2 bg-[#27272A] rounded-full"></span>
+              Your team
+            </span>
+            <span class="inline-flex items-center gap-2">
+              <span class="w-0 h-3.5 border-l-2 border-dashed border-[#71717A]"></span>
+              Department average
+            </span>
+          </div>
+
+          <!-- Parameter Rows -->
+          <div class="px-5 py-3" id="ta-param-rows-container">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Team Member Performance -->
+      <section class="mb-8">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-[18px] font-semibold text-[#18181B] m-0">Team Member Performance</h2>
+          <span class="text-[11px] text-[#A1A1AA] italic" id="ta-members-subtitle">
+            8 active members · click a tab to switch view
+          </span>
+        </div>
+
+        <div class="bg-white border border-[#E4E4E7] rounded-lg overflow-hidden shadow-2xs">
+          <!-- Panel Header with Tabs -->
+          <div class="px-5 border-b border-[#E4E4E7] flex items-center justify-between">
+            <div class="flex gap-1">
+              <button id="ta-tab-summary" onclick="setTaTab('summary')" class="h-10 px-4 text-[13px] font-semibold border-b-2 border-[#18181B] text-[#18181B] -mb-px transition-all">
+                Summary
+              </button>
+              <button id="ta-tab-breakdown" onclick="setTaTab('breakdown')" class="h-10 px-4 text-[13px] font-normal text-[#71717A] hover:text-[#18181B] border-b-2 border-transparent -mb-px transition-all">
+                Parameter Breakdown
+              </button>
+            </div>
+          </div>
+
+          <!-- Summary Tab View -->
+          <div id="ta-view-summary" class="overflow-x-auto">
+            <table class="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr class="h-10 bg-[#FAFAFA] border-b border-[#E4E4E7] text-[12px] uppercase tracking-wider text-[#71717A]">
+                  <th class="px-4 font-semibold text-left">Agent</th>
+                  <th class="px-4 font-semibold text-right">Pickup Rate</th>
+                  <th class="px-4 font-semibold text-right">IQS</th>
+                  <th id="th-col-chats" class="px-4 font-semibold text-right">Chats</th>
+                  <th id="th-col-calls" class="px-4 font-bold text-right bg-[#F4F4F5] text-[#18181B]">Calls</th>
+                  <th id="th-col-emails" class="px-4 font-semibold text-right">Emails</th>
+                </tr>
+              </thead>
+              <tbody id="ta-summary-tbody" class="divide-y divide-[#F4F4F5]">
+                <!-- Injected via JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Parameter Breakdown View -->
+          <div id="ta-view-breakdown" class="hidden">
+            <div class="flex items-center gap-3 px-5 py-3 border-b border-[#F4F4F5]">
+              <span class="text-[11px] uppercase tracking-wider font-semibold text-[#A1A1AA]">Channel</span>
+              <div class="inline-flex bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg p-0.5 gap-0.5">
+                <button id="ta-bk-chats" onclick="setTaBreakdownChannel('chats')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
+                  <span id="ta-bkdot-chats" class="w-1.5 h-1.5 rounded-full bg-[#D4D4D8]"></span>
+                  Chats
+                </button>
+                <button id="ta-bk-calls" onclick="setTaBreakdownChannel('calls')" class="h-7 px-3.5 rounded-md text-[13px] font-semibold bg-white text-[#18181B] shadow-xs inline-flex items-center gap-1.5 transition-all">
+                  <span id="ta-bkdot-calls" class="w-1.5 h-1.5 rounded-full bg-[#18181B]"></span>
+                  Calls
+                </button>
+                <button id="ta-bk-emails" onclick="setTaBreakdownChannel('emails')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
+                  <span id="ta-bkdot-emails" class="w-1.5 h-1.5 rounded-full bg-[#D4D4D8]"></span>
+                  Emails
+                </button>
+              </div>
+            </div>
+            <div class="text-[11px] text-[#A1A1AA] px-5 py-2 border-b border-[#F4F4F5]">
+              Scroll right to see all parameters →
+            </div>
+            <div class="overflow-x-auto">
+              <table class="border-collapse text-xs w-max min-w-full">
+                <thead>
+                  <tr id="ta-breakdown-thead-tr">
+                    <!-- Injected via JS -->
+                  </tr>
+                </thead>
+                <tbody id="ta-breakdown-tbody" class="divide-y divide-[#F4F4F5]">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer Note -->
+      <p class="text-[11px] text-[#A1A1AA] italic m-0 mb-4">
+        Pickup Rate = connected calls / total actionable calls · IQS = avg internal quality score · Parameter scores = pass rate
+      </p>
+    </div>
+
+    <!-- RM PERFORMANCE TAB CONTENT -->
+    <div id="view-rm-performance" class="hidden space-y-6">
+      <!-- Header: Title + Team Filter + Date Range -->
+      <div class="flex items-center justify-between gap-6 flex-wrap pb-4 border-b border-[#E4E4E7]">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-2xl font-semibold text-[#18181B] m-0 whitespace-nowrap">RM Performance</h1>
+            <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+              Calls Channel
+            </span>
+          </div>
+          <p class="text-xs text-[#71717A] mt-1">
+            Top 5 performers, Bottom performers (IQS ≤ 70%), and Most improved 5 RMs (two-week rolling difference) with IQS scores.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex items-center gap-1.5 text-xs">
+            <span class="text-[#71717A] font-semibold text-[11px]">Team:</span>
+            <select id="rmperf-team-select" onchange="onRmPerfTeamChange(this.value)" class="h-8 px-3 bg-white border border-[#E4E4E7] rounded-lg text-xs font-semibold text-[#18181B] outline-none shadow-2xs cursor-pointer hover:border-zinc-400">
+              <option value="all">All Teams (10 RMs)</option>
+              <option value="Gokul">Team Gokul</option>
+              <option value="Vaishnavi">Team Vaishnavi</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 Leaderboard Boards Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- 1. Top Performers -->
+        <div class="bg-white border border-[#E4E4E7] rounded-xl overflow-hidden shadow-2xs">
+          <div class="px-4 py-3 border-b border-[#E4E4E7] flex items-center justify-between bg-[#FAFAFA]">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+              <h2 class="text-xs font-bold uppercase tracking-wider text-[#18181B] m-0">Top Performers</h2>
+            </div>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+              Top 5 by IQS
+            </span>
+          </div>
+          <div id="rmperf-top-container" class="divide-y divide-[#F4F4F5]">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- 2. Bottom Performers -->
+        <div class="bg-white border border-[#E4E4E7] rounded-xl overflow-hidden shadow-2xs">
+          <div class="px-4 py-3 border-b border-[#E4E4E7] flex items-center justify-between bg-[#FAFAFA]">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+              <h2 class="text-xs font-bold uppercase tracking-wider text-[#18181B] m-0">Bottom Performers</h2>
+            </div>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+              IQS ≤ 70%
+            </span>
+          </div>
+          <div id="rmperf-bottom-container" class="divide-y divide-[#F4F4F5]">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- 3. Most Improved -->
+        <div class="bg-white border border-[#E4E4E7] rounded-xl overflow-hidden shadow-2xs">
+          <div class="px-4 py-3 border-b border-[#E4E4E7] flex items-center justify-between bg-[#FAFAFA]">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+              <h2 class="text-xs font-bold uppercase tracking-wider text-[#18181B] m-0">Most Improved</h2>
+            </div>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+              2-Wk Rolling Diff
+            </span>
+          </div>
+          <div id="rmperf-improved-container" class="divide-y divide-[#F4F4F5]">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Methodology Note -->
+      <div class="p-3.5 bg-white border border-[#E4E4E7] rounded-lg text-xs text-[#71717A] flex items-center justify-between flex-wrap gap-2">
+        <span><strong>Ranking Methodology:</strong> Top category ranks the top 5 RMs by average call IQS. Bottom category highlights RMs scoring 70% or below for active coaching. Most Improved tracks the top 5 net score gainers over a 14-day rolling window.</span>
+        <span class="text-[11px] text-[#A1A1AA] italic">Values available for Calls only</span>
+      </div>
+    </div>
+
+    <!-- MEMBER ANALYTICS TAB CONTENT -->
+    <div id="view-member-analytics" class="hidden space-y-6">
+      <!-- Member Analytics Header: Title + Team & Agent Dropdowns + Date Range -->
+      <div class="flex items-center justify-between gap-4 flex-wrap pb-2 border-b border-[#E4E4E7]">
+        <div class="flex items-center gap-4 flex-wrap">
+          <h2 id="ma-title" class="text-xl font-bold text-[#111111]">Member Analytics</h2>
+
+          <!-- Viewing Agent Selector Dropdown (All agents across the team for Admin) -->
+          <div class="flex items-center gap-1.5 text-xs">
+            <span class="text-[#71717A] font-semibold text-[11px]">Viewing:</span>
+            <select id="ma-agent-select" onchange="onMaAgentChange(this.value)" class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-white text-zinc-900 outline-none shadow-2xs cursor-pointer hover:border-zinc-400 min-w-[210px]">
+              <!-- Dynamically populated via JS with team groupings -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Time Range Selector -->
+        <div class="inline-flex rounded-lg border border-[#E4E4E7] p-0.5 bg-zinc-100 text-xs">
+          <button class="px-3 py-1 rounded-md font-semibold bg-[#111111] text-white shadow-2xs">7 days</button>
+          <button class="px-3 py-1 rounded-md text-[#71717A] hover:text-[#111111]">30 days</button>
+          <button class="px-3 py-1 rounded-md text-[#71717A] hover:text-[#111111]">Custom range</button>
+        </div>
+      </div>
+
+      <!-- Stat Cards (Calls, Chats, Emails) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Calls Card -->
+        <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">CALLS</div>
+          <div class="flex items-end gap-6">
+            <div>
+              <div class="text-2xl font-extrabold text-[#111111] leading-none" id="ma-stat-iqs">88.5%</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-extrabold text-[#111111] leading-none" id="ma-stat-vol">20</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">VOLUME</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chats Card -->
+        <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">CHATS</div>
+          <div class="flex items-end gap-6">
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">VOLUME</div>
+            </div>
+          </div>
+          <div class="text-xs text-zinc-400 italic mt-2">Not yet evaluated</div>
+        </div>
+
+        <!-- Emails Card -->
+        <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">EMAILS</div>
+          <div class="flex items-end gap-6">
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">VOLUME</div>
+            </div>
+          </div>
+          <div class="text-xs text-zinc-400 italic mt-2">Not yet evaluated</div>
+        </div>
+      </div>
+
+      <!-- IQS by Parameters -->
+      <div class="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-2xs">
+        <div class="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-[#FAFAFB]">
+          <h3 class="text-sm font-bold text-[#111111]">IQS by Parameters</h3>
+          <span class="text-xs text-[#71717A] italic">10 voice quality parameters · evaluated across calls</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase">
+                <th class="py-3 px-4 w-[40%]">Parameter</th>
+                <th class="py-3 px-4 text-right w-[20%]">Calls IQS</th>
+                <th class="py-3 px-4 text-right w-[20%]">Chats</th>
+                <th class="py-3 px-4 text-right w-[20%]">Emails</th>
+              </tr>
+            </thead>
+            <tbody id="ma-category-table-body" class="divide-y divide-[#E4E4E7]">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AI Coaching Brief & Focus Areas -->
+      <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <h3 class="text-sm font-bold text-[#111111]">AI Coaching & Performance Brief</h3>
+          </div>
+          <span class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            Automated Audit
+          </span>
+        </div>
+        <div class="p-4 bg-zinc-50 rounded-lg border border-[#E4E4E7] text-xs text-zinc-700 space-y-2">
+          <p id="ma-coaching-text">
+            <strong>Key Strength:</strong> Outstanding clarity when explaining the 13% Club senior secured debt structure and monthly payouts. Effectively counters customer yield hesitation.
+          </p>
+          <p id="ma-coaching-focus" class="text-amber-800">
+            <strong>Coaching Focus:</strong> Reinforce standard disclaimers regarding secondary liquidity windows during premature exit discussions.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCORECARD TAB CONTENT -->
+    <div id="view-scorecard" class="hidden space-y-4">
+      <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+        <div class="flex items-center justify-between pb-4 border-b border-[#E4E4E7]">
+          <div>
+            <h3 class="text-sm font-bold text-[#111111]">Weekly RM Scorecard Leaderboard</h3>
+            <p class="text-xs text-[#71717A] mt-0.5">Aggregated performance across 13-parameter pitching, upselling, and support</p>
+          </div>
+          <span class="text-xs font-bold px-2.5 py-1 bg-zinc-100 rounded-lg text-zinc-700">Week 42 · 2026</span>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase">
+                <th class="py-3 px-4">Rank</th>
+                <th class="py-3 px-4">RM Name</th>
+                <th class="py-3 px-4">Team</th>
+                <th class="py-3 px-4">Total Calls</th>
+                <th class="py-3 px-4">Connect %</th>
+                <th class="py-3 px-4">Pitching IQS</th>
+                <th class="py-3 px-4">Upsell IQS</th>
+                <th class="py-3 px-4">Overall IQS</th>
+                <th class="py-3 px-4">Trend</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#E4E4E7]" id="scorecard-table-body">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- DISPUTES TAB CONTENT -->
+    <div id="view-disputes" class="hidden space-y-4">
+      <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+        <h3 class="text-sm font-bold text-[#111111]">Team Quality Disputes & Overrides</h3>
+        <p class="text-xs text-[#71717A] mt-0.5">Review agent challenges against AI parameter scores and record TL decisions</p>
+        <div class="mt-4 p-8 text-center text-zinc-400 text-xs bg-zinc-50 rounded-xl border border-dashed border-zinc-300">
+          Click on any call marked with a dispute to view challenged quotes and trigger TL score adjustments.
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- SLIDE-OVER CALL AUDIT DRAWER -->
+  <!-- Call Evaluation Drawer Backdrop (Matching CX Calls) -->
+  <div id="drawer-backdrop" class="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs hidden">
+    <div class="w-full max-w-5xl xl:max-w-6xl bg-[#F8FAFC] h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+      
+      <!-- Drawer Header (matching CX Calls) -->
+      <div class="px-6 py-4 border-b border-[#E4E4E7] flex items-center justify-between bg-white">
+        <h3 class="m-0 text-[15px] font-semibold text-[#18181B] flex items-center gap-2 flex-wrap">
+          <span>Call Evaluation Panel — ID: <span id="drawer-call-id">102</span> (<span id="drawer-rm-name">Aahan Thaker</span>)</span>
+          <span class="text-zinc-500">· <span id="drawer-call-date">19 Oct 2026, 02:57 pm</span></span>
+          <span class="font-mono text-[13px] font-medium text-[#475569] bg-[#F1F5F9] px-2 py-0.5 rounded-md border border-[#E2E8F0] flex items-center gap-1" id="drawer-phone-container">
+            <span>📱</span> <span id="drawer-phone">917016176911</span>
+          </span>
+        </h3>
+
+        <div class="flex items-center gap-2.5">
+          <button
+            id="drawer-raise-dispute-btn"
+            onclick="handleProtoRaiseDispute()"
+            class="hidden px-3 py-1.5 text-xs font-semibold rounded-md border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer"
+          >
+            Raise Dispute
+          </button>
+          <button
+            onclick="closeDrawer()"
+            title="Close Panel"
+            class="w-7 h-7 rounded-md border border-[#E4E4E7] flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-zinc-100 text-sm font-semibold transition-colors shadow-2xs cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Drawer Body: 2-Column Split Layout matching CX calls -->
+      <div class="flex-1 flex flex-col lg:flex-row overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[#E4E4E7]">
+        
+        <!-- LEFT COLUMN: Transcript & Audio (Matching CX calls) -->
+        <div class="flex-1 flex flex-col overflow-y-auto p-5 space-y-3.5 bg-white">
+          <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-2">
+            <div class="flex items-center gap-2.5">
+              <h4 class="m-0 text-xs font-bold uppercase tracking-wider text-[#71717A]">Transcript</h4>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                id="btn-swap-speakers"
+                onclick="handleSwapSpeakersPrototype()"
+                class="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-zinc-300 bg-[#F8FAFC] hover:bg-zinc-100 text-[#334155] transition-colors shadow-2xs cursor-pointer"
+                title="Swap RM and Investor speaker labels"
+              >
+                ⇄ Swap All Speakers (IR ⇋ Investor)
+              </button>
+              <button
+                id="btn-reevaluate"
+                onclick="handleReevaluatePrototype()"
+                class="hidden px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#CA8A04] hover:bg-[#A16207] text-white transition-colors shadow-2xs cursor-pointer"
+              >
+                Save &amp; Re-evaluate Call (1 of 1)
+              </button>
+              <span
+                id="badge-reevaluated"
+                class="hidden px-2 py-0.5 text-[11px] font-semibold rounded bg-zinc-100 text-zinc-600 border border-zinc-300"
+              >
+                ✓ Re-evaluation used
+              </span>
+            </div>
+          </div>
+
+          <!-- Clean Audio Recording Box matching CX Calls -->
+          <div class="p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg flex flex-col gap-1">
+            <span class="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">Audio Recording</span>
+            <audio id="drawer-audio-player" controls class="w-full h-8" style="height: 32px;"></audio>
+          </div>
+
+          <!-- Dialogue Turns Container with CX Bubbles -->
+          <div class="space-y-2.5 flex-1 overflow-y-auto pr-1 flex flex-col" id="drawer-turns-container">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Evaluation Parameters & Compliance Gates (Matching CX calls) -->
+        <div class="w-full lg:w-[450px] flex flex-col overflow-y-auto p-5 space-y-4 bg-white border-l border-[#E4E4E7]">
+          <!-- Sticky Parameters Header -->
+          <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-2">
+            <h4 class="m-0 text-xs font-bold uppercase tracking-wider text-[#71717A]">Evaluation Parameters</h4>
+            <span class="text-sm font-bold text-[#18181B]">
+              IQS Score: <span class="text-[#15803D]" id="drawer-iqs-score">97%</span>
+            </span>
+          </div>
+
+          <!-- Compliance Gates Card -->
+          <div class="bg-[#F8FAFC] border border-[#E4E4E7] rounded-xl p-3.5 space-y-2.5 shadow-2xs">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <h5 class="m-0 text-xs font-bold text-[#18181B] uppercase tracking-wider">Compliance Gates:</h5>
+                <span id="drawer-gate-badge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]">PASS</span>
+              </div>
+            </div>
+
+            <!-- Gate Items -->
+            <div class="space-y-2" id="drawer-gates-container">
+              <!-- G1 -->
+              <div class="p-2.5 bg-white border border-[#E4E4E7] rounded-lg flex items-center justify-between gap-3 shadow-2xs">
+                <span class="text-xs font-semibold text-[#18181B]">G1: Advice (No Investment / Tax Advice)</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#15803D] text-white">Yes</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">No</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">NA</span>
+                </div>
+              </div>
+              <!-- G2 -->
+              <div class="p-2.5 bg-white border border-[#E4E4E7] rounded-lg flex items-center justify-between gap-3 shadow-2xs">
+                <span class="text-xs font-semibold text-[#18181B]">G2: Fabrication (No Fabricated Facts)</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#15803D] text-white">Yes</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">No</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">NA</span>
+                </div>
+              </div>
+              <!-- G3 -->
+              <div class="p-2.5 bg-white border border-[#E4E4E7] rounded-lg flex items-center justify-between gap-3 shadow-2xs">
+                <span class="text-xs font-semibold text-[#18181B]">G3: Identity (Identity Verified First)</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#15803D] text-white">Yes</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">No</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">NA</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Parameter Cards List -->
+          <div class="space-y-2 flex-1" id="drawer-params-container">
+            <!-- Injected via JS -->
+          </div>
+
+          <!-- TL Score Override / Dispute Action Section -->
+          <div id="drawer-override-section" class="pt-3 border-t border-[#E4E4E7] space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-[#111111] uppercase tracking-wider">
+                TL Score Override
+              </span>
+              <span class="text-[10px] font-semibold text-zinc-500">Edit parameter or adjust score</span>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-zinc-600 font-medium">Parameter:</label>
+                <select id="override-param-select" class="flex-1 text-xs font-semibold bg-white border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 outline-none">
+                  <!-- Dynamically populated -->
+                </select>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-zinc-600 font-medium">New Status:</label>
+                <select id="override-score-select" class="text-xs font-semibold bg-white border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 outline-none">
+                  <option value="Yes">Yes (Fully Met)</option>
+                  <option value="No">No (Did Not Meet)</option>
+                  <option value="NA">NA (Not Applicable)</option>
+                </select>
+              </div>
+
+              <textarea
+                id="override-note-input"
+                rows="2"
+                placeholder="Internal review note explaining why score was overridden…"
+                class="w-full text-xs p-2.5 rounded-lg border border-[#E4E4E7] bg-white outline-none focus:border-zinc-900 resize-none font-sans"
+              ></textarea>
+
+              <button
+                id="btn-submit-override"
+                onclick="handleSubmitOverridePrototype()"
+                class="w-full py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm transition-colors cursor-pointer"
+              >
+                Submit Evaluation Override
+              </button>
+
+              <div id="override-feedback" class="hidden text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg font-medium text-center">
+                ✓ Evaluation override submitted successfully.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Canonical 11 PCG Call Quality Parameters across 3 Skill Groups
+    const PCG_CALL_PARAMS_SPEC = [
+      // Group 1: Process Skills — 50%
+      { id: 'CallOpening', num: 1, name: 'Call Opening', weight: 5, weightStr: '5%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'CallClosing', num: 2, name: 'Call Closing', weight: 5, weightStr: '5%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'TechnicalLegal', num: 3, name: 'Technically / Legally Correct', weight: 15, weightStr: '15%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'AllQuestions', num: 4, name: 'All Questions Addressed', weight: 10, weightStr: '10%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'Expectation', num: 5, name: 'Expectation Setting', weight: 10, weightStr: '10%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'Process', num: 6, name: 'Process / Pre-check', weight: 5, weightStr: '5%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      
+      // Group 2: Communication Skills — 30%
+      { id: 'Grammar', num: 7, name: 'Vocabulary / Sentence Structure / Grammar / Pronunciations', weight: 10, weightStr: '10%', group: 'Group 2: Communication Skills', groupWeight: '30%' },
+      { id: 'Fillers', num: 8, name: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air', weight: 10, weightStr: '10%', group: 'Group 2: Communication Skills', groupWeight: '30%' },
+      { id: 'EnergyTone', num: 9, name: 'Energy Level, Enthusiasm & Tone Modulation', weight: 10, weightStr: '10%', group: 'Group 2: Communication Skills', groupWeight: '30%' },
+      
+      // Group 3: Customer Service Skills — 20%
+      { id: 'ActiveListening', num: 10, name: 'Active Listening, Interruptions & Empathy', weight: 10, weightStr: '10%', group: 'Group 3: Customer Service Skills', groupWeight: '20%' },
+      { id: 'Simplifying', num: 11, name: 'Simplifying Answers', weight: 10, weightStr: '10%', group: 'Group 3: Customer Service Skills', groupWeight: '20%' }
+    ];
+
+    function createPcgParameters(scoresConfig = {}) {
+      return [
+        // Group 1: Process Skills — 50%
+        {
+          num: 1,
+          id: 'CallOpening',
+          name: 'Call Opening',
+          maxScore: 5,
+          weightStr: '5%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.CallOpening?.status || 'Yes',
+          quote: scoresConfig.CallOpening?.quote || 'Turn 1: Greeted client respectfully as Sir/Ma\'am, identified as Wint Wealth RM, and confirmed good time to speak.'
+        },
+        {
+          num: 2,
+          id: 'CallClosing',
+          name: 'Call Closing',
+          maxScore: 5,
+          weightStr: '5%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.CallClosing?.status || 'Yes',
+          quote: scoresConfig.CallClosing?.quote || 'Turn 8: Thanked client, summarized agreed WhatsApp follow-up, and closed with polite sign-off.'
+        },
+        {
+          num: 3,
+          id: 'TechnicalLegal',
+          name: 'Technically / Legally Correct',
+          maxScore: 15,
+          weightStr: '15%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.TechnicalLegal?.status || 'Yes',
+          quote: scoresConfig.TechnicalLegal?.quote || 'Turn 6: Accurately stated 1.25x asset cover, senior debt priority, and PMS/AIF disclosure terms without promising guaranteed returns.'
+        },
+        {
+          num: 4,
+          id: 'AllQuestions',
+          name: 'All Questions Addressed',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.AllQuestions?.status || 'Yes',
+          quote: scoresConfig.AllQuestions?.quote || 'Turn 4: Confirmed coupon credit turnaround time and addressed lock-in questions clearly.'
+        },
+        {
+          num: 5,
+          id: 'Expectation',
+          name: 'Expectation Setting',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.Expectation?.status || 'Yes',
+          quote: scoresConfig.Expectation?.quote || 'Turn 7: Established firm expectation for WhatsApp term sheet delivery and Thursday evening callback.'
+        },
+        {
+          num: 6,
+          id: 'Process',
+          name: 'Process / Pre-check',
+          maxScore: 5,
+          weightStr: '5%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.Process?.status || 'Yes',
+          quote: scoresConfig.Process?.quote || 'Turn 2: Pre-checked Muthoot coupon log on PCG Finder before calling; client did not need to repeat details.'
+        },
+        // Group 2: Communication Skills — 30%
+        {
+          num: 7,
+          id: 'Grammar',
+          name: 'Vocabulary / Sentence Structure / Grammar / Pronunciations',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 2: Communication Skills',
+          status: scoresConfig.Grammar?.status || 'Yes',
+          quote: scoresConfig.Grammar?.quote || 'Turn 5: Articulate delivery, professional vocabulary, correct pronunciation of issuer names and financial terms.'
+        },
+        {
+          num: 8,
+          id: 'Fillers',
+          name: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 2: Communication Skills',
+          status: scoresConfig.Fillers?.status || 'Yes',
+          quote: scoresConfig.Fillers?.quote || 'Turn 3: Fluent delivery with zero dead air; verification pause was announced professionally.'
+        },
+        {
+          num: 9,
+          id: 'EnergyTone',
+          name: 'Energy Level, Enthusiasm & Tone Modulation',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 2: Communication Skills',
+          status: scoresConfig.EnergyTone?.status || 'Yes',
+          quote: scoresConfig.EnergyTone?.quote || 'Calm, composed, attentive pacing suited to wealth management; empathetic tone modulation.'
+        },
+        // Group 3: Customer Service Skills — 20%
+        {
+          num: 10,
+          id: 'ActiveListening',
+          name: 'Active Listening, Interruptions & Empathy',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 3: Customer Service Skills',
+          status: scoresConfig.ActiveListening?.status || 'Yes',
+          quote: scoresConfig.ActiveListening?.quote || 'Turn 3: Allowed investor to complete query without interruption and acknowledged cash flow requirement.'
+        },
+        {
+          num: 11,
+          id: 'Simplifying',
+          name: 'Simplifying Answers',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 3: Customer Service Skills',
+          status: scoresConfig.Simplifying?.status || 'Yes',
+          quote: scoresConfig.Simplifying?.quote || 'Turn 6: Simplified senior secured asset cover and monthly interest payout mechanics in plain language.'
+        }
+      ];
+    }
+
+    // Sample Real Calls Dataset
+    const sampleCalls = [
+      {
+        id: "102",
+        callId: "runo-102",
+        rmName: "Aahan Thaker",
+        tlName: "Team Gokul",
+        phoneNumber: "+91 98765 10102",
+        category: "Upselling Calls",
+        categoryKey: "upselling",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 145,
+        durationFormatted: "02:25",
+        iqsScore: 90,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "Customer", text: "Hi Aahan, I noticed my quarterly coupon interest from Muthoot Capital didn't show up in my HDFC account yesterday. Can you check?", time: "00:04", segment: "Support Query" },
+          { speaker: "RM", text: "Hello Mr. Kapoor! Let me check your transaction log right away. I see the payout was processed at 6 PM yesterday and will reflect in your HDFC account by 2 PM today.", time: "00:18", segment: "Support Query" },
+          { speaker: "Customer", text: "Okay perfect, that's a relief. Was worried there was an account mismatch.", time: "00:34", segment: "Support Query" },
+          { speaker: "RM", text: "No issue at all, your bank details are 100% verified. Also Mr. Kapoor, while I have you on the line, your CreditAccess bonds matured last week. We have a fresh AA-rated senior secured issuance yielding 11.25% open today.", time: "00:46", segment: "Upselling Pitch", isPivotTurn: true },
+          { speaker: "Customer", text: "What is the tenure and payout frequency on that new issuance?", time: "01:05", segment: "Upselling Pitch" },
+          { speaker: "RM", text: "It is a 24-month tenure with monthly interest payouts credited directly to your verified HDFC bank account, backed by 1.25x asset cover.", time: "01:22", segment: "Upselling Pitch" },
+          { speaker: "Customer", text: "That fits my cash flow needs. Can you WhatsApp the term sheet and IM?", time: "01:45", segment: "Upselling Pitch" },
+          { speaker: "RM", text: "Sent directly to your WhatsApp! I will follow up this evening to help reserve your units.", time: "02:05", segment: "Upselling Pitch" },
+          { speaker: "Customer", text: "Sounds good, thanks Aahan.", time: "02:18", segment: "Upselling Pitch" }
+        ],
+        parameters: createPcgParameters({
+          Expectation: { status: 'Yes', quote: 'Turn 8: Committed to sending WhatsApp term sheet and evening follow-up.' },
+          TechnicalLegal: { status: 'Yes', quote: 'Turn 6: Accurately explained 11.25% yield and 1.25x asset cover without promising guaranteed returns.' },
+          Fillers: { status: 'Yes', quote: 'Turn 2: Fast, fluent lookup of Muthoot coupon credit with zero dead air.' }
+        })
+      },
+      {
+        id: "105",
+        callId: "runo-105",
+        rmName: "Aahan Thaker",
+        tlName: "Team Gokul",
+        phoneNumber: "+91 98765 10105",
+        category: "13% Club / Pitching",
+        categoryKey: "13_pitching",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 178,
+        durationFormatted: "02:58",
+        iqsScore: 92,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "RM", text: "Good morning Mr. Mehta, Aahan here from Wint Wealth. You had registered on our platform to explore fixed-income senior secured bonds.", time: "00:05", segment: "Support Query" },
+          { speaker: "Customer", text: "Yes Aahan, but while completing my profile, my KYC got stuck on DigiLocker Aadhaar verification.", time: "00:16", segment: "Support Query" },
+          { speaker: "RM", text: "I can help you unlock that right away. Did it show an address mismatch or OTP timeout?", time: "00:30", segment: "Support Query" },
+          { speaker: "Customer", text: "It showed an OTP timeout. Can we re-trigger it?", time: "00:42", segment: "Support Query" },
+          { speaker: "RM", text: "I have reset the verification session from our end. Please refresh the Wint app and re-enter the OTP now.", time: "00:58", segment: "Support Query" },
+          { speaker: "Customer", text: "Done, it says KYC verified! Now tell me, how does the 13% Club fixed return product compare to standard bank FDs?", time: "01:14", segment: "New Pitching", isPivotTurn: true },
+          { speaker: "RM", text: "Unlike bank FDs which offer 6.5-7%, the 13% Club is backed by senior secured assets with 1.25x asset cover, giving fixed monthly returns.", time: "01:35", segment: "New Pitching" },
+          { speaker: "Customer", text: "Is there a minimum ticket size to start?", time: "01:58", segment: "New Pitching" },
+          { speaker: "RM", text: "You can start with ₹10,000, and interest is credited monthly right to your bank account.", time: "02:15", segment: "New Pitching" }
+        ],
+        parameters: createPcgParameters({
+          TechnicalLegal: { status: 'Yes', quote: 'Turn 7: Clear explanation of fixed monthly returns and senior asset backing vs standard FDs.' },
+          Process: { status: 'Yes', quote: 'Turn 3: Guided through KYC DigiLocker reset smoothly without requesting redundant documents.' },
+          Simplifying: { status: 'Yes', quote: 'Turn 7: Positioned senior debt asset cover vs bank FDs in plain language.' }
+        })
+      },
+      {
+        id: "122",
+        callId: "runo-122",
+        rmName: "Dhanush",
+        tlName: "Team Gokul",
+        phoneNumber: "+91 98765 10122",
+        category: "Upselling Calls",
+        categoryKey: "upselling",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 138,
+        durationFormatted: "02:18",
+        iqsScore: 80,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "Customer", text: "Hi Dhanush, I submitted Form 15G last week. Has it been processed?", time: "00:06", segment: "Support Query" },
+          { speaker: "RM", text: "Yes Mr. Rao, I checked your account and Form 15G has been verified and registered.", time: "00:20", segment: "Support Query" },
+          { speaker: "RM", text: "Also, since you have ₹1,00,000 available from your recent redemption, we have a fresh NBFC NCD open today.", time: "00:40", segment: "Upselling Pitch", isPivotTurn: true },
+          { speaker: "Customer", text: "What is the coupon rate?", time: "01:05", segment: "Upselling Pitch" },
+          { speaker: "RM", text: "It pays 11.20% annualized yield with quarterly payouts.", time: "01:25", segment: "Upselling Pitch" }
+        ],
+        parameters: createPcgParameters({
+          Process: { status: 'Yes', quote: 'Turn 2: Verified Form 15G submission on CRM beforehand.' },
+          Fillers: { status: 'No', quote: 'Turn 4: Noticeable fumbling on quarterly payout dates causing ~4s silence.' },
+          Expectation: { status: 'No', quote: 'Turn 5: Ended without confirming next steps or follow-up for NCD investment.' }
+        })
+      },
+      {
+        id: "164",
+        callId: "runo-164",
+        rmName: "Aravind",
+        tlName: "Team Vaishnavi",
+        phoneNumber: "+91 98765 10164",
+        category: "Upselling Calls",
+        categoryKey: "upselling",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 152,
+        durationFormatted: "02:32",
+        iqsScore: 80,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "Customer", text: "Hello, I wanted to change my linked bank account IFSC code.", time: "00:08", segment: "Support Query" },
+          { speaker: "RM", text: "Hi Mr. Nair, Aravind here. You can upload your cancelled cheque in the Profile tab.", time: "00:25", segment: "Support Query" },
+          { speaker: "RM", text: "Also, your wallet has ₹1.5L unallocated. We have an 11.60% XIRR secondary market bond available.", time: "00:48", segment: "Upselling Pitch", isPivotTurn: true }
+        ],
+        parameters: createPcgParameters({
+          Expectation: { status: 'No', quote: 'Turn 5: Did not commit to a specific callback window for demat allocation.' },
+          ActiveListening: { status: 'Yes', quote: 'Turn 3: Addressed bank account update request before introducing bond reinvestment.' },
+          Fillers: { status: 'No', quote: 'Turn 3: Repeated filler sounds (umm, aaa) while explaining cheque upload.' }
+        })
+      },
+      {
+        id: "176",
+        callId: "runo-176",
+        rmName: "Sujal Dadwani",
+        tlName: "Team Vaishnavi",
+        phoneNumber: "+91 98765 10176",
+        category: "13% Club / Pitching",
+        categoryKey: "13_pitching",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 165,
+        durationFormatted: "02:45",
+        iqsScore: 89,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "Customer", text: "Is my CDSL demat account linked?", time: "00:05", segment: "Support Query" },
+          { speaker: "RM", text: "Yes, verified and active. Let me explain the 13% Club senior debt allocation.", time: "00:25", segment: "New Pitching", isPivotTurn: true }
+        ],
+        parameters: createPcgParameters({
+          Process: { status: 'Yes', quote: 'Turn 2: Checked CDSL demat linking status prior to call on PCG Finder.' },
+          Simplifying: { status: 'Yes', quote: 'Turn 3: Explained senior debt allocation in clear, simple terms.' }
+        })
+      }
+    ];
+
+    let currentRole = 'admin';
+    let currentCategory = 'all';
+    let currentAgent = 'all';
+    let currentSearch = '';
+
+    function renderTable() {
+      const tbody = document.getElementById('calls-table-body');
+      tbody.innerHTML = '';
+
+      let filtered = sampleCalls.filter(c => {
+        // Role filter
+        if (currentRole === 'agent' && c.rmName !== 'Aahan Thaker') return false;
+        if (currentRole === 'tl_gokul' && !['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'].includes(c.rmName)) return false;
+        if (currentRole === 'tl_vaishnavi' && !['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'].includes(c.rmName)) return false;
+
+        // Category filter
+        if (currentCategory !== 'all') {
+          if (c.categoryKey !== currentCategory && !(c.secondaryCategories && c.secondaryCategories.some(s => s.toLowerCase().includes(currentCategory)))) {
+            return false;
+          }
+        }
+
+        // Agent filter
+        if (currentAgent !== 'all' && c.rmName !== currentAgent) return false;
+
+        // Search filter
+        if (currentSearch.trim()) {
+          const q = currentSearch.toLowerCase();
+          if (!c.callId.toLowerCase().includes(q) && !c.phoneNumber.includes(q) && !c.rmName.toLowerCase().includes(q)) return false;
+        }
+
+        // Min IQS filter
+        if (currentMinIqs !== '' && currentMinIqs !== 'all') {
+          const minVal = parseFloat(currentMinIqs);
+          if (!isNaN(minVal) && c.iqsScore < minVal) return false;
+        }
+
+        // Max IQS filter
+        if (currentMaxIqs !== '' && currentMaxIqs !== 'all') {
+          const maxVal = parseFloat(currentMaxIqs);
+          if (!isNaN(maxVal) && c.iqsScore > maxVal) return false;
+        }
+
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-zinc-400">No calls match the selected filters.</td></tr>';
+        return;
+      }
+
+      filtered.slice(0, 10).forEach(c => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-[#FAFAFB] transition-colors cursor-pointer';
+        tr.onclick = () => openDrawer(c.id);
+
+        const rmCell = currentRole === 'agent' ? '' : `<td class="py-3 px-4 font-semibold text-zinc-800">${c.rmName}</td>`;
+
+        const categoryBadge = c.categoryKey === '13_pitching'
+          ? 'bg-blue-50 text-blue-700 border-blue-200'
+          : 'bg-purple-50 text-purple-700 border-purple-200';
+
+        const secondaryBadge = c.secondaryCategories && c.secondaryCategories.length > 0
+          ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs mt-1">
+              <span class="font-bold text-amber-600">+</span> ${c.secondaryCategories.join(', ')}
+            </span>`
+          : '';
+
+        tr.innerHTML = `
+          <td class="py-3 px-4 font-bold tabular-nums text-zinc-900">
+            #${c.id}
+          </td>
+          ${rmCell}
+          <td class="py-3 px-4 tabular-nums text-zinc-600">${c.phoneNumber}</td>
+          <td class="py-3 px-4">
+            <div class="flex flex-col items-start">
+              <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold border ${categoryBadge}">
+                ${c.category}
+              </span>
+              ${secondaryBadge}
+            </div>
+          </td>
+          <td class="py-3 px-4 tabular-nums">${c.durationFormatted}</td>
+          <td class="py-3 px-4">
+            <span class="px-2 py-0.5 rounded font-bold tabular-nums text-xs bg-emerald-100 text-emerald-800 border border-emerald-200">
+              ${c.iqsScore}%
+            </span>
+          </td>
+          <td class="py-3 px-4">
+            <span class="text-emerald-700 font-bold">PASS</span>
+          </td>
+          <td class="py-3 px-4">
+            <span class="text-emerald-700 font-medium">Connected</span>
+          </td>
+          <td class="py-3 px-4 text-center">
+            <button class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition-colors">
+              View
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openDrawer(callId) {
+      const c = typeof callId === 'object' ? callId : sampleCalls.find(item => item.id === callId);
+      if (!c) return;
+      activeCall = c;
+
+      const callIdEl = document.getElementById('drawer-call-id');
+      if (callIdEl) callIdEl.innerText = c.id;
+      const rmNameEl = document.getElementById('drawer-rm-name');
+      if (rmNameEl) rmNameEl.innerText = c.rmName;
+      const phoneEl = document.getElementById('drawer-phone');
+      if (phoneEl) phoneEl.innerText = c.phoneNumber.replace('+91 ', '');
+      const chatIdEl = document.getElementById('drawer-chat-id');
+      if (chatIdEl) chatIdEl.innerText = `1794${c.id}`;
+      const iqsScoreEl = document.getElementById('drawer-iqs-score');
+      if (iqsScoreEl) iqsScoreEl.innerText = `${c.iqsScore}%`;
+
+      const gateBadge = document.getElementById('drawer-gate-badge');
+      if (gateBadge) {
+        if (c.gateStatus === 'FAIL') {
+          gateBadge.innerText = 'FAIL';
+          gateBadge.className = 'text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-[#FEE2E2] text-[#B91C1C] border border-[#FCA5A5]';
+        } else {
+          gateBadge.innerText = 'PASS';
+          gateBadge.className = 'text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]';
+        }
+      }
+
+      // Raise dispute button visibility for agent
+      const raiseBtn = document.getElementById('drawer-raise-dispute-btn');
+      if (raiseBtn) {
+        if (currentRole === 'agent') raiseBtn.classList.remove('hidden');
+        else raiseBtn.classList.add('hidden');
+      }
+
+      // TL override section visibility
+      const overrideSec = document.getElementById('drawer-override-section');
+      if (overrideSec) {
+        if (currentRole === 'agent') overrideSec.classList.add('hidden');
+        else overrideSec.classList.remove('hidden');
+      }
+
+      // Render Dialogue Turns matching CX Calls
+      const turnsContainer = document.getElementById('drawer-turns-container');
+      turnsContainer.innerHTML = '';
+      c.turns.forEach((t, idx) => {
+        const isRM = t.speaker === 'RM';
+
+        if (t.isPivotTurn) {
+          const banner = document.createElement('div');
+          banner.className = 'p-2 px-3 bg-[#FEF2F2] text-[#991B1B] border border-[#FEE2E2] rounded-lg text-xs flex items-center gap-1.5 my-1';
+          banner.innerHTML = `<span>⚡</span> <span><b>INVESTOR</b> interrupted by <b>IR EXECUTIVE</b></span>`;
+          turnsContainer.appendChild(banner);
+        }
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `flex flex-col ${isRM ? 'items-end self-end' : 'items-start self-start'} max-w-[85%]`;
+        msgDiv.innerHTML = `
+          <div class="flex items-center gap-1.5 mb-1 text-[10px] text-[#71717A]">
+            <span>${isRM ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'}</span>
+            <span>·</span>
+            <span>${t.time}</span>
+          </div>
+          <div class="p-3 px-3.5 rounded-xl text-xs leading-relaxed ${isRM ? 'bg-[#18181B] text-white' : 'bg-[#F1F5F9] text-[#18181B]'}">
+            ${t.text}
+          </div>
+        `;
+        turnsContainer.appendChild(msgDiv);
+
+        if (idx < c.turns.length - 1 && !t.isPivotTurn) {
+          const deadAir = document.createElement('div');
+          deadAir.className = 'p-1.5 px-3 bg-[#F8FAFC] text-[#475569] border border-[#F1F5F9] rounded-lg text-xs self-start my-0.5 flex items-center gap-1.5';
+          deadAir.innerHTML = `<span>⏸</span> <span>Dead air: ~1 seconds</span>`;
+          turnsContainer.appendChild(deadAir);
+        }
+      });
+
+      // Render 11 PCG Parameters grouped by 3 Skill Groups
+      const paramsContainer = document.getElementById('drawer-params-container');
+      paramsContainer.innerHTML = '';
+
+      const skillGroups = [
+        { name: 'Group 1: Process Skills', weight: '50%', startIndex: 0, endIndex: 6 },
+        { name: 'Group 2: Communication Skills', weight: '30%', startIndex: 6, endIndex: 9 },
+        { name: 'Group 3: Customer Service Skills', weight: '20%', startIndex: 9, endIndex: 11 }
+      ];
+
+      skillGroups.forEach(grp => {
+        const grpParams = (c.parameters || []).slice(grp.startIndex, grp.endIndex);
+        if (grpParams.length === 0) return;
+
+        const grpHeader = document.createElement('div');
+        grpHeader.className = 'pt-2.5 pb-1 border-b border-[#E4E4E7] flex items-center justify-between mt-3 first:mt-0';
+        grpHeader.innerHTML = `
+          <span class="text-[11px] font-bold uppercase tracking-wider text-[#71717A]">${grp.name}</span>
+          <span class="text-[11px] font-bold text-[#18181B] bg-[#F4F4F5] px-2 py-0.5 rounded border border-[#E4E4E7]">${grp.weight}</span>
+        `;
+        paramsContainer.appendChild(grpHeader);
+
+        grpParams.forEach(p => {
+          const pdiv = document.createElement('div');
+          const status = p.status || 'Yes';
+          let badgeClass = 'bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]';
+          if (status === 'No') {
+            badgeClass = 'bg-[#FEE2E2] text-[#B91C1C] border border-[#FCA5A5]';
+          } else if (status === 'NA') {
+            badgeClass = 'bg-[#F1F5F9] text-[#475569] border border-[#CBD5E1]';
+          } else if (status === 'Half') {
+            badgeClass = 'bg-[#FEF3C7] text-[#92400E] border border-[#FCD34D]';
+          }
+
+          pdiv.className = 'p-3 bg-[#FAFAFA] border border-[#F0F0F2] rounded-lg space-y-1 hover:border-[#D4D4D8] transition-colors';
+          pdiv.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-semibold text-[#18181B]">
+                ${p.num || ''}. ${p.name}
+                <span class="text-[10px] text-zinc-400 font-medium">(${p.weightStr || (p.maxScore + '%')})</span>
+              </span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${badgeClass}">
+                ${status}
+              </span>
+            </div>
+            <p class="text-[11px] text-[#52525B] leading-relaxed m-0">${p.quote}</p>
+          `;
+          paramsContainer.appendChild(pdiv);
+        });
+      });
+
+      // Populate Override Dropdown
+      const paramSelect = document.getElementById('override-param-select');
+      if (paramSelect) {
+        paramSelect.innerHTML = c.parameters.map((p, idx) => `<option value="${idx}">${p.num || (idx + 1)}. ${p.name} (Current: ${p.status || 'Yes'})</option>`).join('');
+      }
+
+      // Reset feedback
+      const fb = document.getElementById('override-feedback');
+      if (fb) fb.classList.add('hidden');
+
+      // Update swap / reevaluate button states
+      const btnSwap = document.getElementById('btn-swap-speakers');
+      const btnReeval = document.getElementById('btn-reevaluate');
+      const badgeReeval = document.getElementById('badge-reevaluated');
+
+      if (c.hasReevaluated) {
+        btnSwap?.classList.add('hidden');
+        btnReeval?.classList.add('hidden');
+        badgeReeval?.classList.remove('hidden');
+      } else {
+        btnSwap?.classList.remove('hidden');
+        btnReeval?.classList.add('hidden');
+        badgeReeval?.classList.add('hidden');
+      }
+
+      document.getElementById('drawer-backdrop').classList.remove('hidden');
+    }
+
+    function handleProtoRaiseDispute() {
+      alert(`Dispute raised on Call #${activeCall?.id || ''}. Your Team Leader will review the transcript and update your scorecard.`);
+      closeDrawer();
+    }
+
+    let activeCall = null;
+    function openCallDrawer(cid) {
+      const c = sampleCalls.find(x => x.id === cid);
+      if (c) {
+        activeCall = c;
+        openDrawer(c);
+      }
+    }
+
+    function handleSwapSpeakersPrototype() {
+      if (!activeCall) return;
+      if (activeCall.hasReevaluated) return;
+
+      activeCall.turns = activeCall.turns.map(t => ({
+        ...t,
+        speaker: t.speaker === 'RM' ? 'Customer' : 'RM'
+      }));
+
+      // Re-render turns
+      const turnsContainer = document.getElementById('drawer-turns-container');
+      turnsContainer.innerHTML = '';
+      activeCall.turns.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'p-3 rounded-xl border border-zinc-200 bg-zinc-50/50 text-xs space-y-1.5';
+        div.innerHTML = `
+          <div class="flex items-center justify-between font-semibold">
+            <div class="flex items-center gap-2">
+              <span class="${t.speaker === 'RM' ? 'text-blue-800' : 'text-zinc-800'}">
+                ${t.speaker === 'RM' ? `RM (${activeCall.rmName})` : 'Investor / Customer'}
+              </span>
+              ${t.segment ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-medium bg-zinc-100 text-zinc-700 border border-zinc-300">${t.segment}</span>` : ''}
+            </div>
+            <span class="tabular-nums text-[10px] text-zinc-400">${t.time}</span>
+          </div>
+          <p class="text-zinc-900 leading-relaxed">${t.text}</p>
+        `;
+        turnsContainer.appendChild(div);
+      });
+
+      // Show re-evaluate button
+      document.getElementById('btn-reevaluate').classList.remove('hidden');
+    }
+
+    function handleReevaluatePrototype() {
+      if (!activeCall) return;
+      if (activeCall.hasReevaluated) {
+        alert('Re-evaluation has already been performed once for this call.');
+        return;
+      }
+
+      activeCall.hasReevaluated = true;
+      activeCall.iqsScore = Math.min(100, Math.max(88, Math.round(activeCall.iqsScore * 1.1)));
+      activeCall.parameters.forEach(p => {
+        if (p.status !== 'Yes') {
+          p.status = 'Yes';
+          p.earned = p.maxScore;
+          p.quote = "Re-evaluated after speaker swap: verified query resolution and compliant disclosure.";
+        }
+      });
+
+      // Re-render drawer score & parameters
+      document.getElementById('drawer-iqs-badge').innerText = `${activeCall.iqsScore}%`;
+      openDrawer(activeCall);
+      renderTable();
+      alert('Transcript saved and call quality re-evaluated successfully! (Re-evaluation limit: 1 of 1 used)');
+    }
+
+    function handleSubmitOverridePrototype() {
+      if (!activeCall) return;
+      const paramSelect = document.getElementById('override-param-select');
+      const scoreSelect = document.getElementById('override-score-select');
+      const noteInput = document.getElementById('override-note-input');
+
+      const pIdx = parseInt(paramSelect.value, 10);
+      const newStatus = scoreSelect.value;
+      const note = noteInput.value.trim() || 'TL manual score override.';
+
+      if (activeCall.parameters[pIdx]) {
+        const p = activeCall.parameters[pIdx];
+        p.status = newStatus;
+        p.quote = `TL Override Note: "${note}"`;
+      }
+
+      // Recalculate IQS score excluding NA parameters
+      let totalEarned = 0;
+      let totalApplicable = 0;
+      activeCall.parameters.forEach(p => {
+        if (p.status !== 'NA') {
+          totalApplicable += p.maxScore;
+          if (p.status === 'Yes') totalEarned += p.maxScore;
+          else if (p.status === 'Half') totalEarned += Math.round(p.maxScore / 2);
+        }
+      });
+      activeCall.iqsScore = totalApplicable > 0 ? Math.min(100, Math.round((totalEarned / totalApplicable) * 100)) : 100;
+
+      document.getElementById('drawer-iqs-badge').innerText = `${activeCall.iqsScore}%`;
+      openDrawer(activeCall);
+      renderTable();
+
+      const fb = document.getElementById('override-feedback');
+      if (fb) {
+        fb.classList.remove('hidden');
+        setTimeout(() => fb.classList.add('hidden'), 4000);
+      }
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer-backdrop').classList.add('hidden');
+    }
+
+    const TEAMS_DATA = {
+      'Team Gokul': ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'],
+      'Team Vaishnavi': ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'],
+    };
+
+    const AGENTS_METRICS = {
+      'Aahan Thaker': { team: 'Team Gokul', iqs: 88.5, vol: 20, pitch: 90.0, upsell: 87.5, support: 89.0, strength: 'Outstanding clarity when explaining the 13% Club senior secured debt structure and monthly payouts.', focus: 'Reinforce standard disclaimers regarding secondary liquidity windows during premature exit discussions.' },
+      'Dhanush': { team: 'Team Gokul', iqs: 86.2, vol: 16, pitch: 87.0, upsell: 85.0, support: 86.5, strength: 'High energy and strong rapport building in early call stages.', focus: 'Ensure thorough KYC verification walkthrough before closing the call.' },
+      'Yaashvi Arora': { team: 'Team Gokul', iqs: 91.0, vol: 14, pitch: 93.0, upsell: 90.0, support: 90.0, strength: 'Flawless compliance positioning and zero return-guarantee claims.', focus: 'Improve secondary window explanation turnaround time.' },
+      'Samskriti Rao': { team: 'Team Gokul', iqs: 84.8, vol: 12, pitch: 85.0, upsell: 83.5, support: 86.0, strength: 'Clear simplification of fixed return calculation.', focus: 'Address lock-in period objections more proactively.' },
+      'Gaurav Nautiyal': { team: 'Team Gokul', iqs: 83.0, vol: 10, pitch: 84.0, upsell: 81.0, support: 84.0, strength: 'Accurate explanations of TDS and Form 15G submission.', focus: 'Enhance transition from support resolution to portfolio upselling.' },
+      'Aravind': { team: 'Team Vaishnavi', iqs: 87.5, vol: 14, pitch: 89.0, upsell: 86.0, support: 87.5, strength: 'Excellent active listening and patient clarification of Demat linking.', focus: 'Commit to specific callback slots rather than open-ended followups.' },
+      'Sujal Dadwani': { team: 'Team Vaishnavi', iqs: 85.5, vol: 12, pitch: 86.5, upsell: 84.0, support: 86.0, strength: 'Structured closing with precise recap of next steps.', focus: 'Maintain consistent speech cadence during yield comparisons.' },
+      'Antara Chakrabarty': { team: 'Team Vaishnavi', iqs: 84.0, vol: 10, pitch: 85.0, upsell: 82.5, support: 84.5, strength: 'Polite and reassuring tone when addressing payout delays.', focus: 'Reinforce asset cover ratios during 13% Club pitching.' },
+      'Swati Singh': { team: 'Team Vaishnavi', iqs: 83.5, vol: 8, pitch: 84.0, upsell: 82.0, support: 84.5, strength: 'Strong empathy and quick resolution of bank account verification.', focus: 'Avoid technical jargon when explaining senior secured backing.' },
+    };
+
+    let selectedMaAgent = 'Aahan Thaker';
+
+    function populateMaAgentDropdown() {
+      const select = document.getElementById('ma-agent-select');
+      const maTitle = document.getElementById('ma-title');
+      if (!select) return;
+
+      select.innerHTML = '';
+
+      if (currentRole === 'agent') {
+        if (maTitle) maTitle.innerText = 'My Analytics';
+        const opt = document.createElement('option');
+        opt.value = 'Aahan Thaker';
+        opt.innerText = 'Aahan Thaker (My Profile)';
+        select.appendChild(opt);
+        select.disabled = true;
+        selectedMaAgent = 'Aahan Thaker';
+      } else {
+        if (maTitle) maTitle.innerText = 'Member Analytics';
+        select.disabled = false;
+
+        let teams = [];
+        if (currentRole === 'admin') {
+          teams = ['Team Gokul', 'Team Vaishnavi'];
+        } else if (currentRole === 'tl_gokul') {
+          teams = ['Team Gokul'];
+        } else if (currentRole === 'tl_vaishnavi') {
+          teams = ['Team Vaishnavi'];
+        }
+
+        teams.forEach(teamName => {
+          const optGroup = document.createElement('optgroup');
+          optGroup.label = `${teamName} (${TEAMS_DATA[teamName].length} Agents)`;
+          TEAMS_DATA[teamName].forEach(rm => {
+            const opt = document.createElement('option');
+            opt.value = rm;
+            opt.innerText = `${rm} (${teamName})`;
+            if (rm === selectedMaAgent) opt.selected = true;
+            optGroup.appendChild(opt);
+          });
+          select.appendChild(optGroup);
+        });
+
+        // Ensure selectedMaAgent is valid in the available list
+        const validAgents = teams.flatMap(t => TEAMS_DATA[t]);
+        if (!validAgents.includes(selectedMaAgent)) {
+          selectedMaAgent = validAgents[0];
+          select.value = selectedMaAgent;
+        }
+      }
+
+      renderMemberAnalytics();
+    }
+
+    function onMaAgentChange(agent) {
+      selectedMaAgent = agent;
+      renderMemberAnalytics();
+    }
+
+    function renderMemberAnalytics() {
+      const data = AGENTS_METRICS[selectedMaAgent] || AGENTS_METRICS['Aahan Thaker'];
+      const statIqs = document.getElementById('ma-stat-iqs');
+      const statVol = document.getElementById('ma-stat-vol');
+      const coachingText = document.getElementById('ma-coaching-text');
+      const coachingFocus = document.getElementById('ma-coaching-focus');
+
+      if (statIqs) statIqs.innerText = `${data.iqs}%`;
+      if (statVol) statVol.innerText = `${data.vol}`;
+      if (coachingText) {
+        coachingText.innerHTML = `<strong>Key Strength:</strong> ${data.strength}`;
+      }
+      if (coachingFocus) {
+        coachingFocus.innerHTML = `<strong>Coaching Focus:</strong> ${data.focus}`;
+      }
+
+      // Render parameter breakdown rows
+      const tbody = document.getElementById('ma-category-table-body');
+      if (tbody) {
+        const pcgParams = [
+          { key: 'CallOpening', label: 'Call Opening', weight: 5 },
+          { key: 'CallClosing', label: 'Call Closing', weight: 5 },
+          { key: 'TechnicalLegal', label: 'Technically / Legally Correct', weight: 15 },
+          { key: 'AllQuestions', label: 'All Questions Addressed', weight: 10 },
+          { key: 'Expectation', label: 'Expectation Setting', weight: 10 },
+          { key: 'Process', label: 'Process / Pre-check', weight: 5 },
+          { key: 'Grammar', label: 'Vocabulary / Sentence Structure / Grammar / Pronunciations', weight: 10 },
+          { key: 'Fillers', label: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air', weight: 10 },
+          { key: 'EnergyTone', label: 'Energy Level, Enthusiasm & Tone Modulation', weight: 10 },
+          { key: 'ActiveListening', label: 'Active Listening, Interruptions & Empathy', weight: 10 },
+          { key: 'Simplifying', label: 'Simplifying Answers', weight: 10 },
+        ];
+
+        const agentScores = {
+          'Yaashvi Arora': { CallOpening: 98, CallClosing: 96, TechnicalLegal: 99, AllQuestions: 98, Expectation: 96, Process: 97, Grammar: 98, Fillers: 95, EnergyTone: 97, ActiveListening: 96, Simplifying: 97 },
+          'Aditya R': { CallOpening: 97, CallClosing: 95, TechnicalLegal: 98, AllQuestions: 97, Expectation: 95, Process: 96, Grammar: 97, Fillers: 94, EnergyTone: 96, ActiveListening: 95, Simplifying: 96 },
+          'Aahan Thaker': { CallOpening: 96, CallClosing: 94, TechnicalLegal: 98, AllQuestions: 96, Expectation: 94, Process: 95, Grammar: 96, Fillers: 93, EnergyTone: 95, ActiveListening: 95, Simplifying: 95 },
+          'Aravind': { CallOpening: 96, CallClosing: 94, TechnicalLegal: 97, AllQuestions: 95, Expectation: 94, Process: 95, Grammar: 96, Fillers: 92, EnergyTone: 95, ActiveListening: 94, Simplifying: 94 },
+          'Dhanush': { CallOpening: 95, CallClosing: 93, TechnicalLegal: 96, AllQuestions: 94, Expectation: 92, Process: 94, Grammar: 95, Fillers: 91, EnergyTone: 93, ActiveListening: 93, Simplifying: 93 },
+          'Sujal Dadwani': { CallOpening: 95, CallClosing: 92, TechnicalLegal: 96, AllQuestions: 93, Expectation: 92, Process: 94, Grammar: 94, Fillers: 91, EnergyTone: 94, ActiveListening: 93, Simplifying: 92 },
+          'Samskriti Rao': { CallOpening: 94, CallClosing: 92, TechnicalLegal: 95, AllQuestions: 93, Expectation: 91, Process: 93, Grammar: 94, Fillers: 90, EnergyTone: 93, ActiveListening: 92, Simplifying: 92 },
+          'Antara Chakrabarty': { CallOpening: 94, CallClosing: 91, TechnicalLegal: 95, AllQuestions: 92, Expectation: 91, Process: 93, Grammar: 93, Fillers: 89, EnergyTone: 92, ActiveListening: 92, Simplifying: 91 },
+          'Swati Singh': { CallOpening: 92, CallClosing: 90, TechnicalLegal: 93, AllQuestions: 90, Expectation: 88, Process: 91, Grammar: 92, Fillers: 86, EnergyTone: 90, ActiveListening: 89, Simplifying: 89 },
+          'Gaurav Nautiyal': { CallOpening: 91, CallClosing: 89, TechnicalLegal: 92, AllQuestions: 89, Expectation: 87, Process: 90, Grammar: 91, Fillers: 85, EnergyTone: 89, ActiveListening: 88, Simplifying: 88 },
+        };
+
+        const scores = agentScores[selectedMaAgent] || agentScores['Aahan Thaker'];
+
+        tbody.innerHTML = pcgParams.map(p => {
+          const score = scores[p.key] || 90;
+          return `
+            <tr class="hover:bg-zinc-50 font-medium">
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-zinc-900">${p.label}</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 font-semibold border border-zinc-200">${p.weight}%</span>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-right font-bold font-mono text-zinc-900">
+                ${score.toFixed(1)}%
+              </td>
+              <td class="py-3 px-4 text-right text-zinc-300 font-mono">—</td>
+              <td class="py-3 px-4 text-right text-zinc-300 font-mono">—</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    function changeRole(role) {
+      currentRole = role;
+      const thRm = document.getElementById('th-rm-name');
+      const agentFilterCont = document.getElementById('agent-filter-container');
+      const avatarText = document.getElementById('user-avatar-text');
+
+      const tabCalls = document.getElementById('tab-calls');
+      const tabTeam = document.getElementById('tab-team-analytics');
+      const tabMember = document.getElementById('tab-member-analytics');
+      const tabScorecard = document.getElementById('tab-scorecard');
+      const tabRmPerf = document.getElementById('tab-rm-performance');
+      const protoName = document.getElementById('proto-user-name');
+      const protoEmail = document.getElementById('proto-user-email');
+      const protoBadge = document.getElementById('proto-user-role-badge');
+
+      const maTitle = document.getElementById('ma-title');
+
+      if (tabMember) {
+        tabMember.innerText = (role === 'agent') ? 'My Analytics' : 'Member Analytics';
+        tabMember.classList.remove('hidden');
+      }
+
+      if (tabScorecard) {
+        tabScorecard.innerText = (role === 'agent') ? 'My Scorecard' : 'RM Scorecard';
+      }
+
+      const metricConnectTitle = document.getElementById('metric-connect-title');
+      if (metricConnectTitle) {
+        metricConnectTitle.innerText = (role === 'admin') ? 'Connect Rate' : 'Pickup Rate';
+      }
+
+      if (role === 'admin') {
+        if (tabCalls) tabCalls.classList.add('hidden');
+        if (tabTeam) tabTeam.classList.remove('hidden');
+        if (tabRmPerf) tabRmPerf.classList.remove('hidden');
+        if (maTitle) maTitle.innerText = "Member Analytics";
+        setTab('team-analytics');
+        thRm.classList.remove('hidden');
+        agentFilterCont.classList.remove('hidden');
+        document.getElementById('table-title').innerText = "Evaluated Call Audits";
+        avatarText.innerText = "S";
+        if (protoName) protoName.innerText = "Sivaranjini";
+        if (protoEmail) protoEmail.innerText = "sivaranjini@wintwealth.com";
+        if (protoBadge) { protoBadge.innerText = "Admin"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
+      } else {
+        if (tabCalls) tabCalls.classList.remove('hidden');
+        if (tabTeam) tabTeam.classList.add('hidden');
+        if (tabRmPerf) tabRmPerf.classList.add('hidden');
+        if (role === 'agent') {
+          if (maTitle) maTitle.innerText = "My Analytics";
+          setTab('calls');
+          thRm.classList.add('hidden');
+          agentFilterCont.classList.add('hidden');
+          document.getElementById('table-title').innerText = "My Evaluated Calls (Aahan Thaker)";
+          avatarText.innerText = "A";
+          if (protoName) protoName.innerText = "Aahan Thaker";
+          if (protoEmail) protoEmail.innerText = "aahan.thaker@wintwealth.com";
+          if (protoBadge) { protoBadge.innerText = "RM"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
+        } else {
+          if (maTitle) maTitle.innerText = "Member Analytics";
+          if (role === 'tl_gokul') {
+            setTab('calls');
+            thRm.classList.remove('hidden');
+            agentFilterCont.classList.remove('hidden');
+            document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Gokul";
+            avatarText.innerText = "G";
+            if (protoName) protoName.innerText = "Gokul N";
+            if (protoEmail) protoEmail.innerText = "gokul@wintwealth.com";
+            if (protoBadge) { protoBadge.innerText = "Team Lead"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
+          } else if (role === 'tl_vaishnavi') {
+            setTab('calls');
+            thRm.classList.remove('hidden');
+            agentFilterCont.classList.remove('hidden');
+            document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Vaishnavi";
+            avatarText.innerText = "V";
+            if (protoName) protoName.innerText = "Vaishnavi S";
+            if (protoEmail) protoEmail.innerText = "vaishnavi@wintwealth.com";
+            if (protoBadge) { protoBadge.innerText = "Team Lead"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
+          }
+        }
+      }
+      populateMaAgentDropdown();
+      renderTable();
+    }
+
+    function toggleProtoProfileMenu(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('proto-profile-dropdown');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+      const container = document.getElementById('prototype-profile-container');
+      const menu = document.getElementById('proto-profile-dropdown');
+      if (menu && container && !container.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    function filterCategory(cat) {
+      currentCategory = cat;
+      ['all', '13_pitching', 'upselling', 'support'].forEach(k => {
+        const el = document.getElementById(`cat-${k}`);
+        if (!el) return;
+        if (k === cat) {
+          el.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#111111] text-white shadow-sm transition-all';
+        } else {
+          el.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F4F4F5] text-[#71717A] hover:text-[#111111] transition-all';
+        }
+      });
+      renderTable();
+    }
+
+    let currentMinIqs = '';
+    let currentMaxIqs = '';
+
+    function handleMinIqsInput(val) {
+      if (val === '') {
+        currentMinIqs = '';
+      } else {
+        const n = parseFloat(val);
+        if (!isNaN(n)) {
+          if (n < 0) currentMinIqs = '0';
+          else if (n > 100) currentMinIqs = '100';
+          else currentMinIqs = val;
+        }
+      }
+      const el = document.getElementById('table-min-iqs-input');
+      if (el && el.value !== currentMinIqs) el.value = currentMinIqs;
+      updateResetIqsVisibility();
+      renderTable();
+    }
+
+    function handleMaxIqsInput(val) {
+      if (val === '') {
+        currentMaxIqs = '';
+      } else {
+        const n = parseFloat(val);
+        if (!isNaN(n)) {
+          if (n < 0) currentMaxIqs = '0';
+          else if (n > 100) currentMaxIqs = '100';
+          else currentMaxIqs = val;
+        }
+      }
+      const el = document.getElementById('table-max-iqs-input');
+      if (el && el.value !== currentMaxIqs) el.value = currentMaxIqs;
+      updateResetIqsVisibility();
+      renderTable();
+    }
+
+    function updateResetIqsVisibility() {
+      const resetBtn = document.getElementById('btn-reset-iqs');
+      if (resetBtn) {
+        if ((currentMinIqs !== '' && currentMinIqs !== 'all') || (currentMaxIqs !== '' && currentMaxIqs !== 'all')) {
+          resetBtn.classList.remove('hidden');
+        } else {
+          resetBtn.classList.add('hidden');
+        }
+      }
+    }
+
+    function resetIqsFilters() {
+      currentMinIqs = '';
+      currentMaxIqs = '';
+      const minEl = document.getElementById('table-min-iqs-input');
+      const maxEl = document.getElementById('table-max-iqs-input');
+      if (minEl) minEl.value = '';
+      if (maxEl) maxEl.value = '';
+      updateResetIqsVisibility();
+      renderTable();
+    }
+
+    function filterAgent(agent) {
+      currentAgent = agent;
+      renderTable();
+    }
+
+    function handleSearch(val) {
+      currentSearch = val;
+      renderTable();
+    }
+
+    function setTab(tab) {
+      if (tab === 'rm-performance' && currentRole !== 'admin') {
+        tab = 'calls';
+      }
+      ['calls', 'team-analytics', 'rm-performance', 'member-analytics', 'scorecard', 'disputes'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        const view = document.getElementById(`view-${t}`);
+        if (!btn || !view) return;
+        if (t === tab) {
+          btn.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#111111] shadow-2xs transition-all';
+          view.classList.remove('hidden');
+        } else {
+          btn.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all';
+          view.classList.add('hidden');
+        }
+      });
+      if (tab === 'team-analytics') {
+        renderTeamAnalytics();
+      }
+      if (tab === 'rm-performance') {
+        renderRmPerformance();
+      }
+      if (tab === 'member-analytics') {
+        populateMaAgentDropdown();
+      }
+      if (tab === 'scorecard') {
+        renderScorecardTable();
+      }
+    }
+
+    let taCurrentChannel = 'calls';
+    let taCurrentTL = 'Gokul';
+    let taCurrentPeriod = '30';
+    let taCurrentTab = 'summary';
+    let taBreakdownChannel = 'calls';
+
+    const TA_GOKUL_AGENTS = [
+      { name: 'Yaashvi Arora', ini: 'YA', chats: { pickup: '95.0%', iqs: '96%', vol: 45 }, calls: { pickup: '94.0%', iqs: '91%', vol: 68 } },
+      { name: 'Aahan Thaker', ini: 'AT', chats: { pickup: '92.5%', iqs: '94%', vol: 60 }, calls: { pickup: '91.5%', iqs: '88%', vol: 74 } },
+      { name: 'Dhanush', ini: 'D', chats: { pickup: '88.0%', iqs: '90%', vol: 50 }, calls: { pickup: '87.0%', iqs: '86%', vol: 58 } },
+      { name: 'Samskriti Rao', ini: 'SR', chats: { pickup: '86.5%', iqs: '88%', vol: 40 }, calls: { pickup: '85.0%', iqs: '85%', vol: 52 } },
+      { name: 'Gaurav Nautiyal', ini: 'GN', chats: { pickup: '84.0%', iqs: '86%', vol: 35 }, calls: { pickup: '83.5%', iqs: '83%', vol: 44 } }
+    ];
+
+    const TA_VAISHNAVI_AGENTS = [
+      { name: 'Aravind', ini: 'AR', chats: { pickup: '91.0%', iqs: '93%', vol: 52 }, calls: { pickup: '90.0%', iqs: '88%', vol: 62 } },
+      { name: 'Sujal Dadwani', ini: 'SD', chats: { pickup: '87.5%', iqs: '90%', vol: 48 }, calls: { pickup: '86.5%', iqs: '86%', vol: 56 } },
+      { name: 'Antara Chakrabarty', ini: 'AC', chats: { pickup: '85.0%', iqs: '88%', vol: 44 }, calls: { pickup: '84.5%', iqs: '84%', vol: 50 } },
+      { name: 'Swati Singh', ini: 'SS', chats: { pickup: '84.5%', iqs: '87%', vol: 46 }, calls: { pickup: '84.0%', iqs: '84%', vol: 56 } }
+    ];
+
+    const TA_CHAT_PARAMS = [
+      { label: 'Issue Resolution', weight: '25%', team: 94, dept: 92 },
+      { label: 'Accuracy', weight: '20%', team: 96, dept: 94 },
+      { label: 'Expectation Setting & Follow-Through', weight: '20%', team: 96, dept: 97 },
+      { label: 'Dissatisfaction Handling', weight: '10%', team: 90, dept: 89 },
+      { label: 'Personalization', weight: '10%', team: 95, dept: 94 },
+      { label: 'Empathy', weight: '5%', team: 97, dept: 96 },
+      { label: 'Call Escalation Decision', weight: '5%', team: 96, dept: 95 },
+      { label: 'Readability & Tone', weight: '3%', team: 96, dept: 96 },
+      { label: 'Greeting & Handover', weight: '2%', team: 94, dept: 93 },
+      { label: 'Post-Call Recap', weight: '5%', team: 81, dept: 76 }
+    ];
+
+    const TA_CALL_PARAMS = [
+      { label: '1. Call Opening', weight: '5%', team: 96, dept: 94 },
+      { label: '2. Call Closing', weight: '5%', team: 94, dept: 92 },
+      { label: '3. Technically / Legally Correct', weight: '15%', team: 98, dept: 96 },
+      { label: '4. All Questions Addressed', weight: '10%', team: 95, dept: 93 },
+      { label: '5. Expectation Setting', weight: '10%', team: 91, dept: 88 },
+      { label: '6. Process / Pre-check', weight: '5%', team: 97, dept: 95 },
+      { label: '7. Vocabulary / Sentence Structure / Grammar / Pronunciations', weight: '10%', team: 92, dept: 90 },
+      { label: '8. Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air', weight: '10%', team: 89, dept: 86 },
+      { label: '9. Energy Level, Enthusiasm & Tone Modulation', weight: '10%', team: 93, dept: 91 },
+      { label: '10. Active Listening, Interruptions & Empathy', weight: '10%', team: 94, dept: 92 },
+      { label: '11. Simplifying Answers', weight: '10%', team: 96, dept: 94 }
+    ];
+
+    function setTaChannel(ch) {
+      taCurrentChannel = ch;
+      ['chats', 'calls', 'emails'].forEach(c => {
+        const btn = document.getElementById(`ta-ch-${c}`);
+        const dot = document.getElementById(`ta-dot-${c}`);
+        if (!btn || !dot) return;
+        if (c === ch) {
+          btn.className = 'h-7 px-3.5 rounded-md text-[13px] font-semibold bg-white text-[#18181B] shadow-xs inline-flex items-center gap-1.5 transition-all';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-[#18181B]';
+        } else {
+          btn.className = 'h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-[#D4D4D8]';
+        }
+      });
+      renderTeamAnalytics();
+    }
+
+    function onTaTlChange(tl) {
+      taCurrentTL = tl;
+      renderTeamAnalytics();
+    }
+
+    function setTaPeriod(p) {
+      taCurrentPeriod = p;
+      ['7', '30', 'custom'].forEach(k => {
+        const btn = document.getElementById(`ta-p-${k}`);
+        if (!btn) return;
+        if (k === p) {
+          btn.className = 'h-8 px-3.5 bg-[#18181B] text-white font-semibold border-r border-[#E4E4E7] transition-all';
+        } else {
+          btn.className = 'h-8 px-3.5 text-[#71717A] hover:text-[#18181B] border-r border-[#E4E4E7] transition-all';
+        }
+      });
+      renderTeamAnalytics();
+    }
+
+    function setTaTab(tab) {
+      taCurrentTab = tab;
+      const btnSum = document.getElementById('ta-tab-summary');
+      const btnBk = document.getElementById('ta-tab-breakdown');
+      const viewSum = document.getElementById('ta-view-summary');
+      const viewBk = document.getElementById('ta-view-breakdown');
+
+      if (tab === 'summary') {
+        if (btnSum) btnSum.className = 'h-10 px-4 text-[13px] font-semibold border-b-2 border-[#18181B] text-[#18181B] -mb-px transition-all';
+        if (btnBk) btnBk.className = 'h-10 px-4 text-[13px] font-normal text-[#71717A] hover:text-[#18181B] border-b-2 border-transparent -mb-px transition-all';
+        if (viewSum) viewSum.classList.remove('hidden');
+        if (viewBk) viewBk.classList.add('hidden');
+      } else {
+        if (btnSum) btnSum.className = 'h-10 px-4 text-[13px] font-normal text-[#71717A] hover:text-[#18181B] border-b-2 border-transparent -mb-px transition-all';
+        if (btnBk) btnBk.className = 'h-10 px-4 text-[13px] font-semibold border-b-2 border-[#18181B] text-[#18181B] -mb-px transition-all';
+        if (viewSum) viewSum.classList.add('hidden');
+        if (viewBk) viewBk.classList.remove('hidden');
+        renderTaBreakdown();
+      }
+    }
+
+    function setTaBreakdownChannel(ch) {
+      taBreakdownChannel = ch;
+      ['chats', 'calls', 'emails'].forEach(c => {
+        const btn = document.getElementById(`ta-bk-${c}`);
+        const dot = document.getElementById(`ta-bkdot-${c}`);
+        if (!btn || !dot) return;
+        if (c === ch) {
+          btn.className = 'h-7 px-3.5 rounded-md text-[13px] font-semibold bg-white text-[#18181B] shadow-xs inline-flex items-center gap-1.5 transition-all';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-[#18181B]';
+        } else {
+          btn.className = 'h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-[#D4D4D8]';
+        }
+      });
+      renderTaBreakdown();
+    }
+
+    function jumpToMemberAnalytics(rmName) {
+      selectedMaAgent = rmName;
+      setTab('member-analytics');
+      const select = document.getElementById('ma-agent-select');
+      if (select) select.value = rmName;
+    }
+
+    function renderTeamAnalytics() {
+      // 1. Get Active Agents
+      let agents = [];
+      if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
+      else agents = TA_GOKUL_AGENTS;
+
+      // 2. Update Top Stat Cards
+      const pickupTeamEl = document.getElementById('ta-stat-pickup-team');
+      const pickupCxEl = document.getElementById('ta-stat-pickup-cx');
+      const iqsTeamEl = document.getElementById('ta-stat-iqs-team');
+      const iqsCxEl = document.getElementById('ta-stat-iqs-cx');
+      const volTitleEl = document.getElementById('ta-stat-vol-title');
+      const volTeamEl = document.getElementById('ta-stat-vol-team');
+      const volCxEl = document.getElementById('ta-stat-vol-cx');
+
+      if (taCurrentChannel !== 'calls') {
+        if (pickupTeamEl) pickupTeamEl.innerText = '—';
+        if (pickupCxEl) pickupCxEl.innerText = '—';
+        if (iqsTeamEl) iqsTeamEl.innerText = '—';
+        if (iqsCxEl) iqsCxEl.innerText = '—';
+        if (volTitleEl) volTitleEl.innerText = taCurrentChannel === 'emails' ? 'EMAILS HANDLED' : 'CHATS HANDLED';
+        if (volTeamEl) volTeamEl.innerText = '—';
+        if (volCxEl) volCxEl.innerText = '—';
+      } else if (taCurrentTL === 'Vaishnavi') {
+        if (pickupTeamEl) pickupTeamEl.innerText = '91.8%';
+        if (pickupCxEl) pickupCxEl.innerText = '91.0%';
+        if (iqsTeamEl) iqsTeamEl.innerText = '85.1%';
+        if (iqsCxEl) iqsCxEl.innerText = '85.0%';
+        if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
+        if (volTeamEl) volTeamEl.innerText = '224';
+        if (volCxEl) volCxEl.innerText = '520';
+      } else {
+        // Gokul
+        if (pickupTeamEl) pickupTeamEl.innerText = '93.2%';
+        if (pickupCxEl) pickupCxEl.innerText = '91.0%';
+        if (iqsTeamEl) iqsTeamEl.innerText = '86.8%';
+        if (iqsCxEl) iqsCxEl.innerText = '85.0%';
+        if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
+        if (volTeamEl) volTeamEl.innerText = '296';
+        if (volCxEl) volCxEl.innerText = '520';
+      }
+
+      // 3. Update IQS by Parameter Rows
+      const paramsSubtitle = document.getElementById('ta-params-subtitle');
+      const paramsCount = document.getElementById('ta-params-count');
+      const paramsContainer = document.getElementById('ta-param-rows-container');
+
+      const periodText = taCurrentPeriod === '7' ? '7 days' : taCurrentPeriod === '30' ? '30 days' : 'Custom range';
+      if (paramsSubtitle) {
+        paramsSubtitle.innerText = taCurrentChannel === 'calls'
+          ? `${periodText} · avg across all evaluated calls`
+          : `${periodText} · values available for Calls only`;
+      }
+
+      const activeParams = TA_CALL_PARAMS;
+      if (paramsCount) {
+        paramsCount.innerText = taCurrentChannel === 'calls'
+          ? `${activeParams.length} quality parameters · weighted`
+          : '0 quality parameters';
+      }
+
+      if (paramsContainer) {
+        if (taCurrentChannel !== 'calls') {
+          paramsContainer.innerHTML = '<div class="py-12 text-center text-xs text-[#A1A1AA]">Values are currently available for Calls only.</div>';
+        } else {
+          paramsContainer.innerHTML = activeParams.map(p => `
+            <div class="flex items-center gap-4 py-2 border-b border-[#F4F4F5] last:border-b-0">
+              <span class="w-[230px] shrink-0 text-sm font-semibold text-[#18181B] truncate">${p.label}</span>
+              <span class="w-11 shrink-0 text-xs font-mono text-[#A1A1AA] text-right">${p.weight}</span>
+              <div class="flex-1 h-2.5 bg-[#E4E4E7] rounded-full relative">
+                <div class="h-full bg-[#27272A] rounded-full" style="width: ${p.team}%;"></div>
+                <div class="absolute -top-1 w-0 h-[18px] border-l-2 border-dashed border-[#71717A] -translate-x-px" style="left: ${p.dept}%;" title="Department avg ${p.dept}%"></div>
+              </div>
+              <span class="w-11 shrink-0 text-sm font-semibold font-mono text-[#18181B] text-right">${p.team}%</span>
+            </div>
+          `).join('');
+        }
+      }
+
+      // 4. Update Team Member Performance Table
+      const membersSubtitle = document.getElementById('ta-members-subtitle');
+      if (membersSubtitle) membersSubtitle.innerText = `${agents.length} active members · click a tab to switch view`;
+
+      // Highlight active channel column header in Summary
+      const thChats = document.getElementById('th-col-chats');
+      const thCalls = document.getElementById('th-col-calls');
+      const thEmails = document.getElementById('th-col-emails');
+      if (thChats) thChats.className = taCurrentChannel === 'chats' ? 'px-4 font-bold text-right bg-[#F4F4F5] text-[#18181B]' : 'px-4 font-semibold text-right';
+      if (thCalls) thCalls.className = taCurrentChannel === 'calls' ? 'px-4 font-bold text-right bg-[#F4F4F5] text-[#18181B]' : 'px-4 font-semibold text-right';
+      if (thEmails) thEmails.className = taCurrentChannel === 'emails' ? 'px-4 font-bold text-right bg-[#F4F4F5] text-[#18181B]' : 'px-4 font-semibold text-right';
+
+      const summaryTbody = document.getElementById('ta-summary-tbody');
+      if (summaryTbody) {
+        summaryTbody.innerHTML = agents.map(agent => {
+          const chData = taCurrentChannel === 'calls' ? agent.calls : null;
+          const chatsBg = taCurrentChannel === 'chats' ? 'bg-[#F4F4F5] font-semibold text-[#18181B]' : 'text-[#71717A]';
+          const callsBg = taCurrentChannel === 'calls' ? 'bg-[#F4F4F5] font-semibold text-[#18181B]' : 'text-[#71717A]';
+          const emailsBg = taCurrentChannel === 'emails' ? 'bg-[#F4F4F5] font-semibold text-[#18181B]' : 'text-[#71717A]';
+
+          return `
+            <tr onclick="jumpToMemberAnalytics('${agent.name}')" class="h-12 hover:bg-zinc-50 cursor-pointer transition-colors">
+              <td class="px-4">
+                <span class="flex items-center gap-2.5">
+                  <span class="w-7 h-7 rounded-full bg-[#E4E4E7] inline-flex items-center justify-center text-[11px] font-semibold text-[#71717A]">
+                    ${agent.ini}
+                  </span>
+                  <span class="text-sm font-medium text-[#18181B]">${agent.name}</span>
+                </span>
+              </td>
+              <td class="px-4 text-right font-mono text-sm text-[#18181B]">${chData ? `${90 + (agent.ini.charCodeAt(0) % 8)}%` : '—'}</td>
+              <td class="px-4 text-right font-mono text-sm text-[#18181B]">${chData ? chData.iqs : '—'}</td>
+              <td class="px-4 text-right font-mono text-sm ${chatsBg}">—</td>
+              <td class="px-4 text-right font-mono text-sm ${callsBg}">${agent.calls.vol}</td>
+              <td class="px-4 text-right font-mono text-sm ${emailsBg}">—</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      if (taCurrentTab === 'breakdown') {
+        renderTaBreakdown();
+      }
+    }
+
+    function renderTaBreakdown() {
+      let agents = [];
+      if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
+      else agents = TA_GOKUL_AGENTS;
+
+      const activeParams = TA_CALL_PARAMS;
+      const theadTr = document.getElementById('ta-breakdown-thead-tr');
+      const tbody = document.getElementById('ta-breakdown-tbody');
+
+      if (theadTr) {
+        theadTr.innerHTML = `
+          <th class="sticky left-0 z-10 w-[180px] min-w-[180px] text-left px-4 py-2.5 bg-[#FAFAFA] border-r border-b border-[#E4E4E7] text-[11px] uppercase tracking-wider text-[#71717A] font-semibold shadow-[6px_0_8px_-6px_rgba(0,0,0,0.12)]">
+            Agent
+          </th>
+          ${activeParams.map(p => `
+            <th class="w-[100px] min-w-[100px] text-center px-2 py-2.5 bg-[#FAFAFA] border-b border-[#E4E4E7] text-[11px] uppercase tracking-wider text-[#71717A] font-semibold whitespace-normal leading-tight">
+              ${p.label}
+            </th>
+          `).join('')}
+        `;
+      }
+
+      if (tbody) {
+        if (taBreakdownChannel !== 'calls') {
+          tbody.innerHTML = `<tr><td colspan="${activeParams.length + 1}" class="py-12 text-center text-xs text-[#A1A1AA]">Values are currently available for Calls only.</td></tr>`;
+        } else {
+          tbody.innerHTML = agents.map(agent => `
+            <tr class="h-11 border-b border-[#F4F4F5] hover:bg-zinc-50 transition-colors">
+              <td onclick="jumpToMemberAnalytics('${agent.name}')" class="sticky left-0 z-10 w-[180px] min-w-[180px] text-left px-4 bg-white border-r border-b border-[#E4E4E7] text-[13px] text-[#18181B] font-medium shadow-[6px_0_8px_-6px_rgba(0,0,0,0.12)] cursor-pointer hover:font-bold">
+                ${agent.name}
+              </td>
+              ${activeParams.map((p, idx) => {
+                const baseScore = parseInt(agent.calls.iqs) || 94;
+                const score = Math.min(100, Math.max(75, baseScore + ((idx % 3) - 1) * 2));
+                return `
+                  <td class="w-[100px] min-w-[100px] text-center font-mono text-[13px] text-[#18181B] border-b border-[#F4F4F5]">
+                    ${agent.calls.vol === 0 ? '—' : score}
+                  </td>
+                `;
+              }).join('')}
+            </tr>
+          `).join('');
+        }
+      }
+    }
+
+    // ── RM Performance Logic ──────────────────────────────────────────────
+    let rmPerfCurrentTeam = 'all';
+
+    const RM_PERFORMANCE_DATA = [
+      { name: 'Yaashvi Arora', ini: 'YA', tl: 'Gokul', currentIqs: 94.2, prev2WkIqs: 91.8, delta2Wk: 2.4, calls: 68, focusArea: 'Pitch Clarity & Senior Secured Backing' },
+      { name: 'Aditya R', ini: 'AR', tl: 'Gokul', currentIqs: 93.5, prev2WkIqs: 89.0, delta2Wk: 4.5, calls: 72, focusArea: 'Active Listening & Objection Handling' },
+      { name: 'Aahan Thaker', ini: 'AT', tl: 'Gokul', currentIqs: 91.5, prev2WkIqs: 87.5, delta2Wk: 4.0, calls: 74, focusArea: 'Indicative Yield Framing & Disclaimers' },
+      { name: 'Aravind', ini: 'AR', tl: 'Vaishnavi', currentIqs: 89.8, prev2WkIqs: 86.6, delta2Wk: 3.2, calls: 62, focusArea: 'Demat Linking & Account Verification' },
+      { name: 'Dhanush', ini: 'D', tl: 'Gokul', currentIqs: 88.2, prev2WkIqs: 83.1, delta2Wk: 5.1, calls: 58, focusArea: 'Asset Allocation Need Discovery' },
+      { name: 'Sujal Dadwani', ini: 'SD', tl: 'Vaishnavi', currentIqs: 87.0, prev2WkIqs: 80.2, delta2Wk: 6.8, calls: 56, focusArea: 'Monthly Interest Payout Timeline Clarity' },
+      { name: 'Samskriti Rao', ini: 'SR', tl: 'Gokul', currentIqs: 85.4, prev2WkIqs: 79.6, delta2Wk: 5.8, calls: 52, focusArea: 'Secondary Liquidity Window Framing' },
+      { name: 'Antara Chakrabarty', ini: 'AC', tl: 'Vaishnavi', currentIqs: 84.2, prev2WkIqs: 82.4, delta2Wk: 1.8, calls: 50, focusArea: 'Post-Call Recap & Follow-Through' },
+      { name: 'Swati Singh', ini: 'SS', tl: 'Vaishnavi', currentIqs: 69.5, prev2WkIqs: 72.0, delta2Wk: -2.5, calls: 56, focusArea: 'Active Listening & Objection Handling' },
+      { name: 'Gaurav Nautiyal', ini: 'GN', tl: 'Gokul', currentIqs: 68.0, prev2WkIqs: 71.5, delta2Wk: -3.5, calls: 44, focusArea: 'Post-Call Recap & Follow-Through' }
+    ];
+
+    function onRmPerfTeamChange(team) {
+      rmPerfCurrentTeam = team;
+      renderRmPerformance();
+    }
+
+    function renderRmPerformance() {
+      const filtered = RM_PERFORMANCE_DATA.filter(r => rmPerfCurrentTeam === 'all' || r.tl === rmPerfCurrentTeam);
+
+      // Top 5
+      const top5 = [...filtered].sort((a, b) => b.currentIqs - a.currentIqs).slice(0, 5);
+      // Bottom Performers: anyone with an IQS score of 70% or below (sorted ascending by score)
+      const bottomPerformers = [...filtered]
+        .filter(r => r.currentIqs <= 70.0)
+        .sort((a, b) => a.currentIqs - b.currentIqs)
+        .slice(0, 5);
+      // Most Improved 5
+      const improved5 = [...filtered].sort((a, b) => b.delta2Wk - a.delta2Wk).slice(0, 5);
+
+      // 1. Render Top Performers
+      const topContainer = document.getElementById('rmperf-top-container');
+      const rankIcons = ['🥇', '🥈', '🥉', '#4', '#5'];
+      if (topContainer) {
+        topContainer.innerHTML = top5.map((rm, idx) => `
+          <div onclick="jumpToMemberAnalytics('${rm.name}')" class="p-4 flex items-center justify-between gap-3 hover:bg-zinc-50 cursor-pointer transition-colors">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="w-6 text-center font-bold text-sm ${idx < 3 ? 'text-base' : 'text-xs text-[#71717A]'} shrink-0">${rankIcons[idx]}</span>
+              <div class="w-8 h-8 rounded-full bg-[#E4E4E7] text-[#3F3F46] font-bold text-xs flex items-center justify-center shrink-0">
+                ${rm.ini}
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-semibold text-[#18181B] truncate">${rm.name}</span>
+                  <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 shrink-0">Team ${rm.tl}</span>
+                </div>
+                <div class="text-[11px] text-[#71717A] mt-0.5 truncate">${rm.calls} calls</div>
+              </div>
+            </div>
+            <div class="text-right shrink-0 flex flex-col items-end gap-1">
+              <div class="text-base font-bold font-mono text-emerald-600">${rm.currentIqs}%</div>
+              <button onclick="event.stopPropagation(); openScorecardFor('${rm.name}')" class="px-2 py-0.5 rounded text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 transition-colors cursor-pointer inline-flex items-center gap-1">
+                Show Scorecard →
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 2. Render Bottom Performers (anyone with IQS <= 70%)
+      const bottomContainer = document.getElementById('rmperf-bottom-container');
+      if (bottomContainer) {
+        if (bottomPerformers.length === 0) {
+          bottomContainer.innerHTML = `
+            <div class="p-8 text-center text-[#71717A]">
+              <div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 inline-flex items-center justify-center text-lg font-bold mb-2">✓</div>
+              <div class="text-xs font-bold text-[#18181B] mb-1">No RMs Scoring ≤ 70%</div>
+              <div class="text-[11px] text-[#71717A]">All active team members meet or exceed the 70% quality benchmark.</div>
+            </div>
+          `;
+        } else {
+          bottomContainer.innerHTML = bottomPerformers.map((rm, idx) => {
+            return `
+              <div onclick="jumpToMemberAnalytics('${rm.name}')" class="p-4 flex items-center justify-between gap-3 hover:bg-zinc-50 cursor-pointer transition-colors">
+                <div class="flex items-center gap-3 min-w-0">
+                  <span class="w-6 text-center font-bold text-xs text-[#71717A] shrink-0">#${idx + 1}</span>
+                  <div class="w-8 h-8 rounded-full bg-[#E4E4E7] text-[#3F3F46] font-bold text-xs flex items-center justify-center shrink-0">
+                    ${rm.ini}
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-xs font-semibold text-[#18181B] truncate">${rm.name}</span>
+                      <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 shrink-0">Team ${rm.tl}</span>
+                    </div>
+                    <div class="text-[11px] text-[#71717A] mt-0.5 truncate">Focus: ${rm.focusArea}</div>
+                  </div>
+                </div>
+                <div class="text-right shrink-0 flex flex-col items-end gap-1">
+                  <div class="text-base font-bold font-mono text-emerald-600">${rm.currentIqs}%</div>
+                  <button onclick="event.stopPropagation(); openScorecardFor('${rm.name}')" class="px-2 py-0.5 rounded text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 transition-colors cursor-pointer inline-flex items-center gap-1">
+                    Show Scorecard →
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // 3. Render Most Improved
+      const improvedContainer = document.getElementById('rmperf-improved-container');
+      if (improvedContainer) {
+        improvedContainer.innerHTML = improved5.map((rm, idx) => {
+          const isPositive = rm.delta2Wk >= 0;
+          return `
+            <div onclick="jumpToMemberAnalytics('${rm.name}')" class="p-4 flex items-center justify-between gap-3 hover:bg-zinc-50 cursor-pointer transition-colors">
+              <div class="flex items-center gap-3 min-w-0">
+                <span class="w-6 text-center font-bold text-xs text-[#71717A] shrink-0">#${idx + 1}</span>
+                <div class="w-8 h-8 rounded-full bg-[#E4E4E7] text-[#3F3F46] font-bold text-xs flex items-center justify-center shrink-0">
+                  ${rm.ini}
+                </div>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-semibold text-[#18181B] truncate">${rm.name}</span>
+                    <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 shrink-0">Team ${rm.tl}</span>
+                  </div>
+                  <div class="text-[11px] text-[#71717A] mt-0.5 truncate">${rm.prev2WkIqs}% → <strong class="text-[#18181B]">${rm.currentIqs}%</strong></div>
+                </div>
+              </div>
+              <div class="text-right shrink-0 flex flex-col items-end gap-1">
+                <div class="text-base font-bold font-mono text-emerald-600 flex items-center justify-end gap-1">
+                  <span>${isPositive ? '↑' : '↓'}</span>
+                  <span>${isPositive ? `+${rm.delta2Wk.toFixed(1)}%` : `${rm.delta2Wk.toFixed(1)}%`}</span>
+                </div>
+                <button onclick="event.stopPropagation(); openScorecardFor('${rm.name}')" class="px-2 py-0.5 rounded text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 transition-colors cursor-pointer inline-flex items-center gap-1">
+                  Show Scorecard →
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    const PCG_WEEKLY_SCORECARDS = [
+      { name: 'Yaashvi Arora', tl: 'Gokul', calls: 68, connect: '74%', pitch: '96%', upsell: '92%', overall: '94.2%', trend: '+2.4%' },
+      { name: 'Aditya R', tl: 'Gokul', calls: 72, connect: '72%', pitch: '95%', upsell: '91%', overall: '93.5%', trend: '+4.5%' },
+      { name: 'Aahan Thaker', tl: 'Gokul', calls: 74, connect: '70%', pitch: '93%', upsell: '89%', overall: '91.5%', trend: '+4.0%' },
+      { name: 'Aravind', tl: 'Vaishnavi', calls: 62, connect: '68%', pitch: '91%', upsell: '88%', overall: '89.8%', trend: '+3.2%' },
+      { name: 'Dhanush', tl: 'Gokul', calls: 58, connect: '66%', pitch: '90%', upsell: '86%', overall: '88.2%', trend: '+5.1%' },
+      { name: 'Sujal Dadwani', tl: 'Vaishnavi', calls: 56, connect: '65%', pitch: '89%', upsell: '84%', overall: '87.0%', trend: '+6.8%' },
+      { name: 'Samskriti Rao', tl: 'Gokul', calls: 52, connect: '63%', pitch: '87%', upsell: '83%', overall: '85.4%', trend: '+5.8%' },
+      { name: 'Antara Chakrabarty', tl: 'Vaishnavi', calls: 50, connect: '62%', pitch: '86%', upsell: '82%', overall: '84.2%', trend: '+1.8%' },
+      { name: 'Swati Singh', tl: 'Vaishnavi', calls: 56, connect: '61%', pitch: '72%', upsell: '67%', overall: '69.5%', trend: '-2.5%' },
+      { name: 'Gaurav Nautiyal', tl: 'Gokul', calls: 44, connect: '60%', pitch: '70%', upsell: '65%', overall: '68.0%', trend: '-3.5%' }
+    ];
+
+    function openScorecardFor(rmName) {
+      setTab('scorecard');
+      renderScorecardTable(rmName);
+    }
+
+    function renderScorecardTable(highlightRm = null) {
+      const tbody = document.getElementById('scorecard-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = PCG_WEEKLY_SCORECARDS.map((sc, idx) => {
+        const isHighlighted = highlightRm && sc.name.toLowerCase() === highlightRm.toLowerCase();
+        const isPositive = !sc.trend.startsWith('-');
+        return `
+          <tr id="sc-row-${sc.name.replace(/\\s+/g, '-')}" class="transition-colors ${isHighlighted ? 'bg-blue-50/80 font-medium' : 'hover:bg-zinc-50'}">
+            <td class="py-3 px-4 font-bold ${idx < 3 ? 'text-amber-600' : 'text-zinc-500'}">#${idx + 1}</td>
+            <td class="py-3 px-4 font-semibold text-[#18181B] flex items-center gap-2">
+              <span>${sc.name}</span>
+              ${isHighlighted ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-600 text-white">Selected Scorecard</span>' : ''}
+            </td>
+            <td class="py-3 px-4 text-zinc-600">Team ${sc.tl}</td>
+            <td class="py-3 px-4 font-mono">${sc.calls}</td>
+            <td class="py-3 px-4 font-mono">${sc.connect}</td>
+            <td class="py-3 px-4 font-mono">${sc.pitch}</td>
+            <td class="py-3 px-4 font-mono">${sc.upsell}</td>
+            <td class="py-3 px-4 font-bold font-mono ${parseFloat(sc.overall) >= 85 ? 'text-emerald-600' : parseFloat(sc.overall) <= 70 ? 'text-red-600' : 'text-zinc-700'}">${sc.overall}</td>
+            <td class="py-3 px-4 font-bold font-mono ${isPositive ? 'text-emerald-600' : 'text-red-600'}">${isPositive ? '↑ ' : '↓ '}${sc.trend}</td>
+          </tr>
+        `;
+      }).join('');
+
+      if (highlightRm) {
+        setTimeout(() => {
+          const el = document.getElementById(`sc-row-${highlightRm.replace(/\\s+/g, '-')}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    }
+
+    // Initialize
+    changeRole('admin');
+  </script>
+</body>
+</html>
