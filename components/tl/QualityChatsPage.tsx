@@ -489,7 +489,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     return true;
   });
 
-  const colCount = 10;
+  const colCount = 9;
   const totalPages = Math.max(1, Math.ceil(filteredDisputes.length / limit));
   const pagedDisputes = filteredDisputes.slice((page - 1) * limit, page * limit);
 
@@ -553,7 +553,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   }
 
   const [sort, toggleSort] = useSort();
-  const sorted1 = sortRows(pagedDisputes, sort, { agent: d => d.agentName, disp: d => d.disposition, by: d => d.raisedByName, iqs: d => d.iqsScore, call: d => d.callIqsScore, csat: d => d.csatScore, raised: d => d.raisedAt });
+  const sorted1 = sortRows(pagedDisputes, sort, { agent: d => d.agentName, disp: d => d.disposition, iqs: d => d.iqsScore, call: d => d.callIqsScore, csat: d => d.csatScore, raised: d => d.raisedAt });
 
   return (
     <>
@@ -656,14 +656,13 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
 
     <table style={{ width: '100%', minWidth: 1080, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
-        {(status === 'pending' ? [8, 10, 16, 9, 7, 6, 8, 8, 10, 18] : [9, 12, 14, 10, 8, 7, 10, 9, 14, 7]).map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
+        {(status === 'pending' ? [9, 12, 19, 9, 7, 9, 9, 12, 14] : [10, 15, 18, 10, 8, 10, 11, 12, 6]).map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
       </colgroup>
       <thead>
         <tr>
           <th style={th}>Chat ID</th>
           <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
           <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
-          <SortTh k="by" sort={sort} onSort={toggleSort} style={th}>Raised By</SortTh>
           <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS (Agent)</SortTh>
           <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
           <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
@@ -711,15 +710,6 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                     <span style={{ fontSize: 13, color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
                   )}
                 </td>
-                <td style={{ ...td, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  <span style={{
-                    display: 'inline-block', fontSize: 10, fontWeight: 600,
-                    textTransform: 'uppercase', letterSpacing: '0.04em',
-                    background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                    borderRadius: 4, padding: '1px 5px', marginRight: 6, color: 'var(--qa-text-2)',
-                  }}>{d.raisedBy}</span>
-                  {d.raisedByName}
-                </td>
                 <td style={tdNum}>
                   {d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -757,17 +747,6 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                 </td>
                 <td style={{ ...td, textAlign: 'right' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <button
-                      onClick={() => setExpandedId(prev => prev === d.chatId ? null : d.chatId)}
-                      style={{
-                        border: '1px solid var(--qa-border)', padding: '0 10px',
-                        height: 28, borderRadius: 8, fontFamily: 'inherit', fontSize: 12,
-                        color: 'var(--qa-text-2)', cursor: 'pointer', whiteSpace: 'nowrap',
-                        background: expandedId === d.chatId ? 'var(--qa-gray-100)' : 'transparent',
-                      }}
-                    >
-                      View
-                    </button>
                     {status === 'pending' && (
                       <>
                         <button
@@ -808,14 +787,6 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   {/* Note + challenged params row */}
                   <tr>
                     <td colSpan={colCount} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
-                      {d.agentNote && (
-                        <div style={{ marginBottom: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)', marginRight: 8 }}>
-                            {d.raisedBy === 'TL' ? 'Team Lead Note' : 'Agent Note'}
-                          </span>
-                          <span style={{ fontSize: 13, color: 'var(--qa-text)' }}>{d.agentNote}</span>
-                        </div>
-                      )}
                       {d.challengedParams.length > 0 && (
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
                           <span style={{
