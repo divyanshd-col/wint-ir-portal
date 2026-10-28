@@ -100,19 +100,28 @@ export async function fetchGoogleDoc(url: string): Promise<{ text: string; name:
   const { id, isDoc } = extractIds(url);
   if (!id) throw new Error(`Cannot extract ID from URL: ${url}`);
 
+  const name = await fetchFileNameFromDrive(id);
+
   if (isDoc) {
-    const [textRes, name] = await Promise.all([
-      fetchWithTimeout(`https://docs.google.com/document/d/${id}/export?format=txt`),
-      fetchFileNameFromDrive(id),
-    ]);
-    if (!textRes.ok) throw new Error(`Failed to fetch doc: ${textRes.status}`);
-    return { text: await textRes.text(), name };
+    try {
+      const textRes = await fetchWithTimeout(`https://docs.google.com/document/d/${id}/export?format=txt`);
+      if (textRes.ok) {
+        return { text: await textRes.text(), name };
+      }
+    } catch {
+      // Fall through to Drive API
+    }
+
+    const drive = getDriveClient();
+    if (drive) {
+      const exportRes = await drive.files.export({ fileId: id, mimeType: 'text/plain' });
+      return { text: String(exportRes.data), name };
+    }
+    throw new Error(`Failed to fetch doc: unauthenticated export failed and drive client unavailable`);
   }
 
-  const [res, name] = await Promise.all([
-    fetchWithTimeout(`https://drive.google.com/uc?export=download&id=${id}`),
-    fetchFileNameFromDrive(id),
-  ]);
+
+  const res = await fetchWithTimeout(`https://drive.google.com/uc?export=download&id=${id}`);
   if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
   const contentType = res.headers.get('content-type') || '';
 
@@ -189,7 +198,7 @@ function getHeaderLevel(line: string): number {
  *    context is never lost at split boundaries.
  *  - Skip fragments that are too small to be useful (< 40 chars of real content).
  */
-function chunkText(text: string, maxChars = 600): string[] {
+export function chunkText(text: string, maxChars = 600): string[] {
   const lines = text.split('\n');
   const chunks: string[] = [];
 
@@ -349,7 +358,7 @@ export function retrieveRelevantChunks(chunks: KnowledgeChunk[], query: string, 
     // Split into header (breadcrumb path) vs body for weighted scoring
     const firstNewline = lower.indexOf('\n');
     const headerPart = firstNewline > -1 ? lower.slice(0, firstNewline) : lower;
-    const bodyPart   = firstNewline > -1 ? lower.slice(firstNewline)    : '';
+    const bodyPart = firstNewline > -1 ? lower.slice(firstNewline) : '';
 
     let score = 0;
 
@@ -357,7 +366,7 @@ export function retrieveRelevantChunks(chunks: KnowledgeChunk[], query: string, 
     for (const term of searchTerms) {
       const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
       score += (headerPart.match(re) || []).length * 3;
-      score += (bodyPart.match(re)   || []).length;
+      score += (bodyPart.match(re) || []).length;
     }
 
     // Phrase hits: 5× per occurrence
@@ -396,12 +405,12 @@ export function getTopKBScore(chunks: KnowledgeChunk[], query: string): number {
     const lower = chunk.content.toLowerCase();
     const firstNewline = lower.indexOf('\n');
     const headerPart = firstNewline > -1 ? lower.slice(0, firstNewline) : lower;
-    const bodyPart   = firstNewline > -1 ? lower.slice(firstNewline)    : '';
+    const bodyPart = firstNewline > -1 ? lower.slice(firstNewline) : '';
     let score = 0;
     for (const term of searchTerms) {
       const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
       score += (headerPart.match(re) || []).length * 3;
-      score += (bodyPart.match(re)   || []).length;
+      score += (bodyPart.match(re) || []).length;
     }
     for (const phrase of phrases) {
       const re = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');

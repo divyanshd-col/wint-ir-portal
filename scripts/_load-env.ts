@@ -13,12 +13,13 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const envFile = join(ROOT, '.env.local');
-
-if (existsSync(envFile)) {
-  for (const line of readFileSync(envFile, 'utf-8').split('\n')) {
-    const m = line.match(/^([^#=\s]+)\s*=\s*"?(.+?)"?\s*$/);
-    // Don't clobber vars already set in the real environment.
-    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+for (const fname of ['.env.local', '.env']) {
+  const envFile = join(ROOT, fname);
+  if (existsSync(envFile)) {
+    for (const line of readFileSync(envFile, 'utf-8').split('\n')) {
+      const m = line.match(/^([^#=\s]+)\s*=\s*"?(.+?)"?\s*$/);
+      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+    }
   }
 }
+

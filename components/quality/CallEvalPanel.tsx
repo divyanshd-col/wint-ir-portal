@@ -82,7 +82,7 @@ export const PCG_PARAM_NAMES: Record<string, string> = {
 export const PCG_PARAM_ALIASES: Record<string, string[]> = {
   CallOpening: ['CallOpening', 'call_opening', 'P1', 'P5', 'opening', 'CallOpening_reasoning', 'P1_opening'],
   CallClosing: ['CallClosing', 'call_closing', 'P2', 'P6', 'closing', 'CallClosing_reasoning', 'P2_closing'],
-  TechnicalLegal: ['TechnicalLegal', 'technically_legally_correct', 'Technical', 'P1', 'P3', 'factual', 'TechnicalLegal_reasoning', 'P3_technical'],
+  TechnicalLegal: ['TechnicalLegal', 'TechnicallyLegal', 'technically_legally_correct', 'Technical', 'P1', 'P3', 'factual', 'TechnicalLegal_reasoning', 'P3_technical'],
   AllQuestions: ['AllQuestions', 'all_questions_addressed', 'questions', 'P2', 'P4', 'AllQuestions_reasoning', 'P4_questions'],
   Expectation: ['Expectation', 'expectation_setting', 'ExpectationSetting', 'P3', 'P5', 'Expectation_reasoning', 'P5_expectation'],
   Process: ['Process', 'process_precheck', 'PreCheck', 'P6', 'P7', 'Process_reasoning', 'P6_process'],
@@ -175,14 +175,14 @@ function extractReasoning(ev: any): string {
       .map(item => {
         if (!item) return '';
         if (typeof item === 'string') return item.trim();
-        const text = item.note || item.why || item.reason || item.comment || item.explanation || item.text || item.quote || '';
+        const text = item.explanation || item.reasoning || item.note || item.why || item.reason || item.comment || item.text || item.quote || '';
         return typeof text === 'string' ? text.trim() : String(text);
       })
       .filter(Boolean);
     return parts.join(' • ');
   }
   if (typeof ev === 'object') {
-    const text = ev.note || ev.why || ev.reason || ev.comment || ev.explanation || ev.text || ev.quote || '';
+    const text = ev.explanation || ev.reasoning || ev.note || ev.why || ev.reason || ev.comment || ev.text || ev.quote || '';
     return typeof text === 'string' ? text.trim() : String(text);
   }
   return String(ev).trim();

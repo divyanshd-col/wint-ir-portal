@@ -15,143 +15,56 @@ export interface RmPerformanceItem {
   improvementDriver?: string;
 }
 
-const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
-  {
-    id: 'rm-yaashvi',
-    name: 'Yaashvi Arora',
-    ini: 'YA',
-    tl: 'Gokul',
-    currentIqs: 94.2,
-    prev2WkIqs: 91.8,
-    delta2Wk: 2.4,
-    callsVolume: 68,
-    focusArea: 'Technically / Legally Correct',
-    improvementDriver: '+4% in Senior Secured debt backing & legal disclosures',
-  },
-  {
-    id: 'rm-aditya',
-    name: 'Aditya R',
-    ini: 'AR',
-    tl: 'Gokul',
-    currentIqs: 93.5,
-    prev2WkIqs: 89.0,
-    delta2Wk: 4.5,
-    callsVolume: 72,
-    focusArea: 'Active Listening, Interruptions & Empathy',
-    improvementDriver: '+8% in Handling secondary liquidity objections',
-  },
-  {
-    id: 'rm-aahan',
-    name: 'Aahan Thaker',
-    ini: 'AT',
-    tl: 'Gokul',
-    currentIqs: 91.5,
-    prev2WkIqs: 87.5,
-    delta2Wk: 4.0,
-    callsVolume: 74,
-    focusArea: 'Technically / Legally Correct',
-    improvementDriver: '+7% in Indicative yield disclaimers & risk warnings',
-  },
-  {
-    id: 'rm-aravind',
-    name: 'Aravind',
-    ini: 'AR',
-    tl: 'Vaishnavi',
-    currentIqs: 89.8,
-    prev2WkIqs: 86.6,
-    delta2Wk: 3.2,
-    callsVolume: 62,
-    focusArea: 'Process / Pre-check',
-    improvementDriver: '+6% in Demat verification & pre-check walkthrough',
-  },
-  {
-    id: 'rm-dhanush',
-    name: 'Dhanush',
-    ini: 'D',
-    tl: 'Gokul',
-    currentIqs: 88.2,
-    prev2WkIqs: 83.1,
-    delta2Wk: 5.1,
-    callsVolume: 58,
-    focusArea: 'Expectation Setting',
-    improvementDriver: '+9% in Expectation setting & callback scheduling',
-  },
-  {
-    id: 'rm-sujal',
-    name: 'Sujal Dadwani',
-    ini: 'SD',
-    tl: 'Vaishnavi',
-    currentIqs: 87.0,
-    prev2WkIqs: 80.2,
-    delta2Wk: 6.8,
-    callsVolume: 56,
-    focusArea: 'Simplifying Answers',
-    improvementDriver: '+12% in Simplifying monthly interest payout terms',
-  },
-  {
-    id: 'rm-samskriti',
-    name: 'Samskriti Rao',
-    ini: 'SR',
-    tl: 'Gokul',
-    currentIqs: 85.4,
-    prev2WkIqs: 79.6,
-    delta2Wk: 5.8,
-    callsVolume: 52,
-    focusArea: 'All Questions Addressed',
-    improvementDriver: '+11% in Addressing all customer questions thoroughly',
-  },
-  {
-    id: 'rm-antara',
-    name: 'Antara Chakrabarty',
-    ini: 'AC',
-    tl: 'Vaishnavi',
-    currentIqs: 84.2,
-    prev2WkIqs: 82.4,
-    delta2Wk: 1.8,
-    callsVolume: 50,
-    focusArea: 'Call Closing',
-    improvementDriver: '+3% in Polite sign-off & agreed follow-up recap',
-  },
-  {
-    id: 'rm-swati',
-    name: 'Swati Singh',
-    ini: 'SS',
-    tl: 'Vaishnavi',
-    currentIqs: 69.5,
-    prev2WkIqs: 72.0,
-    delta2Wk: -2.5,
-    callsVolume: 56,
-    focusArea: 'Active Listening, Interruptions & Empathy',
-    improvementDriver: 'Needs coaching on attentive listening without interruptions',
-  },
-  {
-    id: 'rm-gaurav',
-    name: 'Gaurav Nautiyal',
-    ini: 'GN',
-    tl: 'Gokul',
-    currentIqs: 68.0,
-    prev2WkIqs: 71.5,
-    delta2Wk: -3.5,
-    callsVolume: 44,
-    focusArea: 'Expectation Setting',
-    improvementDriver: 'Needs coaching on explicit expectation setting & follow-through',
-  },
-];
-
 interface PcgRmPerformanceProps {
   activePersona?: 'admin' | 'tl' | 'agent';
   onSelectRm?: (rmName: string) => void;
   onOpenScorecard?: (rmName: string) => void;
+  rmScorecards?: Array<{
+    rmName: string;
+    totalCalls: number;
+    connectRate: number;
+    overallScore: number;
+    trend: string;
+    complianceFlags: number;
+    topWeakness: string;
+  }>;
+  teamLeads?: Array<{
+    tlName: string;
+    rms: string[];
+  }>;
 }
 
 export default function PcgRmPerformanceDashboard({
   activePersona = 'admin',
   onSelectRm,
   onOpenScorecard,
+  rmScorecards = [],
+  teamLeads = [],
 }: PcgRmPerformanceProps) {
   const [selectedTeam, setSelectedTeam] = useState<'all' | 'Gokul' | 'Vaishnavi'>('all');
 
-  const filteredRms = ALL_RMS_PERFORMANCE.filter(
+  const rmsList: RmPerformanceItem[] = (rmScorecards && rmScorecards.length > 0)
+    ? rmScorecards.map((sc) => {
+        const isVaishnavi = teamLeads?.find(t => t.tlName.toLowerCase() === 'vaishnavi')?.rms.some(r => r.toLowerCase() === sc.rmName.toLowerCase());
+        const tl: 'Gokul' | 'Vaishnavi' = isVaishnavi ? 'Vaishnavi' : 'Gokul';
+        const parts = sc.rmName.split(' ');
+        const ini = parts.map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();
+        return {
+          id: `rm-${sc.rmName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          name: sc.rmName,
+          ini,
+          tl,
+          currentIqs: sc.overallScore || 0,
+          prev2WkIqs: sc.overallScore || 0,
+          delta2Wk: 0,
+          callsVolume: sc.totalCalls,
+          focusArea: sc.topWeakness || '—',
+          improvementDriver: undefined,
+        };
+      })
+    : [];
+
+  const filteredRms = rmsList.filter(
     (rm) => selectedTeam === 'all' || rm.tl === selectedTeam
   );
 
@@ -217,7 +130,7 @@ export default function PcgRmPerformanceDashboard({
                 boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
               }}
             >
-              <option value="all">All Teams ({ALL_RMS_PERFORMANCE.length} RMs)</option>
+              <option value="all">All Teams ({rmsList.length} RMs)</option>
               <option value="Gokul">Team Gokul</option>
               <option value="Vaishnavi">Team Vaishnavi</option>
             </select>
@@ -226,6 +139,12 @@ export default function PcgRmPerformanceDashboard({
       </div>
 
       {/* ── 3 CATEGORIES GRID ────────────────────────────────────────────── */}
+      {filteredRms.length === 0 ? (
+        <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, padding: 48, textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#71717a' }}>No RM evaluations recorded yet for this team or period.</p>
+          <p style={{ margin: '6px 0 0 0', fontSize: 12, color: '#a1a1aa' }}>Rankings and trends will populate automatically once weekly call quality evaluations are scored.</p>
+        </div>
+      ) : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 20 }}>
         {/* =================================================================== */}
         {/* 1. TOP PERFORMERS                                                   */}
@@ -541,6 +460,7 @@ export default function PcgRmPerformanceDashboard({
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Footer Explanatory Note ────────────────────────────────────── */}
       <div style={{ marginTop: 28, padding: '14px 18px', background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>

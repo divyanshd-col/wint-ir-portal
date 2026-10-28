@@ -137,9 +137,9 @@ export default function PcgMemberAnalyticsDashboard({
   const rmCalls = calls.filter(c => c.rmName.toLowerCase() === effectiveRm.toLowerCase());
   const rmAnswered = rmCalls.filter(c => c.isAnswered);
   const rmAvgIqs = rmScorecard?.overallScore ?? (rmAnswered.length > 0
-    ? rmAnswered.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnswered.length
-    : 87.4);
-  const callsVol = rmScorecard?.totalCalls ?? (rmCalls.length > 0 ? rmCalls.length : 7);
+    ? Math.round(rmAnswered.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnswered.length)
+    : 0);
+  const callsVol = rmScorecard?.totalCalls ?? rmCalls.length;
   const callsIqs = rmAvgIqs;
 
   // Canonical 11 PCG Call Quality Parameters across 3 Skill Groups (Process Skills 50%, Communication 30%, Customer Service 20%)
@@ -157,18 +157,6 @@ export default function PcgMemberAnalyticsDashboard({
     { key: 'Simplifying', label: 'Simplifying Answers', weight: 10, deptScore: 93 },
   ];
 
-  const AGENT_PARAMETER_SCORES: Record<string, Record<string, number>> = {
-    'Yaashvi Arora': { CallOpening: 98, CallClosing: 96, TechnicalLegal: 99, AllQuestions: 98, Expectation: 96, Process: 97, Grammar: 98, Fillers: 95, EnergyTone: 97, ActiveListening: 96, Simplifying: 97 },
-    'Aditya R': { CallOpening: 97, CallClosing: 95, TechnicalLegal: 98, AllQuestions: 97, Expectation: 95, Process: 96, Grammar: 97, Fillers: 94, EnergyTone: 96, ActiveListening: 95, Simplifying: 96 },
-    'Aahan Thaker': { CallOpening: 96, CallClosing: 94, TechnicalLegal: 98, AllQuestions: 96, Expectation: 94, Process: 95, Grammar: 96, Fillers: 93, EnergyTone: 95, ActiveListening: 95, Simplifying: 95 },
-    'Aravind': { CallOpening: 96, CallClosing: 94, TechnicalLegal: 97, AllQuestions: 95, Expectation: 94, Process: 95, Grammar: 96, Fillers: 92, EnergyTone: 95, ActiveListening: 94, Simplifying: 94 },
-    'Dhanush': { CallOpening: 95, CallClosing: 93, TechnicalLegal: 96, AllQuestions: 94, Expectation: 92, Process: 94, Grammar: 95, Fillers: 91, EnergyTone: 93, ActiveListening: 93, Simplifying: 93 },
-    'Sujal Dadwani': { CallOpening: 95, CallClosing: 92, TechnicalLegal: 96, AllQuestions: 93, Expectation: 92, Process: 94, Grammar: 94, Fillers: 91, EnergyTone: 94, ActiveListening: 93, Simplifying: 92 },
-    'Samskriti Rao': { CallOpening: 94, CallClosing: 92, TechnicalLegal: 95, AllQuestions: 93, Expectation: 91, Process: 93, Grammar: 94, Fillers: 90, EnergyTone: 93, ActiveListening: 92, Simplifying: 92 },
-    'Antara Chakrabarty': { CallOpening: 94, CallClosing: 91, TechnicalLegal: 95, AllQuestions: 92, Expectation: 91, Process: 93, Grammar: 93, Fillers: 89, EnergyTone: 92, ActiveListening: 92, Simplifying: 91 },
-    'Swati Singh': { CallOpening: 92, CallClosing: 90, TechnicalLegal: 93, AllQuestions: 90, Expectation: 88, Process: 91, Grammar: 92, Fillers: 86, EnergyTone: 90, ActiveListening: 89, Simplifying: 89 },
-    'Gaurav Nautiyal': { CallOpening: 91, CallClosing: 89, TechnicalLegal: 92, AllQuestions: 89, Expectation: 87, Process: 90, Grammar: 91, Fillers: 85, EnergyTone: 89, ActiveListening: 88, Simplifying: 88 },
-  };
 
   // Derive live parameter scores from rmAnswered calls if available
   const callParamAverages: Record<string, number> = useMemo(() => {
@@ -199,43 +187,22 @@ export default function PcgMemberAnalyticsDashboard({
     if (callParamAverages[key] !== undefined) {
       return callParamAverages[key];
     }
-    const scores = AGENT_PARAMETER_SCORES[rm];
-    if (scores && scores[key] !== undefined) return scores[key];
-    const delta = (callsIqs - 85) * 0.4;
-    return Math.min(100, Math.max(50, Math.round(fallbackBase + delta)));
+    return null;
   };
 
   const wowWeeks = ['2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'];
   const wowWeekLabels = ['SEP 21 – 27', 'SEP 28 – OCT 4', 'OCT 5 – 11', 'OCT 12 – 18', 'OCT 19 – 25'];
 
   const wowMetrics = (() => {
-    if (wowChannel !== 'calls') {
+    if (wowChannel !== 'calls' || callsVol === 0 || callsIqs === 0) {
       return [
         { name: 'IQS', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
         { name: 'Volume', vals: [null, null, null, null, null] as (number | null)[], isPct: false },
       ];
     }
-    if (wowCategory === '13_pitching') {
-      return [
-        { name: 'IQS', vals: [91.5, 94.0, 92.8, 95.0, callsIqs >= 85 ? Math.min(100, callsIqs + 3) : 88.0] as (number | null)[], isPct: true },
-        { name: 'Volume', vals: [6, 4, 8, 5, Math.max(1, Math.round(callsVol * 0.5))] as (number | null)[], isPct: false },
-      ];
-    }
-    if (wowCategory === 'upselling') {
-      return [
-        { name: 'IQS', vals: [84.0, 87.5, 86.2, 88.0, callsIqs >= 85 ? callsIqs : 82.0] as (number | null)[], isPct: true },
-        { name: 'Volume', vals: [4, 3, 5, 4, Math.max(1, Math.round(callsVol * 0.3))] as (number | null)[], isPct: false },
-      ];
-    }
-    if (wowCategory === 'support') {
-      return [
-        { name: 'IQS', vals: [88.0, 90.5, 89.0, 91.5, callsIqs >= 85 ? Math.min(100, callsIqs + 1) : 85.0] as (number | null)[], isPct: true },
-        { name: 'Volume', vals: [2, 2, 2, 2, Math.max(1, Math.round(callsVol * 0.2))] as (number | null)[], isPct: false },
-      ];
-    }
     return [
-      { name: 'IQS', vals: [85.7, 88.0, 84.8, 86.7, callsIqs] as (number | null)[], isPct: true },
-      { name: 'Volume', vals: [12, 9, 15, 11, callsVol] as (number | null)[], isPct: false },
+      { name: 'IQS', vals: [null, null, null, null, callsIqs] as (number | null)[], isPct: true },
+      { name: 'Volume', vals: [null, null, null, null, callsVol] as (number | null)[], isPct: false },
     ];
   })();
 
@@ -1018,6 +985,10 @@ export default function PcgMemberAnalyticsDashboard({
           {aiChannel === 'chats' ? (
             <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontStyle: 'italic' }}>
               Chat quality evaluation is not yet implemented for PCG. AI insights will appear here once enabled.
+            </div>
+          ) : callsVol === 0 || callsIqs === 0 ? (
+            <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontStyle: 'italic' }}>
+              No evaluated call data available for {effectiveRm} in this time period. AI coaching insights will populate once calls are evaluated.
             </div>
           ) : (
             <>
