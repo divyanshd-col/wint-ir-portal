@@ -184,7 +184,7 @@ export default function PageNav({ role, isAdmin, skills: propSkills, flags, anal
         {canSeeAnalytics && (
           analytics
             ? <AnalyticsNav {...analytics} />
-            : <NavLink href="/analytics" label="Analytics" icon={AnalyticsIcon} />
+            : <NavLink href="/analytics" label="MCP" icon={AnalyticsIcon} />
         )}
         {showCx && (
           <NavLink
