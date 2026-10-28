@@ -1,3 +1,4 @@
+import { topicKey } from '@/lib/qa-topics';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -271,16 +272,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // otherwise it sits "forwarded" forever and no one sees it.
   const ownedDispositions = new Set<string>();
   for (const u of (config.users ?? []) as any[]) {
-    if (u.role === 'quality') for (const d of (u.assignedDispositions ?? [])) ownedDispositions.add(d);
+    if (u.role === 'quality') for (const d of (u.assignedDispositions ?? [])) ownedDispositions.add(topicKey(d));
   }
-  for (const e of map) for (const d of (e.dispositions ?? [])) ownedDispositions.add(d);
+  for (const e of map) for (const d of (e.dispositions ?? [])) ownedDispositions.add(topicKey(d));
   const ownedAgents = new Set<string>();
   try {
     const owned = await query<{ name: string }>(`SELECT name FROM agents WHERE qa_name IS NOT NULL AND qa_name <> ''`, []);
     for (const r of owned) ownedAgents.add((r.name || '').toLowerCase());
   } catch { /* CX DB unavailable: treat as no agent ownership */ }
   const isUnowned = (disposition: string, agentName: string) =>
-    !(disposition && ownedDispositions.has(disposition)) && !(agentName && ownedAgents.has(agentName.toLowerCase()));
+    !(disposition && ownedDispositions.has(topicKey(disposition))) && !(agentName && ownedAgents.has(agentName.toLowerCase()));
 
   const disputes: DisputeRow[] = [];
   for (const flag of pendingFlags) {
@@ -305,8 +306,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     // Scope-check: disputes should be sent to the QA who reviewed it; otherwise based on disposition
     // The topic's owner decides: a dispute on a topic that some QA owns goes to that QA only (admins still see everything).
     // Only when no QA owns the topic do the scorer / agent-assignment rules below apply.
-    const topicOwned = Boolean(effectiveDisposition) && ownedDispositions.has(effectiveDisposition);
-    if (topicOwned && role === 'quality' && !dispositions.includes(effectiveDisposition)) continue;
+    const topicOwned = Boolean(effectiveDisposition) && ownedDispositions.has(topicKey(effectiveDisposition));
+    if (topicOwned && role === 'quality' && !dispositions.some(d => topicKey(d) === topicKey(effectiveDisposition))) continue;
 
     if ((role === 'quality' || (role === 'admin' && dispositions.length > 0)) && !topicOwned) {
       let isReviewedByQA = false;
@@ -338,7 +339,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       if (!isReviewedByQA) {
         // Chat/Call was not reviewed by a specific QA — fallback to mapped dispositions or assigned agents
         const agentMatches = myAgents && effectiveAgentName && myAgents.has(effectiveAgentName.toLowerCase());
-        const dispositionMatches = dispositions.length > 0 && effectiveDisposition && dispositions.includes(effectiveDisposition);
+        const dispositionMatches = dispositions.length > 0 && effectiveDisposition && dispositions.some(d => topicKey(d) === topicKey(effectiveDisposition));
 
         const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
         if (hasRestrictions && !agentMatches && !dispositionMatches && !isUnowned(effectiveDisposition, effectiveAgentName)) {

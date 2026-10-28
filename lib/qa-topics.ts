@@ -10,3 +10,12 @@ export async function getDefinedDispositions(): Promise<string[]> {
   for (const e of (config.qaDispositionMap ?? []) as any[]) for (const d of (e.dispositions ?? [])) set.add(d);
   return [...set].sort((a, b) => a.localeCompare(b));
 }
+
+/** Topic names compare ignoring case and surrounding spaces ("OTHERS" is "Others"). */
+export const topicKey = (t: string | null | undefined) => String(t ?? '').trim().toLowerCase();
+
+/** The defined topic matching `t`, or undefined when `t` is empty or no QA owns it. */
+export function findDefinedTopic(defined: string[], t: string | null | undefined): string | undefined {
+  const k = topicKey(t);
+  return k ? defined.find(d => topicKey(d) === k) : undefined;
+}

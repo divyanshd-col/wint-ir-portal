@@ -7,7 +7,7 @@ import type { IQSAuditEntry } from '@/lib/store';
 import { resolveQANameForChat } from '@/lib/qa-resolver';
 import { readConfig } from '@/lib/config';
 import { log } from '@/lib/log';
-import { getDefinedDispositions } from '@/lib/qa-topics';
+import { getDefinedDispositions, findDefinedTopic } from '@/lib/qa-topics';
 import { getConversation, updateConversationTags } from '@/lib/robylon/db';
 import { randomUUID } from 'crypto';
 
@@ -41,12 +41,13 @@ export async function POST(req: NextRequest) {
     const conv = await getConversation(String(flag.chatId));
     const current = String((conv?.tags as any)?.disposition ?? '').trim();
     // No topic list loaded (config unavailable): do not block the forward, a missing list must not make every chat unforwardable.
-    if (defined.length > 0 && (!current || !defined.includes(current))) {
-      if (!disposition || !defined.includes(disposition)) {
+    if (defined.length > 0 && !findDefinedTopic(defined, current)) {
+      const picked = findDefinedTopic(defined, disposition);
+      if (!picked) {
         log.info('cx/tl/disputes/forward', 'topic_required', { flagId, chatId: flag.chatId, current, definedCount: defined.length });
         return NextResponse.json({ error: 'topic_required', definedDispositions: defined }, { status: 422 });
       }
-      await updateConversationTags(String(flag.chatId), { disposition, sub_disposition: String((conv?.tags as any)?.sub_disposition ?? '') });
+      await updateConversationTags(String(flag.chatId), { disposition: picked, sub_disposition: String((conv?.tags as any)?.sub_disposition ?? '') });
     }
   }
 
@@ -55,12 +56,13 @@ export async function POST(req: NextRequest) {
     const defined = await getDefinedDispositions();
     const rows = await query<{ d: string | null }>(`SELECT call_disposition AS d FROM call_recordings WHERE id = $1`, [flag.callId]);
     const current = String(rows[0]?.d ?? '').trim();
-    if (defined.length > 0 && (!current || !defined.includes(current))) {
-      if (!disposition || !defined.includes(disposition)) {
+    if (defined.length > 0 && !findDefinedTopic(defined, current)) {
+      const picked = findDefinedTopic(defined, disposition);
+      if (!picked) {
         log.info('cx/tl/disputes/forward', 'topic_required', { flagId, callId: flag.callId, current, definedCount: defined.length });
         return NextResponse.json({ error: 'topic_required', definedDispositions: defined }, { status: 422 });
       }
-      await query(`UPDATE call_recordings SET call_disposition = $1 WHERE id = $2`, [disposition, flag.callId]);
+      await query(`UPDATE call_recordings SET call_disposition = $1 WHERE id = $2`, [picked, flag.callId]);
     }
   }
 

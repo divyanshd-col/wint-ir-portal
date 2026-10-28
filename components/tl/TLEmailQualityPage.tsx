@@ -119,6 +119,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning, setActioning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [topics, setTopics] = useState<string[]>([]);
+  const [topicPick, setTopicPick] = useState<Record<string, string>>({});
   const [ticketSearch, setTicketSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('');
@@ -140,6 +142,12 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   }, [queue, period]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetch('/api/cx/tl/topics').then(r => r.json()).then(d => setTopics(d.topics || [])).catch(() => {});
+  }, []);
+  // Only needed when the email has no topic a QA owns; an existing matching intent routes it already.
+  const needsTopic = (item: EvaluationItem) =>
+    topics.length > 0 && !topics.some(t => t.trim().toLowerCase() === String(item.intent_l1 ?? '').trim().toLowerCase());
 
   const [modalItem, setModalItem] = useState<EvaluationItem | null>(null);
   const [modalAction, setModalAction] = useState<'forward_dispute' | 'tl_resolve_dispute' | null>(null);
@@ -152,8 +160,9 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       const res = await fetch('/api/email-evaluations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, messageId: item.message_id, notes }),
+        body: JSON.stringify({ action, messageId: item.message_id, notes, disposition: topicPick[item.message_id] }),
       });
+      if (res.status === 422) { setError('Pick a topic for this email first, so it goes to the QA responsible for it.'); return; }
       if (!res.ok) throw new Error(String(res.status));
       setRows(prev => prev.filter(r => r.message_id !== item.message_id));
       setModalItem(null);
@@ -414,8 +423,14 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                         {pending && (
                           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
+                            {needsTopic(item) && (
+                              <UISelect aria-label="Disposition" value={topicPick[item.message_id] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [item.message_id]: e.target.value }))} style={{ width: '100%' }}>
+                                <option value="">{intentLabel(item.intent_l1) !== '—' ? `${intentLabel(item.intent_l1)} (not assigned), choose` : 'Choose disposition'}</option>
+                                {topics.map(t => <option key={t} value={t}>{t}</option>)}
+                              </UISelect>
+                            )}
                             <button style={{ ...actionBtn, width: '100%', height: 32 }} disabled={actioning === item.message_id} onClick={() => openResolveModal(item)}>Resolve</button>
-                            <button style={{ ...actionBtn, width: '100%', height: 32, background: 'var(--qa-gray-700)', color: '#fff', border: 'none' }} disabled={actioning === item.message_id} onClick={() => openForwardModal(item)}>
+                            <button style={{ ...actionBtn, width: '100%', height: 32, background: 'var(--qa-gray-700)', color: '#fff', border: 'none' }} disabled={actioning === item.message_id || (needsTopic(item) && !topicPick[item.message_id])} onClick={() => openForwardModal(item)}>
                               {actioning === item.message_id ? '…' : 'Forward to QA'}
                             </button>
                           </div>
