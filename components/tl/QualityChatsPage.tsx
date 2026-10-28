@@ -654,9 +654,13 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       </div>
     </div>
 
-    <table style={{ width: '100%', minWidth: 1080, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+    <div style={{ overflowX: 'auto' }}>
+    <table style={{ width: '100%', minWidth: status === 'pending' ? 1150 : 960, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
-        {(status === 'pending' ? [9, 12, 19, 9, 7, 9, 9, 12, 14] : [10, 15, 18, 10, 8, 10, 11, 12, 6]).map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
+        {(status === 'pending'
+          ? ['120px', '150px', undefined, '90px', '80px', '110px', '150px', '190px', '230px']
+          : ['120px', '150px', undefined, '90px', '80px', '110px', '150px', '210px', '80px']
+        ).map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
       </colgroup>
       <thead>
         <tr>
@@ -727,7 +731,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   {d.callIqsScore != null ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                 </td>
                 <td style={td}><CSATBadge score={d.csatScore} /></td>
-                <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)' }}>
+                <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
                   {fmtDate(d.raisedAt)}
                   <br />
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(d.raisedAt)}</span>
@@ -851,6 +855,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       )}
       </tbody>
     </table>
+    </div>
 
     {/* Pagination Footer */}
     {totalPages > 1 && (
