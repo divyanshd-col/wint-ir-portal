@@ -750,8 +750,20 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   {/* Note + challenged params row */}
                   <tr>
                     <td colSpan={colCount} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
-                      {d.challengedParams.length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                      <DisputeThread
+                        flagId={d.flagId}
+                        agentNote={d.agentNote}
+                        reviewNote={d.reviewNote}
+                        agentName={d.agentName}
+                        raisedByRole={d.raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
+                        raisedByName={d.raisedByName || d.agentName}
+                        reviewedBy={(d as any).reviewedBy}
+                        flush
+                        topSlot={
+                      d.challengedParams.length > 0 ? (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
                           <span style={{
                             fontSize: 10, fontWeight: 700,
                             background: targetInfo.badgeBg, color: targetInfo.badgeText,
@@ -769,18 +781,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                             }}>{formatParamLabel(cp.param)}</span>
                           ))}
                         </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                      <DisputeThread
-                        flagId={d.flagId}
-                        agentNote={d.agentNote}
-                        reviewNote={d.reviewNote}
-                        agentName={d.agentName}
-                        raisedByRole={d.raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
-                        raisedByName={d.raisedByName || d.agentName}
-                        reviewedBy={(d as any).reviewedBy}
-                        flush
+                      ) : null
+                        }
                         reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
                         flaggedAt={(d as any).flaggedAt || d.raisedAt}
                         reviewedAt={(d as any).reviewedAt}
