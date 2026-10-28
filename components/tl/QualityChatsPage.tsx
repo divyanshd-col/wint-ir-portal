@@ -655,7 +655,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     </div>
 
     <div style={{ overflowX: 'auto' }}>
-    <table style={{ width: '100%', minWidth: status === 'pending' ? 1150 : 960, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+    <table style={{ width: '100%', minWidth: status === 'pending' ? 1340 : 1200, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
         {(status === 'pending'
           ? ['120px', '150px', undefined, '90px', '80px', '110px', '150px', '190px', '230px']
