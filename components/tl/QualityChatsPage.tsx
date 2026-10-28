@@ -702,15 +702,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
               >
                 <td style={tdMono}><ChatIdCell chatId={d.chatId} /></td>
                 <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.agentName}</td>
-                <td style={{ ...td, overflow: 'visible' }} onClick={e => e.stopPropagation()}>
-                  {status === 'pending' && definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) ? (
-                    <UISelect aria-label="Disposition" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ width: '100%' }}>
-                      <option value="">{d.disposition ? `${d.disposition} (not assigned), choose` : 'Choose disposition'}</option>
-                      {definedTopics.map(t => <option key={t} value={t}>{t}</option>)}
-                    </UISelect>
-                  ) : (
-                    <span style={{ fontSize: 13, color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
-                  )}
+                <td style={td}>
+                  <span style={{ fontSize: 13, color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
                 </td>
                 <td style={tdNum}>
                   {d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore ? (
@@ -777,7 +770,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                           ))}
                         </div>
                       )}
-                      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                       <DisputeThread
                         flagId={d.flagId}
@@ -796,6 +789,12 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         {status === 'pending' && (
                           <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 16, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 12 }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
+                            {definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && (
+                              <UISelect aria-label="Disposition" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ width: '100%' }}>
+                                <option value="">{d.disposition ? `${d.disposition} (not assigned), choose` : 'Choose disposition'}</option>
+                                {definedTopics.map(t => <option key={t} value={t}>{t}</option>)}
+                              </UISelect>
+                            )}
                         <button
                           onClick={() => resolveAtTLLevel(d.flagId)}
                           disabled={actioning === d.flagId}
