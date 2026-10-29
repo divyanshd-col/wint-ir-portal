@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePcgAdmin } from '@/lib/pcg/auth';
 import { listUsers } from '@/lib/users';
 import { readConfig, writeConfig } from '@/lib/config';
-import { TL_TEAMS } from '@/app/api/admin/pcg-calls/route';
 
 export async function GET(req: NextRequest) {
   const { session, response } = await requirePcgAdmin();
@@ -18,32 +17,19 @@ export async function GET(req: NextRequest) {
       (u) => u.platform_domain === 'pcg' || u.platform_domain === 'both' || u.is_super_admin
     );
 
-    // Identify Team Leads
-    const dbTls = pcgUsers.filter((u) => u.role === 'tl');
-    const tlSet = new Set<string>();
-    tlSet.add('Team Gokul');
-    tlSet.add('Team Vaishnavi');
-    for (const tl of dbTls) {
-      tlSet.add(`Team ${tl.name}`);
-    }
+    // Dynamic Team Leads: users in DB with role === 'tl'
+    const teamLeads = pcgUsers
+      .filter((u) => u.role === 'tl' && u.status !== 'disabled')
+      .map((u) => u.name);
 
     // Identify RMs (agents)
     const rms = pcgUsers.filter((u) => u.role === 'agent');
 
-    // Build assignment map
+    // Build assignment map from portal configurations only
     const assignments: { rmName: string; email: string; tlName: string; userId: number }[] = [];
     for (const rm of rms) {
       const clean = rm.name.trim().toLowerCase();
-      let assignedTl = customTeamMap[clean];
-      if (!assignedTl) {
-        if (TL_TEAMS.Gokul.some((n) => n.toLowerCase() === clean)) {
-          assignedTl = 'Team Gokul';
-        } else if (TL_TEAMS.Vaishnavi.some((n) => n.toLowerCase() === clean)) {
-          assignedTl = 'Team Vaishnavi';
-        } else {
-          assignedTl = 'Unassigned';
-        }
-      }
+      const assignedTl = customTeamMap[clean] || '';
       assignments.push({
         userId: rm.user_id,
         rmName: rm.name,
@@ -54,7 +40,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      teamLeads: Array.from(tlSet),
+      teamLeads,
       assignments,
     });
   } catch (err: any) {
@@ -71,7 +57,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const updates: Record<string, string> = body.assignments || {};
 
-    if (body.rmName && body.tlName) {
+    if (body.rmName && body.tlName !== undefined) {
       updates[body.rmName.trim().toLowerCase()] = body.tlName;
     }
 
@@ -79,7 +65,12 @@ export async function PATCH(req: NextRequest) {
     const currentMap = { ...(config.pcgTeamAssignments || {}) };
 
     for (const [rm, tl] of Object.entries(updates)) {
-      currentMap[rm.toLowerCase()] = tl;
+      const key = rm.toLowerCase().trim();
+      if (!tl || tl === 'Unassigned') {
+        delete currentMap[key];
+      } else {
+        currentMap[key] = tl;
+      }
     }
 
     await writeConfig({ ...config, pcgTeamAssignments: currentMap });

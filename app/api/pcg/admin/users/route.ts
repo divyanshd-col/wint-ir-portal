@@ -17,19 +17,15 @@ import {
 import { sendInviteEmail, mailerConfigured } from '@/lib/mailer';
 import { isAllowedEmail, normalizeEmail, normalizeName } from '@/lib/identity';
 import { readConfig, writeConfig } from '@/lib/config';
-import { TL_TEAMS } from '@/app/api/admin/pcg-calls/route';
-
 const VALID_ROLES: UserRole[] = ['agent', 'admin', 'quality', 'tl'];
 const DORMANT_DAYS = 60;
 
-function resolveDefaultTlForRm(rmName: string, customMap?: Record<string, string>): string {
+function resolveTlForRm(rmName: string, customMap?: Record<string, string>): string {
   const clean = rmName.trim().toLowerCase();
   if (customMap && customMap[clean]) {
     return customMap[clean];
   }
-  if (TL_TEAMS.Gokul.some((n) => n.toLowerCase() === clean)) return 'Team Gokul';
-  if (TL_TEAMS.Vaishnavi.some((n) => n.toLowerCase() === clean)) return 'Team Vaishnavi';
-  return 'Unassigned';
+  return '';
 }
 
 // GET — List all PCG team users
@@ -51,7 +47,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       users: pcgUsers.map((u) => {
-        const assignedTl = resolveDefaultTlForRm(u.name, customTeamMap);
+        const assignedTl = resolveTlForRm(u.name, customTeamMap);
         return {
           userId: u.user_id,
           email: u.email,
@@ -232,9 +228,13 @@ export async function PATCH(req: NextRequest) {
   if (body.tlName !== undefined) {
     try {
       const config = await readConfig();
-      const currentMap = config.pcgTeamAssignments || {};
-      const rmKey = (body.name || target.name).toLowerCase();
-      currentMap[rmKey] = body.tlName;
+      const currentMap = { ...(config.pcgTeamAssignments || {}) };
+      const rmKey = (body.name || target.name).toLowerCase().trim();
+      if (!body.tlName || body.tlName === 'Unassigned') {
+        delete currentMap[rmKey];
+      } else {
+        currentMap[rmKey] = body.tlName;
+      }
       await writeConfig({ ...config, pcgTeamAssignments: currentMap });
     } catch (err: any) {
       console.warn('[pcg/admin/users] could not update team assignment:', err?.message);

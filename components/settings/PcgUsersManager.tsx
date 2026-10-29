@@ -71,10 +71,14 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
   const [menuFor, setMenuFor] = useState<number | null>(null);
 
   // ── Team Leads & Assignments State ─────────────────────────────────────────
-  const [teamLeads, setTeamLeads] = useState<string[]>(['Team Gokul', 'Team Vaishnavi']);
   const [teamSearch, setTeamSearch] = useState('');
   const [pendingAssignments, setPendingAssignments] = useState<Record<string, string>>({});
   const [savingAssignments, setSavingAssignments] = useState(false);
+
+  // Dynamic Team Leads derived from users who have role === 'tl'
+  const tlOptions = useMemo(() => {
+    return users.filter((u) => u.role === 'tl' && u.status !== 'disabled');
+  }, [users]);
 
   // ── Invite Modal State ─────────────────────────────────────────────────────
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -107,16 +111,9 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
   const loadData = async () => {
     setLoadingUsers(true);
     try {
-      const [usersRes, teamsRes] = await Promise.all([
-        fetch('/api/pcg/admin/users').then((r) => r.json()),
-        fetch('/api/pcg/admin/teams').then((r) => r.json()),
-      ]);
-
+      const usersRes = await fetch('/api/pcg/admin/users').then((r) => r.json());
       if (usersRes.users) {
         setUsers(usersRes.users);
-      }
-      if (teamsRes.teamLeads) {
-        setTeamLeads(teamsRes.teamLeads);
       }
     } catch (err: any) {
       console.error('[PcgUsersManager] failed to load:', err);
@@ -514,19 +511,13 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600">{roleLabel(role)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-gray-600">
                         {u.role === 'agent' ? (
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium border ${
-                              u.tlName?.includes('Gokul')
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : u.tlName?.includes('Vaishnavi')
-                                ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                : 'bg-gray-50 text-gray-600 border-gray-200'
-                            }`}
-                          >
-                            {u.tlName || 'Unassigned'}
-                          </span>
+                          u.tlName ? (
+                            <span className="text-gray-700">{u.tlName}</span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}
@@ -650,7 +641,8 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
               <tbody>
                 {filteredRms.map((rm) => {
                   const currentTl =
-                    pendingAssignments[rm.name.toLowerCase()] ?? rm.tlName ?? 'Unassigned';
+                    pendingAssignments[rm.name.toLowerCase()] ??
+                    (rm.tlName && rm.tlName !== 'Unassigned' ? rm.tlName : '');
                   const isChanged = pendingAssignments[rm.name.toLowerCase()] !== undefined;
 
                   return (
@@ -679,10 +671,10 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
                           }}
                           className={`${inputCls} w-52 ${isChanged ? '!border-amber-400' : ''}`}
                         >
-                          <option value="Unassigned">— Unassigned —</option>
-                          {teamLeads.map((tl) => (
-                            <option key={tl} value={tl}>
-                              {tl}
+                          <option value="">—</option>
+                          {tlOptions.map((tl) => (
+                            <option key={tl.userId} value={tl.name}>
+                              {tl.name}
                             </option>
                           ))}
                         </select>
@@ -804,9 +796,9 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
                     className={`${inputCls} w-full`}
                   >
                     <option value="">— Select Team Lead —</option>
-                    {teamLeads.map((tl) => (
-                      <option key={tl} value={tl}>
-                        {tl}
+                    {tlOptions.map((tl) => (
+                      <option key={tl.userId} value={tl.name}>
+                        {tl.name}
                       </option>
                     ))}
                   </select>
@@ -935,10 +927,10 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
                     onChange={(e) => setEditTl(e.target.value)}
                     className={`${inputCls} w-full`}
                   >
-                    <option value="Unassigned">— Unassigned —</option>
-                    {teamLeads.map((tl) => (
-                      <option key={tl} value={tl}>
-                        {tl}
+                    <option value="">— Unassigned —</option>
+                    {tlOptions.map((tl) => (
+                      <option key={tl.userId} value={tl.name}>
+                        {tl.name}
                       </option>
                     ))}
                   </select>
