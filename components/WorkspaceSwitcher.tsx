@@ -106,9 +106,11 @@ export default function WorkspaceSwitcher({ compact = false }: { compact?: boole
                 Profile
               </span>
             </div>
-            <p className="text-[10px] text-zinc-400 truncate mt-0.5">
-              {activeDomain === 'pcg' ? 'Private Client Group' : 'Customer Experience'}
-            </p>
+            {!compact && (
+              <p className="text-[10px] text-zinc-400 truncate mt-0.5">
+                {activeDomain === 'pcg' ? 'Private Client Group' : 'Customer Experience'}
+              </p>
+            )}
           </div>
         </div>
 
@@ -168,9 +170,6 @@ export default function WorkspaceSwitcher({ compact = false }: { compact?: boole
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                     )}
                   </div>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Chats, CSAT & Exotel Calls
-                  </p>
                 </div>
               </div>
 
@@ -200,9 +199,6 @@ export default function WorkspaceSwitcher({ compact = false }: { compact?: boole
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     )}
                   </div>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Runo Dialers, Pitching & RM Scorecards
-                  </p>
                 </div>
               </div>
 

@@ -39,6 +39,7 @@ export interface PortalConfig {
   iqsScoringPrompt?: string;
   analyticsPlannerPrompt?: string;
   analyticsSynthesizerPrompt?: string;
+  pcgTeamAssignments?: Record<string, string>;
   // ── QA disposition mapping ───────────────────────────────────────────────
   qaDispositionMap?: QADispositionEntry[];
   // ── KB document display names (Drive ID → human-readable name) ──────────────

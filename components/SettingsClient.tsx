@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import UsersManager, { type User } from './settings/UsersManager';
+import PcgUsersManager from './settings/PcgUsersManager';
 
 interface SafeConfig {
   llmProvider?: string;
@@ -31,6 +32,15 @@ interface SafeConfig {
   hasSlackToken?: boolean;
   qualityAlertSheetUrl?: string;
   hasPyannoteKey?: boolean;
+}
+
+interface SettingsClientProps {
+  config: SafeConfig;
+  isAdmin?: boolean;
+  isSuperAdmin?: boolean;
+  hasPcgAccess?: boolean;
+  platformDomain?: string;
+  activeDomain?: 'cx' | 'pcg';
 }
 
 const ADMIN_SECTIONS = [
@@ -66,9 +76,60 @@ const PROMPT_TABS = [
   },
 ];
 
-export default function SettingsClient({ config, isAdmin = false }: { config: SafeConfig; isAdmin?: boolean }) {
-  const SECTIONS = isAdmin ? [...ADMIN_SECTIONS, SECURITY_SECTION] : [SECURITY_SECTION];
-  const [activeSection, setActiveSection] = useState(isAdmin ? 'general' : 'security');
+export default function SettingsClient({
+  config,
+  isAdmin = false,
+  isSuperAdmin = false,
+  hasPcgAccess = false,
+  platformDomain = 'cx',
+  activeDomain = 'cx',
+}: SettingsClientProps) {
+  const isPcgAdminOnly = isAdmin && platformDomain === 'pcg' && !isSuperAdmin;
+
+  let SECTIONS: { id: string; label: string }[] = [];
+  if (isPcgAdminOnly) {
+    SECTIONS = [
+      { id: 'pcg-users', label: 'Users & Permissions' },
+      SECURITY_SECTION,
+    ];
+  } else if (isSuperAdmin) {
+    SECTIONS = [
+      { id: 'general', label: 'General' },
+      { id: 'kb', label: 'Knowledge Base' },
+      { id: 'prompt', label: 'Prompts' },
+      { id: 'users', label: 'CX Users & Permissions' },
+      { id: 'pcg-users', label: 'PCG Users & Permissions' },
+      { id: 'tokens', label: 'Token Usage' },
+      { id: 'integrations', label: 'Integrations' },
+      SECURITY_SECTION,
+    ];
+  } else if (isAdmin) {
+    SECTIONS = [...ADMIN_SECTIONS, SECURITY_SECTION];
+  } else {
+    SECTIONS = [SECURITY_SECTION];
+  }
+
+  const initialSection = isPcgAdminOnly
+    ? 'pcg-users'
+    : isSuperAdmin && activeDomain === 'pcg'
+    ? 'pcg-users'
+    : isAdmin
+    ? 'general'
+    : 'security';
+
+  const [activeSection, setActiveSection] = useState(initialSection);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const s = p.get('section');
+      if (s && SECTIONS.some((sec) => sec.id === s)) {
+        setActiveSection(s);
+      } else if (p.get('tab') === 'pcg' && hasPcgAccess) {
+        setActiveSection('pcg-users');
+      }
+    }
+  }, [hasPcgAccess]);
 
   // ── General state ──────────────────────────────────────────────────────────
   const [llmProvider, setLlmProvider] = useState<'gemini' | 'claude'>((config.llmProvider as any) || 'gemini');
@@ -540,7 +601,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       </aside>
 
       {/* Main content */}
-      <main className={`flex-1 w-full mx-auto px-8 py-10 space-y-10 ${activeSection === 'users' ? 'max-w-6xl' : 'max-w-3xl'}`}>
+      <main className={`flex-1 w-full mx-auto px-8 py-10 space-y-10 ${activeSection === 'users' || activeSection === 'pcg-users' ? 'max-w-6xl' : 'max-w-3xl'}`}>
 
         {/* ── GENERAL ── */}
         {activeSection === 'general' && (
@@ -978,7 +1039,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
           </div>
         )}
 
-        {/* ── USERS ── */}
+        {/* ── USERS (CX) ── */}
         {activeSection === 'users' && (
           <UsersManager
             users={users}
@@ -988,6 +1049,14 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
             loadingUsers={loadingUsers}
             reloadUsers={loadUsers}
             showToast={showToast}
+          />
+        )}
+
+        {/* ── PCG USERS & PERMISSIONS ── */}
+        {activeSection === 'pcg-users' && hasPcgAccess && (
+          <PcgUsersManager
+            showToast={showToast}
+            isSuperAdmin={isSuperAdmin}
           />
         )}
 
