@@ -61,7 +61,6 @@ export async function GET(req: NextRequest) {
           lastLogin: u.last_login,
           createdAt: u.created_at,
           dormant: !!u.last_login && now - new Date(u.last_login).getTime() > DORMANT_DAYS * 864e5,
-          hasPassword: Boolean(u.password_hash),
         };
       }),
     });

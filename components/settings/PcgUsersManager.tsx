@@ -16,7 +16,6 @@ export interface PcgUser {
   lastLogin?: string | null;
   createdAt?: string;
   dormant?: boolean;
-  hasPassword?: boolean;
 }
 
 interface PcgUsersManagerProps {
@@ -92,11 +91,6 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState('');
 
-  // ── Batch Invite Modal State ───────────────────────────────────────────────
-  const [batchInviteOpen, setBatchInviteOpen] = useState(false);
-  const [sendingBatch, setSendingBatch] = useState(false);
-  const [batchResult, setBatchResult] = useState<{ total: number; sent: number; failed: number } | null>(null);
-
   // ── Edit Modal State ───────────────────────────────────────────────────────
   const [editUser, setEditUser] = useState<PcgUser | null>(null);
   const [editName, setEditName] = useState('');
@@ -166,32 +160,6 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
       (u) => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
     );
   }, [rms, teamSearch]);
-
-  const pendingInviteCount = useMemo(() => {
-    return users.filter((u) => !u.hasPassword && u.status !== 'disabled').length;
-  }, [users]);
-
-  const runBatchInvite = async () => {
-    setSendingBatch(true);
-    setBatchResult(null);
-    try {
-      const res = await fetch('/api/pcg/admin/users/batch-invite', {
-        method: 'POST',
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        showToast(data.error || 'Failed to send batch invites');
-        return;
-      }
-      setBatchResult(data);
-      showToast(`Sent setup invites to ${data.sent} users`);
-      await loadData();
-    } catch {
-      showToast('Network error triggering batch invites');
-    } finally {
-      setSendingBatch(false);
-    }
-  };
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const submitInvite = async (e: React.FormEvent) => {
@@ -397,34 +365,16 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
           <p className="text-sm text-gray-500 mt-1">Manage members, teams, and RM assignments.</p>
         </div>
         {tab === 'users' && (
-          <div className="flex items-center gap-2">
-            {pendingInviteCount > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setBatchResult(null);
-                  setBatchInviteOpen(true);
-                }}
-                className="shrink-0 px-3.5 py-2.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-sm font-semibold hover:bg-amber-100 transition flex items-center gap-1.5"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
-                Invite Pending ({pendingInviteCount})
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                resetInviteForm();
-                setInviteOpen(true);
-              }}
-              className="shrink-0 px-4 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] transition"
-            >
-              + Invite User
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              resetInviteForm();
+              setInviteOpen(true);
+            }}
+            className="shrink-0 px-4 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] transition"
+          >
+            + Invite User
+          </button>
         )}
       </div>
 
@@ -604,12 +554,12 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
                               >
                                 Edit
                               </button>
-                              {(!u.hasPassword || status === 'invited') && (
+                              {status === 'invited' && (
                                 <button
                                   onClick={() => resendInvite(u)}
                                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
                                 >
-                                  {u.hasPassword ? 'Resend invite' : 'Send setup invite'}
+                                  Resend invite
                                 </button>
                               )}
                               {status === 'disabled' ? (
@@ -1068,59 +1018,6 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
                   {savingEdit ? 'Saving…' : 'Save'}
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* ── Batch Invite Modal ──────────────────────────────────────────────── */}
-      {batchInviteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-gray-900">Send Setup Invites</h3>
-                <p className="text-xs text-gray-500">Email password creation links to PCG team members</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-600 leading-relaxed">
-              This will send a single-use setup link (valid for 15 days) to all{' '}
-              <strong className="text-gray-900 font-semibold">{pendingInviteCount} active PCG members</strong>{' '}
-              who do not have a password set yet.
-            </p>
-
-            {batchResult && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 space-y-1">
-                <p className="font-semibold">Batch invite process completed!</p>
-                <p>Successfully sent: {batchResult.sent} / {batchResult.total}</p>
-                {batchResult.failed > 0 && <p className="text-red-600">Failed: {batchResult.failed}</p>}
-              </div>
-            )}
-
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setBatchInviteOpen(false)}
-                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition"
-              >
-                {batchResult ? 'Close' : 'Cancel'}
-              </button>
-              {!batchResult && (
-                <button
-                  type="button"
-                  disabled={sendingBatch || pendingInviteCount === 0}
-                  onClick={runBatchInvite}
-                  className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
-                >
-                  {sendingBatch ? 'Sending Invites…' : `Send to ${pendingInviteCount} Users`}
-                </button>
-              )}
             </div>
           </div>
         </div>
