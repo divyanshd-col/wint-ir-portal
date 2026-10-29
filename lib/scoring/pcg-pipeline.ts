@@ -358,8 +358,7 @@ Return ONLY valid JSON matching this schema:
     }
   },
   "compliance_tripwire": false,
-  "compliance_reason": null,
-  "ai_coaching_tip": "Specific coaching recommendation for RM"
+  "compliance_reason": null
 }
 `;
 
@@ -581,15 +580,12 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
   const complianceTripwire = !!evalJson.compliance_tripwire || evaluatedParams.TechnicallyLegal?.compliance_breach === true;
   const complianceReason = evalJson.compliance_reason || evaluatedParams.TechnicallyLegal?.breach_reason || null;
 
-  let verdict: 'PASS' | 'COACHING_REQUIRED' | 'COMPLIANCE_BREACH' = 'PASS';
+  let verdict: 'PASS' | 'COMPLIANCE_BREACH' = 'PASS';
   if (complianceTripwire) {
     verdict = 'COMPLIANCE_BREACH';
-  } else if (iqsScore < 85) {
-    verdict = 'COACHING_REQUIRED';
   }
 
   const category = evalJson.call_category || call.call_category || '13_pitching';
-  const coachingTip = evalJson.ai_coaching_tip || (iqsScore < 85 ? 'Review expectation follow-up timelines and product risk disclosures.' : null);
 
   // 7. Store Result in pcg_call_evaluations
   await query(`
@@ -598,7 +594,7 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
       iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
       verdict, parameters, compliance_tripwire, compliance_reason, ai_coaching_tip,
       transcript_turns, scored_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, null, $16, NOW(), NOW())
     ON CONFLICT (call_id) DO UPDATE SET
       rm_name = EXCLUDED.rm_name,
       tl_name = EXCLUDED.tl_name,
@@ -614,7 +610,7 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
       parameters = EXCLUDED.parameters,
       compliance_tripwire = EXCLUDED.compliance_tripwire,
       compliance_reason = EXCLUDED.compliance_reason,
-      ai_coaching_tip = EXCLUDED.ai_coaching_tip,
+      ai_coaching_tip = null,
       transcript_turns = EXCLUDED.transcript_turns,
       scored_at = NOW(),
       updated_at = NOW()
@@ -634,7 +630,6 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     JSON.stringify(formattedParameters),
     complianceTripwire,
     complianceReason,
-    coachingTip,
     JSON.stringify(transcriptTurns),
   ]);
 

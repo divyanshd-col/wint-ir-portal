@@ -4,7 +4,7 @@ import { authOptions } from '@/auth';
 import type { UserRole } from '@/next-auth';
 import {
   listUsers, createInvite, createSignupToken, changeRole, changeStatus,
-  updateUserProfile, getUserById, isUniqueViolation, audit,
+  updateUserProfile, getUserById, isUniqueViolation, audit, updateUserDomain,
   type UserStatus,
 } from '@/lib/users';
 import { sendInviteEmail, mailerConfigured } from '@/lib/mailer';
@@ -22,18 +22,27 @@ const DORMANT_DAYS = 60;
 // GET — list users (no password hashes). Reads the DB; if the users table
 // isn't there yet (pre-migration dual-read window), falls back to the legacy
 // config.users blob so the admin page never 500s during rollout.
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const now = Date.now();
   try {
+    const { searchParams } = new URL(req.url);
+    const domain = searchParams.get('domain');
     const users = await listUsers();
-    return NextResponse.json(users.map(u => ({
+    const filtered = domain
+      ? users.filter(u => domain === 'cx'
+          ? (u.platform_domain === 'cx' || u.platform_domain === 'both' || u.is_super_admin)
+          : (u.platform_domain === 'pcg' || u.platform_domain === 'both' || u.is_super_admin))
+      : users;
+    return NextResponse.json(filtered.map(u => ({
       userId: u.user_id,
       email: u.email,
       name: u.name,
       role: u.role,
       status: u.status,
       isAdmin: u.role === 'admin',
+      isSuperAdmin: Boolean(u.is_super_admin),
+      platformDomain: u.platform_domain || 'cx',
       agentName: u.name,
       assignedDispositions: u.assigned_dispositions || [],
       lastLogin: u.last_login,
@@ -76,10 +85,20 @@ export async function POST(req: NextRequest) {
   if (!name) return NextResponse.json({ error: 'Name is required.' }, { status: 400 });
 
   const actor = session.user?.email || 'admin';
+  const platformDomain = body.platformDomain || 'cx';
+  const isSuperAdmin = Boolean(session.user?.isSuperAdmin && body.isSuperAdmin);
 
   let user;
   try {
-    user = await createInvite({ email, name, role, assignedDispositions, createdBy: actor });
+    user = await createInvite({
+      email,
+      name,
+      role,
+      assignedDispositions,
+      createdBy: actor,
+      platformDomain,
+      isSuperAdmin,
+    });
   } catch (err) {
     if (isUniqueViolation(err)) {
       return NextResponse.json({ error: 'A user with this email or name already exists.' }, { status: 409 });
@@ -165,6 +184,13 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "You can't disable your own account." }, { status: 400 });
     }
     await changeStatus(userId, status, actor);
+  }
+
+  // Domain & SuperAdmin update (Super Admins only)
+  if (session.user?.isSuperAdmin && (body.platformDomain !== undefined || body.isSuperAdmin !== undefined)) {
+    const domain = body.platformDomain ?? target.platform_domain;
+    const superFlag = body.isSuperAdmin !== undefined ? Boolean(body.isSuperAdmin) : target.is_super_admin;
+    await updateUserDomain(userId, domain, superFlag, actor);
   }
 
   return NextResponse.json({ success: true });
