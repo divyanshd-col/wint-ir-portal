@@ -72,6 +72,42 @@ export async function middleware(req: NextRequest) {
     : (DEFAULT_ROLE_SKILLS[role] || []);
 
   const isAdmin = token.isAdmin || role === 'admin';
+  const isSuperAdmin = Boolean(token.isSuperAdmin);
+  const platformDomain = (token.platformDomain as string) || 'cx';
+  const cookieDomain = req.cookies.get('wint_active_domain')?.value;
+
+  // Resolve active domain profile (Super Admins can switch; others are fixed to their domain)
+  const activeDomain: 'cx' | 'pcg' = (isSuperAdmin || platformDomain === 'both')
+    ? (cookieDomain === 'pcg' ? 'pcg' : 'cx')
+    : (platformDomain === 'pcg' ? 'pcg' : 'cx');
+
+  const isPcgRoute = pathname.startsWith('/admin/pcg-calls') || pathname.startsWith('/pcg');
+
+  // --- PCG Mode Enforcement ---
+  if (activeDomain === 'pcg') {
+    // In PCG mode, accessing home or CX tools redirects to PCG dashboard
+    if (
+      pathname === '/' ||
+      pathname.startsWith('/chat') ||
+      pathname.startsWith('/analytics') ||
+      pathname.startsWith('/call-analysis') ||
+      pathname.startsWith('/quality') ||
+      pathname.startsWith('/cx') ||
+      pathname.startsWith('/tl') ||
+      pathname.startsWith('/agent')
+    ) {
+      return NextResponse.redirect(new URL('/admin/pcg-calls', req.url));
+    }
+  }
+
+  // --- CX Mode Enforcement ---
+  if (activeDomain === 'cx') {
+    // Non-super-admins who are CX-only must NOT access PCG routes
+    if (isPcgRoute && !isSuperAdmin && platformDomain !== 'both') {
+      return NextResponse.redirect(new URL('/quality', req.url));
+    }
+  }
+
   const checkSkill = (reqSkill: string | string[]): boolean => {
     if (isAdmin) return true;
     if (Array.isArray(reqSkill)) {

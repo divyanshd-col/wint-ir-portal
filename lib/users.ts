@@ -27,11 +27,13 @@ export interface DbUser {
   status_changed_at: string | null;
   status_changed_by: string | null;
   google_sub: string | null;
+  platform_domain: string;
+  is_super_admin: boolean;
 }
 
 const USER_COLS = `user_id, email, name, password_hash, role, status,
   assigned_dispositions, last_login, created_at, created_by,
-  status_changed_at, status_changed_by, google_sub`;
+  status_changed_at, status_changed_by, google_sub, platform_domain, is_super_admin`;
 
 const SIGNUP_TOKEN_TTL_DAYS = 15;
 
@@ -101,6 +103,8 @@ export interface CreateInviteInput {
   role: UserRole;
   assignedDispositions?: string[];
   createdBy: string; // admin email
+  platformDomain?: string;
+  isSuperAdmin?: boolean;
 }
 
 /** Creates an `invited` user. Throws on unique violation (email/name) — the
@@ -108,14 +112,16 @@ export interface CreateInviteInput {
 export async function createInvite(input: CreateInviteInput): Promise<DbUser> {
   const email = normalizeEmail(input.email);
   const name = normalizeName(input.name);
+  const domain = input.platformDomain || 'cx';
+  const superAdmin = Boolean(input.isSuperAdmin);
   return withTransaction(async (tx) => {
     const rows = await tx.query<DbUser>(
-      `INSERT INTO users (email, name, role, status, assigned_dispositions, created_by)
-       VALUES ($1, $2, $3, 'invited', $4, $5)
+      `INSERT INTO users (email, name, role, status, assigned_dispositions, created_by, platform_domain, is_super_admin)
+       VALUES ($1, $2, $3, 'invited', $4, $5, $6, $7)
        RETURNING ${USER_COLS}`,
-      [email, name, input.role, input.assignedDispositions?.length ? input.assignedDispositions : null, normalizeEmail(input.createdBy)],
+      [email, name, input.role, input.assignedDispositions?.length ? input.assignedDispositions : null, normalizeEmail(input.createdBy), domain, superAdmin],
     );
-    await audit('invite', { actorEmail: input.createdBy, targetEmail: email, detail: { role: input.role, name } }, tx);
+    await audit('invite', { actorEmail: input.createdBy, targetEmail: email, detail: { role: input.role, name, domain, superAdmin } }, tx);
     return rows[0];
   });
 }
@@ -267,4 +273,27 @@ export async function setPasswordByEmail(email: string, password: string): Promi
     [passwordHash, normalizeEmail(email)],
   );
   return rows.length > 0;
+}
+
+export async function updateUserDomain(
+  userId: number,
+  platformDomain: string,
+  isSuperAdmin: boolean,
+  actorEmail: string,
+): Promise<void> {
+  await withTransaction(async (tx) => {
+    const rows = await tx.query<{ email: string; platform_domain: string; is_super_admin: boolean }>(
+      `SELECT email, platform_domain, is_super_admin FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
+    const cur = rows[0];
+    if (!cur) throw new Error('User not found');
+    await tx.query(
+      `UPDATE users SET platform_domain = $1, is_super_admin = $2 WHERE user_id = $3`,
+      [platformDomain, isSuperAdmin, userId]
+    );
+    await audit('role_change', {
+      actorEmail,
+      targetEmail: cur.email,
+      detail: { from: { domain: cur.platform_domain, superAdmin: cur.is_super_admin }, to: { domain: platformDomain, superAdmin: isSuperAdmin } }
+    }, tx);
+  });
 }
