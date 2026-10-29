@@ -585,6 +585,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         COUNT(*)::int AS total_calls,
         COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
         ROUND(AVG(e.iqs_score), 1)::float AS avg_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= (NOW() - INTERVAL '7 days') THEN e.iqs_score END), 1)::float AS recent_iqs,
+        ROUND(AVG(CASE WHEN r.start_time < (NOW() - INTERVAL '7 days') THEN e.iqs_score END), 1)::float AS prev_iqs,
         ROUND(AVG(CASE WHEN e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%' THEN e.iqs_score END), 1)::float AS pitch_score,
         ROUND(AVG(CASE WHEN e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%' THEN e.iqs_score END), 1)::float AS upsell_score,
         ROUND(AVG(CASE WHEN e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%' THEN e.iqs_score END), 1)::float AS support_score,
@@ -601,8 +603,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       const answeredCalls = r.answered_calls || 0;
       const connectRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
       const overallScore = r.avg_iqs != null ? Math.round(r.avg_iqs) : 0;
+      const recentIqs = r.recent_iqs != null ? Number(r.recent_iqs) : overallScore;
+      const prevIqs = r.prev_iqs != null ? Number(r.prev_iqs) : overallScore;
+      const delta2Wk = r.recent_iqs != null && r.prev_iqs != null
+        ? Math.round((recentIqs - prevIqs) * 10) / 10
+        : 0;
       const trend: 'improving' | 'declining' | 'stable' =
-        overallScore >= 85 ? 'improving' : (overallScore > 0 && overallScore < 78 ? 'declining' : 'stable');
+        delta2Wk > 0 ? 'improving' : (delta2Wk < 0 ? 'declining' : 'stable');
 
       return {
         rmName: r.rm_name,
@@ -612,6 +619,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         upsellScore: r.upsell_score != null ? Math.round(r.upsell_score) : 0,
         supportScore: r.support_score != null ? Math.round(r.support_score) : 0,
         overallScore,
+        prev2WkIqs: prevIqs,
+        delta2Wk,
         trend,
         complianceFlags: r.compliance_flags || 0,
         topWeakness: overallScore > 0 && overallScore < 85 ? 'Technical / Legal disclosures' : '—',

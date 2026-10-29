@@ -77,6 +77,8 @@ interface RmScorecard {
   trend: 'improving' | 'declining' | 'stable';
   complianceFlags: number;
   topWeakness: string;
+  prev2WkIqs?: number;
+  delta2Wk?: number;
 }
 
 interface TeamLeadSummary {
