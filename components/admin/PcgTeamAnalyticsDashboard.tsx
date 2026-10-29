@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -71,6 +71,13 @@ export interface PcgTeamAnalyticsProps {
     complianceFlags: number;
     topWeakness: string;
   }>;
+  departmentStats?: {
+    totalCalls: number;
+    answeredCalls: number;
+    pickupRate: number;
+    avgIqs: number | null;
+    parameterScores?: Record<string, number>;
+  };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -508,6 +515,7 @@ export default function PcgTeamAnalyticsDashboard({
   onSwitchToMemberAnalytics,
   teamLeads = [],
   rmScorecards = [],
+  departmentStats,
 }: PcgTeamAnalyticsProps) {
   const [channel, setChannel] = useState<Channel>('calls');
   const [period, setPeriod] = useState<Period>('30');
@@ -517,12 +525,12 @@ export default function PcgTeamAnalyticsDashboard({
   const [activeTab, setActiveTab] = useState<'summary' | 'breakdown'>('summary');
   const [breakdownCh, setBreakdownCh] = useState<Channel>('calls');
 
-  // Viewing TL state: default to 'Gokul' (or passed selectedTl)
-  const [currentTL, setCurrentTL] = useState<string>(selectedTl || 'Gokul');
+  // Viewing TL state: default to first team lead or 'Gokul'
+  const [currentTL, setCurrentTL] = useState<string>(selectedTl || (teamLeads[0]?.tlName ?? 'Gokul'));
   const [showTLDrop, setShowTLDrop] = useState<boolean>(false);
   const tlDropRef = useRef<HTMLDivElement>(null);
 
-  const availableTLs = ['Gokul', 'Vaishnavi'];
+  const availableTLs = teamLeads.length > 0 ? teamLeads.map((t) => t.tlName) : ['Gokul', 'Vaishnavi'];
 
   useEffect(() => {
     if (selectedTl && availableTLs.includes(selectedTl)) {
@@ -584,9 +592,28 @@ export default function PcgTeamAnalyticsDashboard({
 
   const activeAgents = getActiveAgents();
 
-  // Active channel parameters
-  const params = channel === 'calls' ? CALL_PARAMS : CHAT_PARAMS;
-  const breakdownParams = breakdownCh === 'calls' ? CALL_PARAMS : CHAT_PARAMS;
+  // Active channel parameters with live department scores
+  const params = useMemo(() => {
+    const baseParams = channel === 'calls' ? CALL_PARAMS : CHAT_PARAMS;
+    if (!departmentStats?.parameterScores || channel !== 'calls') {
+      return baseParams;
+    }
+    const scores = departmentStats.parameterScores;
+    return baseParams.map((p) => {
+      const lookupScore =
+        scores[p.key] ??
+        scores[p.key === 'TechnicalLegal' ? 'TechnicallyLegal' : p.key] ??
+        scores[p.key === 'Grammar' ? 'VocabularyGrammar' : p.key] ??
+        scores[p.key === 'Fillers' ? 'FillersDeadAir' : p.key];
+
+      return {
+        ...p,
+        cx_score: lookupScore !== undefined ? lookupScore : p.cx_score,
+      };
+    });
+  }, [channel, departmentStats]);
+
+  const breakdownParams = params;
 
   // Stat Card Metrics dynamically tailored to team and channel
   const getStatMetrics = () => {
@@ -601,13 +628,33 @@ export default function PcgTeamAnalyticsDashboard({
       };
     }
     const currentTlData = teamLeads?.find(t => t.tlName.toLowerCase() === currentTL.toLowerCase());
+
+    // Department metrics: prefer live departmentStats from API, fallback to aggregating all teams
+    let deptTotalCalls: number | undefined = departmentStats?.totalCalls;
+    let deptPickup: number | null | undefined = departmentStats?.pickupRate;
+    let deptIqs: number | null | undefined = departmentStats?.avgIqs;
+
+    if ((deptTotalCalls === undefined || deptTotalCalls === 0) && teamLeads && teamLeads.length > 0) {
+      deptTotalCalls = teamLeads.reduce((acc, t) => acc + (t.totalCalls || 0), 0);
+      const totalAnswered = teamLeads.reduce(
+        (acc, t) => acc + Math.round(((t.totalCalls || 0) * (t.connectRate || 0)) / 100),
+        0
+      );
+      deptPickup = deptTotalCalls > 0 ? Math.round((totalAnswered / deptTotalCalls) * 100) : null;
+      const totalWeightedIqs = teamLeads.reduce(
+        (acc, t) => acc + (t.totalCalls || 0) * (t.avgScore || 0),
+        0
+      );
+      deptIqs = deptTotalCalls > 0 ? Math.round((totalWeightedIqs / deptTotalCalls) * 10) / 10 : null;
+    }
+
     return {
       pickupTeam: currentTlData && currentTlData.totalCalls > 0 ? `${currentTlData.connectRate}%` : '—',
-      pickupCx: '—',
+      pickupCx: deptPickup != null ? `${deptPickup}%` : '—',
       iqsTeam: currentTlData && currentTlData.avgScore ? `${currentTlData.avgScore}%` : '—',
-      iqsCx: '—',
+      iqsCx: deptIqs != null ? `${deptIqs}%` : '—',
       volumeTeam: currentTlData ? fmtVol(currentTlData.totalCalls) : '—',
-      volumeCx: '—',
+      volumeCx: deptTotalCalls != null ? fmtVol(deptTotalCalls) : '—',
     };
   };
 

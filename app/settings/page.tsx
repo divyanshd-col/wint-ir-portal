@@ -10,8 +10,14 @@ import { PLANNER_PROMPT, SYNTHESIZER_PROMPT } from '@/lib/analytics/agent';
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
-  const role = (session.user as any)?.role;
-  const isAdmin = role === 'admin';
+  const user = session.user as any;
+  const role = user?.role;
+  const isAdmin = role === 'admin' || !!user?.isAdmin;
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+  const platformDomain = user?.platformDomain || 'cx';
+  const isPcgAdmin = isAdmin && (platformDomain === 'pcg' || platformDomain === 'both');
+  const hasPcgAccess = isSuperAdmin || isPcgAdmin;
+  const activeDomain = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
 
   const config = await readConfig();
   // Strip actual key values — only pass presence flags to client
@@ -45,5 +51,14 @@ export default async function SettingsPage() {
     hasPyannoteKey: !!config.pyannoteApiKey,
   };
 
-  return <SettingsClient config={safeConfig} isAdmin={isAdmin} />;
+  return (
+    <SettingsClient
+      config={safeConfig}
+      isAdmin={isAdmin}
+      isSuperAdmin={isSuperAdmin}
+      hasPcgAccess={hasPcgAccess}
+      platformDomain={platformDomain}
+      activeDomain={activeDomain}
+    />
+  );
 }

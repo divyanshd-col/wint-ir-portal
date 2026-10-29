@@ -578,31 +578,43 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       count: row.count,
     }));
 
-    // 5. RM Scorecards calculated from real call records
+    // 5. RM Scorecards calculated from real call records with rolling window comparison
+    const windowMs = Math.max(7 * 86400000, endDate.getTime() - startDate.getTime());
+    const prevStartDate = new Date(startDate.getTime() - windowMs);
+    const prevStartDateIso = prevStartDate.toISOString();
+
     const rmStatsRows = await query(`
       SELECT
         COALESCE(NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM') AS rm_name,
-        COUNT(*)::int AS total_calls,
-        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
-        ROUND(AVG(e.iqs_score), 1)::float AS avg_iqs,
-        ROUND(AVG(CASE WHEN e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%' THEN e.iqs_score END), 1)::float AS pitch_score,
-        ROUND(AVG(CASE WHEN e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%' THEN e.iqs_score END), 1)::float AS upsell_score,
-        ROUND(AVG(CASE WHEN e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%' THEN e.iqs_score END), 1)::float AS support_score,
-        COUNT(*) FILTER (WHERE e.compliance_tripwire = true)::int AS compliance_flags
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3)::int AS total_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 THEN e.iqs_score END), 1)::float AS avg_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 THEN e.iqs_score END), 1)::float AS current_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $1 AND r.start_time < $2 THEN e.iqs_score END), 1)::float AS prev_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%') THEN e.iqs_score END), 1)::float AS pitch_score,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%') THEN e.iqs_score END), 1)::float AS upsell_score,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') THEN e.iqs_score END), 1)::float AS support_score,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND e.compliance_tripwire = true)::int AS compliance_flags
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
-      WHERE r.start_time >= $1 AND r.start_time <= $2
+      WHERE r.start_time >= $1 AND r.start_time <= $3
       GROUP BY 1
+      HAVING COUNT(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 THEN 1 END) > 0
       ORDER BY total_calls DESC
-    `, [startDateIso, endDateIso]);
+    `, [prevStartDateIso, startDateIso, endDateIso]);
 
     const rmScorecards = rmStatsRows.map(r => {
       const totalCalls = r.total_calls || 0;
       const answeredCalls = r.answered_calls || 0;
       const connectRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
       const overallScore = r.avg_iqs != null ? Math.round(r.avg_iqs) : 0;
+      const currentIqs = r.current_iqs != null ? Math.round(r.current_iqs) : overallScore;
+      const prevIqs = r.prev_iqs != null ? Math.round(r.prev_iqs) : currentIqs;
+      const delta2Wk = r.prev_iqs != null
+        ? Math.round((currentIqs - prevIqs) * 10) / 10
+        : 0;
       const trend: 'improving' | 'declining' | 'stable' =
-        overallScore >= 85 ? 'improving' : (overallScore > 0 && overallScore < 78 ? 'declining' : 'stable');
+        delta2Wk > 0 ? 'improving' : (delta2Wk < 0 ? 'declining' : 'stable');
 
       return {
         rmName: r.rm_name,
@@ -612,6 +624,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         upsellScore: r.upsell_score != null ? Math.round(r.upsell_score) : 0,
         supportScore: r.support_score != null ? Math.round(r.support_score) : 0,
         overallScore,
+        prev2WkIqs: prevIqs,
+        delta2Wk,
         trend,
         complianceFlags: r.compliance_flags || 0,
         topWeakness: overallScore > 0 && overallScore < 85 ? 'Technical / Legal disclosures' : '—',
@@ -667,6 +681,63 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       },
     ];
 
+    // 7. Department overall metrics (across all PCG calls in this time window)
+    const deptSummaryRows = await query(`
+      SELECT
+        COUNT(*)::int AS total_calls,
+        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
+        ROUND(AVG(e.iqs_score), 1)::float AS avg_iqs
+      FROM pcg_call_recordings r
+      LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
+      WHERE r.start_time >= $1 AND r.start_time <= $2
+    `, [startDateIso, endDateIso]);
+
+    const dRow = deptSummaryRows[0] || {};
+    const deptTotal = dRow.total_calls || 0;
+    const deptAnswered = dRow.answered_calls || 0;
+    const departmentStats: {
+      totalCalls: number;
+      answeredCalls: number;
+      pickupRate: number;
+      avgIqs: number | null;
+      parameterScores: Record<string, number>;
+    } = {
+      totalCalls: deptTotal,
+      answeredCalls: deptAnswered,
+      pickupRate: deptTotal > 0 ? Math.round((deptAnswered / deptTotal) * 100) : 0,
+      avgIqs: dRow.avg_iqs != null ? dRow.avg_iqs : 0,
+      parameterScores: {},
+    };
+
+    try {
+      const paramStatsRows = await query(`
+        SELECT
+          p->>'id' AS param_id,
+          ROUND(
+            SUM(CASE WHEN p->>'status' != 'NA' THEN (p->>'earnedScore')::numeric ELSE 0 END) * 100.0 /
+            NULLIF(SUM(CASE WHEN p->>'status' != 'NA' THEN (p->>'maxScore')::numeric ELSE 0 END), 0)
+          )::int AS avg_score
+        FROM pcg_call_evaluations e
+        JOIN pcg_call_recordings r ON r.call_id = e.call_id
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(e.parameters::jsonb) = 'array' THEN e.parameters::jsonb
+            ELSE '[]'::jsonb
+          END
+        ) AS p
+        WHERE r.start_time >= $1 AND r.start_time <= $2
+        GROUP BY p->>'id'
+      `, [startDateIso, endDateIso]);
+
+      for (const row of paramStatsRows) {
+        if (row.param_id && row.avg_score != null) {
+          departmentStats.parameterScores[row.param_id] = row.avg_score;
+        }
+      }
+    } catch (paramErr: any) {
+      console.warn('[pcg-calls API] paramStats error:', paramErr?.message);
+    }
+
     return NextResponse.json({
       success: true,
       total,
@@ -676,6 +747,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       rms,
       rmScorecards,
       teamLeads,
+      departmentStats,
       summary: {
         totalCalls: sRow.total_calls || 0,
         answeredCalls: sRow.answered_calls || 0,

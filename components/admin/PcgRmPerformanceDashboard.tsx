@@ -6,7 +6,7 @@ export interface RmPerformanceItem {
   id: string;
   name: string;
   ini: string;
-  tl: 'Gokul' | 'Vaishnavi';
+  tl?: string;
   currentIqs: number;
   prev2WkIqs: number;
   delta2Wk: number;
@@ -27,6 +27,8 @@ interface PcgRmPerformanceProps {
     trend: string;
     complianceFlags: number;
     topWeakness: string;
+    prev2WkIqs?: number;
+    delta2Wk?: number;
   }>;
   teamLeads?: Array<{
     tlName: string;
@@ -41,12 +43,10 @@ export default function PcgRmPerformanceDashboard({
   rmScorecards = [],
   teamLeads = [],
 }: PcgRmPerformanceProps) {
-  const [selectedTeam, setSelectedTeam] = useState<'all' | 'Gokul' | 'Vaishnavi'>('all');
-
   const rmsList: RmPerformanceItem[] = (rmScorecards && rmScorecards.length > 0)
     ? rmScorecards.map((sc) => {
-        const isVaishnavi = teamLeads?.find(t => t.tlName.toLowerCase() === 'vaishnavi')?.rms.some(r => r.toLowerCase() === sc.rmName.toLowerCase());
-        const tl: 'Gokul' | 'Vaishnavi' = isVaishnavi ? 'Vaishnavi' : 'Gokul';
+        const foundTl = teamLeads?.find(t => t.rms?.some(r => r.toLowerCase() === sc.rmName.toLowerCase()));
+        const tl = foundTl ? foundTl.tlName : '';
         const parts = sc.rmName.split(' ');
         const ini = parts.map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();
         return {
@@ -55,8 +55,8 @@ export default function PcgRmPerformanceDashboard({
           ini,
           tl,
           currentIqs: sc.overallScore || 0,
-          prev2WkIqs: sc.overallScore || 0,
-          delta2Wk: 0,
+          prev2WkIqs: sc.prev2WkIqs ?? sc.overallScore ?? 0,
+          delta2Wk: sc.delta2Wk ?? 0,
           callsVolume: sc.totalCalls,
           focusArea: sc.topWeakness || '—',
           improvementDriver: undefined,
@@ -64,32 +64,28 @@ export default function PcgRmPerformanceDashboard({
       })
     : [];
 
-  const filteredRms = rmsList.filter(
-    (rm) => selectedTeam === 'all' || rm.tl === selectedTeam
-  );
-
-  // 1. Top Performers (Top 5 by IQS score)
-  const topPerformers = [...filteredRms]
+  // 1. Top Performers (Top 5 by IQS score across the whole PCG department)
+  const topPerformers = [...rmsList]
+    .filter((rm) => rm.currentIqs > 0)
     .sort((a, b) => b.currentIqs - a.currentIqs)
     .slice(0, 5);
 
-  // 2. Bottom Performers (anyone with an IQS score of 70% or below, sorted ascending by score)
-  const bottomPerformers = [...filteredRms]
-    .filter((rm) => rm.currentIqs <= 70.0)
+  // 2. Bottom Performers (anyone with an IQS score of 70% or below across the whole PCG department)
+  const bottomPerformers = [...rmsList]
+    .filter((rm) => rm.currentIqs > 0 && rm.currentIqs <= 70.0)
     .sort((a, b) => a.currentIqs - b.currentIqs)
     .slice(0, 5);
 
-  // 3. Most Improved (Top 5 by 2-week rolling difference)
-  const mostImproved = [...filteredRms]
+  // 3. Most Improved (Top 5 net gainers across the whole PCG department)
+  let mostImproved = [...rmsList]
+    .filter((rm) => rm.delta2Wk > 0)
     .sort((a, b) => b.delta2Wk - a.delta2Wk)
     .slice(0, 5);
-
-  const highestPerformer = topPerformers[0];
-  const biggestImprover = mostImproved[0];
-  const underTargetCount = filteredRms.filter((r) => r.currentIqs < 85.0).length;
-  const avgIqs = (
-    filteredRms.reduce((acc, r) => acc + r.currentIqs, 0) / (filteredRms.length || 1)
-  ).toFixed(1);
+  if (mostImproved.length === 0) {
+    mostImproved = [...rmsList]
+      .sort((a, b) => b.delta2Wk - a.delta2Wk)
+      .slice(0, 5);
+  }
 
   return (
     <div style={{ fontFamily: 'Inter, sans-serif', maxWidth: 1280, margin: '0 auto', color: '#18181b' }}>
@@ -103,45 +99,20 @@ export default function PcgRmPerformanceDashboard({
             <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: 6 }}>
               Calls Channel
             </span>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7', padding: '2px 8px', borderRadius: 6 }}>
+              Whole PCG Department · {rmsList.length} RMs
+            </span>
           </div>
           <p style={{ fontSize: 13, color: '#71717a', margin: '4px 0 0 0' }}>
-            Top performers (Top 5), Bottom performers (IQS ≤ 70%), and Most improved (Top 5 by two-week rolling difference).
+            Top performers (Top 5), Bottom performers (IQS ≤ 70%), and Most improved performers for the whole PCG department.
           </p>
-        </div>
-
-        {/* Team Filter + Time Range */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#71717a' }}>
-            <span style={{ fontWeight: 500 }}>Team:</span>
-            <select
-              value={selectedTeam}
-              onChange={(e) => setSelectedTeam(e.target.value as any)}
-              style={{
-                height: 34,
-                padding: '0 12px',
-                background: '#ffffff',
-                border: '1px solid #e4e4e7',
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 600,
-                color: '#18181b',
-                outline: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-              }}
-            >
-              <option value="all">All Teams ({rmsList.length} RMs)</option>
-              <option value="Gokul">Team Gokul</option>
-              <option value="Vaishnavi">Team Vaishnavi</option>
-            </select>
-          </div>
         </div>
       </div>
 
       {/* ── 3 CATEGORIES GRID ────────────────────────────────────────────── */}
-      {filteredRms.length === 0 ? (
+      {rmsList.length === 0 ? (
         <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, padding: 48, textAlign: 'center' }}>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#71717a' }}>No RM evaluations recorded yet for this team or period.</p>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#71717a' }}>No RM evaluations recorded yet for the PCG department.</p>
           <p style={{ margin: '6px 0 0 0', fontSize: 12, color: '#a1a1aa' }}>Rankings and trends will populate automatically once weekly call quality evaluations are scored.</p>
         </div>
       ) : (
@@ -193,9 +164,11 @@ export default function PcgRmPerformanceDashboard({
                         <span style={{ fontSize: 13, fontWeight: 600, color: '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {rm.name}
                         </span>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
-                          Team {rm.tl}
-                        </span>
+                        {rm.tl ? (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                            {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
+                          </span>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: 11, color: '#71717a', marginTop: 2 }}>
                         {rm.callsVolume} calls
@@ -305,9 +278,11 @@ export default function PcgRmPerformanceDashboard({
                           <span style={{ fontSize: 13, fontWeight: 600, color: '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {rm.name}
                           </span>
-                          <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
-                            Team {rm.tl}
-                          </span>
+                          {rm.tl ? (
+                            <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                              {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
+                            </span>
+                          ) : null}
                         </div>
                         <div style={{ fontSize: 11, color: '#71717a', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           Focus: {rm.focusArea}
@@ -316,7 +291,7 @@ export default function PcgRmPerformanceDashboard({
                     </div>
 
                     <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#dc2626' }}>
                         {rm.currentIqs}%
                       </div>
                       <button
@@ -406,9 +381,11 @@ export default function PcgRmPerformanceDashboard({
                         <span style={{ fontSize: 13, fontWeight: 600, color: '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {rm.name}
                         </span>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
-                          Team {rm.tl}
-                        </span>
+                        {rm.tl ? (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                            {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
+                          </span>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: 11, color: '#71717a', marginTop: 2 }}>
                         {rm.prev2WkIqs}% → <strong style={{ color: '#18181b' }}>{rm.currentIqs}%</strong>
