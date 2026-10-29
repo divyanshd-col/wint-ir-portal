@@ -57,27 +57,27 @@ export default function WoWChart({ data, metrics }: WoWChartProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="#ffffff12" />
           <XAxis
             dataKey="week"
-            tick={{ fill: '#6b7280', fontSize: 11 }}
+            tick={{ fill: 'var(--qa-text-2)', fontSize: 11 }}
             axisLine={{ stroke: '#ffffff15' }}
             tickLine={false}
           />
           <YAxis
-            tick={{ fill: '#6b7280', fontSize: 11 }}
+            tick={{ fill: 'var(--qa-text-2)', fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             width={36}
           />
           <Tooltip
             contentStyle={{ background: '#1e1e1e', border: '1px solid #ffffff20', borderRadius: 8, fontSize: 12 }}
-            labelStyle={{ color: '#9ca3af' }}
-            itemStyle={{ color: '#e5e7eb' }}
+            labelStyle={{ color: 'var(--qa-text-3)' }}
+            itemStyle={{ color: 'var(--qa-border)' }}
             formatter={(value: any, name: any) => {
               if (value === null || value === undefined) return ['—', name ?? ''];
               return [typeof value === 'number' ? value.toFixed(2) : value, name ?? ''];
             }}
           />
           <Legend
-            wrapperStyle={{ fontSize: 12, color: '#9ca3af', paddingTop: 8 }}
+            wrapperStyle={{ fontSize: 12, color: 'var(--qa-text-3)', paddingTop: 8 }}
           />
           {inProgressWeek && (
             <ReferenceLine

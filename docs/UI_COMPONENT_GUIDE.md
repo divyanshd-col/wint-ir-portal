@@ -18,9 +18,41 @@ Defined in `app/globals.css` (light defaults) and `app/dark-theme.css` (shell to
 | Quality (`--qa-*`) | Quality / TL / agent pages and tables | `--qa-bg`, `--qa-card`, `--qa-border`, `--qa-border-sub`, `--qa-fill-light`, `--qa-fill-med`, `--qa-text`, `--qa-text-2`, `--qa-text-3`, `--qa-text-4`, `--qa-gray-50`, `--qa-gray-100`, `--qa-gray-700`, `--qa-on-text` |
 | Global (`--color-*`) | everything else, Tailwind-style pages, chat | `--color-background-primary/secondary/tertiary` (+ `-danger/-warning/-success/-info`), `--color-text-primary/secondary/tertiary` (+ status), `--color-border-tertiary/secondary` |
 
-Plus brand: `--accent` (#2d9e4f), `--accent-hover`, `--accent-active`, `--accent-weak`, `--accent-on`.
+Plus brand: `--accent` (light `#1f7a4d`, dark `#4cc287`), `--accent-hover`, `--accent-active`, `--accent-weak`, `--accent-on`.
 
-Light values: eggshell `#f5f3ee` for `--page-bg`, `--tb-bg`, `--sb-bg` (top bar, sidebar and page blend as one surface), white `--qa-card` / `--color-background-primary` for cards. Dark values live under `[data-theme="dark"]`.
+Semantic status tokens (Chat Evaluation reference, both themes): `--pass` / `--pass-soft`, `--fail` / `--fail-soft`, `--marker` / `--marker-fg` (blue: **focus outlines and change markers only**), `--ink` / `--ink-fg` (primary action and active chips: use this pair instead of `#fff` on a `--qa-gray-700` fill), `--sunk` (recessed filter bars and notes), `--line` / `--line-strong`, `--faint` (low-priority text).
+
+Light values: muted gray-green `#f5f6f4` for `--page-bg`, `--tb-bg`, `--sb-bg` (top bar, sidebar and page blend as one surface), white `--qa-card` / `--color-background-primary` for cards. Muted / faint text are `#4f584f` / `#667066` (the reference's `#5f685f` / `#8a938a` measured 2.8-3.2:1 on white; these pass AA and stay three distinct tiers). Dark values live under `[data-theme="dark"]` (below).
+
+### Dark palette (Chat Evaluation reference)
+Dark mode is a deep green-black with green-tinted surface steps and a brighter green accent, taken from `Chat Evaluation Redesign.html`. Values live in `[data-theme="dark"]` in `app/dark-theme.css`. (This replaces the earlier brand-black scheme; green = pass, red = breach, blue = focus/markers.)
+
+| Role | Value | Notes |
+|---|---|---|
+| Page background (`--page-bg`, `--qa-bg`, `--background`) | `#121512` | darkest |
+| Sunk / sidebar (`--sunk`, `--sb-bg`) | `#151815` | filter bars, internal notes |
+| Card / top bar (`--qa-card`, `--color-background-primary`, `--tb-bg`) | `#1a1e1a` | |
+| Raised (`--qa-gray-50`) | `#1e231e` | table headers, drawers |
+| Fill (`--qa-fill-light`, `--qa-gray-100`, `--color-background-secondary`) | `#222722` | |
+| Hover (`--color-background-tertiary`) | `#272d27` | |
+| Lines (`--line`, `--qa-border`) / strong (`--line-strong`) | `#2b312b` / `#3c443c` | |
+| Text / muted / faint | `#e7ebe6` / `#a3ada2` / `#818b80` | faint nudged from the reference `#7a8479` to stay >= 4.5:1 on a card. `--qa-text-4` (disabled) is `#5a645a`. |
+| Accent (`--accent`) / links (`--accent-active`) | `#4cc287` / `#7be0a8` | |
+| Accent hover / tint (`--accent-hover`, `--accent-weak`) | `#62cf98` / `#1c3326` | |
+| Text on green (`--accent-on`) | `#0b1a11` | |
+| Pass / fail (+ soft) | `#4cc287` `#1c3326` / `#f07167` `#3a1d1a` | |
+| Marker (blue) | `#7c94f5` | focus ring + change markers |
+
+### Why old pages work in dark mode (what `dark-theme.css` covers)
+Most pages predate the tokens and hard-code light colours, so the dark layer catches them. Know what exists before adding more:
+- **Tailwind classes:** `bg-white`, `bg-gray/slate/stone-50..200`, borders, text greys, status tints, hover variants, `disabled:` variants, plus every colour family (indigo, violet, pink, teal, cyan, sky, lime, orange ... shades 50-950 and their `/50`-style opacity variants).
+- **Inline styles in two forms:** the hex form (`background:#fff`, as server-rendered) **and** the `rgb(r, g, b)` form (what the browser writes back once React updates an element). A rule for only one form silently misses half the elements.
+- **Filled controls:** anything filled with `--qa-gray-700` or `--qa-text` (a light fill in dark) gets `--qa-on-text` text, so hard-coded white labels on active tabs, Submit buttons and selected answers stay readable. Count badges inside them get a dark tint.
+- **Transcript bubbles** filled with `--qa-gray-700` keep a light fill with dark text (the executive side), investor bubbles stay dark.
+- **HTML email bodies** (`.email-html-body`) have the sender's own colours neutralised (transparent backgrounds, light text, accent links), since emails ship dark text and white boxes.
+- **Internal Slack notes** (`.email-internal-note-content`) use the warning tint with warm text.
+
+To check a page: toggle dark, open each tab and expand a row, and look for light surfaces and text below ~3:1 contrast against its background (the dark sweep did this with a small script over `getComputedStyle`). New code should still use tokens instead of relying on these catch-alls.
 
 Rules of thumb:
 - Page ground = `var(--page-bg)`; cards/tables = `var(--qa-card)` (quality pages) or `var(--color-background-primary)`; muted text = `--qa-text-2` / `--qa-text-3`; borders = `--qa-border` / `--qa-border-sub`.
@@ -55,6 +87,7 @@ interface NavItem { label; href; icon; roles?: string[]; skill?: string; section
 ```
 - Visibility: admin sees every item; others need `roles` to include their role and, if set, the `skill`.
 - **Section headings (admin only):** when `role === 'admin'` and an item has `section`, a heading is rendered whenever the section changes between consecutive visible items. The sidebar title (`Admin`) covers the first group; headings are **QA**, **TL**, **IR Agent**. Keep items of one section contiguous in the array.
+- **Pinned and collapsible:** the sidebar is `position: sticky` under the top bar (own scroll if the nav is long, never scrolls with the page). The chevron at the top collapses it to a 64px icon rail; the choice is stored in `localStorage.wint_sidebar`, and a first visit on <=1100px starts collapsed. Labels stay in the DOM as `.quality-shell-sidebar-label` (visually hidden, plus a `title` tooltip). <=560px it becomes a scrolling icon strip above the content (the reference hides it; the strip keeps every page reachable).
 - CSS classes (in `app/globals.css`): `.quality-shell-sidebar`, `.quality-shell-sidebar-title` (also used for section headings), `.quality-shell-sidebar-link` (+ `.active`), `.quality-shell-main`.
 
 Shell wrappers and their layouts:
@@ -235,19 +268,52 @@ Base: `origin/main` at PR #296 (SLA breach alert). Commits, oldest first:
 | `9e10b3a` | Email detail drawers: evaluation (ring + parameters) on the left, conversation on the right, as in chats (QA and TL swapped; agent already matched) |
 | `521766c` | Parameter rows in all three email drawers use the chat layout via the shared `ParamScoreRow` (name + buttons + weight on one line, reasoning below; QA editable, TL/agent read-only) |
 | `17d82f5` | QA Accept / Reject Dispute buttons now show on forwarded (`Under_Review`) disputes; `resolve_dispute` SQL got explicit type casts (it failed with "inconsistent types deduced for parameter $1", so QA could never resolve an email dispute) |
-| (this change) | Member Analytics "Viewing" dropdown: height capped and scrolls inside (167 agents ran off the page); active period pill text uses `--qa-on-text` so it shows in dark mode |
+| `5f2b68b` | Member Analytics "Viewing" dropdown: height capped and scrolls inside (167 agents ran off the page); active period pill text uses `--qa-on-text` so it shows in dark mode |
+| `399312f` | Dark mode uses the Wint brand scheme: neutral black surface steps, brand green `#05a54b` accent with black text on green, old hard-coded green remapped in dark (see "Dark palette") |
+| (this change) | Dark-mode sweep of every Quality page (QA, TL, agent) and their tabs/drawers: rgb-form inline catch-alls, filled-control text, HTML email and note callouts, Tailwind colour families, disabled states, readable faint text |
 
 Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-raised disputes until forwarded; `Under_Review` is shown as "Forwarded to QA" (it used to read "Pending TL Review" on the agent page); the Run Gemini Batch / per-row Eval buttons are gone from the QA page.
 
 ---
 
+## 7a. Evaluation panel and queue pattern (`GO` branch)
+
+Source of truth: `Chat Evaluation Redesign.html`. Classes live in the "Evaluation panel" block of `app/globals.css`.
+
+- **Panel layout** (`EvalPanel.tsx`): `.eval-wrap` is a grid, transcript left (1.35fr) and scoring right (1fr), DOM order = visual order. Below 980px the panes stack (transcript capped at 440px) and `.eval-panel-cell` stops clipping so the footer can stick to the page. `CallEvalPanel.tsx` already had transcript-left and only adopts the gates/footer pattern.
+- **Gates**: `.eval-gates` (+ `.failed`), rows `.eval-gate`, control `.eval-seg.gate` with `Pass` / `Breach` / `NA` (values stay `pass` / `fail` / `not_applicable`). Any breach: card + footer turn red, chip reads `GATE BREACHED`, submit reads `Submit as failed`. In chat evaluation the displayed Agent IQS drops to 0 while editing (display only; the stored score is still the computed one).
+- **Graded parameters**: neutral `.eval-seg` (selected = `--ink`), weight as `.eval-weight`.
+- **Sticky footer**: `.eval-foot` at the bottom of the scoring pane: score + gate chip, optional "Mark for KB change", Submit. Close is the icon button in the scoring header, away from Submit.
+- **Internal notes**: `<details class="eval-note">`, collapsed, `--sunk`, secrets masked by `maskText` / `renderMasked` (`ck_live_...`, JWTs).
+- **Rubric tabs**: `.eval-rtab[aria-selected]` (underline uses `--qa-text`; the old `--qa-primary` was never defined, so no underline rendered).
+- **Queue pages**: tabs are underlined (`tabStyle` in each page, hairline tab bar, count chip on `--ink`); the interaction select is `AgentFilterSelect` rendered through each table's `leadingFilter` slot; filter bars sit on `--sunk`; chat tables show Agent IQS first (bold) and Bot IQS muted; the Status column only shows when a re-opened chat is listed.
+
+### Queue consistency rules
+- **Rows**: a click anywhere on a row opens its inline panel (`rowClick` from `components/quality/rowClick.ts`; mark the `<tr>` with `data-row-click`). Buttons, links and inputs inside the row keep their own behaviour.
+- **Filter bar**: wrap controls in `.qfilters` (add `.standalone` when the bar is not the top of a table card). Order: interaction, search, agent / disposition, status or parameter, IQS min-max (`.qf-group` + `.qf-label`), CSAT, `DateRangeChip` (or `PeriodRangeChip` for e-mail), `Reset Filters` (`.qf-chip`, always shown, disabled when nothing is filtered), then count and the list-icon page-size control on the right. Controls inherit the 32px / 8px-radius look from the class; do not restyle them inline.
+- **Selected row**: an expanded row uses `background: var(--accent-weak)`; `tr[style*="--accent-weak"]` in `globals.css` adds the inset accent marker on its first cell. Use that token for any new expandable row.
+- **ID links**: chat, call-linked-chat and ticket IDs all render `TicketLinkButton` (the `.id-link` chip, opens Robylon in a new tab). Do not hand-roll `<a href=".../unified-inbox/share/...">`. No customer e-mail address under the ID in rows.
+- **Evaluation panels** (chat, call, e-mail): all use `.eval-wrap` with the conversation/transcript left and scoring right; the scoring head is ring + agent + `id · date · disposition/intent · mobile` + Close, the footer is `.eval-foot`. Dates and times live in that head line, not under the ID in the table row. Panes scroll internally (`.eval-scroll-t` / `.eval-scroll-r`), so collapsing an e-mail thread never resizes the panes. Internal notes (chat and e-mail) are collapsed `.eval-note` rows with secrets masked (`components/quality/mask.tsx`).
+- **Page frame**: pages render a title and content directly inside the shell's `<main>`; no extra padded or tinted wrapper.
+- **Dropdowns**: never a native `<select>` in the UI; use `UISelect` (`components/quality/UISelect.tsx`), a drop-in with the same `<option>` children and `value` / `onChange(e.target.value)`. It opens a themed popover; anything other than the first ("all") option shows as an active ink chip.
+- **CSAT**: render `CsatPill` (`components/quality/csat.tsx`); labels are Robylon's own: Good (5), Could be better (3), Bad (1). Green / neutral / red, sans font, no mono.
+- **Message markers**: `[Attachment: name - url]` and `[Image: url]` become `.attachment-chip` links via `components/quality/attachments.tsx` (chat transcripts and e-mail bodies).
+- **Sorting**: every list column except IDs and Action sorts on click (`SortTh`, `useSort`, `sortRows` in `components/quality/sort.tsx`): ascending (A-Z, low to high), descending, off. It sorts the rows loaded on the page.
+- **Column / split alignment**: in lists that open the evaluation panel, column widths are percentages that put ID + agent on the left of the panel split (57.4%, the `1.35fr : 1fr` ratio) and the scores + action on the right, so the row header lines up with the panes below it.
+- **No scroll inside a scroll**: free-text boxes in panels use `AutoTextarea` (grows with its text). Panels scroll per pane only.
+- **Transcript events**: "Claimed by …", "Assigned by …", "Waiting to assign …" are events, not messages (`transcript-events.ts`); they render as centred system lines whatever the sender field says.
+- **E-mail bodies**: quoted history ("On … wrote:") is collapsed behind a "•••" pill; `isHtml` only counts real tags, so "Name <name@mail.com>" stays plain text.
+- **Cards**: a filter bar that opens a table is the top of the same card (`.qfilters` first child), not a separate box with a gap.
+- **Copy**: no emoji, no em dashes (use a period, colon or middle dot) and no helper sentences under titles or tables ("click a row to expand", "data from live DB"). Section headers carry at most the period label.
+
 ## 8. Do / Don't (for AI assistants editing the UI)
 
+- **Do** use `var(--ink)` / `var(--ink-fg)` for filled neutral chips and buttons, `--pass` / `--fail` for status, and `--marker` only for focus and change markers.
 - **Do** use tokens, `TicketLinkButton`, `PeriodFilter`, `paramLabel`, `disputeLabel`, `intentLabel`; reuse the column/tab/drawer patterns above.
 - **Do** round numeric scores from the API (`numeric` arrives as a string).
 - **Do** keep `colSpan` and `<colgroup>` in step with the column list.
 - **Do** keep a sidebar item's `section` contiguous in `NAV_ALL`.
-- **Don't** add coloured pills/badges to tables, or emoji to UI text.
+- **Don't** add coloured pills/badges to tables, or emoji to UI text (including status dots like 🟢/🟡 and icon glyphs like ⚡/📱/💬; use words or SVG).
 - **Don't** hard-code `#fff`/`#111` text or backgrounds in new UI; dark mode will break. (Some older files, notably parts of `MyQualityEmailsPage.tsx` and the call pages, still use fixed light hex colours and rely on the dark-theme inline-style overrides.)
 - **Do** cap any dropdown/popover list that can grow (agents, dispositions): `maxHeight: 'min(360px, calc(100vh - 220px))'`, `overflowY: 'auto'`, `overscrollBehavior: 'contain'`, so it scrolls inside the panel instead of running off the page (the Member Analytics "Viewing" agent list has ~170 entries).
 - **Don't** make the chat sidebar expand on hover.

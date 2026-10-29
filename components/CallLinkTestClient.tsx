@@ -41,10 +41,10 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
       <tr>
         <td colSpan={2} className="px-4 py-1.5">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-100">
-            <span className="text-red-500">⚡</span>
+            
             <span className="text-xs text-red-700">
               <strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>
-              {seg.words_spoken != null && ` — ${seg.words_spoken} word${seg.words_spoken !== 1 ? 's' : ''} before cutoff`}
+              {seg.words_spoken != null && ` · ${seg.words_spoken} word${seg.words_spoken !== 1 ? 's' : ''} before cutoff`}
             </span>
           </div>
         </td>
@@ -56,9 +56,9 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
       <tr>
         <td colSpan={2} className="px-4 py-1.5">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
-            <span className="text-slate-400">⏸</span>
+            
             <span className="text-xs text-slate-500">
-              Dead air{seg.duration ? ` — ${seg.duration}` : ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}
+              Dead air{seg.duration ? ` · ${seg.duration}` : ''}{seg.resumed_by ? ` · resumed by ${seg.resumed_by}` : ''}
             </span>
           </div>
         </td>
@@ -70,7 +70,7 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
       <tr>
         <td colSpan={2} className="px-4 py-1.5">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50 border border-orange-100">
-            <span className="text-orange-500">👂</span>
+            
             <span className="text-xs text-orange-700">
               Poor listening detected{seg.phrase ? `: "${seg.phrase}"` : ''}
             </span>
@@ -86,14 +86,14 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
           isIR ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
         }`}>
-          {isIR ? '🟡' : '🟢'} {seg.speaker}
+          {seg.speaker}
         </span>
       </td>
       <td className="px-4 py-2.5 text-sm text-slate-700 leading-relaxed">
         {seg.text}
         {seg.translated && (
           <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-500 align-middle">
-            🌐 translated
+            translated
           </span>
         )}
       </td>
@@ -183,14 +183,14 @@ function CallCard({
         </div>
         <div className="flex items-center gap-3 text-xs text-slate-500">
           {recording.interruptionCount > 0 && (
-            <span title="Interruptions">⚡ {recording.interruptionCount}</span>
+            <span title="Interruptions">Interruptions {recording.interruptionCount}</span>
           )}
           {recording.deadAirCount > 0 && (
-            <span title="Dead air events">⏸ {recording.deadAirCount}</span>
+            <span title="Dead air events">Dead air {recording.deadAirCount}</span>
           )}
           {callKbCitation && (
             <span className="max-w-[200px] truncate text-blue-500" title={callKbCitation}>
-              📖 {callKbCitation}
+              {callKbCitation}
             </span>
           )}
         </div>
@@ -367,7 +367,7 @@ function ResultPanel({
     return (
       <div className="space-y-4">
         <div className="bg-amber-50 border border-amber-200 rounded-2xl px-6 py-5 flex items-center gap-3">
-          <span className="text-amber-500 text-2xl">📵</span>
+          
           <div>
             <p className="font-semibold text-amber-800">No call recordings found for this chat</p>
             <p className="text-sm text-amber-600 mt-0.5">
@@ -380,7 +380,7 @@ function ResultPanel({
             onClick={onReset}
             className="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors"
           >
-            🔄 Score another
+            Score another
           </button>
         </div>
       </div>
@@ -410,7 +410,7 @@ function ResultPanel({
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-800">
-              {(savedIqs ?? data.callIqs) != null ? `${t.label} — Call IQS` : 'Call IQS unavailable'}
+              {(savedIqs ?? data.callIqs) != null ? `${t.label} · Call IQS` : 'Call IQS unavailable'}
               {savedIqs !== null && <span className="ml-2 text-xs font-normal text-emerald-500">(overridden)</span>}
             </p>
             {data.callSummary && (
@@ -418,11 +418,11 @@ function ResultPanel({
             )}
           </div>
           <div className="flex flex-wrap gap-3 text-sm text-slate-600 shrink-0">
-            {data.language && <span className="flex items-center gap-1">🌐 {data.language}</span>}
-            <span title="Interruptions">⚡ {data.interruptionCount}</span>
-            <span title="Dead air events">⏸ {data.deadAirCount}</span>
+            {data.language && <span className="flex items-center gap-1">{data.language}</span>}
+            <span title="Interruptions">Interruptions {data.interruptionCount}</span>
+            <span title="Dead air events">Dead air {data.deadAirCount}</span>
             {data.callRecordingCount > 1 && (
-              <span className="text-blue-600" title="Number of call recordings">📞 {data.callRecordingCount} calls</span>
+              <span className="text-blue-600" title="Number of call recordings">{data.callRecordingCount} calls</span>
             )}
           </div>
         </div>
@@ -455,7 +455,7 @@ function ResultPanel({
           onClick={onReset}
           className="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors"
         >
-          🔄 Score another
+          Score another
         </button>
       </div>
 
@@ -616,7 +616,7 @@ export default function CallLinkTestClient({ userRole }: Props) {
   return (
     <div className="max-w-md mx-auto px-4 py-10">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-100 text-3xl mb-4">📞</div>
+        
         <h1 className="text-2xl font-bold text-slate-800">Call Transcript Test</h1>
         <p className="text-slate-500 mt-1.5 text-sm">
           Enter a Chat ID to fetch its call recording(s), run transcription and IQS scoring.
@@ -642,7 +642,7 @@ export default function CallLinkTestClient({ userRole }: Props) {
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-            ❌ {error}
+            {error}
           </div>
         )}
 

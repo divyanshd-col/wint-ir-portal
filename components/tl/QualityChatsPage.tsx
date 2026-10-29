@@ -6,6 +6,12 @@ import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
 import { getDisputeClassification, formatParamLabel } from '@/lib/quality';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import { rowClick } from '@/components/quality/rowClick';
+import { DateRangeChip } from '@/components/quality/FilterControls';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { CsatPill, csatLabel } from '@/components/quality/csat';
+import UISelect from '@/components/quality/UISelect';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -37,31 +43,20 @@ const chipActive: React.CSSProperties = {
 };
 
 // ─── IQS score badge ──────────────────────────────────────────────────────────
-function IQSBadge({ score }: { score: number | null }) {
+function IQSBadge({ score, muted }: { score: number | null; muted?: boolean }) {
   if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
       fontFamily: 'ui-monospace, monospace',
-      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-      border: '1px solid var(--qa-border)',
+      fontSize: muted ? 12 : 14, fontWeight: muted ? 400 : 700,
+      color: muted ? 'var(--faint)' : 'var(--qa-text)',
     }}>{score}</span>
   );
 }
 
 // ─── CSAT badge ───────────────────────────────────────────────────────────────
 function CSATBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>;
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
-      fontFamily: 'ui-monospace, monospace',
-      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-      border: '1px solid var(--qa-border)',
-    }}>{score === 1 ? 'Bad' : score === 3 ? 'Neutral' : 'Good'}</span>
-  );
+  return <CsatPill value={score} />;
 }
 
 // ─── Dispute Status Pill ───────────────────────────────────────────────────────
@@ -117,15 +112,7 @@ function ChatIdCell({ chatId }: { chatId: string }) {
   const id = String(chatId ?? '').trim();
   if (/^\d+$/.test(id)) {
     return (
-      <a
-        href={`https://app.robylon.ai/unified-inbox/share/${id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={e => e.stopPropagation()}
-        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-      >{chatId}</a>
+      <TicketLinkButton id={id} label={chatId} />
     );
   }
   return <>{chatId}</>;
@@ -194,7 +181,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 
   useEffect(() => { fetchChats(page); }, [fetchChats, page]);
 
-  function applyFilters() { setPage(1); setPageSizeDrop(false); fetchChats(1); }
+  useEffect(() => { setPage(1); }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, limit]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -203,47 +190,51 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
     fontSize: 12, fontFamily: 'inherit', background: 'var(--qa-card)', color: 'var(--qa-text)', outline: 'none',
   };
 
+  const [sort, toggleSort] = useSort();
+  const sorted1 = sortRows(chats, sort, { agent: c => c.agentName, iqs: c => c.iqsScore, call: c => c.callIqsScore, csat: c => c.csatScore });
+
   return (
     <div>
       {/* Filters */}
-      <div style={{
-        display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
-        padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
-      }}>
+      <div className="qfilters">
         <input
           type="text"
           value={chatIdSearch}
           onChange={e => setChatIdSearch(e.target.value)}
-          placeholder="Search Chat ID…"
-          style={{ ...inputStyle, width: 130 }}
+          placeholder="Search by Chat ID…"
+          style={{ ...inputStyle, width: 170 }}
         />
         {agents.length > 0 && (
-          <select value={agent} onChange={e => setAgent(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
+          <UISelect value={agent} onChange={e => setAgent(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
             <option value="">All Agents</option>
             {agents.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
+          </UISelect>
         )}
-        <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={inputStyle} placeholder="From" />
-        <input type="date" value={to}   onChange={e => setTo(e.target.value)}   style={inputStyle} placeholder="To" />
-        <input type="number" value={iqsMin} onChange={e => setIqsMin(e.target.value)} placeholder="IQS min" style={{ ...inputStyle, width: 70 }} />
-        <input type="number" value={iqsMax} onChange={e => setIqsMax(e.target.value)} placeholder="IQS max" style={{ ...inputStyle, width: 70 }} />
+        <span className="qf-group">
+<span className="qf-label">IQS</span>
+<input type="number" value={iqsMin} onChange={e => setIqsMin(e.target.value)} placeholder="min" style={{ ...inputStyle, width: 70 }} />
+<input type="number" value={iqsMax} onChange={e => setIqsMax(e.target.value)} placeholder="max" style={{ ...inputStyle, width: 70 }} />
+</span>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>CSAT</span>
-          {['1','3','5'].map(v => (
+          {['5','3','1'].map(v => (
             <button
               key={v}
               style={csat.includes(v) ? chipActive : chip}
               onClick={() => setCsat(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v])}
             >
-              {v === '1' ? 'Bad' : v === '3' ? 'Neutral' : 'Good'}
+              {csatLabel(v)}
             </button>
           ))}
         </div>
-        <button onClick={applyFilters} style={{ ...chip, background: 'var(--qa-gray-700)', color: '#fff', borderColor: 'var(--qa-gray-700)' }}>
-          Apply
+        <DateRangeChip from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+        <button
+          type="button" className="qf-chip"
+          disabled={!(chatIdSearch || agent || from || to || iqsMin || iqsMax || csat.length)}
+          onClick={() => { setChatIdSearch(''); setAgent(''); setFrom(''); setTo(''); setIqsMin(''); setIqsMax(''); setCsat([]); setPage(1); }}
+        >
+          Reset Filters
         </button>
-        <button onClick={() => { setAgent(''); setFrom(''); setTo(''); setIqsMin(''); setIqsMax(''); setCsat([]); setPage(1); fetchChats(1); }}
-          style={chip}>Clear</button>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
             {loading ? 'Loading…' : `Showing ${chats.length} of ${total}`}
@@ -296,20 +287,20 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
-          <col style={{ width: 110 }} />
-          <col />
-          <col style={{ width: 90 }} />
-          <col style={{ width: 90 }} />
-          <col style={{ width: 65 }} />
-          <col style={{ width: 80 }} />
-        </colgroup>
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '41.4%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '12.6%' }} />
+              <col style={{ width: '8%' }} />
+</colgroup>
         <thead>
           <tr>
             <th style={th}>Chat ID</th>
-            <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
-            <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
-            <th style={th}>CSAT</th>
+            <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Agent IQS</SortTh>
+            <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
+            <SortTh k="csat" sort={sort} onSort={toggleSort} style={{ ...th, paddingLeft: 32 }}>CSAT</SortTh>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
@@ -331,10 +322,10 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
               </td>
             </tr>
           ) : (
-            chats.map(chat => (
+            sorted1.map(chat => (
               <React.Fragment key={chat.chatId}>
-                <tr
-                  style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined }}
+                <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId))}
+                  style={{ background: expandedId === chat.chatId ? 'var(--accent-weak)' : undefined }}
                   onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                 >
@@ -345,7 +336,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                   </td>
                   <td style={tdNum}>
                     {chat.callIqsScore != null ? (
-                      <IQSBadge score={chat.callIqsScore} />
+                      <IQSBadge score={chat.callIqsScore} muted />
                     ) : chat.callTranscriptStatus === 'transcribed' ? (
                       <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>Transcribed</span>
                     ) : chat.callTranscriptStatus === 'pending' ? (
@@ -354,7 +345,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                     )}
                   </td>
-                  <td style={td}><CSATBadge score={chat.csatScore} /></td>
+                  <td style={{ ...td, paddingLeft: 32 }}><CSATBadge score={chat.csatScore} /></td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     <button
                       onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
@@ -444,6 +435,8 @@ export function getDisputeOutcomeKey(d: TLDisputeRow): string {
 // decision by QA.
 function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resolved'; onTotalChange?: (count: number) => void }) {
   const [disputes,   setDisputes]   = useState<TLDisputeRow[]>([]);
+  const [definedTopics, setDefinedTopics] = useState<string[]>([]);
+  const [topicPick, setTopicPick] = useState<Record<string, string>>({});
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning,  setActioning]  = useState<string | null>(null);
@@ -453,6 +446,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const [pageSizeDrop, setPageSizeDrop] = useState(false);
 
   // Filters
+  const [chatSearch, setChatSearch] = useState('');
   const [agentFilter,   setAgentFilter]   = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('');
   const [fromFilter,    setFromFilter]    = useState('');
@@ -468,6 +462,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
         if (!cancelled) {
           const list = data.disputes ?? [];
           setDisputes(list);
+          setDefinedTopics(data.definedDispositions ?? []);
           onTotalChange?.(list.length);
         }
       } finally {
@@ -482,6 +477,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const agents = Array.from(new Set(disputes.map(d => d.agentName).filter(Boolean))).sort();
 
   const filteredDisputes = disputes.filter(d => {
+    if (chatSearch.trim() && !String(d.chatId).includes(chatSearch.trim())) return false;
     if (agentFilter && d.agentName !== agentFilter) return false;
     if (outcomeFilter && getDisputeOutcomeKey(d) !== outcomeFilter) return false;
     if (fromFilter) {
@@ -495,7 +491,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     return true;
   });
 
-  const colCount = 9;
+  const colCount = status === 'pending' ? 7 : 8;
   const totalPages = Math.max(1, Math.ceil(filteredDisputes.length / limit));
   const pagedDisputes = filteredDisputes.slice((page - 1) * limit, page * limit);
 
@@ -504,26 +500,28 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     fontSize: 12, fontFamily: 'inherit', background: 'var(--qa-card)', color: 'var(--qa-text)', outline: 'none',
   };
 
-  async function forwardToQA(flagId: string) {
+  async function forwardToQA(flagId: string, disposition?: string) {
     setActioning(flagId);
     setActionError(null);
     try {
       const res = await fetch('/api/cx/tl/disputes/forward', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flagId }),
+        body: JSON.stringify({ flagId, disposition }),
       });
-      if (res.ok) {
+      if (res.status === 422) {
+        setActionError('Pick a topic for this chat first, so it goes to the QA responsible for it.');
+      } else if (res.ok) {
         setDisputes(prev => {
           const next = prev.filter(d => d.flagId !== flagId);
           onTotalChange?.(next.length);
           return next;
         });
       } else {
-        setActionError('Could not forward that dispute — please retry.');
+        setActionError('Could not forward that dispute. Please retry.');
       }
     } catch {
-      setActionError('Could not forward that dispute — please retry.');
+      setActionError('Could not forward that dispute. Please retry.');
     } finally {
       setActioning(null);
     }
@@ -547,14 +545,17 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           return next;
         });
       } else {
-        setActionError('Could not resolve that dispute — please retry.');
+        setActionError('Could not resolve that dispute. Please retry.');
       }
     } catch {
-      setActionError('Could not resolve that dispute — please retry.');
+      setActionError('Could not resolve that dispute. Please retry.');
     } finally {
       setActioning(null);
     }
   }
+
+  const [sort, toggleSort] = useSort();
+  const sorted1 = sortRows(pagedDisputes, sort, { agent: d => d.agentName, disp: d => d.disposition, iqs: d => d.iqsScore, call: d => d.callIqsScore, csat: d => d.csatScore, raised: d => d.raisedAt });
 
   return (
     <>
@@ -566,18 +567,22 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     )}
 
     {/* Header / Filter & Rows per page bar */}
-    <div style={{
-      display: 'flex', flexWrap: 'nowrap', gap: 8, alignItems: 'center', overflowX: 'auto',
-      padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
-    }}>
+    <div className="qfilters">
+      <input
+        type="text"
+        value={chatSearch}
+        onChange={e => { setChatSearch(e.target.value); setPage(1); }}
+        placeholder="Search by Chat ID…"
+        style={{ ...inputStyle, width: 170 }}
+      />
       {agents.length > 0 && (
-        <select value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
+        <UISelect value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
           <option value="">All Agents</option>
           {agents.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
+        </UISelect>
       )}
 
-      <select value={outcomeFilter} onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
+      <UISelect value={outcomeFilter} onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
         <option value="">{status === 'pending' ? 'All Statuses' : 'All Outcomes'}</option>
         {status === 'resolved' ? (
           <>
@@ -593,25 +598,21 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
             <option value="raised_tl">Dispute raised by TL</option>
           </>
         )}
-      </select>
+      </UISelect>
 
-      <input type="date" value={fromFilter} onChange={e => { setFromFilter(e.target.value); setPage(1); }} style={inputStyle} placeholder="From" />
-      <input type="date" value={toFilter}   onChange={e => { setToFilter(e.target.value); setPage(1); }}   style={inputStyle} placeholder="To" />
-
-      {(agentFilter || outcomeFilter || fromFilter || toFilter) && (
-        <button
+      <DateRangeChip from={fromFilter} to={toFilter} onChange={(f, t) => { setFromFilter(f); setToFilter(t); setPage(1); }} />
+      <button type="button" className="qf-chip" disabled={!(chatSearch || agentFilter || outcomeFilter || fromFilter || toFilter)}
           onClick={() => {
+            setChatSearch('');
             setAgentFilter('');
             setOutcomeFilter('');
             setFromFilter('');
             setToFilter('');
             setPage(1);
           }}
-          style={chip}
         >
-          Clear
-        </button>
-      )}
+              Reset Filters
+            </button>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
@@ -665,27 +666,21 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
 
     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
-        <col style={{ width: 90 }} />
-        <col />
-        <col style={{ width: 130 }} />
-        <col style={{ width: 85 }} />
-        <col style={{ width: 75 }} />
-        <col style={{ width: 65 }} />
-        <col style={{ width: 110 }} />
-        <col style={{ width: 150 }} />
-        <col style={{ width: 260 }} />
+        {(status === 'pending'
+          ? ['12%', '15%', undefined, '10%', '9%', '11%', '14%']
+          : ['12%', '14%', undefined, '9%', '8%', '10%', '13%', '20%']
+        ).map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
       </colgroup>
       <thead>
         <tr>
           <th style={th}>Chat ID</th>
-          <th style={th}>Agent</th>
-          <th style={th}>Raised By</th>
-          <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
-          <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
-          <th style={th}>CSAT</th>
-          <th style={th}>Raised</th>
-          <th style={th}>{status === 'pending' ? 'Status' : 'Outcome'}</th>
-          <th style={{ ...th, textAlign: 'right' }}>Action</th>
+          <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+          <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
+          <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS (Agent)</SortTh>
+          <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
+          <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
+          <SortTh k="raised" sort={sort} onSort={toggleSort} style={th}>Raised</SortTh>
+          {status !== 'pending' && <th style={th}>Outcome</th>}
         </tr>
       </thead>
       <tbody>
@@ -706,25 +701,19 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
             </td>
           </tr>
         ) : (
-          pagedDisputes.map(d => {
+          sorted1.map(d => {
             const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
             return (
             <React.Fragment key={d.flagId}>
-              <tr
-                style={{ background: expandedId === d.chatId ? 'var(--qa-gray-50)' : undefined }}
+              <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === d.chatId ? null : d.chatId))}
+                style={{ background: expandedId === d.chatId ? 'var(--accent-weak)' : undefined }}
                 onMouseEnter={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                 onMouseLeave={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = ''; }}
               >
                 <td style={tdMono}><ChatIdCell chatId={d.chatId} /></td>
                 <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.agentName}</td>
-                <td style={{ ...td, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  <span style={{
-                    display: 'inline-block', fontSize: 10, fontWeight: 600,
-                    textTransform: 'uppercase', letterSpacing: '0.04em',
-                    background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                    borderRadius: 4, padding: '1px 5px', marginRight: 6, color: 'var(--qa-text-2)',
-                  }}>{d.raisedBy}</span>
-                  {d.raisedByName}
+                <td style={td}>
+                  <span style={{ fontSize: 13, color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
                 </td>
                 <td style={tdNum}>
                   {d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore ? (
@@ -743,44 +732,87 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   {d.callIqsScore != null ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                 </td>
                 <td style={td}><CSATBadge score={d.csatScore} /></td>
-                <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)' }}>
+                <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
                   {fmtDate(d.raisedAt)}
                   <br />
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(d.raisedAt)}</span>
                 </td>
+                {status !== 'pending' && (
                 <td style={{ ...td }}>
-                  <DisputeStatusPill
-                    status={d.status}
-                    raisedByRole={d.raisedByRole}
-                    reviewNote={d.reviewNote}
-                    parameters={d.parameters}
-                  />
-                  {d.reviewNote && (
-                    <div style={{ fontSize: 11, color: 'var(--qa-text-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }} title={d.reviewNote}>
-                      {d.reviewNote}
-                    </div>
-                  )}
-                </td>
-                <td style={{ ...td, textAlign: 'right' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <button
-                      onClick={() => setExpandedId(prev => prev === d.chatId ? null : d.chatId)}
-                      style={{
-                        border: '1px solid var(--qa-border)', padding: '0 10px',
-                        height: 28, borderRadius: 8, fontFamily: 'inherit', fontSize: 12,
-                        color: 'var(--qa-text-2)', cursor: 'pointer', whiteSpace: 'nowrap',
-                        background: expandedId === d.chatId ? 'var(--qa-gray-100)' : 'transparent',
-                      }}
-                    >
-                      View
-                    </button>
-                    {status === 'pending' && (
-                      <>
+                    <DisputeStatusPill
+                      status={d.status}
+                      raisedByRole={d.raisedByRole}
+                      reviewNote={d.reviewNote}
+                      parameters={d.parameters}
+                    />
+                    {d.reviewNote && (
+                      <div style={{ fontSize: 11, color: 'var(--qa-text-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }} title={d.reviewNote}>
+                        {d.reviewNote}
+                      </div>
+                    )}
+                  </td>
+                )}
+              </tr>
+
+              {/* Dispute detail: agent note + challenged params + eval panel */}
+              {expandedId === d.chatId && (
+                <>
+                  {/* Note + challenged params row */}
+                  <tr>
+                    <td colSpan={colCount} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
+                      <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+                        <div style={{ flex: '2 1 0', minWidth: 0, display: 'grid' }}>
+                      <DisputeThread
+                        flagId={d.flagId}
+                        agentNote={d.agentNote}
+                        reviewNote={d.reviewNote}
+                        agentName={d.agentName}
+                        raisedByRole={d.raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
+                        raisedByName={d.raisedByName || d.agentName}
+                        reviewedBy={(d as any).reviewedBy}
+                        flush
+                        reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
+                        flaggedAt={(d as any).flaggedAt || d.raisedAt}
+                        reviewedAt={(d as any).reviewedAt}
+                        compact
+                      />
+                        </div>
+                        {(d.challengedParams.length > 0 || status === 'pending') && (
+                          <>
+                            {d.challengedParams.length > 0 && (
+                              <div style={{ flex: '2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)' }}>Disputed Params</span>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 700,
+                                  background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                                  border: `1px solid ${targetInfo.badgeBorder}`,
+                                  borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase',
+                                }}>
+                                  Target: {targetInfo.label}
+                                </span>
+                                {d.challengedParams.map(cp => (
+                                  <span key={cp.param} title={cp.note} style={{
+                                    fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                    background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                                    borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
+                                  }}>{formatParamLabel(cp.param)}</span>
+                                ))}
+                              </div>
+                            )}
+                            {status === 'pending' && (
+                          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
+                            {definedTopics.length > 0 && !definedTopics.some(t => t.trim().toLowerCase() === (d.disposition || '').trim().toLowerCase()) && (
+                              <UISelect aria-label="Disposition" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ width: '100%' }}>
+                                <option value="">{d.disposition ? `${d.disposition} (not assigned), choose` : 'Choose disposition'}</option>
+                                {definedTopics.map(t => <option key={t} value={t}>{t}</option>)}
+                              </UISelect>
+                            )}
                         <button
                           onClick={() => resolveAtTLLevel(d.flagId)}
                           disabled={actioning === d.flagId}
                           style={{
-                            height: 28, padding: '0 10px', borderRadius: 8,
+                            width: '100%', height: 32, padding: '0 10px', borderRadius: 8,
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                             background: 'var(--qa-card)', color: 'var(--qa-text)',
                             border: '1px solid var(--qa-border)', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
@@ -790,10 +822,10 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                           Resolve
                         </button>
                         <button
-                          onClick={() => forwardToQA(d.flagId)}
-                          disabled={actioning === d.flagId}
+                          onClick={() => forwardToQA(d.flagId, topicPick[d.flagId])}
+                          disabled={actioning === d.flagId || (definedTopics.length > 0 && !definedTopics.some(t => t.trim().toLowerCase() === (d.disposition || '').trim().toLowerCase()) && !topicPick[d.flagId])}
                           style={{
-                            height: 28, padding: '0 12px', borderRadius: 8,
+                            width: '100%', height: 32, padding: '0 12px', borderRadius: 8,
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                             background: 'var(--qa-gray-700)', color: '#fff',
                             border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
@@ -802,59 +834,11 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         >
                           {actioning === d.flagId ? '…' : 'Forward to QA'}
                         </button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-
-              {/* Dispute detail: agent note + challenged params + eval panel */}
-              {expandedId === d.chatId && (
-                <>
-                  {/* Note + challenged params row */}
-                  <tr>
-                    <td colSpan={colCount} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
-                      {d.agentNote && (
-                        <div style={{ marginBottom: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)', marginRight: 8 }}>
-                            {d.raisedBy === 'TL' ? 'Team Lead Note' : 'Agent Note'}
-                          </span>
-                          <span style={{ fontSize: 13, color: 'var(--qa-text)' }}>{d.agentNote}</span>
-                        </div>
-                      )}
-                      {d.challengedParams.length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700,
-                            background: targetInfo.badgeBg, color: targetInfo.badgeText,
-                            border: `1px solid ${targetInfo.badgeBorder}`,
-                            borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
-                          }}>
-                            Target: {targetInfo.label}
-                          </span>
-                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>Disputed Params</span>
-                          {d.challengedParams.map(cp => (
-                            <span key={cp.param} title={cp.note} style={{
-                              fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                              background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                              borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
-                            }}>{formatParamLabel(cp.param)}</span>
-                          ))}
-                        </div>
-                      )}
-                      <DisputeThread
-                        flagId={d.flagId}
-                        agentNote={d.agentNote}
-                        reviewNote={d.reviewNote}
-                        agentName={d.agentName}
-                        raisedByRole={d.raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
-                        raisedByName={d.raisedByName || d.agentName}
-                        reviewedBy={(d as any).reviewedBy}
-                        reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
-                        flaggedAt={(d as any).flaggedAt || d.raisedAt}
-                        reviewedAt={(d as any).reviewedAt}
-                        compact
-                      />
+                          </div>
+                        )}
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                   <EvalPanel
@@ -876,6 +860,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
                     colSpan={colCount}
+                    inset
                     conversationType={d.conversationType}
                   />
                 </>
@@ -909,8 +894,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   return (
     <span style={{
       fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px',
-      background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100)',
-      color: active ? '#fff' : 'var(--qa-text-2)',
+      background: active ? 'var(--ink)' : 'var(--qa-fill-light)',
+      color: active ? 'var(--ink-fg)' : 'var(--qa-text-2)',
     }}>
       {count}
     </span>
@@ -930,10 +915,11 @@ export default function QualityChatsPage() {
   const [reviewedCount,  setReviewedCount]  = useState<number | null>(null);
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    height: 36, padding: '0 16px', border: 'none', borderRadius: 8,
-    background: active ? 'var(--qa-gray-700)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2)',
-    fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 500 : 400,
+    height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
+    background: 'transparent',
+    color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+    borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
+    fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 600 : 500,
     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
@@ -957,8 +943,7 @@ export default function QualityChatsPage() {
       }}>
         <div style={{
           display: 'flex', gap: 4,
-          background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
-          borderRadius: 10, padding: 4, width: 'fit-content',
+          borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
         }}>
           <button style={tabStyle(tab === 'evaluated')} onClick={() => setTab('evaluated')}>
             Evaluated Chats

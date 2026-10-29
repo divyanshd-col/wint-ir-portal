@@ -76,9 +76,9 @@ export default function SetupPage() {
           <div className="text-center mb-6">
             <div className="flex items-center justify-center gap-3 mb-3">
               <svg width="36" height="28" viewBox="0 0 40 32" fill="none">
-                <rect x="0" y="12" width="12" height="20" fill="#2d9e4f" rx="1"/>
-                <rect x="14" y="6" width="12" height="26" fill="#2d9e4f" rx="1"/>
-                <rect x="28" y="0" width="12" height="32" fill="#2d9e4f" rx="1"/>
+                <rect x="0" y="12" width="12" height="20" fill="#1f7a4d" rx="1"/>
+                <rect x="14" y="6" width="12" height="26" fill="#1f7a4d" rx="1"/>
+                <rect x="28" y="0" width="12" height="32" fill="#1f7a4d" rx="1"/>
               </svg>
               <span className="text-2xl font-bold text-[#1a1a1a]">wint</span>
             </div>
@@ -138,9 +138,9 @@ export default function SetupPage() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
             <svg width="36" height="28" viewBox="0 0 40 32" fill="none">
-              <rect x="0" y="12" width="12" height="20" fill="#2d9e4f" rx="1"/>
-              <rect x="14" y="6" width="12" height="26" fill="#2d9e4f" rx="1"/>
-              <rect x="28" y="0" width="12" height="32" fill="#2d9e4f" rx="1"/>
+              <rect x="0" y="12" width="12" height="20" fill="#1f7a4d" rx="1"/>
+              <rect x="14" y="6" width="12" height="26" fill="#1f7a4d" rx="1"/>
+              <rect x="28" y="0" width="12" height="32" fill="#1f7a4d" rx="1"/>
             </svg>
             <span className="text-2xl font-bold text-[#1a1a1a]">wint</span>
           </div>
@@ -154,7 +154,7 @@ export default function SetupPage() {
               <button
                 onClick={() => setStep(s.num)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                  step === s.num ? 'bg-[#2d9e4f] text-white' : step > s.num ? 'bg-[#2d9e4f]/20 text-[#2d9e4f]' : 'bg-gray-100 text-gray-400'
+                  step === s.num ? 'bg-[#1f7a4d] text-white' : step > s.num ? 'bg-[#1f7a4d]/20 text-[#1f7a4d]' : 'bg-gray-100 text-gray-400'
                 }`}
               >
                 <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs">
@@ -162,7 +162,7 @@ export default function SetupPage() {
                 </span>
                 {s.label}
               </button>
-              {i < steps.length - 1 && <div className={`w-8 h-0.5 ${step > s.num ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`} />}
+              {i < steps.length - 1 && <div className={`w-8 h-0.5 ${step > s.num ? 'bg-[#1f7a4d]' : 'bg-gray-200'}`} />}
             </div>
           ))}
         </div>
@@ -173,7 +173,7 @@ export default function SetupPage() {
               <h2 className="text-lg font-semibold text-[#1a1a1a] mb-1">Gemini API Key</h2>
               <p className="text-gray-500 text-sm mb-6">
                 Get your free API key from{' '}
-                <a href="https://aistudio.google.com" target="_blank" className="text-[#2d9e4f] hover:underline">aistudio.google.com</a>
+                <a href="https://aistudio.google.com" target="_blank" className="text-[#1f7a4d] hover:underline">aistudio.google.com</a>
                 {' '}→ Get API Key → Create API key
               </p>
               <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
@@ -182,10 +182,10 @@ export default function SetupPage() {
                 value={geminiKey}
                 onChange={e => setGeminiKey(e.target.value)}
                 placeholder="AIza..."
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d] focus:border-transparent"
               />
               <button onClick={() => setStep(2)} disabled={!geminiKey.trim()}
-                className="mt-6 w-full bg-[#2d9e4f] hover:bg-[#27883f] disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+                className="mt-6 w-full bg-[#1f7a4d] hover:bg-[#27883f] disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl transition text-sm">
                 Next →
               </button>
             </div>
@@ -196,23 +196,23 @@ export default function SetupPage() {
               <h2 className="text-lg font-semibold text-[#1a1a1a] mb-1">Knowledge Base Documents</h2>
               <p className="text-gray-500 text-sm mb-2">Paste links to your Google Docs. Make sure each is set to <strong>"Anyone with the link can view"</strong>.</p>
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 mb-5 text-xs text-amber-700">
-                💡 In Google Drive: Right-click doc → Share → "Anyone with the link" → Viewer → Copy link
+                In Google Drive: Right-click doc → Share → "Anyone with the link" → Viewer → Copy link
               </div>
               <div className="space-y-2">
                 {urls.map((url, i) => (
                   <div key={i} className="flex gap-2">
                     <input type="url" value={url} onChange={e => updateUrl(i, e.target.value)}
                       placeholder="https://docs.google.com/document/d/..."
-                      className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent" />
+                      className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d] focus:border-transparent" />
                     {urls.length > 1 && <button onClick={() => removeUrl(i)} className="text-red-400 hover:text-red-600 px-2 text-lg">×</button>}
                   </div>
                 ))}
               </div>
-              <button onClick={addUrl} className="mt-3 text-[#2d9e4f] text-sm hover:underline">+ Add another document</button>
+              <button onClick={addUrl} className="mt-3 text-[#1f7a4d] text-sm hover:underline">+ Add another document</button>
               <div className="flex gap-3 mt-6">
                 <button onClick={() => setStep(1)} className="flex-1 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50 transition">← Back</button>
                 <button onClick={() => setStep(3)} disabled={!urls.some(u => u.trim())}
-                  className="flex-1 bg-[#2d9e4f] hover:bg-[#27883f] disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl transition text-sm">Next →</button>
+                  className="flex-1 bg-[#1f7a4d] hover:bg-[#27883f] disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl transition text-sm">Next →</button>
               </div>
             </div>
           )}
@@ -226,20 +226,20 @@ export default function SetupPage() {
                   <div key={i} className="flex gap-2 items-center">
                     <input type="text" value={user.username} onChange={e => updateUser(i, 'username', e.target.value)}
                       placeholder="Username"
-                      className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent" />
+                      className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d] focus:border-transparent" />
                     <input type="password" value={user.password} onChange={e => updateUser(i, 'password', e.target.value)}
                       placeholder="Password"
-                      className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent" />
+                      className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d] focus:border-transparent" />
                     {users.length > 1 && <button onClick={() => removeUser(i)} className="text-red-400 hover:text-red-600 text-lg px-1">×</button>}
                   </div>
                 ))}
               </div>
-              <button onClick={addUser} className="mt-3 text-[#2d9e4f] text-sm hover:underline">+ Add another user</button>
+              <button onClick={addUser} className="mt-3 text-[#1f7a4d] text-sm hover:underline">+ Add another user</button>
               {error && <div className="mt-4 bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-xl">{error}</div>}
               <div className="flex gap-3 mt-6">
                 <button onClick={() => setStep(2)} className="flex-1 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50 transition">← Back</button>
                 <button onClick={handleSave} disabled={saving || !users.some(u => u.username.trim() && u.password.trim())}
-                  className="flex-1 bg-[#2d9e4f] hover:bg-[#27883f] disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+                  className="flex-1 bg-[#1f7a4d] hover:bg-[#27883f] disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl transition text-sm">
                   {saving ? 'Saving...' : '✓ Save & Launch Portal'}
                 </button>
               </div>

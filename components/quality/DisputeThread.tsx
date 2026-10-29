@@ -25,6 +25,7 @@ interface Props {
   flaggedAt?: string | null;
   reviewedAt?: string | null;
   compact?: boolean;
+  flush?: boolean;
 }
 
 function fmtDateTime(iso?: string | null) {
@@ -46,9 +47,9 @@ function fmtDateTime(iso?: string | null) {
 
 function RoleBadge({ role }: { role: string }) {
   const r = (role || 'user').toLowerCase();
-  let bg = '#f4f4f5';
+  let bg = 'var(--qa-fill-light)';
   let color = '#52525b';
-  let border = '#e4e4e7';
+  let border = 'var(--qa-border)';
   let label = role.toUpperCase();
 
   if (r === 'agent' || r === 'ir') {
@@ -120,6 +121,7 @@ export function DisputeThread({
   flaggedAt,
   reviewedAt,
   compact = false,
+  flush = false,
 }: Props) {
   const [comments, setComments] = useState<IQSFlagComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,11 +177,11 @@ export function DisputeThread({
   return (
     <div style={{
       background: 'var(--qa-card, #FFFFFF)',
-      border: '1px solid var(--qa-border, #E4E4E7)',
+      border: '1px solid var(--qa-border, var(--qa-border))',
       borderRadius: compact ? 8 : 12,
       padding: compact ? '12px 14px' : '16px 20px',
-      marginTop: 12,
-      marginBottom: 12,
+      marginTop: flush ? 0 : 12,
+      marginBottom: flush ? 0 : 12,
       boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
     }}>
       <div style={{
@@ -188,7 +190,7 @@ export function DisputeThread({
         justifyContent: 'space-between',
         marginBottom: 12,
         paddingBottom: 8,
-        borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+        borderBottom: '1px solid var(--qa-border-sub, var(--qa-border-sub))',
       }}>
         <div style={{
           fontSize: 12,
@@ -200,9 +202,9 @@ export function DisputeThread({
           alignItems: 'center',
           gap: 6,
         }}>
-          <span>💬</span> Dispute Activity & Comments
+          Dispute Activity & Comments
         </div>
-        <span style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)' }}>
+        <span style={{ fontSize: 11, color: 'var(--qa-text-3, var(--qa-text-2))' }}>
           {comments.length + (agentNote ? 1 : 0)} messages
         </span>
       </div>
@@ -258,7 +260,7 @@ export function DisputeThread({
 
         {/* Thread Comments */}
         {loading ? (
-          <div style={{ fontSize: 12, color: 'var(--qa-text-3, #71717A)', fontStyle: 'italic', padding: '4px 0' }}>
+          <div style={{ fontSize: 12, color: 'var(--qa-text-3, var(--qa-text-2))', fontStyle: 'italic', padding: '4px 0' }}>
             Loading comments…
           </div>
         ) : (
@@ -279,7 +281,7 @@ export function DisputeThread({
             return (
               <div key={c.id} style={{
                 background: isForward ? '#fcfaef' : '#FFFFFF',
-                border: isForward ? '1px solid #fef08a' : '1px solid var(--qa-border, #E4E4E7)',
+                border: isForward ? '1px solid #fef08a' : '1px solid var(--qa-border, var(--qa-border))',
                 borderRadius: 8,
                 padding: '10px 12px',
               }}>
@@ -301,7 +303,7 @@ export function DisputeThread({
                       {badgeText}
                     </span>
                   )}
-                  <span style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginLeft: 'auto' }}>
+                  <span style={{ fontSize: 11, color: 'var(--qa-text-3, var(--qa-text-2))', marginLeft: 'auto' }}>
                     {fmtDateTime(c.createdAt)}
                   </span>
                 </div>
@@ -354,8 +356,8 @@ export function DisputeThread({
               borderRadius: 8,
               fontSize: 12,
               fontWeight: 600,
-              background: posting || !newComment.trim() ? '#E4E4E7' : '#18181B',
-              color: posting || !newComment.trim() ? '#A1A1AA' : '#FFFFFF',
+              background: posting || !newComment.trim() ? 'var(--qa-border)' : '#18181B',
+              color: posting || !newComment.trim() ? 'var(--qa-text-3)' : '#FFFFFF',
               border: 'none',
               cursor: posting || !newComment.trim() ? 'default' : 'pointer',
               whiteSpace: 'nowrap',

@@ -24,8 +24,10 @@ interface ChannelData  { stats: StatValues; categories: CatRow[]; wow: WowWeek[]
 interface MemberData {
   agentName: string; agents: string[];
   dateFrom: string; dateTo: string; wowWeekStarts: string[];
-  channels: { chats: ChannelData; calls: ChannelData; emails: null; };
+  channels: { chats: ChannelData; calls: ChannelData; emails: ChannelData | null; };
+  cxAverage?: { chats: CxAvg | null; calls: CxAvg | null; emails: CxAvg | null };
 }
+interface CxAvg { csat_pct: number|null; iqs: number|null; volume: number|null; }
 interface AiResult     { summary: string; items: Array<{ type: string; text: string }>; }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -351,7 +353,7 @@ export default function MemberAnalyticsDashboard() {
         {([
           { label: 'Chats', data: chats },
           { label: 'Calls', data: calls },
-          { label: 'Emails', data: null },
+          { label: 'Emails', data: data?.channels?.emails },
         ] as { label: string; data: ChannelData | null | undefined }[]).map(({ label, data: cd }) => (
           <div key={label} style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 20 }}>
             <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 14 }}>{label}</div>
@@ -380,9 +382,26 @@ export default function MemberAnalyticsDashboard() {
                 ))}
               </div>
             )}
-            {label === 'Emails' && !loading && (
-              <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 8, fontStyle: 'italic' }}>Not yet evaluated</div>
-            )}
+            {!loading && (() => {
+              const avg = data?.cxAverage?.[label.toLowerCase() as 'chats' | 'calls' | 'emails'];
+              return (
+                <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--qa-border-sub)' }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>CX average</div>
+                  <div style={{ display: 'flex', gap: 24 }}>
+                    {[
+                      { cap: 'CSAT', val: avg ? fmtPct(avg.csat_pct) : '—' },
+                      { cap: 'IQS', val: avg ? fmtPct(avg.iqs) : '—' },
+                      { cap: 'Volume / agent', val: avg?.volume != null ? fmtVol(avg.volume) : '—' },
+                    ].map(item => (
+                      <div key={item.cap} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--qa-text-2)', fontVariantNumeric: 'tabular-nums' }}>{item.val}</span>
+                        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>{item.cap}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ))}
       </div>
@@ -392,7 +411,7 @@ export default function MemberAnalyticsDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <SectionTitle>Performance by Category</SectionTitle>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
-            {periodLabel} · click a row to expand subcategories
+            {periodLabel}
           </span>
         </div>
         <Panel>
@@ -502,7 +521,6 @@ export default function MemberAnalyticsDashboard() {
       <section style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <SectionTitle>Week-on-Week Performance</SectionTitle>
-          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>Trailing 5 weeks · week beginning – ending</span>
         </div>
         <Panel>
           <div style={{ padding: '0 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--qa-border)' }}>
@@ -724,9 +742,6 @@ export default function MemberAnalyticsDashboard() {
                   </div>
                 ))}
               </div>
-              <p style={{ marginTop: 14, fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
-                Generated from {agentInitials(selectedAgent)} {selectedAgent}'s evaluated {aiChannel} · {periodLabel}
-              </p>
             </div>
           )}
         </div>

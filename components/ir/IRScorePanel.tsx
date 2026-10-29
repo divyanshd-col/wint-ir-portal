@@ -10,6 +10,8 @@ import {
 } from '@/lib/quality';
 import { resolveParamCell } from '@/lib/param-keys';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import { renderWithAttachments } from '@/components/quality/attachments';
+import { isActivityEvent } from '@/components/quality/transcript-events';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -81,7 +83,7 @@ function ScoreRing({ score }: { score: number | null }) {
   const offset = circ - (val / 100) * circ;
   return (
     <svg width={64} height={64}>
-      <circle cx={32} cy={32} r={r} stroke="#E4E4E7" strokeWidth={5} fill="none" />
+      <circle cx={32} cy={32} r={r} stroke="var(--qa-border)" strokeWidth={5} fill="none" />
       <circle
         cx={32} cy={32} r={r} stroke="#2D2D31" strokeWidth={5} fill="none"
         strokeLinecap="round"
@@ -147,7 +149,7 @@ export default function IRScorePanel({
       .then(d => {
         const raw: any[] = d.timedMessages ?? d.messages ?? d.transcript ?? [];
         const msgs: TranscriptMsg[] = Array.isArray(raw) ? raw.map(m => ({
-          role: m.role ?? (m.sender === 'user' ? 'user' : m.sender === 'bot' ? 'bot' : m.sender === 'activity' ? 'system' : 'assistant'),
+          role: m.role ?? (isActivityEvent(m.sender, m.content ?? m.text) ? 'system' : m.sender === 'user' ? 'user' : m.sender === 'bot' ? 'bot' : 'assistant'),
           content: m.content ?? m.text ?? '',
           timestamp: m.timestamp,
         })) : [];
@@ -210,27 +212,27 @@ export default function IRScorePanel({
   const reviewedOutcome = isRejected ? 'Rejected' : 'Accepted';
 
   return (
-    <tr style={{ background: '#FAFAFB' }}>
+    <tr style={{ background: 'var(--qa-gray-50)' }}>
       <td colSpan={colSpan} style={{ padding: '0 16px 16px' }}>
         <div style={{
           display: 'flex', height: 520,
-          border: '1px solid #E4E4E7', borderRadius: 8,
+          border: '1px solid var(--qa-border)', borderRadius: 8,
           background: '#FFFFFF', overflow: 'hidden',
         }}>
           {/* ── Left panel ── */}
           <div style={{
             // Wider param column, shrinking back to 400 when space is tight so
             // the transcript pane stays readable.
-            width: 496, minWidth: 400, flexShrink: 1, borderRight: '1px solid #E4E4E7',
+            width: 496, minWidth: 400, flexShrink: 1, borderRight: '1px solid var(--qa-border)',
             display: 'flex', flexDirection: 'column',
           }}>
             {/* Header */}
-            <div style={{ padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0 }}>
+            <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <ScoreRing score={displayedScore} />
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#111111' }}>{agentName || '—'}</div>
-                  <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 6 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{agentName || '—'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 6 }}>
                     <span style={{ fontFamily: MONO }}>{chatId?.slice(0, 14)}</span>
                     {' · '}{date}
                   </div>
@@ -241,7 +243,7 @@ export default function IRScorePanel({
             {/* Tab header */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '12px 16px 0', borderBottom: '1px solid #E4E4E7', flexShrink: 0,
+              padding: '12px 16px 0', borderBottom: '1px solid var(--qa-border)', flexShrink: 0,
             }}>
               <div style={{ display: 'flex', gap: 16 }}>
                 <button
@@ -249,7 +251,7 @@ export default function IRScorePanel({
                   onClick={() => setActiveTab('agent')}
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
-                    color: activeTab === 'agent' ? '#111111' : '#A1A1AA',
+                    color: activeTab === 'agent' ? '#111111' : 'var(--qa-text-3)',
                     borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'agent' ? '2px solid #111111' : '2px solid transparent',
                     background: 'none', cursor: 'pointer', fontFamily: SANS,
@@ -262,7 +264,7 @@ export default function IRScorePanel({
                   onClick={() => setActiveTab('bot')}
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
-                    color: activeTab === 'bot' ? '#111111' : '#A1A1AA',
+                    color: activeTab === 'bot' ? '#111111' : 'var(--qa-text-3)',
                     borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'bot' ? '2px solid #111111' : '2px solid transparent',
                     background: 'none', cursor: 'pointer', fontFamily: SANS,
@@ -304,9 +306,9 @@ export default function IRScorePanel({
 
                   const rowStyle: CSSProperties = {
                     padding: '14px 16px',
-                    borderBottom: isLast ? 'none' : '1px solid #F0F0F2',
+                    borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)',
                     cursor: disputing ? 'pointer' : 'default',
-                    background: isPicked ? '#FAFAFB' : 'transparent',
+                    background: isPicked ? 'var(--qa-gray-50)' : 'transparent',
                     boxShadow: isPicked ? 'inset 3px 0 0 #2D2D31' : 'none',
                     transition: 'background 0.1s',
                   };
@@ -316,8 +318,8 @@ export default function IRScorePanel({
                       key={param}
                       style={rowStyle}
                       onClick={disputing ? () => togglePick(param) : undefined}
-                      onMouseEnter={disputing ? e => { if (!isPicked) (e.currentTarget as HTMLElement).style.background = '#F4F4F5'; } : undefined}
-                      onMouseLeave={disputing ? e => { (e.currentTarget as HTMLElement).style.background = isPicked ? '#FAFAFB' : 'transparent'; } : undefined}
+                      onMouseEnter={disputing ? e => { if (!isPicked) (e.currentTarget as HTMLElement).style.background = 'var(--qa-fill-light)'; } : undefined}
+                      onMouseLeave={disputing ? e => { (e.currentTarget as HTMLElement).style.background = isPicked ? 'var(--qa-gray-50)' : 'transparent'; } : undefined}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         {disputing && (
@@ -329,7 +331,7 @@ export default function IRScorePanel({
                             style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#111111' }}
                           />
                         )}
-                        <span style={{ fontSize: 13, fontWeight: 500, color: '#111111', flex: '0 1 auto' }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', flex: '0 1 auto' }}>
                           {activeParamNames[param] || param}
                         </span>
                       {dispChallenge && (mode === 'pending' || mode === 'reviewed') && (
@@ -353,7 +355,7 @@ export default function IRScorePanel({
                         </span>
                       )}
                       {weight && (
-                        <span style={{ fontSize: 11, color: '#A1A1AA', fontFamily: MONO, marginLeft: 'auto', flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: MONO, marginLeft: 'auto', flexShrink: 0 }}>
                           {weight}
                         </span>
                       )}
@@ -362,7 +364,7 @@ export default function IRScorePanel({
                           const selected = score === opt;
                           let bg = '#FFFFFF';
                           let color = '#D4D4D8';
-                          let border = '1px solid #F4F4F5';
+                          let border = '1px solid var(--qa-fill-light)';
 
                           if (selected) {
                             if (opt === 'Yes') {
@@ -374,9 +376,9 @@ export default function IRScorePanel({
                               color = '#B91C1C';
                               border = '1px solid #FCA5A5';
                             } else {
-                              bg = '#F4F4F5';
+                              bg = 'var(--qa-fill-light)';
                               color = '#52525B';
-                              border = '1px solid #E4E4E7';
+                              border = '1px solid var(--qa-border)';
                             }
                           }
 
@@ -410,8 +412,8 @@ export default function IRScorePanel({
                     )}
                     {dispChallenge && (mode === 'pending' || mode === 'reviewed') && (
                       <div style={{
-                        marginTop: 10, fontSize: 12, color: '#6B6B6B',
-                        background: '#FFFFFF', border: '1px solid #E4E4E7',
+                        marginTop: 10, fontSize: 12, color: 'var(--qa-text-2)',
+                        background: '#FFFFFF', border: '1px solid var(--qa-border)',
                         borderRadius: 6, padding: '8px 10px',
                         display: 'flex', flexDirection: 'column', gap: 4,
                       }}>
@@ -429,7 +431,7 @@ export default function IRScorePanel({
           <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column' }}>
             {/* Header */}
             <div style={{
-              padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0,
+              padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0,
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <div style={{ flex: 1 }} />
@@ -439,8 +441,8 @@ export default function IRScorePanel({
                 <button
                   style={{
                     height: 32, padding: '0 16px', borderRadius: 8,
-                    background: '#FFFFFF', border: '1px solid #E4E4E7',
-                    fontSize: 13, fontWeight: 500, color: '#111111', cursor: 'pointer', fontFamily: SANS,
+                    background: '#FFFFFF', border: '1px solid var(--qa-border)',
+                    fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', fontFamily: SANS,
                   }}
                   onClick={startDisputing}
                 >
@@ -452,8 +454,8 @@ export default function IRScorePanel({
                   <button
                     style={{
                       height: 32, padding: '0 16px', borderRadius: 8,
-                      background: '#FFFFFF', border: '1px solid #E4E4E7',
-                      fontSize: 13, fontWeight: 500, color: '#111111', cursor: 'pointer', fontFamily: SANS,
+                      background: '#FFFFFF', border: '1px solid var(--qa-border)',
+                      fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', fontFamily: SANS,
                     }}
                     onClick={cancelDisputing}
                   >
@@ -475,13 +477,13 @@ export default function IRScorePanel({
                 </>
               )}
               {mode === 'evaluated' && disputeDone && (
-                <span style={{ fontSize: 13, color: '#A1A1AA' }}>Dispute raised</span>
+                <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Dispute raised</span>
               )}
               {mode === 'pending' && (
-                <span style={{ fontSize: 13, color: '#A1A1AA' }}>{pendingStatusLabel}</span>
+                <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>{pendingStatusLabel}</span>
               )}
               {mode === 'reviewed' && (
-                <span style={{ fontSize: 13, color: '#A1A1AA' }}>{reviewedOutcome}{reviewedBy ? ` by ${reviewedBy}` : ''}</span>
+                <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>{reviewedOutcome}{reviewedBy ? ` by ${reviewedBy}` : ''}</span>
               )}
 
               {error && <span style={{ fontSize: 12, color: '#DC2626' }}>{error}</span>}
@@ -489,8 +491,8 @@ export default function IRScorePanel({
               {/* Close */}
               <button
                 style={{
-                  width: 28, height: 28, border: '1px solid #E4E4E7', borderRadius: 8,
-                  background: '#FFFFFF', color: '#6B6B6B', cursor: 'pointer',
+                  width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
+                  background: '#FFFFFF', color: 'var(--qa-text-2)', cursor: 'pointer',
                   fontSize: 16, lineHeight: 1,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   fontFamily: SANS,
@@ -529,22 +531,22 @@ export default function IRScorePanel({
             {mode === 'evaluated' && disputing && (
               <div style={{
                 flexShrink: 0, padding: '14px 16px',
-                borderBottom: '1px solid #E4E4E7', background: '#FAFAFB',
+                borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
               }}>
-                <div style={{ fontSize: 13, color: '#6B6B6B', marginBottom: 8 }}>Reason for dispute</div>
+                <div style={{ fontSize: 13, color: 'var(--qa-text-2)', marginBottom: 8 }}>Reason for dispute</div>
                 <textarea
                   ref={textareaRef}
                   style={{
-                    width: '100%', height: 80, border: '1px solid #E4E4E7', borderRadius: 8,
+                    width: '100%', height: 80, border: '1px solid var(--qa-border)', borderRadius: 8,
                     padding: '8px 10px', fontFamily: SANS, fontSize: 13, lineHeight: 1.5,
-                    color: '#111111', resize: 'none', outline: 'none', background: '#FFFFFF',
+                    color: 'var(--qa-text)', resize: 'none', outline: 'none', background: '#FFFFFF',
                     boxSizing: 'border-box',
                   }}
                   placeholder="Describe what you think is incorrect and why (required)"
                   value={sharedNote}
                   onChange={e => setSharedNote(e.target.value)}
                   onFocus={e => { e.target.style.borderColor = '#111111'; }}
-                  onBlur={e => { e.target.style.borderColor = '#E4E4E7'; }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--qa-border)'; }}
                 />
               </div>
             )}
@@ -552,9 +554,9 @@ export default function IRScorePanel({
             {/* Transcript */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', background: '#FFFFFF' }}>
               {txLoading ? (
-                <div style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, marginTop: 40 }}>Loading transcript…</div>
+                <div style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, marginTop: 40 }}>Loading transcript…</div>
               ) : transcript.length === 0 ? (
-                <div style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, marginTop: 40 }}>No transcript available</div>
+                <div style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, marginTop: 40 }}>No transcript available</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                   {transcript.map((msg, i) => {
@@ -583,8 +585,8 @@ export default function IRScorePanel({
                       return (
                         <div key={i} style={{ marginTop: i === 0 ? 0 : 8 }}>
                           <div style={{
-                            background: '#FAFAFB', border: '1px solid #F0F0F2', borderRadius: 8,
-                            fontSize: 12, fontStyle: 'italic', color: '#6B6B6B',
+                            background: 'var(--qa-gray-50)', border: '1px solid var(--qa-border-sub)', borderRadius: 8,
+                            fontSize: 12, fontStyle: 'italic', color: 'var(--qa-text-2)',
                             textAlign: 'center', padding: '8px 14px', lineHeight: 1.5,
                           }}>
                             {msg.content}{systemTime}
@@ -598,17 +600,17 @@ export default function IRScorePanel({
 
                     return (
                       <div key={i} style={{ marginTop: i === 0 ? 0 : 8, display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-start' : 'flex-end' }}>
-                        <div style={{ fontSize: 11, color: '#A1A1AA', marginBottom: 4 }}>
+                        <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginBottom: 4 }}>
                           {roleLabel}{timeStr ? ` · ${timeStr}` : ''}
                         </div>
                         <div style={{
-                          background: isUser ? '#FFFFFF' : isAgent ? '#2D2D31' : '#F4F4F5',
+                          background: isUser ? '#FFFFFF' : isAgent ? '#2D2D31' : 'var(--qa-fill-light)',
                           color: isUser ? '#111111' : isAgent ? '#fff' : '#111111',
-                          border: isUser ? '1px solid #E4E4E7' : 'none',
+                          border: isUser ? '1px solid var(--qa-border)' : 'none',
                           padding: '10px 14px', borderRadius: 8,
                           fontSize: 13, lineHeight: 1.5, maxWidth: '76%',
                         }}>
-                          {msg.content}
+                          {renderWithAttachments(msg.content)}
                         </div>
                       </div>
                     );

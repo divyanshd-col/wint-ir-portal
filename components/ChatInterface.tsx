@@ -90,7 +90,7 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
       const label = match[5] || match[7];
       parts.push(
         <a key={`${keyPrefix}-link-${match.index}`} href={href} target="_blank" rel="noopener noreferrer"
-          className="text-[#2d9e4f] underline underline-offset-2 hover:text-[#238a42] break-all">
+          className="text-[#1f7a4d] underline underline-offset-2 hover:text-[#238a42] break-all">
           {label}
         </a>
       );
@@ -115,8 +115,8 @@ function renderContent(text: string): React.ReactNode {
           const content = trimmed.replace(/^#{1,3}\s+/, '');
           return (
             <div key={pi} className="flex items-center gap-2 pt-0.5">
-              <span className="w-[3px] h-3.5 bg-[#2d9e4f] rounded-full shrink-0" />
-              <p className="text-[11.5px] font-[700] text-[#2d9e4f] uppercase tracking-[0.09em]">
+              <span className="w-[3px] h-3.5 bg-[#1f7a4d] rounded-full shrink-0" />
+              <p className="text-[11.5px] font-[700] text-[#1f7a4d] uppercase tracking-[0.09em]">
                 {renderInline(content, `${pi}`)}
               </p>
             </div>
@@ -135,7 +135,7 @@ function renderContent(text: string): React.ReactNode {
                 const num = (line.match(/^(\d+)/) || [])[1];
                 return (
                   <li key={li} className="flex gap-3 text-[15px] leading-[1.7]">
-                    <span className="shrink-0 w-5 h-5 rounded-md bg-[#2d9e4f]/10 text-[#2d9e4f] text-[11px] font-[700] flex items-center justify-center mt-[2px]">
+                    <span className="shrink-0 w-5 h-5 rounded-md bg-[#1f7a4d]/10 text-[#1f7a4d] text-[11px] font-[700] flex items-center justify-center mt-[2px]">
                       {num}
                     </span>
                     <span className="text-[#111827]">{renderInline(content, `${pi}-${li}`)}</span>
@@ -155,7 +155,7 @@ function renderContent(text: string): React.ReactNode {
                 const content = line.replace(/^[-•]\s+/, '');
                 return (
                   <li key={li} className="flex gap-3 text-[15px] leading-[1.7]">
-                    <span className="shrink-0 w-[5px] h-[5px] rounded-sm bg-[#2d9e4f] mt-[9px]" />
+                    <span className="shrink-0 w-[5px] h-[5px] rounded-sm bg-[#1f7a4d] mt-[9px]" />
                     <span className="text-[#111827]">{renderInline(content, `${pi}-${li}`)}</span>
                   </li>
                 );
@@ -819,7 +819,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                           <img src={msg.imagePreviewUrl} alt="Attached screenshot" className="rounded-xl max-w-[220px] max-h-[160px] object-cover border border-white/20 shadow-sm" />
                         )}
                         {msg.content && (
-                          <div className="px-4 py-3 rounded-2xl rounded-tr-sm text-[14.5px] leading-[1.6] font-[450] bg-[#2d9e4f] text-white shadow-sm">
+                          <div className="px-4 py-3 rounded-2xl rounded-tr-sm text-[14.5px] leading-[1.6] font-[450] bg-[#1f7a4d] text-white shadow-sm">
                             {msg.content}
                           </div>
                         )}
@@ -831,9 +831,9 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                   {msg.role === 'assistant' && msg.loading && (
                     <div className="px-4 py-3.5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)] inline-flex">
                       <div className="flex gap-1 items-center">
-                        <span className="w-1.5 h-1.5 bg-[#2d9e4f]/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-1.5 h-1.5 bg-[#2d9e4f]/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-1.5 h-1.5 bg-[#2d9e4f]/80 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <span className="w-1.5 h-1.5 bg-[#1f7a4d]/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 bg-[#1f7a4d]/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 bg-[#1f7a4d]/80 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                       </div>
                     </div>
                   )}
@@ -843,21 +843,21 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                     <div className="bg-white border border-gray-200/80 rounded-2xl rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
                       {msg.form.submitted ? (
                         <div className="px-5 py-3.5 flex items-center gap-2.5">
-                          <span className="w-4 h-4 rounded-full bg-[#2d9e4f]/10 flex items-center justify-center shrink-0">
-                            <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="#2d9e4f" strokeWidth="2.5">
+                          <span className="w-4 h-4 rounded-full bg-[#1f7a4d]/10 flex items-center justify-center shrink-0">
+                            <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" strokeWidth="2.5">
                               <path d="M3 8l4 4 6-6" />
                             </svg>
                           </span>
                           <span className="text-[13px] text-gray-400">
-                            {msg.form.stepTitle ? `${msg.form.stepTitle} — submitted` : 'Step submitted'}
+                            {msg.form.stepTitle ? `${msg.form.stepTitle} submitted` : 'Step submitted'}
                           </span>
                         </div>
                       ) : (
                         <>
                           <div className="px-5 pt-4 pb-3 border-b border-gray-100">
                             <div className="flex items-center gap-2.5">
-                              <span className="w-[3px] h-[14px] bg-[#2d9e4f] rounded-full shrink-0" />
-                              <p className="text-[11px] font-[700] text-[#2d9e4f] uppercase tracking-[0.1em]">
+                              <span className="w-[3px] h-[14px] bg-[#1f7a4d] rounded-full shrink-0" />
+                              <p className="text-[11px] font-[700] text-[#1f7a4d] uppercase tracking-[0.1em]">
                                 {msg.form.stepTitle || 'Context Required'}
                               </p>
                             </div>
@@ -885,7 +885,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                                       value={msg.form!.answers[q.id] || ''}
                                       onChange={e => updateFormAnswer(msg.id, q.id, e.target.value)}
                                       placeholder={q.placeholder || 'Type your answer…'}
-                                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 placeholder-gray-400 disabled:opacity-50 transition"
+                                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/40 focus:border-[#1f7a4d]/60 placeholder-gray-400 disabled:opacity-50 transition"
                                     />
                                   ) : (
                                     <div className="flex flex-wrap gap-2">
@@ -898,8 +898,8 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                                             disabled={loading}
                                             onClick={() => updateFormAnswer(msg.id, q.id, opt)}
                                             className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${selected
-                                              ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
-                                              : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
+                                              ? 'bg-[#1f7a4d] border-[#1f7a4d] text-white shadow-sm'
+                                              : 'bg-white border-gray-200 text-gray-600 hover:border-[#1f7a4d]/70 hover:text-[#1f7a4d] hover:bg-[#1f7a4d]/5'
                                               }`}
                                           >
                                             {opt}
@@ -917,8 +917,8 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                                               disabled={loading}
                                               onClick={() => updateFormAnswer(msg.id, q.id, '__other__')}
                                               className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${isOtherMode
-                                                ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
-                                                : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
+                                                ? 'bg-[#1f7a4d] border-[#1f7a4d] text-white shadow-sm'
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-[#1f7a4d]/70 hover:text-[#1f7a4d] hover:bg-[#1f7a4d]/5'
                                                 }`}
                                             >
                                               Other
@@ -931,7 +931,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                                                 value={cur === '__other__' ? '' : cur}
                                                 onChange={e => updateFormAnswer(msg.id, q.id, e.target.value || '__other__')}
                                                 placeholder="Describe the situation…"
-                                                className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 placeholder-gray-400 disabled:opacity-50 transition"
+                                                className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/40 focus:border-[#1f7a4d]/60 placeholder-gray-400 disabled:opacity-50 transition"
                                               />
                                             )}
                                           </>
@@ -1095,7 +1095,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                                     value={draftContext[msg.id] || ''}
                                     onChange={e => setDraftContext(prev => ({ ...prev, [msg.id]: e.target.value }))}
                                     placeholder="e.g. User already tried reinstalling the app · This is a premium investor · User is frustrated, second time reaching out…"
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-[#111827] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 focus:border-[#2d9e4f]/50 resize-none leading-relaxed transition"
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-[#111827] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 focus:border-[#1f7a4d]/50 resize-none leading-relaxed transition"
                                   />
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1177,7 +1177,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                               {/* Fix 11 — Zone C: Escalation */}
                               {zoneC && (
                                 <div style={{ background: 'color-mix(in srgb, var(--color-background-warning) 30%, transparent)', borderLeft: '3px solid var(--color-border-warning)', borderRadius: 8 }} className="px-4 py-3">
-                                  <p style={{ color: 'var(--color-text-warning)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Escalation — only if needed</p>
+                                  <p style={{ color: 'var(--color-text-warning)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Escalation. Only if needed</p>
                                   <div className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{renderContent(zoneC)}</div>
                                 </div>
                               )}

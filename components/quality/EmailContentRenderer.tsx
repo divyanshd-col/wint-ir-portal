@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { maskText, renderMasked } from './mask';
+import { renderWithAttachments, attachmentsToHtml } from './attachments';
 import { trimEmailBody } from '@/lib/email/ui';
 
 /**
@@ -30,7 +32,29 @@ export function stripHtml(raw?: string | null): string {
  */
 export function isHtml(str?: string | null): boolean {
   if (!str) return false;
-  return /<\/?[a-z][\s\S]*>/i.test(str);
+  // Real markup only: a plain-text address like "Name <name@gmail.com>" must not count as a tag.
+  return /<\/?(?:html|head|body|style|p|div|br|span|a|b|i|u|em|strong|ul|ol|li|table|thead|tbody|tr|td|th|h[1-6]|blockquote|img|hr|pre|font|center)\b[^>]*>/i.test(str);
+}
+
+/**
+ * Splits a plain-text e-mail into the new message and the quoted history below an "On <date>, <name> wrote:" header
+ * (also works on text whose line breaks were already collapsed).
+ */
+export function splitQuotedReply(text: string): { main: string; quoted: string } {
+  const m = /(?:^|\n|(?<=[.!?]\s))\s*On\s+(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+)?(?:\d{1,2}|[A-Z][a-z]{2,8})\b[^\n]{0,200}?\bwrote:/.exec(text)
+    ?? /(?:^|\n)\s*-{2,}\s*Original Message\s*-{2,}/i.exec(text);
+  if (!m || m.index === undefined) return { main: text, quoted: '' };
+  return { main: text.slice(0, m.index).trimEnd(), quoted: text.slice(m.index).trim() };
+}
+
+/** Quoted history arrives with its ">" markers flattened onto one line; give every quoted line its own row again. */
+export function formatQuoted(q: string): string {
+  return q
+    .replace(/<([^<>\s@]+@[^<>\s]+)>/g, '\u27E8$1\u27E9') // keep "<name@mail.com>" intact
+    .replace(/\s*(?:>\s*)+/g, '\n')
+    .replace(/\u27E8([^\u27E9]+)\u27E9/g, '<$1>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -48,7 +72,7 @@ export function extractConciseQuery(raw?: string | null, fallbackSubject?: strin
   text = text.replace(/begin forwarded message:[\s\S]*?(?=(dear|hi|hello|\b[a-z0-9]))/gi, '');
   text = text.replace(/-+\s*forwarded message\s*-+[\s\S]*?(?=(dear|hi|hello|\b[a-z0-9]))/gi, '');
   text = text.replace(/^[> ]*(from|to|date|subject|cc):[^\n\r]+/gim, '');
-  text = text.replace(/on\s+.+?wrote:[\s\S]*/i, '');
+  text = splitQuotedReply(text).main;
 
   // 3. Remove leading greetings / salutations
   text = text.replace(/^\s*(dear\s+[a-z0-9\s]{1,30}|hi\s*[a-z0-9\s]{0,20}|hello\s*[a-z0-9\s]{0,20}|hey\s*[a-z0-9\s]{0,20}|good\s+(morning|afternoon|evening)\s*[a-z0-9\s]{0,20})[,.!:-]*/i, '');
@@ -102,6 +126,8 @@ export default function EmailMessageView({
   className = '',
 }: EmailMessageViewProps) {
   const text = trimEmailBody(content);
+  const parts = React.useMemo(() => (isHtml(text) ? { main: text, quoted: '' } : splitQuotedReply(text)), [text]);
+  const [showQuoted, setShowQuoted] = useState(false);
 
   if (!text) {
     return (
@@ -112,7 +138,7 @@ export default function EmailMessageView({
   }
 
   if (isHtml(text)) {
-    const sanitized = sanitizeEmailHtml(text);
+    const sanitized = sanitizeEmailHtml(attachmentsToHtml(text));
     return (
       <div
         className={`email-html-body ${className}`}
@@ -131,7 +157,17 @@ export default function EmailMessageView({
         ...style,
       }}
     >
-      {text}
+      {renderWithAttachments(parts.main)}
+      {parts.quoted && (
+        <>
+          <div>
+            <button type="button" className="email-quote-toggle" aria-expanded={showQuoted} title={showQuoted ? 'Hide quoted text' : 'Show quoted text'} onClick={() => setShowQuoted(v => !v)}>
+              •••
+            </button>
+          </div>
+          {showQuoted && <div className="email-quoted">{formatQuoted(parts.quoted)}</div>}
+        </>
+      )}
     </div>
   );
 }
@@ -207,39 +243,15 @@ export function CustomerCoreQueryCard({
               fontWeight: 600,
               padding: '1px 7px',
               borderRadius: 4,
-              background: isAiSynthesized ? '#eff6ff' : 'var(--qa-fill-light, #F4F4F5)',
-              color: isAiSynthesized ? '#1d4ed8' : 'var(--qa-text-2, #6B6B6B)',
-              border: isAiSynthesized ? '1px solid #bfdbfe' : '1px solid var(--qa-border, #E4E4E7)',
+              background: 'var(--qa-fill-light)',
+              color: 'var(--qa-text-2)',
+              border: '1px solid var(--qa-border)',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 3,
             }}>
-              {isAiSynthesized ? '🎯 AI Synthesized' : 'Customer Intent'}
+              {isAiSynthesized ? 'AI Synthesized' : 'Customer Intent'}
             </span>
-            {customerEmail && (
-              <span
-                title={`User Email: ${customerEmail}`}
-                style={{
-                  fontSize: 11,
-                  color: '#1d4ed8',
-                  background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
-                  padding: '1px 7px',
-                  borderRadius: 4,
-                  fontWeight: 500,
-                  fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
-                {customerEmail}
-              </span>
-            )}
           </div>
 
           {displaySubject && (
@@ -265,7 +277,7 @@ export function CustomerCoreQueryCard({
       <div style={{
         background: 'var(--qa-card, #FFFFFF)',
         border: '1px solid var(--qa-border, #E4E4E7)',
-        borderLeft: '4px solid #2563EB',
+        borderLeft: '3px solid var(--line-strong)',
         borderRadius: 8,
         padding: '14px 18px',
         boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
@@ -387,30 +399,6 @@ export function CustomerEmailThreadCard({
           <span style={{ fontWeight: 600, color: 'var(--qa-text-2, #6B6B6B)' }}>
             Inbound Message Body
           </span>
-          {customerEmail && (
-            <span
-              title={`User Email: ${customerEmail}`}
-              style={{
-                fontSize: 11,
-                color: '#1d4ed8',
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                padding: '1px 7px',
-                borderRadius: 4,
-                fontWeight: 500,
-                fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                <polyline points="22,6 12,13 2,6" />
-              </svg>
-              {customerEmail}
-            </span>
-          )}
           {subjectLine && subjectLine !== 'Email Support Request' && (
             <span
               title={subjectLine}
@@ -436,14 +424,14 @@ export function CustomerEmailThreadCard({
             padding: 0,
             fontSize: 11,
             fontWeight: 500,
-            color: 'var(--accent, #2d9e4f)',
+            color: 'var(--qa-text-2)',
             cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',
             gap: 4,
           }}
         >
-          {isExpanded ? '▲ Collapse Email' : '▼ Expand Email'}
+          {isExpanded ? 'Collapse' : 'Expand'}
         </button>
       </div>
 
@@ -476,7 +464,7 @@ export function CustomerEmailThreadCard({
           }}
           title="Click to expand"
         >
-          {stripHtml(customerMessage).slice(0, 140)}…
+          {splitQuotedReply(stripHtml(customerMessage)).main.slice(0, 140)}…
         </div>
       )}
     </div>
@@ -578,7 +566,7 @@ export function renderNoteContent(raw?: string | null) {
   const urlRegex = /(https?:\/\/[^\s\]\)\>]+)/gi;
   const parts = raw.split(urlRegex);
   if (parts.length === 1) {
-    return <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{raw}</span>;
+    return <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderMasked(raw)}</span>;
   }
 
   return (
@@ -591,13 +579,13 @@ export function renderNoteContent(raw?: string | null) {
               href={part}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: '#b45309', textDecoration: 'underline', fontWeight: 600, wordBreak: 'break-all' }}
+              style={{ color: 'var(--qa-text)', textDecoration: 'underline', fontWeight: 600, wordBreak: 'break-all' }}
             >
               {part}
             </a>
           );
         }
-        return part;
+        return renderMasked(part);
       })}
     </span>
   );
@@ -608,70 +596,27 @@ export interface InternalNotesBlockProps {
   style?: React.CSSProperties;
 }
 
-/**
- * Renders internal notes with amber/yellow dashed highlighting identical to
- * chat transcripts in EvalPanel (background: #fffbeb, border: 1px dashed #f59e0b).
- */
+/** Internal notes as collapsed, neutral rows with secrets masked: the same `eval-note` pattern as chat transcripts. */
 export function InternalNotesBlock({ notes, style }: InternalNotesBlockProps) {
   if (!notes || notes.length === 0) return null;
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, ...style }}>
-      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b45309', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <line x1="16" y1="13" x2="8" y2="13"></line>
-          <line x1="16" y1="17" x2="8" y2="17"></line>
-        </svg>
-        Internal Working Notes ({notes.length})
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {notes.map((note, idx) => {
-          const noteTime = note.created_at ? '  •  ' + formatNoteDate(note.created_at) : '';
-          const senderName = (note.sender || 'Agent').trim();
-
-          return (
-            <div
-              key={idx}
-              style={{
-                background: '#fffbeb',
-                border: '1px dashed #f59e0b',
-                borderRadius: 8,
-                fontSize: 12,
-                color: '#78350f',
-                padding: '10px 14px',
-                lineHeight: 1.5,
-                wordBreak: 'break-word',
-                overflowWrap: 'anywhere',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 600,
-                  fontSize: 11,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  color: '#b45309',
-                  marginBottom: 6,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 4,
-                }}
-              >
-                <span>Internal Note ({senderName})</span>
-                {noteTime && <span style={{ fontWeight: 400, color: '#92400e', fontSize: 10 }}>{noteTime.replace(/^\s*•\s*/, '')}</span>}
-              </div>
-              <div style={{ fontStyle: 'italic' }}>
-                {renderNoteContent(note.content)}
-              </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, ...style }}>
+      {notes.map((note, idx) => {
+        const when = note.created_at ? ' · ' + formatNoteDate(note.created_at) : '';
+        const senderName = (note.sender || 'Agent').trim();
+        const preview = maskText(stripHtml(note.content || '')).replace(/\s+/g, ' ').slice(0, 140);
+        return (
+          <details key={idx} className="eval-note" style={{ marginTop: 0 }}>
+            <summary>
+              <span style={{ flexShrink: 0 }}>Internal note ({senderName}){when}</span>
+              <span className="preview">{preview}</span>
+            </summary>
+            <div style={{ padding: '4px 12px 10px 28px', fontSize: 12, lineHeight: 1.5, color: 'var(--qa-text)', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+              {renderNoteContent(note.content)}
             </div>
-          );
-        })}
-      </div>
+          </details>
+        );
+      })}
     </div>
   );
 }

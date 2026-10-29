@@ -74,7 +74,7 @@ export default function UsersManager({
 }: UsersManagerProps) {
   const [tab, setTab] = useState<'users' | 'teams' | 'qa' | 'skills'>('users');
 
-  const inputCls = 'border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30';
+  const inputCls = 'border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30';
 
   // ── QA disposition config (owned here — powers the QA Dispositions tab) ───────
   const [qaMap, setQaMap] = useState<{ email: string; dispositions: string[] }[]>([]);
@@ -139,9 +139,9 @@ export default function UsersManager({
       await reloadUsers();
       setInviteOpen(false);
       resetInviteForm();
-      showToast(data.emailed ? 'Invite sent' : 'User created — email not sent, use Resend');
+      showToast(data.emailed ? 'Invite sent' : 'User created. Email not sent, use Resend');
     } catch {
-      setInviteError('Network error — try again.');
+      setInviteError('Network error. Try again.');
     } finally { setInviting(false); }
   };
 
@@ -186,9 +186,9 @@ export default function UsersManager({
       setEditUser(null);
       await reloadUsers();
       const emailChanged = email !== editUser.email.toLowerCase();
-      showToast(emailChanged ? 'User updated — any pending invite link was invalidated' : 'User updated');
+      showToast(emailChanged ? 'User updated. Any pending invite link was invalidated' : 'User updated');
     } catch {
-      setEditError('Network error — try again.');
+      setEditError('Network error. Try again.');
     } finally { setSavingEdit(false); }
   };
 
@@ -347,7 +347,7 @@ export default function UsersManager({
         {tab === 'users' && (
           <button
             onClick={() => { resetInviteForm(); setInviteOpen(true); }}
-            className="shrink-0 px-4 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] transition"
+            className="shrink-0 px-4 py-2.5 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] transition"
           >
             + Invite User
           </button>
@@ -541,7 +541,7 @@ export default function UsersManager({
               <div className="flex items-center gap-2">
                 <button onClick={() => setPendingAssignments({})} className="text-xs text-amber-600 hover:underline font-medium">Discard</button>
                 <button onClick={saveAssignments} disabled={savingAssignments}
-                  className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                  className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                   {savingAssignments ? 'Saving…' : 'Save Assignments'}
                 </button>
               </div>
@@ -566,7 +566,7 @@ export default function UsersManager({
               <button
                 onClick={() => { if (!newQAEmail.trim()) return; openQAEditor(newQAEmail.trim()); setNewQAEmail(''); }}
                 disabled={!newQAEmail.trim()}
-                className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-40 transition">
+                className="px-4 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-40 transition">
                 + Add / Edit
               </button>
             </div>
@@ -601,7 +601,7 @@ export default function UsersManager({
                           )}
                         </td>
                         <td className="px-4 py-3 text-right align-top">
-                          <button onClick={() => openQAEditor(entry.email)} className="text-xs text-[#2d9e4f] hover:underline font-semibold">Edit</button>
+                          <button onClick={() => openQAEditor(entry.email)} className="text-xs text-[#1f7a4d] hover:underline font-semibold">Edit</button>
                         </td>
                       </tr>
                       {editingQA === entry.email && (
@@ -663,7 +663,7 @@ export default function UsersManager({
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Name (must match Robylon exactly)</label>
               <input type="text" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Exact name as it appears in call/chat data…" className={`${inputCls} w-full`} />
-              <p className="text-[11px] text-gray-400 mt-1">This is the attribution key for their calls &amp; chats — enter it exactly as the source system sends it.</p>
+              <p className="text-[11px] text-gray-400 mt-1">This is the attribution key for their calls &amp; chats. Enter it exactly as the source system sends it.</p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Role</label>
@@ -676,7 +676,7 @@ export default function UsersManager({
               <button onClick={() => setInviteOpen(false)} disabled={inviting}
                 className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800 rounded-xl disabled:opacity-50 transition">Cancel</button>
               <button onClick={submitInvite} disabled={inviting || !inviteEmail.trim() || !inviteName.trim()}
-                className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                 {inviting ? 'Sending…' : 'Send Invite'}
               </button>
             </div>
@@ -703,7 +703,7 @@ export default function UsersManager({
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
               <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className={`${inputCls} w-full`} />
               {editUser.status === 'invited' && (
-                <p className="text-[11px] text-amber-600 mt-1">This user hasn&apos;t signed up yet — changing the email invalidates their current invite link. Use Resend afterward.</p>
+                <p className="text-[11px] text-amber-600 mt-1">This user hasn&apos;t signed up yet. Changing the email invalidates their current invite link. Use Resend afterward.</p>
               )}
             </div>
 
@@ -720,7 +720,7 @@ export default function UsersManager({
               <button onClick={() => setEditUser(null)} disabled={savingEdit}
                 className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800 rounded-xl disabled:opacity-50 transition">Cancel</button>
               <button onClick={saveEdit} disabled={savingEdit || !editName.trim() || !editEmail.trim()}
-                className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                 {savingEdit ? 'Saving…' : 'Save changes'}
               </button>
             </div>
@@ -764,7 +764,7 @@ function DispositionPicker({
         <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1.5 max-h-64 overflow-y-auto mb-4">
           {available.map(d => (
             <label key={d} className="flex items-center gap-2 cursor-pointer group">
-              <input type="checkbox" checked={selected.includes(d)} onChange={() => onToggle(d)} className="accent-[#2d9e4f] w-3.5 h-3.5" />
+              <input type="checkbox" checked={selected.includes(d)} onChange={() => onToggle(d)} className="accent-[#1f7a4d] w-3.5 h-3.5" />
               <span className="text-sm text-gray-700 group-hover:text-gray-900 truncate">{d}</span>
             </label>
           ))}
@@ -772,7 +772,7 @@ function DispositionPicker({
       )}
       <div className="flex items-center gap-3">
         <button onClick={onSave} disabled={saving}
-          className="px-4 py-1.5 bg-[#2d9e4f] text-white rounded-lg text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+          className="px-4 py-1.5 bg-[#1f7a4d] text-white rounded-lg text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
           {saving ? 'Saving…' : 'Save'}
         </button>
         <button onClick={onCancel} className="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>

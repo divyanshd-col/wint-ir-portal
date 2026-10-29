@@ -8,6 +8,7 @@ import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
 import { computeIqsFromRawParams } from '@/lib/quality';
+import { getDefinedDispositions } from '@/lib/qa-topics';
 
 const ROUTE = 'cx/tl/disputes';
 
@@ -285,7 +286,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     durationMs: Date.now() - t0,
   });
 
-  return NextResponse.json({ disputes: finalDisputes }, {
+  const definedDispositions = await getDefinedDispositions().catch(() => [] as string[]);
+  return NextResponse.json({ disputes: finalDisputes, definedDispositions }, {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     },
