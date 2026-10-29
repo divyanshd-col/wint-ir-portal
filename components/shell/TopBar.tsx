@@ -20,7 +20,7 @@ const subscribeTheme = (cb: () => void) => {
 };
 const readTheme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => 'light');
   const flip = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -38,7 +38,7 @@ function ThemeToggle() {
   );
 }
 
-function AccountMenu({ name, email, role }: { name: string; email: string; role: string }) {
+export function AccountMenu({ name, email, role, roleLabel }: { name: string; email: string; role: string; roleLabel?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -60,7 +60,7 @@ function AccountMenu({ name, email, role }: { name: string; email: string; role:
           <div className="topbar-menu-head">
             <div className="topbar-menu-name">{name || email}</div>
             {email && <div className="topbar-menu-sub">{email}</div>}
-            <span className="topbar-role">{ROLE_LABELS[role] ?? role}</span>
+            <span className="topbar-role">{roleLabel ?? (ROLE_LABELS[role] ?? role)}</span>
           </div>
           <button type="button" role="menuitem" className="topbar-menu-item" onClick={() => signOut({ callbackUrl: '/login' })}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" /></svg>
@@ -72,15 +72,22 @@ function AccountMenu({ name, email, role }: { name: string; email: string; role:
   );
 }
 
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
+
 export default function TopBar() {
   const pathname = usePathname() || '/';
   const { data: session, status } = useSession();
-  if (isAuthPath(pathname) || status === 'unauthenticated') return null;
+  const user = session?.user as any;
+  const platformDomain = user?.platformDomain || 'cx';
+  const activeDomain: 'cx' | 'pcg' = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
 
-  const user = session?.user as { name?: string; email?: string; role?: string; skills?: string[] } | undefined;
+  if (isAuthPath(pathname) || status === 'unauthenticated' || activeDomain === 'pcg' || pathname.startsWith('/admin/pcg-calls')) return null;
   const role = user?.role ?? 'agent';
-  const tabs = status === 'authenticated' ? topTabs(role, user?.skills) : [];
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+  const tabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
   const current = activeTab(pathname);
+
+  const isTabActive = (t: { key: string }) => current === t.key;
 
   return (
     <>
@@ -92,13 +99,22 @@ export default function TopBar() {
           <img src="/wint-logo.png" alt="Wint Wealth" width={22} height={22} />
         </Link>
         <nav className="topbar-tabs" aria-label="Main">
-          {tabs.map((t) => (
-            <Link key={t.key} href={t.href} className={`topbar-tab${current === t.key ? ' active' : ''}`} aria-current={current === t.key ? 'page' : undefined}>
-              {t.label}
-            </Link>
-          ))}
+          {tabs.map((t) => {
+            const active = isTabActive(t);
+            return (
+              <Link key={t.key} href={t.href} className={`topbar-tab${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>
+                {t.label}
+              </Link>
+            );
+          })}
         </nav>
         <div className="topbar-right">
+          {/* Netflix-style Workspace Switcher for Super Admins */}
+          {(isSuperAdmin || platformDomain === 'both') && (
+            <div className="mr-2">
+              <WorkspaceSwitcher compact={true} />
+            </div>
+          )}
           <ThemeToggle />
           {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} />}
         </div>

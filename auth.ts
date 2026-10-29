@@ -61,7 +61,15 @@ export const authOptions: NextAuthOptions = {
             }
             await recordLogin(user.user_id).catch(() => {});
             await audit('login_success', { targetEmail: email, detail: { user_id: user.user_id } }).catch(() => {});
-            return { id: email, name: user.name || email, email, role: user.role } as any;
+            return {
+              id: email,
+              name: user.name || email,
+              email,
+              role: user.role,
+              isSuperAdmin: Boolean(user.is_super_admin),
+              platformDomain: (user.platform_domain as any) || 'cx',
+              activeDomain: user.platform_domain === 'pcg' ? 'pcg' : 'cx',
+            } as any;
           }
         } catch (err) {
           // Re-throw the explicit status messages above; only swallow DB errors
@@ -81,15 +89,26 @@ export const authOptions: NextAuthOptions = {
         if (!valid) return null;
 
         const role: UserRole = found.role ?? (found.isAdmin ? 'admin' : 'agent');
-        return { id: email, name: found.agentName || (found as any).name || email, email, role } as any;
+        return {
+          id: email,
+          name: found.agentName || (found as any).name || email,
+          email,
+          role,
+          isSuperAdmin: false,
+          platformDomain: 'cx',
+          activeDomain: 'cx',
+        } as any;
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger, session }) {
       if (account && user) {
         token.role = (user as any).role ?? 'agent';
         token.isAdmin = token.role === 'admin';
+        token.isSuperAdmin = Boolean((user as any).isSuperAdmin);
+        token.platformDomain = (user as any).platformDomain ?? 'cx';
+        token.activeDomain = (user as any).activeDomain ?? (token.platformDomain === 'pcg' ? 'pcg' : 'cx');
         if ((user as any).name) token.name = (user as any).name;
         try {
           const { getSkillsForPersona } = await import('./lib/skills');
@@ -98,6 +117,14 @@ export const authOptions: NextAuthOptions = {
           token.skills = [];
         }
       }
+
+      // Allow client-side update() calls to switch activeDomain for Super Admins
+      if (trigger === 'update' && session?.activeDomain) {
+        if (token.isSuperAdmin || token.platformDomain === 'both' || token.platformDomain === session.activeDomain) {
+          token.activeDomain = session.activeDomain;
+        }
+      }
+
       return token;
     },
 
@@ -105,6 +132,9 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.role = token.role as UserRole | undefined;
         session.user.isAdmin = token.isAdmin ?? false;
+        session.user.isSuperAdmin = token.isSuperAdmin ?? false;
+        session.user.platformDomain = token.platformDomain ?? 'cx';
+        session.user.activeDomain = token.activeDomain ?? (token.platformDomain === 'pcg' ? 'pcg' : 'cx');
         if (token.name) session.user.name = token.name as string;
         try {
           const { getSkillsForPersona } = await import('./lib/skills');

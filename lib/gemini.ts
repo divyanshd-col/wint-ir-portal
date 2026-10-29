@@ -111,7 +111,7 @@ export async function geminiGenerate(
               latencyMs,
             });
           }
-        } catch {}
+        } catch { }
 
         return response.text || '';
       } catch (err: any) {
@@ -201,7 +201,7 @@ export async function callGeminiForCall(
                 outputTokens: data.usageMetadata.candidatesTokenCount || 0,
               });
             }
-          } catch {}
+          } catch { }
 
           // Reverse-iterate parts to skip thought:true entries (Gemini 3.5 Pro)
           const parts: any[] = data.candidates?.[0]?.content?.parts ?? [];

@@ -1,6 +1,6 @@
 /** Top-level navigation rules: which tabs a user sees, which one is active, where each role lands. Pure, so it is unit-tested. */
 
-export type TabKey = 'chat' | 'analytics' | 'quality' | 'settings';
+export type TabKey = 'chat' | 'analytics' | 'quality' | 'settings' | 'pcg-calls' | 'pcg-scorecard' | 'pcg-disputes';
 export interface NavTab { key: TabKey; label: string; href: string }
 
 // Same defaults the sidebars use when a session carries no explicit skills.
@@ -23,7 +23,10 @@ const TABS: (NavTab & { skill: string })[] = [
   { key: 'settings',  label: 'Settings',  href: '/settings',  skill: 'settings:manage:access' },
 ];
 
-export function topTabs(role: string | undefined, skills: string[] | undefined): NavTab[] {
+export function topTabs(role: string | undefined, skills: string[] | undefined, activeDomain: 'cx' | 'pcg' = 'cx'): NavTab[] {
+  if (activeDomain === 'pcg') {
+    return [];
+  }
   return TABS.filter((t) => hasNavSkill(role, skills, t.skill)).map(({ key, label, href }) => ({ key, label, href }));
 }
 
@@ -31,7 +34,8 @@ const AREAS: [TabKey, string[]][] = [
   ['chat', ['/chat']],
   ['analytics', ['/analytics', '/call-analysis', '/cx']],
   ['quality', ['/quality', '/tl', '/agent']],
-  ['settings', ['/settings', '/tokens']], // Token Usage is opened from Settings
+  ['settings', ['/settings', '/tokens']],
+  ['pcg-calls', ['/admin/pcg-calls', '/pcg']],
 ];
 
 const inPath = (pathname: string, base: string) => pathname === base || pathname.startsWith(`${base}/`);
