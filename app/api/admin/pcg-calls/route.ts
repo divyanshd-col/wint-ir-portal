@@ -578,35 +578,40 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       count: row.count,
     }));
 
-    // 5. RM Scorecards calculated from real call records
+    // 5. RM Scorecards calculated from real call records with rolling window comparison
+    const windowMs = Math.max(7 * 86400000, endDate.getTime() - startDate.getTime());
+    const prevStartDate = new Date(startDate.getTime() - windowMs);
+    const prevStartDateIso = prevStartDate.toISOString();
+
     const rmStatsRows = await query(`
       SELECT
         COALESCE(NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM') AS rm_name,
-        COUNT(*)::int AS total_calls,
-        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
-        ROUND(AVG(e.iqs_score), 1)::float AS avg_iqs,
-        ROUND(AVG(CASE WHEN r.start_time >= (NOW() - INTERVAL '7 days') THEN e.iqs_score END), 1)::float AS recent_iqs,
-        ROUND(AVG(CASE WHEN r.start_time < (NOW() - INTERVAL '7 days') THEN e.iqs_score END), 1)::float AS prev_iqs,
-        ROUND(AVG(CASE WHEN e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%' THEN e.iqs_score END), 1)::float AS pitch_score,
-        ROUND(AVG(CASE WHEN e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%' THEN e.iqs_score END), 1)::float AS upsell_score,
-        ROUND(AVG(CASE WHEN e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%' THEN e.iqs_score END), 1)::float AS support_score,
-        COUNT(*) FILTER (WHERE e.compliance_tripwire = true)::int AS compliance_flags
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3)::int AS total_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 THEN e.iqs_score END), 1)::float AS avg_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 THEN e.iqs_score END), 1)::float AS current_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $1 AND r.start_time < $2 THEN e.iqs_score END), 1)::float AS prev_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%') THEN e.iqs_score END), 1)::float AS pitch_score,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%') THEN e.iqs_score END), 1)::float AS upsell_score,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') THEN e.iqs_score END), 1)::float AS support_score,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND e.compliance_tripwire = true)::int AS compliance_flags
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
-      WHERE r.start_time >= $1 AND r.start_time <= $2
+      WHERE r.start_time >= $1 AND r.start_time <= $3
       GROUP BY 1
+      HAVING COUNT(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 THEN 1 END) > 0
       ORDER BY total_calls DESC
-    `, [startDateIso, endDateIso]);
+    `, [prevStartDateIso, startDateIso, endDateIso]);
 
     const rmScorecards = rmStatsRows.map(r => {
       const totalCalls = r.total_calls || 0;
       const answeredCalls = r.answered_calls || 0;
       const connectRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
       const overallScore = r.avg_iqs != null ? Math.round(r.avg_iqs) : 0;
-      const recentIqs = r.recent_iqs != null ? Number(r.recent_iqs) : overallScore;
-      const prevIqs = r.prev_iqs != null ? Number(r.prev_iqs) : overallScore;
-      const delta2Wk = r.recent_iqs != null && r.prev_iqs != null
-        ? Math.round((recentIqs - prevIqs) * 10) / 10
+      const currentIqs = r.current_iqs != null ? Math.round(r.current_iqs) : overallScore;
+      const prevIqs = r.prev_iqs != null ? Math.round(r.prev_iqs) : currentIqs;
+      const delta2Wk = r.prev_iqs != null
+        ? Math.round((currentIqs - prevIqs) * 10) / 10
         : 0;
       const trend: 'improving' | 'declining' | 'stable' =
         delta2Wk > 0 ? 'improving' : (delta2Wk < 0 ? 'declining' : 'stable');
