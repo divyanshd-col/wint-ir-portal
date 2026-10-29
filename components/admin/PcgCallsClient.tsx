@@ -275,6 +275,7 @@ export default function PcgCallsClient() {
   const [rmScorecards, setRmScorecards] = useState<RmScorecard[]>([]);
   const [teamLeads, setTeamLeads] = useState<TeamLeadSummary[]>([]);
   const [rms, setRms] = useState<{ name: string; count: number }[]>([]);
+  const [departmentStats, setDepartmentStats] = useState<any>(null);
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -374,6 +375,7 @@ export default function PcgCallsClient() {
       setCalls(data.calls || []);
       setRmScorecards(data.rmScorecards || []);
       setTeamLeads(data.teamLeads || []);
+      setDepartmentStats(data.departmentStats || null);
       setRms(data.rms || []);
       setSummary(data.summary || null);
       setTotalPages(data.totalPages || 1);
@@ -1314,6 +1316,7 @@ export default function PcgCallsClient() {
                 onSwitchToMemberAnalytics={() => handleTabChange('member_analytics')}
                 teamLeads={teamLeads}
                 rmScorecards={rmScorecards}
+                departmentStats={departmentStats}
               />
             </div>
           ) : activeTab === 'rm_performance' ? (

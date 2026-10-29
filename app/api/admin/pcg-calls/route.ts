@@ -667,6 +667,63 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       },
     ];
 
+    // 7. Department overall metrics (across all PCG calls in this time window)
+    const deptSummaryRows = await query(`
+      SELECT
+        COUNT(*)::int AS total_calls,
+        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
+        ROUND(AVG(e.iqs_score), 1)::float AS avg_iqs
+      FROM pcg_call_recordings r
+      LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
+      WHERE r.start_time >= $1 AND r.start_time <= $2
+    `, [startDateIso, endDateIso]);
+
+    const dRow = deptSummaryRows[0] || {};
+    const deptTotal = dRow.total_calls || 0;
+    const deptAnswered = dRow.answered_calls || 0;
+    const departmentStats: {
+      totalCalls: number;
+      answeredCalls: number;
+      pickupRate: number;
+      avgIqs: number | null;
+      parameterScores: Record<string, number>;
+    } = {
+      totalCalls: deptTotal,
+      answeredCalls: deptAnswered,
+      pickupRate: deptTotal > 0 ? Math.round((deptAnswered / deptTotal) * 100) : 0,
+      avgIqs: dRow.avg_iqs != null ? dRow.avg_iqs : 0,
+      parameterScores: {},
+    };
+
+    try {
+      const paramStatsRows = await query(`
+        SELECT
+          p->>'id' AS param_id,
+          ROUND(
+            SUM(CASE WHEN p->>'status' != 'NA' THEN (p->>'earnedScore')::numeric ELSE 0 END) * 100.0 /
+            NULLIF(SUM(CASE WHEN p->>'status' != 'NA' THEN (p->>'maxScore')::numeric ELSE 0 END), 0)
+          )::int AS avg_score
+        FROM pcg_call_evaluations e
+        JOIN pcg_call_recordings r ON r.call_id = e.call_id
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(e.parameters::jsonb) = 'array' THEN e.parameters::jsonb
+            ELSE '[]'::jsonb
+          END
+        ) AS p
+        WHERE r.start_time >= $1 AND r.start_time <= $2
+        GROUP BY p->>'id'
+      `, [startDateIso, endDateIso]);
+
+      for (const row of paramStatsRows) {
+        if (row.param_id && row.avg_score != null) {
+          departmentStats.parameterScores[row.param_id] = row.avg_score;
+        }
+      }
+    } catch (paramErr: any) {
+      console.warn('[pcg-calls API] paramStats error:', paramErr?.message);
+    }
+
     return NextResponse.json({
       success: true,
       total,
@@ -676,6 +733,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       rms,
       rmScorecards,
       teamLeads,
+      departmentStats,
       summary: {
         totalCalls: sRow.total_calls || 0,
         answeredCalls: sRow.answered_calls || 0,
