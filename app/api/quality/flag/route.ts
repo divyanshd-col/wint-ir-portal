@@ -123,6 +123,56 @@ export async function POST(req: NextRequest) {
 
   const auditAction = isTL ? 'tl_dispute_raised' : 'ir_dispute_raised';
   await storeAppendAuditEntry({ id: randomUUID(), action: auditAction, chatId: effectiveChatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName: targetAgentName, submitterName } } as IQSAuditEntry);
+
+  // Synchronize PCG call evaluation dispute state if this is a PCG call
+  try {
+    const { query } = await import('@/lib/cx/db');
+    const pcgCheck = await query<{ call_id: string; rm_name: string; tl_name: string }>(
+      `SELECT e.call_id, e.rm_name, e.tl_name
+       FROM pcg_call_evaluations e
+       WHERE e.call_id = $1
+          OR e.call_id LIKE '%' || $1
+          OR e.call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $1 OR call_id LIKE '%' || $1 OR id::text = $1 LIMIT 1)
+       LIMIT 1`,
+      [effectiveChatId]
+    );
+
+    if (pcgCheck.length > 0) {
+      const resolvedAgent = pcgCheck[0].rm_name || targetAgentName || submitterName;
+      const { canonicalizePcgRmName } = await import('@/lib/pcg/canonical-names');
+      const canRm = canonicalizePcgRmName(resolvedAgent);
+      let mappedTl = pcgCheck[0].tl_name;
+      if (!mappedTl) {
+        const { TL_TEAMS } = await import('@/app/api/admin/pcg-calls/route');
+        for (const [tl, members] of Object.entries(TL_TEAMS)) {
+          if (members.some(n => n.toLowerCase() === canRm.toLowerCase() || n.toLowerCase() === resolvedAgent.toLowerCase())) {
+            mappedTl = `Team ${tl}`;
+            break;
+          }
+        }
+      }
+      mappedTl = mappedTl || 'Team Tanisha Mittal';
+
+      const pSummary = params.length > 0
+        ? `Parameters challenged: ${params.map(p => p.param).join(', ')}. `
+        : '';
+      const disputeReason = (pSummary + (agentNote || 'Agent challenged score.')).trim();
+
+      await query(
+        `UPDATE pcg_call_evaluations
+         SET
+           dispute_status = 'pending',
+           dispute_reason = $1,
+           tl_name = COALESCE(NULLIF(tl_name, ''), $2),
+           updated_at = NOW()
+         WHERE call_id = $3`,
+        [disputeReason, mappedTl, pcgCheck[0].call_id]
+      );
+    }
+  } catch (pcgErr) {
+    console.error('Error syncing PCG dispute in flag route:', pcgErr);
+  }
+
   return NextResponse.json({ ok: true, flagId: flag.id });
 }
 
