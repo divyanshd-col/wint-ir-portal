@@ -525,18 +525,32 @@ export default function PcgTeamAnalyticsDashboard({
   const [activeTab, setActiveTab] = useState<'summary' | 'breakdown'>('summary');
   const [breakdownCh, setBreakdownCh] = useState<Channel>('calls');
 
-  // Viewing TL state: default to first team lead or 'Gokul'
-  const [currentTL, setCurrentTL] = useState<string>(selectedTl || (teamLeads[0]?.tlName ?? 'Gokul'));
+  // Viewing TL state: dynamically resolves to selectedTl or first available team lead with zero lag
+  const DEFAULT_TLS = ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani'];
+  const availableTLs = useMemo(() => {
+    return teamLeads.length > 0 ? teamLeads.map((t) => t.tlName) : DEFAULT_TLS;
+  }, [teamLeads]);
+
+  const [selectedLocalTL, setSelectedLocalTL] = useState<string>('');
   const [showTLDrop, setShowTLDrop] = useState<boolean>(false);
   const tlDropRef = useRef<HTMLDivElement>(null);
 
-  const availableTLs = teamLeads.length > 0 ? teamLeads.map((t) => t.tlName) : ['Gokul', 'Vaishnavi'];
+  // Compute currentTL with useMemo so when teamLeads load from backend, there is ZERO render lag or stale fallback
+  const currentTL = useMemo(() => {
+    if (selectedTl && availableTLs.some((t) => t.toLowerCase() === selectedTl.toLowerCase())) {
+      return availableTLs.find((t) => t.toLowerCase() === selectedTl.toLowerCase()) || selectedTl;
+    }
+    if (selectedLocalTL && availableTLs.some((t) => t.toLowerCase() === selectedLocalTL.toLowerCase())) {
+      return selectedLocalTL;
+    }
+    return availableTLs[0] || 'Swetha';
+  }, [selectedTl, selectedLocalTL, availableTLs]);
 
   useEffect(() => {
-    if (selectedTl && availableTLs.includes(selectedTl)) {
-      setCurrentTL(selectedTl);
+    if (currentTL && !selectedTl && onSelectTl) {
+      onSelectTl(currentTL);
     }
-  }, [selectedTl]);
+  }, [currentTL, selectedTl, onSelectTl]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -549,7 +563,7 @@ export default function PcgTeamAnalyticsDashboard({
   }, []);
 
   const handleSelectTL = (tl: string) => {
-    setCurrentTL(tl);
+    setSelectedLocalTL(tl);
     setShowTLDrop(false);
     if (onSelectTl) onSelectTl(tl);
   };

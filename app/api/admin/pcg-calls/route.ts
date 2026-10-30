@@ -4,7 +4,7 @@ import { withLogging } from '@/lib/log';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { listUsers } from '@/lib/users';
-import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
+import { canonicalizePcgRmName, PCG_RM_TELEPHONY_TO_CANONICAL } from '@/lib/pcg/canonical-names';
 
 const ROUTE = 'admin/pcg-calls';
 
@@ -160,20 +160,34 @@ export const TL_TEAMS: Record<string, string[]> = {
 function resolveTlName(rmName: string, evalTl?: string | null, customTeamMap?: Record<string, string>): string {
   const cleanRm = rmName.toLowerCase().trim();
   const canonicalClean = canonicalizePcgRmName(rmName).toLowerCase().trim();
+
+  // 1. If person is a TL themselves, they lead their own team
+  for (const tl of Object.keys(TL_TEAMS)) {
+    if (cleanRm === tl.toLowerCase() || canonicalClean === tl.toLowerCase()) {
+      return `Team ${tl}`;
+    }
+  }
+
+  // 2. Custom team mapping
   if (customTeamMap && (customTeamMap[canonicalClean] || customTeamMap[cleanRm])) {
     return `Team ${customTeamMap[canonicalClean] || customTeamMap[cleanRm]}`;
   }
-  if (evalTl && evalTl.trim()) {
-    const cleanEvalTl = evalTl.replace(/^Team\s+/i, '').trim().toLowerCase();
-    if (cleanEvalTl !== 'gokul' && cleanEvalTl !== 'vaishnavi' && cleanEvalTl !== 'triage pool' && cleanEvalTl !== 'pcg') {
-      return evalTl.startsWith('Team ') ? evalTl : `Team ${evalTl}`;
-    }
-  }
+
+  // 3. Static TL_TEAMS membership
   for (const [tl, members] of Object.entries(TL_TEAMS)) {
     if (members.some(n => n.toLowerCase() === cleanRm || n.toLowerCase() === canonicalClean)) {
       return `Team ${tl}`;
     }
   }
+
+  // 4. Stored evaluation TL (only if valid and not a system placeholder)
+  if (evalTl && evalTl.trim()) {
+    const cleanEvalTl = evalTl.replace(/^Team\s+/i, '').trim().toLowerCase();
+    if (cleanEvalTl !== 'gokul' && cleanEvalTl !== 'vaishnavi' && cleanEvalTl !== 'triage pool' && cleanEvalTl !== 'pcg' && cleanEvalTl !== 'unknown') {
+      return evalTl.startsWith('Team ') ? evalTl : `Team ${evalTl}`;
+    }
+  }
+
   return 'PCG Team';
 }
 
@@ -394,10 +408,32 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   Object.values(customTeamMap).forEach((tl) => {
     if (tl && tl.trim()) allTlNamesSet.add(tl.trim());
   });
+
+  // Explicitly purge any admin or non-TL names so they NEVER appear as Team Leads
+  const nonTlSet = new Set([
+    'gokul', 'gokul_admin', 'aahan thaker', 'aahan', 'test-pcg-admin', 'test pcg admin',
+    'test-cx-tl', 'test cx tl', 'unknown rm', 'unknown', 'triage pool', 'pcg'
+  ]);
+  Array.from(allTlNamesSet).forEach((n) => {
+    if (nonTlSet.has(n.toLowerCase().trim()) || n.toLowerCase().includes('admin')) {
+      allTlNamesSet.delete(n);
+    }
+  });
+
   if (allTlNamesSet.size === 0) {
     Object.keys(TL_TEAMS).forEach((tl) => allTlNamesSet.add(tl));
   }
-  const allTlNames = Array.from(allTlNamesSet);
+
+  // Canonical preferred TL order: Swetha, Saiyam Rastogi, Tanisha Mittal, Dheeraj Bhojwani
+  const preferredTlOrder = ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani'];
+  const allTlNames = Array.from(allTlNamesSet).sort((a, b) => {
+    const idxA = preferredTlOrder.findIndex((p) => p.toLowerCase() === a.toLowerCase());
+    const idxB = preferredTlOrder.findIndex((p) => p.toLowerCase() === b.toLowerCase());
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   // Build dynamic mapping of TL Name -> list of RM display names
   const dynamicTlTeams: Record<string, string[]> = {};
@@ -430,6 +466,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   if (HIDE_DATA_FOR_NOW) {
     return NextResponse.json({
       success: true,
+      defaultTl: allTlNames[0] || 'Swetha',
       total: 0,
       page: 1,
       limit,
@@ -506,14 +543,22 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const startDateIso = startDate.toISOString();
   const endDateIso = endDate.toISOString();
 
-  // Dynamic conditions for query
-  const whereClauses: string[] = ['r.start_time >= $1 AND r.start_time <= $2'];
-  const queryParams: any[] = [startDateIso, endDateIso];
+  // 1. Scope / Date Range conditions for overall summary & KPI cards (independent of table filters & pagination)
+  const scopeWhereClauses: string[] = ['r.start_time >= $1 AND r.start_time <= $2'];
+  const scopeQueryParams: any[] = [startDateIso, endDateIso];
 
   if (rmFilter && rmFilter !== 'all') {
-    queryParams.push(rmFilter);
-    whereClauses.push(
-      `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = LOWER($${queryParams.length})`
+    const canonical = canonicalizePcgRmName(rmFilter);
+    const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
+    for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+      if (can.toLowerCase() === canonical.toLowerCase()) {
+        variations.push(telName.toLowerCase());
+      }
+    }
+    const uniqueVars = Array.from(new Set(variations));
+    scopeQueryParams.push(uniqueVars);
+    scopeWhereClauses.push(
+      `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
     );
   }
 
@@ -526,42 +571,66 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       .map(([rm]) => rm.toLowerCase());
     const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
 
-    const allTeamMembers = Array.from(new Set([
-      ...mappedRms.map((r) => r.toLowerCase()),
-      ...directRms,
-      ...fallbackRms,
-    ]));
+    const memberSet = new Set<string>();
+    [...mappedRms, ...directRms, ...fallbackRms].forEach((m) => {
+      const lower = m.toLowerCase().trim();
+      memberSet.add(lower);
+      const can = canonicalizePcgRmName(m).toLowerCase().trim();
+      memberSet.add(can);
+      for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+        if (c.toLowerCase().trim() === can) {
+          memberSet.add(telName.toLowerCase().trim());
+        }
+      }
+    });
+
+    // Exclude other TLs and Admins so other TLs/Admins are NEVER included in a TL's team calls
+    allTlNames.forEach((tl) => {
+      memberSet.delete(tl.toLowerCase().trim());
+      memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+    });
+    Object.keys(TL_TEAMS).forEach((tl) => {
+      memberSet.delete(tl.toLowerCase().trim());
+      memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+    });
+    ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
+
+    const allTeamMembers = Array.from(memberSet);
 
     if (allTeamMembers.length > 0) {
-      queryParams.push(allTeamMembers);
-      const pMembers = queryParams.length;
-      queryParams.push(`%${cleanTl}%`);
-      const pTl = queryParams.length;
-      whereClauses.push(
-        `(e.tl_name ILIKE $${pTl} OR LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${pMembers}))`
+      scopeQueryParams.push(allTeamMembers);
+      scopeWhereClauses.push(
+        `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
       );
     } else {
-      queryParams.push(`%${cleanTl}%`);
-      whereClauses.push(`e.tl_name ILIKE $${queryParams.length}`);
+      scopeWhereClauses.push(`1 = 0`);
     }
   }
 
+  // Summary where clause for period-wide metrics (IQS, total volume, pickup rate)
+  const summaryWhereSql = scopeWhereClauses.join(' AND ');
+  const summaryParams = [...scopeQueryParams];
+
+  // 2. Table-specific filters (category filter, search, min/max IQS, call status)
+  const tableWhereClauses = [...scopeWhereClauses];
+  const tableQueryParams = [...scopeQueryParams];
+
   if (categoryFilter && categoryFilter !== 'all') {
     if (categoryFilter === 'coaching_available') {
-      whereClauses.push(`(e.ai_coaching_tip IS NOT NULL AND e.ai_coaching_tip != '')`);
+      tableWhereClauses.push(`(e.ai_coaching_tip IS NOT NULL AND e.ai_coaching_tip != '')`);
     } else if (categoryFilter === '13_pitching') {
-      whereClauses.push(`(e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%')`);
+      tableWhereClauses.push(`(e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%')`);
     } else if (categoryFilter === 'upselling') {
-      whereClauses.push(`(e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%')`);
+      tableWhereClauses.push(`(e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%')`);
     } else if (categoryFilter === 'support') {
-      whereClauses.push(`(e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%')`);
+      tableWhereClauses.push(`(e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%')`);
     }
   }
 
   if (searchFilter) {
-    queryParams.push(`%${searchFilter}%`);
-    const pIdx = queryParams.length;
-    whereClauses.push(
+    tableQueryParams.push(`%${searchFilter}%`);
+    const pIdx = tableQueryParams.length;
+    tableWhereClauses.push(
       `(r.call_id ILIKE $${pIdx} OR r.phone_number ILIKE $${pIdx} OR r.called_by ILIKE $${pIdx} OR r.agent_name ILIKE $${pIdx} OR e.rm_name ILIKE $${pIdx})`
     );
   }
@@ -570,24 +639,20 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   if (minIqsParam && minIqsParam !== 'all') {
     const minVal = parseFloat(minIqsParam);
     if (!isNaN(minVal)) {
-      queryParams.push(minVal);
-      whereClauses.push(`e.iqs_score >= $${queryParams.length}`);
+      tableQueryParams.push(minVal);
+      tableWhereClauses.push(`e.iqs_score >= $${tableQueryParams.length}`);
     }
   }
 
   if (maxIqsParam && maxIqsParam !== 'all') {
     const maxVal = parseFloat(maxIqsParam);
     if (!isNaN(maxVal)) {
-      queryParams.push(maxVal);
-      whereClauses.push(`e.iqs_score <= $${queryParams.length}`);
+      tableQueryParams.push(maxVal);
+      tableWhereClauses.push(`e.iqs_score <= $${tableQueryParams.length}`);
     }
   }
 
-  // Summary where clause (before table-specific answered / unanswered filter)
-  const summaryWhereSql = whereClauses.join(' AND ');
-
   // Table status filter
-  const tableWhereClauses = [...whereClauses];
   if (callStatusFilter === 'unanswered') {
     tableWhereClauses.push(`(r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed')`);
   } else if (callStatusFilter === 'needs_attention') {
@@ -602,7 +667,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const tableWhereSql = tableWhereClauses.join(' AND ');
 
   try {
-    const paginatedParams = [...queryParams, limit, offset];
+    const paginatedParams = [...tableQueryParams, limit, offset];
 
     // Queries to execute concurrently
     const summarySql = `
@@ -735,6 +800,104 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       GROUP BY 1, 2
     `;
 
+    // Query all active and reviewed disputes for this agent / TL scope (independent of table pagination)
+    const disputeWhereClauses: string[] = [
+      `(e.dispute_status IS NOT NULL AND e.dispute_status != 'none' AND e.dispute_status != '')`
+    ];
+    const disputeQueryParams: any[] = [];
+
+    if (rmFilter && rmFilter !== 'all') {
+      const canonical = canonicalizePcgRmName(rmFilter);
+      const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
+      for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+        if (can.toLowerCase() === canonical.toLowerCase()) {
+          variations.push(telName.toLowerCase());
+        }
+      }
+      const uniqueVars = Array.from(new Set(variations));
+      disputeQueryParams.push(uniqueVars);
+      disputeWhereClauses.push(
+        `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+      );
+    } else if (tlFilter && tlFilter !== 'all') {
+      const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
+      const matchedTlKey = allTlNames.find((t) => t.toLowerCase() === cleanTl);
+      const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
+      const directRms = Object.entries(customTeamMap)
+        .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
+        .map(([rm]) => rm.toLowerCase());
+      const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
+
+      const memberSet = new Set<string>();
+      [...mappedRms, ...directRms, ...fallbackRms].forEach((m) => {
+        const lower = m.toLowerCase().trim();
+        memberSet.add(lower);
+        const can = canonicalizePcgRmName(m).toLowerCase().trim();
+        memberSet.add(can);
+        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (c.toLowerCase().trim() === can) {
+            memberSet.add(telName.toLowerCase().trim());
+          }
+        }
+      });
+
+      // Exclude other TLs and Admins
+      allTlNames.forEach((tl) => {
+        memberSet.delete(tl.toLowerCase().trim());
+        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+      });
+      Object.keys(TL_TEAMS).forEach((tl) => {
+        memberSet.delete(tl.toLowerCase().trim());
+        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+      });
+      ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
+
+      const allTeamMembers = Array.from(memberSet);
+
+      if (allTeamMembers.length > 0) {
+        disputeQueryParams.push(allTeamMembers);
+        disputeWhereClauses.push(
+          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+        );
+      } else {
+        disputeWhereClauses.push(`1 = 0`);
+      }
+    }
+
+    const disputesSql = `
+      SELECT
+        r.id,
+        r.call_id,
+        r.called_by,
+        r.agent_name,
+        r.phone_number,
+        r.call_type,
+        r.tag,
+        r.duration_seconds,
+        r.start_time,
+        r.recording_url,
+        r.call_category,
+        r.raw_payload,
+        e.rm_name AS eval_rm_name,
+        e.tl_name AS eval_tl_name,
+        e.call_category AS eval_call_category,
+        e.secondary_categories,
+        e.iqs_score,
+        e.parameters,
+        e.compliance_tripwire,
+        e.compliance_reason,
+        e.ai_coaching_tip,
+        e.transcript_turns,
+        e.dispute_status,
+        e.dispute_reason,
+        e.tl_override_note
+      FROM pcg_call_recordings r
+      JOIN pcg_call_evaluations e ON r.call_id = e.call_id
+      WHERE ${disputeWhereClauses.join(' AND ')}
+      ORDER BY r.start_time DESC
+      LIMIT 100
+    `;
+
     // Execute all queries in parallel for high speed
     const [
       summaryRows,
@@ -744,19 +907,22 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       rmStatsRows,
       deptSummaryRows,
       rmParamRows,
+      disputesRows,
     ] = await Promise.all([
-      query(summarySql, queryParams),
-      query(countSql, queryParams),
+      query(summarySql, summaryParams),
+      query(countSql, tableQueryParams),
       query(callsSql, paginatedParams),
       query(rmsSql, [startDateIso, endDateIso]),
       query(rmStatsSql, [prevStartDateIso, startDateIso, endDateIso]),
       query(deptSummarySql, [startDateIso, endDateIso]),
       query(rmParamSql, [startDateIso, endDateIso]),
+      query(disputesSql, disputeQueryParams),
     ]);
 
     const sRow = summaryRows[0] || {};
     const total = countRows[0]?.total || 0;
     const calls = callsRows.map((r) => mapRowToCall(r, customTeamMap));
+    const disputes = (disputesRows || []).map((r) => mapRowToCall(r, customTeamMap));
 
     // Non-RM exclusion set: Admins, TLs, Quality users, placeholders
     const nonRmNames = new Set<string>();
@@ -986,8 +1152,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
 
+    const defaultTl = teamLeads[0]?.tlName || allTlNames[0] || 'Swetha';
+
     return NextResponse.json({
       success: true,
+      defaultTl,
       total,
       page,
       limit,
@@ -1022,6 +1191,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         complianceFlagsCount: sRow.compliance_flags_count || 0,
       },
       calls,
+      disputes,
     });
   } catch (err: any) {
     console.error('[pcg-calls API] Query error:', err);
@@ -1051,8 +1221,137 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           complianceFlagsCount: 0,
         },
         calls: [],
+        disputes: [],
       },
       { status: 500 }
     );
+  }
+});
+
+export const POST = withLogging(ROUTE, async (req: NextRequest) => {
+  try {
+    const { response, session } = await requireRole(['admin', 'tl', 'agent', 'quality']);
+    if (response) return response;
+
+    const body = await req.json();
+    const { action, callId, reason, challengedParams, agentName, status, tlOverrideNote, newScore, parameters } = body;
+
+    if (!callId) {
+      return NextResponse.json({ error: 'callId is required' }, { status: 400 });
+    }
+
+    const config = await readConfig().catch(() => null);
+    const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
+
+    // 1. Action: Raise Dispute (Agent or TL)
+    if (action === 'raise_dispute') {
+      const resolvedAgent = (agentName || (session?.user as any)?.name || 'PCG Agent').trim();
+      const mappedTl = resolveTlName(resolvedAgent, undefined, customTeamMap).replace(/^Team\s+/i, '');
+
+      const paramsPrefix = Array.isArray(challengedParams) && challengedParams.length > 0
+        ? `Parameters challenged: ${challengedParams.map((p: any) => typeof p === 'string' ? p : p.param || p.name).join(', ')}. `
+        : '';
+      const finalReason = (paramsPrefix + (reason || 'Agent requested evaluation review on score.')).trim();
+
+      const existing = await query<{ call_id: string }>(
+        `SELECT call_id FROM pcg_call_evaluations
+         WHERE call_id = $1
+            OR call_id LIKE '%' || $1
+            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $1 OR call_id LIKE '%' || $1 OR id::text = $1 LIMIT 1)
+         LIMIT 1`,
+        [callId]
+      );
+
+      if (existing.length === 0) {
+        const rec = await query<{ call_id: string; phone_number: string; duration_seconds: number }>(
+          `SELECT call_id, phone_number, duration_seconds FROM pcg_call_recordings
+           WHERE call_id = $1 OR call_id LIKE '%' || $1 OR id::text = $1
+           LIMIT 1`,
+          [callId]
+        );
+        const targetCallId = rec[0]?.call_id || callId;
+        await query(
+          `INSERT INTO pcg_call_evaluations (call_id, rm_name, tl_name, customer_phone, duration_seconds, dispute_status, dispute_reason, scored_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'pending', $6, NOW(), NOW())
+           ON CONFLICT (call_id) DO UPDATE SET dispute_status = 'pending', dispute_reason = $6, tl_name = COALESCE(NULLIF(pcg_call_evaluations.tl_name, ''), $3), updated_at = NOW()`,
+          [targetCallId, resolvedAgent, mappedTl, rec[0]?.phone_number || '', rec[0]?.duration_seconds || 0, finalReason]
+        );
+      } else {
+        await query(
+          `UPDATE pcg_call_evaluations
+           SET
+             dispute_status = 'pending',
+             dispute_reason = $1,
+             tl_name = COALESCE(NULLIF(tl_name, ''), $2),
+             updated_at = NOW()
+           WHERE call_id = $3
+              OR call_id LIKE '%' || $3
+              OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $3 OR call_id LIKE '%' || $3 OR id::text = $3 LIMIT 1)`,
+          [finalReason, mappedTl, callId]
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        callId,
+        disputeStatus: 'pending',
+        tlName: mappedTl,
+        disputeReason: finalReason,
+      });
+    }
+
+    // 2. Action: Resolve Dispute (TL Approve / Reject)
+    if (action === 'resolve_dispute') {
+      const reviewer = (session?.user as any)?.name || 'Team Leader';
+      const finalStatus = status || 'resolved';
+      const note = tlOverrideNote || (status === 'resolved' ? 'Dispute reviewed and resolved by TL.' : 'Dispute reviewed by TL.');
+
+      await query(
+        `UPDATE pcg_call_evaluations
+         SET
+           dispute_status = $1,
+           tl_override_note = $2,
+           iqs_score = COALESCE($3, iqs_score),
+           reviewed_by = $4,
+           reviewed_at = NOW(),
+           updated_at = NOW()
+         WHERE call_id = $5
+            OR call_id LIKE '%' || $5
+            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $5 OR call_id LIKE '%' || $5 OR id::text = $5 LIMIT 1)`,
+        [finalStatus, note, newScore != null ? Number(newScore) : null, reviewer, callId]
+      );
+
+      return NextResponse.json({ success: true, disputeStatus: finalStatus });
+    }
+
+    // 3. Action: Override Parameters (TL Manual Override)
+    if (action === 'override_parameters') {
+      const reviewer = (session?.user as any)?.name || 'Team Leader';
+      const note = tlOverrideNote || 'TL parameter score override.';
+      const score = newScore != null ? Number(newScore) : null;
+
+      await query(
+        `UPDATE pcg_call_evaluations
+         SET
+           parameters = COALESCE($1::jsonb, parameters),
+           iqs_score = COALESCE($2, iqs_score),
+           dispute_status = 'overridden',
+           tl_override_note = $3,
+           reviewed_by = $4,
+           reviewed_at = NOW(),
+           updated_at = NOW()
+         WHERE call_id = $5
+            OR call_id LIKE '%' || $5
+            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $5 OR call_id LIKE '%' || $5 OR id::text = $5 LIMIT 1)`,
+        [parameters ? JSON.stringify(parameters) : null, score, note, reviewer, callId]
+      );
+
+      return NextResponse.json({ success: true, disputeStatus: 'overridden' });
+    }
+
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+  } catch (err: any) {
+    console.error('[pcg-calls POST] Error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }
 });

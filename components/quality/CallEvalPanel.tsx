@@ -885,6 +885,20 @@ export default function CallEvalPanel({
 
     setSubmittingDispute(true);
     try {
+      if (isPcg) {
+        await fetch('/api/admin/pcg-calls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'raise_dispute',
+            callId,
+            reason: agentDisputeNote,
+            challengedParams: challenged,
+            agentName,
+          }),
+        }).catch((err) => console.error('[CallEvalPanel] PCG dispute POST error:', err));
+      }
+
       const res = await fetch('/api/quality/flag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
