@@ -21,7 +21,7 @@ export function getPool(): Pool {
     pool = new Pool({
       connectionString,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
-      max: 5,
+      max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
     });

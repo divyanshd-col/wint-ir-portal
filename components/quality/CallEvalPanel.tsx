@@ -340,12 +340,35 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateP
     return { status: 'pass', reasoning: '' };
   }
   const item = rawGates[gateKey] || (altKey ? rawGates[altKey] : undefined) || rawGates[gateKey.toLowerCase()] || rawGates[gateKey.split('_')[0]];
-  if (!item) return { status: 'pass', reasoning: '' };
+  if (!item) {
+    // If rawGates has top-level status === 'FAIL' with reason (e.g. from PCG evaluation)
+    const topStatus = String(rawGates.status || rawGates.verdict || '').toUpperCase();
+    const reason = rawGates.reason || rawGates.compliance_reason || '';
+    if (topStatus === 'FAIL' || topStatus === 'CRITICAL_FAIL' || rawGates.compliance_tripwire === true) {
+      const lower = String(reason).toLowerCase();
+      const isIdentity = lower.includes('identity') || lower.includes('verif') || lower.includes('otp');
+      const isAdvice = lower.includes('advice') || lower.includes('tax') || lower.includes('guarantee') || lower.includes('assured') || lower.includes('promise') || lower.includes('fixed');
+      const isFabrication = lower.includes('fabricat') || lower.includes('misrepresent') || lower.includes('ytm') || lower.includes('xirr') || lower.includes('return') || lower.includes('false');
+
+      if (gateKey === 'G3_identity_first' && isIdentity) {
+        return { status: 'fail', reasoning: reason };
+      }
+      if (gateKey === 'G1_no_advice' && isAdvice) {
+        return { status: 'fail', reasoning: reason };
+      }
+      if (gateKey === 'G2_no_fabrication' && (isFabrication || (!isIdentity && !isAdvice))) {
+        return { status: 'fail', reasoning: reason };
+      }
+    }
+    return { status: 'pass', reasoning: '' };
+  }
 
   let status: 'pass' | 'fail' | 'not_applicable' = 'pass';
   if (typeof item === 'object') {
     if (item.status === 'pass' || item.status === 'fail' || item.status === 'not_applicable') {
       status = item.status;
+    } else if (item.status === 'FAIL' || item.status === 'breach' || item.status === 'BREACH' || item.verdict === 'FAIL') {
+      status = 'fail';
     } else if (item.score === 'Yes' || item.score === true || item.score === 1) {
       status = 'pass';
     } else if (item.score === 'No' || item.score === false || item.score === 0) {
@@ -356,7 +379,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateP
   } else if (typeof item === 'string') {
     const s = item.toLowerCase();
     if (s === 'pass' || s === 'yes') status = 'pass';
-    else if (s === 'fail' || s === 'no') status = 'fail';
+    else if (s === 'fail' || s === 'no' || s === 'breach') status = 'fail';
     else if (s === 'na' || s === 'not_applicable') status = 'not_applicable';
   } else if (typeof item === 'boolean') {
     status = item ? 'pass' : 'fail';

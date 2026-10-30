@@ -2,18 +2,12 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
+import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
 
 export type Period = '7' | '30' | 'custom';
 
-export const TL_TEAMS: Record<string, string[]> = {
-  'Team Gokul': ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'],
-  'Team Vaishnavi': ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'],
-};
-
-export const ALL_PCG_AGENTS = [
-  ...TL_TEAMS['Team Gokul'],
-  ...TL_TEAMS['Team Vaishnavi'],
-];
+export const TL_TEAMS: Record<string, string[]> = {};
+export const ALL_PCG_AGENTS: string[] = [];
 
 export interface PcgMemberAnalyticsProps {
   selectedRm: string;
@@ -39,7 +33,16 @@ export interface PcgMemberAnalyticsProps {
     trend: string;
     complianceFlags: number;
     topWeakness: string;
+    parameterScores?: Record<string, number>;
   }>;
+  teamLeads?: Array<{
+    tlName: string;
+    teamSize?: number;
+    rms: string[];
+  }>;
+  tlName?: string;
+  dateRange?: '7d' | '30d' | 'custom';
+  onDateRangeChange?: (range: '7d' | '30d' | 'custom', customStart?: string, customEnd?: string) => void;
 }
 
 const PERIOD_LABELS: Record<Period, string> = { '7': '7 days', '30': '30 days', custom: '' };
@@ -89,8 +92,16 @@ export default function PcgMemberAnalyticsDashboard({
   calls = [],
   activePersona = 'tl',
   rmScorecards = [],
+  teamLeads = [],
+  tlName = '',
+  dateRange,
+  onDateRangeChange,
 }: PcgMemberAnalyticsProps) {
-  const [period, setPeriod] = useState<Period>('7');
+  const [period, setPeriod] = useState<Period>(() => {
+    if (dateRange === '30d') return '30';
+    if (dateRange === 'custom') return 'custom';
+    return '7';
+  });
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
@@ -98,13 +109,25 @@ export default function PcgMemberAnalyticsDashboard({
   const [agentSearch, setAgentSearch] = useState('');
   const agentDropRef = useRef<HTMLDivElement>(null);
 
+  // Sync internal period with external dateRange prop when it changes
+  useEffect(() => {
+    if (dateRange === '30d') setPeriod('30');
+    else if (dateRange === 'custom') setPeriod('custom');
+    else if (dateRange === '7d') setPeriod('7');
+  }, [dateRange]);
+
   const [wowTab, setWowTab] = useState<'metrics' | 'params'>('metrics');
   const [wowChannel, setWowChannel] = useState<'chats' | 'calls'>('calls');
   const [wowCategory, setWowCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support'>('all');
   const [aiChannel, setAiChannel] = useState<'chats' | 'calls'>('calls');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
 
-  const effectiveRm = selectedRm || availableRms[0] || 'Aahan Thaker';
+  const effectiveRm = useMemo(() => {
+    if (selectedRm && availableRms.some((r) => isSamePcgAgent(r, selectedRm))) {
+      return selectedRm;
+    }
+    return availableRms[0] || selectedRm || '';
+  }, [selectedRm, availableRms]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -122,6 +145,9 @@ export default function PcgMemberAnalyticsDashboard({
     } else {
       setPeriod(p);
       setShowPicker(false);
+      if (onDateRangeChange) {
+        onDateRangeChange(p === '30' ? '30d' : '7d');
+      }
     }
   };
 
@@ -130,11 +156,14 @@ export default function PcgMemberAnalyticsDashboard({
     setCustomTo(to);
     setPeriod('custom');
     setShowPicker(false);
+    if (onDateRangeChange) {
+      onDateRangeChange('custom', from, to);
+    }
   };
 
   // Derive call analytics for this RM
-  const rmScorecard = rmScorecards.find(s => s.rmName.toLowerCase() === effectiveRm.toLowerCase());
-  const rmCalls = calls.filter(c => c.rmName.toLowerCase() === effectiveRm.toLowerCase());
+  const rmScorecard = rmScorecards.find(s => isSamePcgAgent(s.rmName, effectiveRm));
+  const rmCalls = calls.filter(c => isSamePcgAgent(c.rmName, effectiveRm));
   const rmAnswered = rmCalls.filter(c => c.isAnswered);
   const rmAvgIqs = rmScorecard?.overallScore ?? (rmAnswered.length > 0
     ? Math.round(rmAnswered.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnswered.length)
@@ -157,9 +186,11 @@ export default function PcgMemberAnalyticsDashboard({
     { key: 'Simplifying', label: 'Simplifying Answers', weight: 10, deptScore: 93 },
   ];
 
-
-  // Derive live parameter scores from rmAnswered calls if available
+  // Derive live parameter scores from rmScorecard (computed across all calls) or fallback to rmAnswered calls
   const callParamAverages: Record<string, number> = useMemo(() => {
+    if (rmScorecard?.parameterScores && Object.keys(rmScorecard.parameterScores).length > 0) {
+      return rmScorecard.parameterScores;
+    }
     const averages: Record<string, number> = {};
     if (rmAnswered.length > 0) {
       const paramEarned: Record<string, number> = {};
@@ -167,7 +198,8 @@ export default function PcgMemberAnalyticsDashboard({
       rmAnswered.forEach(c => {
         if (Array.isArray((c as any).parameters)) {
           (c as any).parameters.forEach((p: any) => {
-            if (p.id) {
+            // Exclude NA parameters so they do not count as 0% failures
+            if (p.id && p.status !== 'NA' && p.status !== 'N/A' && p.isApplicable !== false) {
               paramEarned[p.id] = (paramEarned[p.id] || 0) + (p.earnedScore ?? 0);
               paramMax[p.id] = (paramMax[p.id] || 0) + (p.maxScore ?? 0);
             }
@@ -176,17 +208,27 @@ export default function PcgMemberAnalyticsDashboard({
       });
       Object.keys(paramMax).forEach(k => {
         if (paramMax[k] > 0) {
-          averages[k] = Math.round((paramEarned[k] / paramMax[k]) * 100);
+          averages[k] = Math.round((paramEarned[k] / paramMax[k]) * 1000) / 10;
         }
       });
     }
     return averages;
-  }, [rmAnswered]);
+  }, [rmAnswered, rmScorecard]);
 
   const getAgentParamScore = (rm: string, key: string, fallbackBase: number) => {
-    if (callParamAverages[key] !== undefined) {
-      return callParamAverages[key];
+    const scores = (rmScorecard?.parameterScores && Object.keys(rmScorecard.parameterScores).length > 0)
+      ? rmScorecard.parameterScores
+      : callParamAverages;
+
+    if (scores[key] !== undefined) {
+      return scores[key];
     }
+    if (key === 'TechnicalLegal' && scores['TechnicallyLegal'] !== undefined) return scores['TechnicallyLegal'];
+    if (key === 'TechnicallyLegal' && scores['TechnicalLegal'] !== undefined) return scores['TechnicalLegal'];
+    if (key === 'Grammar' && scores['VocabularyGrammar'] !== undefined) return scores['VocabularyGrammar'];
+    if (key === 'VocabularyGrammar' && scores['Grammar'] !== undefined) return scores['Grammar'];
+    if (key === 'Fillers' && scores['FillersDeadAir'] !== undefined) return scores['FillersDeadAir'];
+    if (key === 'FillersDeadAir' && scores['Fillers'] !== undefined) return scores['Fillers'];
     return null;
   };
 
@@ -260,6 +302,23 @@ export default function PcgMemberAnalyticsDashboard({
   const periodLabel = period === 'custom' && customFrom && customTo
     ? `${customFrom} – ${customTo}`
     : PERIOD_LABELS[period];
+
+  const scoredParams = useMemo(() => {
+    return PCG_PARAMETERS.map(p => {
+      const s = getAgentParamScore(effectiveRm, p.key, p.deptScore);
+      return { ...p, score: s };
+    }).filter((p): p is typeof PCG_PARAMETERS[0] & { score: number } => p.score !== null);
+  }, [effectiveRm, getAgentParamScore]);
+
+  const lowestParam = useMemo(() => {
+    if (scoredParams.length === 0) return null;
+    return [...scoredParams].sort((a, b) => a.score - b.score)[0];
+  }, [scoredParams]);
+
+  const strongParams = useMemo(() => {
+    if (scoredParams.length === 0) return [];
+    return [...scoredParams].filter(p => p.score >= 90);
+  }, [scoredParams]);
 
   const handleRegenerateAi = () => {
     setIsGeneratingAi(true);
@@ -336,7 +395,7 @@ export default function PcgMemberAnalyticsDashboard({
                     type="text"
                     value={agentSearch}
                     onChange={(e) => setAgentSearch(e.target.value)}
-                    placeholder="Search agent across teams..."
+                    placeholder={activePersona === 'tl' ? 'Search team member...' : 'Search agent across teams...'}
                     style={{
                       width: '100%',
                       height: 28,
@@ -356,15 +415,21 @@ export default function PcgMemberAnalyticsDashboard({
                 {(() => {
                   const groups: { teamName: string; agents: string[] }[] = [];
 
-                  if (activePersona === 'admin') {
-                    groups.push({ teamName: 'Team Gokul', agents: TL_TEAMS['Team Gokul'] });
-                    groups.push({ teamName: 'Team Vaishnavi', agents: TL_TEAMS['Team Vaishnavi'] });
+                  if (activePersona === 'tl') {
+                    // For TL, strictly show ONLY this TL's team members
+                    const teamTitle = tlName ? `Team ${tlName}` : 'My Team';
+                    groups.push({ teamName: teamTitle, agents: availableRms });
+                  } else if (activePersona === 'admin') {
+                    if (teamLeads && teamLeads.length > 0) {
+                      teamLeads.forEach((tl) => {
+                        groups.push({ teamName: `Team ${tl.tlName}`, agents: tl.rms });
+                      });
+                    } else {
+                      groups.push({ teamName: 'All PCG Agents', agents: availableRms });
+                    }
                   } else {
-                    // For TL, determine their team from effectiveRm or availableRms
-                    const isVaishnavi = availableRms.some(a => TL_TEAMS['Team Vaishnavi'].includes(a));
-                    const teamName = isVaishnavi ? 'Team Vaishnavi' : 'Team Gokul';
-                    const list = availableRms.length > 0 ? availableRms : TL_TEAMS[teamName];
-                    groups.push({ teamName, agents: list });
+                    // Agent
+                    groups.push({ teamName: 'My Profile', agents: [effectiveRm] });
                   }
 
                   const s = agentSearch.trim().toLowerCase();
@@ -410,7 +475,7 @@ export default function PcgMemberAnalyticsDashboard({
                               justifyContent: 'space-between',
                               width: '100%',
                               padding: '8px 12px',
-                              background: a === effectiveRm ? 'var(--qa-fill-light, #F4F4F5)' : 'transparent',
+                              background: a.toLowerCase() === effectiveRm.toLowerCase() ? 'var(--qa-fill-light, #F4F4F5)' : 'transparent',
                               border: 0,
                               borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
                               cursor: 'pointer',
@@ -418,7 +483,7 @@ export default function PcgMemberAnalyticsDashboard({
                               color: 'var(--qa-text, #111111)',
                               fontFamily: 'inherit',
                               textAlign: 'left',
-                              fontWeight: a === effectiveRm ? 600 : 400,
+                              fontWeight: a.toLowerCase() === effectiveRm.toLowerCase() ? 600 : 400,
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -427,8 +492,8 @@ export default function PcgMemberAnalyticsDashboard({
                                   width: 26,
                                   height: 26,
                                   borderRadius: '50%',
-                                  background: a === effectiveRm ? '#18181b' : 'var(--qa-fill-med, #E4E4E7)',
-                                  color: a === effectiveRm ? '#ffffff' : 'var(--qa-text-2, #6B6B6B)',
+                                  background: a.toLowerCase() === effectiveRm.toLowerCase() ? '#18181b' : 'var(--qa-fill-med, #E4E4E7)',
+                                  color: a.toLowerCase() === effectiveRm.toLowerCase() ? '#ffffff' : 'var(--qa-text-2, #6B6B6B)',
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
@@ -451,7 +516,7 @@ export default function PcgMemberAnalyticsDashboard({
                                 fontWeight: 500,
                               }}
                             >
-                              {g.teamName.replace('Team ', '')}
+                              {g.teamName.replace(/^Team\s+/i, '')}
                             </span>
                           </button>
                         ))}
@@ -994,10 +1059,10 @@ export default function PcgMemberAnalyticsDashboard({
             <>
               {/* AI Narrative Analysis Paragraph */}
               <p style={{ fontSize: 14, color: 'var(--qa-text, #111111)', lineHeight: 1.6, margin: '0 0 18px', maxWidth: 860 }}>
-                {effectiveRm} demonstrated strong performance over the last {periodLabel || '7 days'}, achieving an IQS of{' '}
-                {callsIqs.toFixed(1)}% across {callsVol} evaluated calls. He maintained consistent pitch structure across key investment categories
-                including 13% Club Pitching and Portfolio Upselling. While overall quality remains high, his lowest performing parameter was Secondary
-                Liquidity Disclaimer at 85.7%.
+                {effectiveRm} achieved an overall IQS of {callsIqs.toFixed(1)}% across {callsVol} calls in this period.
+                {lowestParam
+                  ? ` Performance is highest across core communication and pre-checks, while ${lowestParam.label} was the lowest area at ${lowestParam.score.toFixed(1)}%.`
+                  : ' Consistent call structure and compliance maintained.'}
               </p>
 
               {/* Badges: STRENGTH, WATCH, TIP */}
@@ -1033,7 +1098,9 @@ export default function PcgMemberAnalyticsDashboard({
                     STRENGTH
                   </span>
                   <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    Achieved a perfect 100.0% score in Identity Verification, Call Opening, and Clear Return vs Risk Positioning without promising guaranteed returns.
+                    {strongParams.length > 0
+                      ? `Achieved strong performance (90%+) in ${strongParams.slice(0, 3).map(p => p.label).join(', ')}.`
+                      : 'Professional greeting and structured closing maintained across evaluated calls.'}
                   </span>
                 </div>
 
@@ -1068,7 +1135,9 @@ export default function PcgMemberAnalyticsDashboard({
                     WATCH
                   </span>
                   <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    Secondary Liquidity Disclaimer was the lowest-performing parameter at 85.7% compared to all other evaluated areas.
+                    {lowestParam && lowestParam.score < 90
+                      ? `${lowestParam.label} was the lowest-performing parameter at ${lowestParam.score.toFixed(1)}% across evaluated calls.`
+                      : 'All quality parameters performing at or above target levels.'}
                   </span>
                 </div>
 
@@ -1104,7 +1173,13 @@ export default function PcgMemberAnalyticsDashboard({
                     TIP
                   </span>
                   <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    State the secondary market window upfront and establish a firm calendar callback slot before concluding the call.
+                    {lowestParam && lowestParam.key.toLowerCase().includes('open')
+                      ? 'Ensure professional greeting with client name, self-introduction, and confirmation of availability upfront.'
+                      : lowestParam && lowestParam.key.toLowerCase().includes('clos')
+                      ? 'Summarize agreed next steps and establish a firm calendar callback slot before concluding the call.'
+                      : lowestParam && lowestParam.key.toLowerCase().includes('legal')
+                      ? 'Ensure mandatory regulatory disclosures and clear return vs risk positioning without promising guaranteed returns.'
+                      : 'Maintain clear pace, proactive expectation setting, and concise follow-ups.'}
                   </span>
                 </div>
               </div>

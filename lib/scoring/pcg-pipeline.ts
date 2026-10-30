@@ -30,46 +30,83 @@ export const PCG_QUALITY_PARAMETERS = [
   { id: 'Simplifying', num: 11, name: 'Simplifying Answers', weight: 10, group: 'Customer Service Skills' },
 ];
 
-// ── Known RM to Team Lead Mappings ───────────────────────────────────────────
+import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
+
+// ── Known RM to Team Lead Mappings (Default fallbacks) ─────────────────────────
 const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
-  'aahan': { rm: 'Aahan Thaker', tl: 'Team Gokul' },
-  'aahan thaker': { rm: 'Aahan Thaker', tl: 'Team Gokul' },
-  'aahan pcg': { rm: 'Aahan Thaker', tl: 'Team Gokul' },
-  'dhanush': { rm: 'Dhanush', tl: 'Team Gokul' },
-  'yaashvi': { rm: 'Yaashvi Arora', tl: 'Team Gokul' },
-  'yaashvi arora': { rm: 'Yaashvi Arora', tl: 'Team Gokul' },
-  'samskriti': { rm: 'Samskriti Rao', tl: 'Team Gokul' },
-  'samskriti rao': { rm: 'Samskriti Rao', tl: 'Team Gokul' },
-  'gaurav': { rm: 'Gaurav Nautiyal', tl: 'Team Gokul' },
-  'gaurav nautiyal': { rm: 'Gaurav Nautiyal', tl: 'Team Gokul' },
-  'aravind': { rm: 'Aravind', tl: 'Team Vaishnavi' },
-  'sujal': { rm: 'Sujal Dadwani', tl: 'Team Vaishnavi' },
-  'sujal dadwani': { rm: 'Sujal Dadwani', tl: 'Team Vaishnavi' },
-  'antara': { rm: 'Antara Chakrabarty', tl: 'Team Vaishnavi' },
-  'antara chakrabarty': { rm: 'Antara Chakrabarty', tl: 'Team Vaishnavi' },
-  'swati': { rm: 'Swati Singh', tl: 'Team Vaishnavi' },
-  'swati singh': { rm: 'Swati Singh', tl: 'Team Vaishnavi' },
-  'satish': { rm: 'Satish Verghese', tl: 'Team Gokul' },
-  'satish verghese': { rm: 'Satish Verghese', tl: 'Team Gokul' },
-  'mansi': { rm: 'MANSI ELHANCE', tl: 'Team Vaishnavi' },
-  'mansi elhance': { rm: 'MANSI ELHANCE', tl: 'Team Vaishnavi' },
-  'sagar': { rm: 'Sagar', tl: 'Team Gokul' },
-  'samir': { rm: 'Samir', tl: 'Team Vaishnavi' },
+  // Team Tanisha Mittal
+  'samskrithi rao n': { rm: 'Samskrithi Rao N', tl: 'Team Tanisha Mittal' },
+  'samskriti rao': { rm: 'Samskrithi Rao N', tl: 'Team Tanisha Mittal' },
+  'samskriti': { rm: 'Samskrithi Rao N', tl: 'Team Tanisha Mittal' },
+  'maniyar kriya jignesh': { rm: 'Maniyar Kriya Jignesh', tl: 'Team Tanisha Mittal' },
+  'kriya maniyar': { rm: 'Maniyar Kriya Jignesh', tl: 'Team Tanisha Mittal' },
+  'antara chakraborty': { rm: 'Antara Chakraborty', tl: 'Team Tanisha Mittal' },
+  'antara chakrabarty': { rm: 'Antara Chakraborty', tl: 'Team Tanisha Mittal' },
+  'deshna dugar': { rm: 'Deshna Dugar', tl: 'Team Tanisha Mittal' },
+  'harshita dhona': { rm: 'Harshita Dhona', tl: 'Team Tanisha Mittal' },
+  'keshvi suresh thacker': { rm: 'Keshvi Suresh Thacker', tl: 'Team Tanisha Mittal' },
+  'nischay manish jain': { rm: 'Nischay Manish Jain', tl: 'Team Tanisha Mittal' },
+
+  // Team Dheeraj Bhojwani
+  'ramita kapoor': { rm: 'Ramita Kapoor', tl: 'Team Dheeraj Bhojwani' },
+  'shrey jain': { rm: 'Shrey jain', tl: 'Team Dheeraj Bhojwani' },
+  'ishaan kapoor': { rm: 'Ishaan Kapoor', tl: 'Team Dheeraj Bhojwani' },
+  'yaashvi arora': { rm: 'Yaashvi Arora', tl: 'Team Dheeraj Bhojwani' },
+  'paritosh ashiya': { rm: 'Paritosh Ashiya', tl: 'Team Dheeraj Bhojwani' },
+  'shivam kumar baghel': { rm: 'Shivam Kumar Baghel', tl: 'Team Dheeraj Bhojwani' },
+  'sargun singh': { rm: 'Sargun Singh', tl: 'Team Dheeraj Bhojwani' },
+
+  // Team Swetha
+  'sujal dadwani': { rm: 'Sujal Dadwani', tl: 'Team Swetha' },
+  'vaishnavi n j': { rm: 'Vaishnavi N J', tl: 'Team Swetha' },
+  'vaishnavi naghat': { rm: 'Vaishnavi Naghat', tl: 'Team Swetha' },
+  'vaishnavi': { rm: 'Vaishnavi N J', tl: 'Team Swetha' },
+  'diya sharma': { rm: 'Diya Sharma', tl: 'Team Swetha' },
+  'vidisha jaiswal': { rm: 'Vidisha Jaiswal', tl: 'Team Swetha' },
+  'nishtha veerwani': { rm: 'Nishtha Veerwani', tl: 'Team Swetha' },
+  'suryansh sharma': { rm: 'Suryansh Sharma', tl: 'Team Swetha' },
+  'ankita agarwal': { rm: 'Ankita Agarwal', tl: 'Team Swetha' },
+  'vishyata tulsani': { rm: 'Vishyata Tulsani', tl: 'Team Swetha' },
+
+  // Team Saiyam Rastogi
+  'vishal kumar yadav': { rm: 'Vishal Kumar Yadav', tl: 'Team Saiyam Rastogi' },
+  'vishal yadav': { rm: 'Vishal Kumar Yadav', tl: 'Team Saiyam Rastogi' },
+  'gaurav nautiyal': { rm: 'Gaurav Nautiyal', tl: 'Team Saiyam Rastogi' },
+  'shruti sharma': { rm: 'Shruti Sharma', tl: 'Team Saiyam Rastogi' },
+  'shruti': { rm: 'Shruti Sharma', tl: 'Team Saiyam Rastogi' },
+  'sahil joshi': { rm: 'Sahil Joshi', tl: 'Team Saiyam Rastogi' },
+  'ayan kumar garg': { rm: 'Ayan Kumar Garg', tl: 'Team Saiyam Rastogi' },
+  'rukmini mundhara': { rm: 'Rukmini Mundhara', tl: 'Team Saiyam Rastogi' },
+  'mahi agarwal': { rm: 'Mahi Agarwal', tl: 'Team Saiyam Rastogi' },
+  'nandini': { rm: 'Nandini', tl: 'Team Saiyam Rastogi' },
+  'nandani': { rm: 'Nandini', tl: 'Team Saiyam Rastogi' },
+
+  // Admin / General
+  'aahan thaker': { rm: 'Aahan Thaker', tl: 'Team Admin' },
+  'aahan': { rm: 'Aahan Thaker', tl: 'Team Admin' },
+  'aahan pcg': { rm: 'Aahan Thaker', tl: 'Team Admin' },
+  'dhanush': { rm: 'Dhanush', tl: 'Team Admin' },
 };
 
-export function resolvePcgAgent(rawAgentName: any): { rm: string; tl: string } {
-  if (!rawAgentName) return { rm: 'Unassigned RM', tl: 'Triage Pool' };
+export function resolvePcgAgent(rawAgentName: any, customTeamMap?: Record<string, string>): { rm: string; tl: string } {
+  if (!rawAgentName) return { rm: 'Unassigned RM', tl: 'PCG Team' };
   const rawStr = typeof rawAgentName === 'object'
     ? (rawAgentName.called_by || rawAgentName.agent_name || '')
     : String(rawAgentName);
-  if (!rawStr || !rawStr.trim()) return { rm: 'Unassigned RM', tl: 'Triage Pool' };
-  const clean = rawStr.trim().toLowerCase();
+  if (!rawStr || !rawStr.trim()) return { rm: 'Unassigned RM', tl: 'PCG Team' };
+  const canonical = canonicalizePcgRmName(rawStr.trim());
+  const clean = canonical.trim().toLowerCase();
+
+  if (customTeamMap && customTeamMap[clean]) {
+    return { rm: canonical, tl: `Team ${customTeamMap[clean]}` };
+  }
+
   for (const [key, val] of Object.entries(PCG_RM_TL_MAP)) {
     if (clean === key || clean.includes(key)) {
-      return val;
+      return { rm: canonical, tl: val.tl };
     }
   }
-  return { rm: rawStr.trim(), tl: 'Triage Pool' };
+  return { rm: canonical, tl: 'PCG Team' };
 }
 
 // ── Detect MIME type from audio buffer or extension ─────────────────────────
@@ -376,7 +413,10 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
   }
 
   const call = rows[0];
-  const { rm: resolvedRm, tl: resolvedTl } = resolvePcgAgent(call.agent_name);
+  const caller = (call.called_by && call.called_by.trim() && call.called_by.toLowerCase() !== 'unknown')
+    ? call.called_by.trim()
+    : (call.agent_name && call.agent_name.trim() && call.agent_name.toLowerCase() !== 'unknown' ? call.agent_name.trim() : 'Unassigned RM');
+  const { rm: resolvedRm, tl: resolvedTl } = resolvePcgAgent(caller);
 
   // If call is unopened / zero duration, mark as NOT_SCOREABLE immediately
   if (!call.duration_seconds || call.duration_seconds < 15 || !call.recording_url) {

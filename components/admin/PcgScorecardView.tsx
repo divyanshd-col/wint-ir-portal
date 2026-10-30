@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
 
 const StarIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -69,6 +70,7 @@ interface Props {
   onSelectTl: (tl: string) => void;
   onOpenCallView: (cid: string) => void;
   onSwitchToCallsTab?: () => void;
+  allowedRms?: string[];
 }
 
 export default function PcgScorecardView({
@@ -79,6 +81,7 @@ export default function PcgScorecardView({
   onSelectTl,
   onOpenCallView,
   onSwitchToCallsTab,
+  allowedRms,
 }: Props) {
   const [reports, setReports] = useState<PcgWeeklyReport[]>(INITIAL_PCG_REPORTS);
   const [activeReportId, setActiveReportId] = useState<string>('');
@@ -92,7 +95,7 @@ export default function PcgScorecardView({
   // Synchronize selection with active report
   React.useEffect(() => {
     if (selectedRm) {
-      const match = reports.find((r) => r.rmName.toLowerCase() === selectedRm.toLowerCase());
+      const match = reports.find((r) => isSamePcgAgent(r.rmName, selectedRm));
       if (match) {
         setActiveReportId(match.id);
         setSelectedAgentFilter(match.rmName);
@@ -114,7 +117,9 @@ export default function PcgScorecardView({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const uniqueAgents = Array.from(new Set(reports.map((r) => r.rmName)));
+  const uniqueAgents = activePersona === 'tl' && allowedRms && allowedRms.length > 0
+    ? allowedRms
+    : Array.from(new Set(reports.map((r) => r.rmName)));
 
   const uniqueWeeksMap = new Map<string, string>();
   reports.forEach((r) => {
@@ -126,14 +131,17 @@ export default function PcgScorecardView({
 
   const filteredReports = reports.filter((r) => {
     const weekRange = `${formatDate(r.weekStart)} - ${formatDate(r.weekEnd)}`.toLowerCase();
+    const tlAllowed = activePersona === 'tl' && allowedRms && allowedRms.length > 0
+      ? allowedRms.some((a) => isSamePcgAgent(a, r.rmName))
+      : true;
     const agentMatch = activePersona === 'agent'
-      ? r.rmName.toLowerCase() === selectedRm.toLowerCase()
-      : selectedAgentFilter === 'all' || r.rmName === selectedAgentFilter;
+      ? isSamePcgAgent(r.rmName, selectedRm)
+      : selectedAgentFilter === 'all' || isSamePcgAgent(r.rmName, selectedAgentFilter);
     const weekFilterMatch = selectedWeekFilter === 'all' || r.weekStart === selectedWeekFilter;
     const searchMatch = !searchTerm.trim() ||
       r.rmName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       weekRange.includes(searchTerm.toLowerCase());
-    return agentMatch && weekFilterMatch && searchMatch;
+    return tlAllowed && agentMatch && weekFilterMatch && searchMatch;
   });
 
   const numbers = activeReport?.numbers;

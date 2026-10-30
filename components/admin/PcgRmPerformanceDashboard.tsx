@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 
 export interface RmPerformanceItem {
   id: string;
@@ -43,43 +43,89 @@ export default function PcgRmPerformanceDashboard({
   rmScorecards = [],
   teamLeads = [],
 }: PcgRmPerformanceProps) {
+  // Exclusion list of known Admins, TLs, and non-RM entities
+  const tlNamesSet = new Set((teamLeads || []).map(t => t.tlName.toLowerCase().replace(/^team\s+/i, '').trim()));
+  const nonRmSet = new Set([
+    'aahan thaker',
+    'aahan',
+    'dheeraj bhojwani',
+    'saiyam rastogi',
+    'tanisha mittal',
+    'swetha',
+    'swetha jayakumar',
+    'gokul_admin',
+    'gokul',
+    'unknown rm',
+    'unknown',
+  ]);
+
   const rmsList: RmPerformanceItem[] = (rmScorecards && rmScorecards.length > 0)
-    ? rmScorecards.map((sc) => {
-        const foundTl = teamLeads?.find(t => t.rms?.some(r => r.toLowerCase() === sc.rmName.toLowerCase()));
-        const tl = foundTl ? foundTl.tlName : '';
-        const parts = sc.rmName.split(' ');
-        const ini = parts.map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();
-        return {
-          id: `rm-${sc.rmName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-          name: sc.rmName,
-          ini,
-          tl,
-          currentIqs: sc.overallScore || 0,
-          prev2WkIqs: sc.prev2WkIqs ?? sc.overallScore ?? 0,
-          delta2Wk: sc.delta2Wk ?? 0,
-          callsVolume: sc.totalCalls,
-          focusArea: sc.topWeakness || '—',
-          improvementDriver: undefined,
-        };
-      })
+    ? rmScorecards
+        .filter((sc) => {
+          const clean = sc.rmName.trim().toLowerCase();
+          const cleanNoTeam = clean.replace(/^team\s+/i, '').trim();
+          if (
+            nonRmSet.has(clean) ||
+            nonRmSet.has(cleanNoTeam) ||
+            tlNamesSet.has(clean) ||
+            tlNamesSet.has(cleanNoTeam) ||
+            clean.includes('admin') ||
+            clean === 'unknown rm'
+          ) {
+            return false;
+          }
+          return true;
+        })
+        .map((sc) => {
+          const cleanScName = sc.rmName.trim().toLowerCase();
+          const foundTl = teamLeads?.find(t =>
+            t.rms?.some(r => r.toLowerCase().trim() === cleanScName)
+          );
+          const tl = foundTl ? foundTl.tlName.replace(/^team\s+/i, '').trim() : '';
+          const parts = sc.rmName.trim().split(/\s+/);
+          const ini = parts.length > 1
+            ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+            : parts[0].slice(0, 2).toUpperCase();
+          return {
+            id: `rm-${sc.rmName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+            name: sc.rmName,
+            ini,
+            tl,
+            currentIqs: sc.overallScore || 0,
+            prev2WkIqs: sc.prev2WkIqs ?? sc.overallScore ?? 0,
+            delta2Wk: sc.delta2Wk ?? 0,
+            callsVolume: sc.totalCalls,
+            focusArea: sc.topWeakness || '—',
+            improvementDriver: undefined,
+          };
+        })
     : [];
 
-  // 1. Top Performers (Top 5 by IQS score across the whole PCG department)
+  // 1. Top Performers (Top 5 by IQS score across the whole PCG department; tie-breaker: calls volume)
   const topPerformers = [...rmsList]
     .filter((rm) => rm.currentIqs > 0)
-    .sort((a, b) => b.currentIqs - a.currentIqs)
+    .sort((a, b) => {
+      if (b.currentIqs !== a.currentIqs) return b.currentIqs - a.currentIqs;
+      return b.callsVolume - a.callsVolume;
+    })
     .slice(0, 5);
 
-  // 2. Bottom Performers (anyone with an IQS score of 70% or below across the whole PCG department)
+  // 2. Bottom Performers (anyone with an IQS score of 70% or below across the whole PCG department; tie-breaker: calls volume)
   const bottomPerformers = [...rmsList]
     .filter((rm) => rm.currentIqs > 0 && rm.currentIqs <= 70.0)
-    .sort((a, b) => a.currentIqs - b.currentIqs)
+    .sort((a, b) => {
+      if (a.currentIqs !== b.currentIqs) return a.currentIqs - b.currentIqs;
+      return b.callsVolume - a.callsVolume;
+    })
     .slice(0, 5);
 
   // 3. Most Improved (Top 5 net gainers across the whole PCG department)
   let mostImproved = [...rmsList]
     .filter((rm) => rm.delta2Wk > 0)
-    .sort((a, b) => b.delta2Wk - a.delta2Wk)
+    .sort((a, b) => {
+      if (Math.abs(b.delta2Wk - a.delta2Wk) > 0.05) return b.delta2Wk - a.delta2Wk;
+      return b.currentIqs - a.currentIqs;
+    })
     .slice(0, 5);
   if (mostImproved.length === 0) {
     mostImproved = [...rmsList]
@@ -116,7 +162,7 @@ export default function PcgRmPerformanceDashboard({
           <p style={{ margin: '6px 0 0 0', fontSize: 12, color: '#a1a1aa' }}>Rankings and trends will populate automatically once weekly call quality evaluations are scored.</p>
         </div>
       ) : (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
         {/* =================================================================== */}
         {/* 1. TOP PERFORMERS                                                   */}
         {/* =================================================================== */}
@@ -152,31 +198,40 @@ export default function PcgRmPerformanceDashboard({
                   }}
                   className="hover:bg-zinc-50"
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                     <span style={{ fontSize: idx < 3 ? 15 : 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
                       {rankIcons[idx]}
                     </span>
                     <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#3f3f46', flexShrink: 0 }}>
                       {rm.ini}
                     </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {rm.name}
-                        </span>
+                    <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: '#18181b',
+                          lineHeight: '18px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={rm.name}
+                      >
+                        {rm.name}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
                         {rm.tl ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                             {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
                           </span>
                         ) : null}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#71717a', marginTop: 2 }}>
-                        {rm.callsVolume} calls
+                        <span>{rm.callsVolume} calls</span>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
                     <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
                       {rm.currentIqs}%
                     </div>
@@ -187,16 +242,16 @@ export default function PcgRmPerformanceDashboard({
                         onOpenScorecard && onOpenScorecard(rm.name);
                       }}
                       style={{
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: 600,
                         color: '#2563eb',
                         background: '#eff6ff',
                         border: '1px solid #bfdbfe',
-                        borderRadius: 6,
-                        padding: '2px 8px',
+                        borderRadius: 5,
+                        padding: '2px 7px',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 3,
+                        gap: 2,
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                         whiteSpace: 'nowrap',
@@ -225,12 +280,12 @@ export default function PcgRmPerformanceDashboard({
         <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
           <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626' }}></span>
               <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Bottom Performers
               </h2>
             </div>
-            <span style={{ fontSize: 11, fontWeight: 600, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: '2px 7px', borderRadius: 6 }}>
               IQS ≤ 70%
             </span>
           </div>
@@ -266,31 +321,42 @@ export default function PcgRmPerformanceDashboard({
                     }}
                     className="hover:bg-zinc-50"
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
                         #{idx + 1}
                       </span>
-                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#3f3f46', flexShrink: 0 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#991b1b', flexShrink: 0 }}>
                         {rm.ini}
                       </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {rm.name}
-                          </span>
+                      <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: '#18181b',
+                            lineHeight: '18px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={rm.name}
+                        >
+                          {rm.name}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
                           {rm.tl ? (
-                            <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                               {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
                             </span>
                           ) : null}
-                        </div>
-                        <div style={{ fontSize: 11, color: '#71717a', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          Focus: {rm.focusArea}
+                          <span style={{ color: '#dc2626', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`Focus: ${rm.focusArea}`}>
+                            Focus: {rm.focusArea}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
                       <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#dc2626' }}>
                         {rm.currentIqs}%
                       </div>
@@ -301,16 +367,16 @@ export default function PcgRmPerformanceDashboard({
                           onOpenScorecard && onOpenScorecard(rm.name);
                         }}
                         style={{
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: 600,
                           color: '#2563eb',
                           background: '#eff6ff',
                           border: '1px solid #bfdbfe',
-                          borderRadius: 6,
-                          padding: '2px 8px',
+                          borderRadius: 5,
+                          padding: '2px 7px',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 3,
+                          gap: 2,
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
                           whiteSpace: 'nowrap',
@@ -369,31 +435,42 @@ export default function PcgRmPerformanceDashboard({
                   }}
                   className="hover:bg-zinc-50"
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
                       #{idx + 1}
                     </span>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#3f3f46', flexShrink: 0 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#065f46', flexShrink: 0 }}>
                       {rm.ini}
                     </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {rm.name}
-                        </span>
+                    <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: '#18181b',
+                          lineHeight: '18px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={rm.name}
+                      >
+                        {rm.name}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
                         {rm.tl ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                             {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
                           </span>
                         ) : null}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#71717a', marginTop: 2 }}>
-                        {rm.prev2WkIqs}% → <strong style={{ color: '#18181b' }}>{rm.currentIqs}%</strong>
+                        <span>
+                          {rm.prev2WkIqs}% → <strong style={{ color: '#18181b' }}>{rm.currentIqs}%</strong>
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
                       <span>{isPositive ? '↑' : '↓'}</span>
                       <span>{isPositive ? `+${rm.delta2Wk.toFixed(1)}%` : `${rm.delta2Wk.toFixed(1)}%`}</span>
@@ -405,16 +482,16 @@ export default function PcgRmPerformanceDashboard({
                         onOpenScorecard && onOpenScorecard(rm.name);
                       }}
                       style={{
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: 600,
                         color: '#2563eb',
                         background: '#eff6ff',
                         border: '1px solid #bfdbfe',
-                        borderRadius: 6,
-                        padding: '2px 8px',
+                        borderRadius: 5,
+                        padding: '2px 7px',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 3,
+                        gap: 2,
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                         whiteSpace: 'nowrap',
