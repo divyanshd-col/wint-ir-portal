@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { IQSRing, IQSPill } from '@/components/quality/IQSRing';
@@ -12,6 +12,7 @@ import PcgRmPerformanceDashboard from './PcgRmPerformanceDashboard';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
 import { ThemeToggle, AccountMenu } from '@/components/shell/TopBar';
+import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
 
 // Type definitions
 interface CallParameter {
@@ -54,7 +55,7 @@ interface PCGCall {
   allCategories?: string[];
   aiCategoryReasoning?: string | null;
   iqsScore: number;
-  gates: { status: 'PASS' | 'FAIL'; reason?: string };
+  gates: { status: 'PASS' | 'FAIL'; reason?: string; [key: string]: any };
   needsAttention: boolean;
   unansweredBy: 'Customer' | 'RM' | null;
   unansweredReason: string | null;
@@ -79,6 +80,7 @@ interface RmScorecard {
   topWeakness: string;
   prev2WkIqs?: number;
   delta2Wk?: number;
+  parameterScores?: Record<string, number>;
 }
 
 interface TeamLeadSummary {
@@ -223,7 +225,12 @@ export default function PcgCallsClient() {
 
   // Selected RM should lock to logged-in user when user is an agent
   const [selectedRm, setSelectedRm] = useState<string>(
-    userRole === 'agent' && loggedInUserName ? loggedInUserName : 'Aahan Thaker'
+    userRole === 'agent' && loggedInUserName ? loggedInUserName : ''
+  );
+
+  // Selected TL should lock to logged-in user when user is a TL
+  const [selectedTl, setSelectedTl] = useState<string>(
+    userRole === 'tl' && loggedInUserName ? loggedInUserName : ''
   );
 
   useEffect(() => {
@@ -232,6 +239,7 @@ export default function PcgCallsClient() {
       if (loggedInUserName) setSelectedRm(loggedInUserName);
     } else if (userRole === 'tl') {
       setActivePersona('tl');
+      if (loggedInUserName) setSelectedTl(loggedInUserName);
     } else {
       setActivePersona('admin');
     }
@@ -274,6 +282,7 @@ export default function PcgCallsClient() {
 
   // Server state
   const [calls, setCalls] = useState<PCGCall[]>([]);
+  const [disputes, setDisputes] = useState<PCGCall[]>([]);
   const [rmScorecards, setRmScorecards] = useState<RmScorecard[]>([]);
   const [teamLeads, setTeamLeads] = useState<TeamLeadSummary[]>([]);
   const [rms, setRms] = useState<{ name: string; count: number }[]>([]);
@@ -281,10 +290,23 @@ export default function PcgCallsClient() {
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const activeTlName = activePersona === 'tl'
+    ? (loggedInUserName || selectedTl)
+    : selectedTl;
+
+  const currentTlTeam = useMemo(() => {
+    if (!activeTlName) return teamLeads[0] || null;
+    return teamLeads.find((t) => t.tlName.toLowerCase() === activeTlName.toLowerCase()) || null;
+  }, [teamLeads, activeTlName]);
+
+  const teamRms: string[] = useMemo(() => {
+    return currentTlTeam?.rms || [];
+  }, [currentTlTeam]);
+
   // Common filters
   const [selectedCategory, setSelectedCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support' | 'tl_analytics' | 'rm_performance' | 'ai_coaching_insights'>('all');
   const [adminGridRmFilter, setAdminGridRmFilter] = useState<string>('all');
-  const [adminBannerTlSelect, setAdminBannerTlSelect] = useState<'all' | 'Gokul' | 'Vaishnavi'>('all');
+  const [adminBannerTlSelect, setAdminBannerTlSelect] = useState<string>('all');
   const [dateRange, setDateRange] = useState<'7d' | '30d' | 'custom'>('7d');
   const [customStartDate, setCustomStartDate] = useState(() => {
     const d = new Date(Date.now() - 7 * 86400000);
@@ -293,8 +315,7 @@ export default function PcgCallsClient() {
   const [customEndDate, setCustomEndDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
   });
-  const [selectedTl, setSelectedTl] = useState<string>('Gokul');
-  const [adminTlFilter, setAdminTlFilter] = useState<'all' | 'Gokul' | 'Vaishnavi'>('all');
+  const [adminTlFilter, setAdminTlFilter] = useState<string>('all');
   const [adminRmFilter, setAdminRmFilter] = useState<string>('all');
   const [minIqsFilter, setMinIqsFilter] = useState<string>('');
   const [maxIqsFilter, setMaxIqsFilter] = useState<string>('');
@@ -302,6 +323,7 @@ export default function PcgCallsClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalCallsCount, setTotalCallsCount] = useState(0);
 
   // Active call view state
   const [activeCallAudit, setActiveCallAudit] = useState<PCGCall | null>(null);
@@ -355,7 +377,8 @@ export default function PcgCallsClient() {
       if (activePersona === 'agent' && selectedRm) {
         p.set('rm_name', selectedRm);
       } else if (activePersona === 'tl') {
-        if (selectedTl) p.set('tl_name', selectedTl);
+        const tlQueryName = loggedInUserName || selectedTl;
+        if (tlQueryName) p.set('tl_name', tlQueryName);
         if (adminRmFilter !== 'all') p.set('rm_name', adminRmFilter);
       } else if (activePersona === 'admin') {
         if (adminTlFilter !== 'all') p.set('tl_name', adminTlFilter);
@@ -375,12 +398,25 @@ export default function PcgCallsClient() {
       if (!res.ok) throw new Error('Failed to load PCG calls');
       const data = await res.json();
       setCalls(data.calls || []);
+      setDisputes(data.disputes || []);
       setRmScorecards(data.rmScorecards || []);
-      setTeamLeads(data.teamLeads || []);
+      const leads = data.teamLeads || [];
+      setTeamLeads(leads);
       setDepartmentStats(data.departmentStats || null);
       setRms(data.rms || []);
       setSummary(data.summary || null);
       setTotalPages(data.totalPages || 1);
+      setTotalCallsCount(data.total || 0);
+
+      // For admin persona, ensure selectedTl locks to defaultTl or first available team lead with zero lag
+      if (activePersona === 'admin' && leads.length > 0) {
+        setSelectedTl((prev) => {
+          if (prev && leads.some((t: any) => t.tlName.toLowerCase() === prev.toLowerCase())) {
+            return prev;
+          }
+          return data.defaultTl || leads[0].tlName;
+        });
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -425,7 +461,7 @@ export default function PcgCallsClient() {
   };
 
   // Action: Agent Raises Dispute Inline
-  const handleSubmitDispute = () => {
+  const handleSubmitDispute = async () => {
     if (!activeCallAudit) return;
     setSubmittingDispute(true);
     const challengedParams = Object.keys(disputeSelectedParams).filter(k => disputeSelectedParams[k]);
@@ -434,6 +470,22 @@ export default function PcgCallsClient() {
       : '';
     const reason = (challengedPrefix + (agentDisputeNote || 'Agent requested evaluation review on score.')).trim();
 
+    try {
+      await fetch('/api/admin/pcg-calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'raise_dispute',
+          callId: activeCallAudit.id,
+          reason,
+          challengedParams,
+          agentName: activeCallAudit.rmName || selectedRm,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to submit dispute API:', e);
+    }
+
     const updatedCall: PCGCall = {
       ...activeCallAudit,
       disputeStatus: 'pending',
@@ -441,15 +493,17 @@ export default function PcgCallsClient() {
     };
 
     setCalls(prev => prev.map(c => c.id === activeCallAudit.id ? updatedCall : c));
+    setDisputes(prev => [updatedCall, ...prev.filter(c => c.id !== updatedCall.id)]);
     setActiveCallAudit(updatedCall);
     setSubmittingDispute(false);
     setIsRaisingDispute(false);
     setDisputeFeedback('Dispute submitted to Team Leader for review.');
+    fetchData();
     setTimeout(() => setDisputeFeedback(null), 5000);
   };
 
   // Action: TL Overrides Score Inline (matching Calls)
-  const handleSubmitOverride = () => {
+  const handleSubmitOverride = async () => {
     if (!activeCallAudit) return;
     setSavingOverride(true);
 
@@ -468,6 +522,23 @@ export default function PcgCallsClient() {
     const totalEarned = updatedParams.reduce((acc, p) => acc + p.earnedScore, 0);
     const totalMax = updatedParams.reduce((acc, p) => acc + p.maxScore, 0) || 100;
     const revisedScore = Math.min(100, Math.round((totalEarned / totalMax) * 100));
+    const note = overrideNoteInput || 'TL manual parameter score override.';
+
+    try {
+      await fetch('/api/admin/pcg-calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'override_parameters',
+          callId: activeCallAudit.id,
+          parameters: updatedParams,
+          newScore: revisedScore,
+          tlOverrideNote: note,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to submit override API:', e);
+    }
 
     const updatedCall: PCGCall = {
       ...activeCallAudit,
@@ -475,37 +546,59 @@ export default function PcgCallsClient() {
       iqsScore: revisedScore,
       needsAttention: revisedScore < 85,
       disputeStatus: activeCallAudit.disputeStatus === 'pending' ? 'resolved' : 'overridden',
-      tlOverrideNote: overrideNoteInput || 'TL manual parameter score override.',
+      tlOverrideNote: note,
     };
 
     setCalls(prev => prev.map(c => c.id === activeCallAudit.id ? updatedCall : c));
+    setDisputes(prev => [updatedCall, ...prev.filter(c => c.id !== updatedCall.id)]);
     setActiveCallAudit(updatedCall);
     setSavingOverride(false);
     setOverrideFeedback('Evaluation override submitted successfully.');
     setOverrideNoteInput('');
+    fetchData();
     setTimeout(() => setOverrideFeedback(null), 5000);
   };
 
   // Action: TL Resolves Dispute Inline
-  const handleResolveDispute = (approve: boolean) => {
+  const handleResolveDispute = async (approve: boolean) => {
     if (!activeCallAudit) return;
     const newScore = approve ? Math.min(100, activeCallAudit.iqsScore + 8) : activeCallAudit.iqsScore;
+    const note = approve ? 'Dispute approved by TL (+8 pts revised).' : 'Dispute reviewed and retained by TL.';
+
+    try {
+      await fetch('/api/admin/pcg-calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'resolve_dispute',
+          callId: activeCallAudit.id,
+          status: 'resolved',
+          newScore,
+          tlOverrideNote: note,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to resolve dispute API:', e);
+    }
+
     const updatedCall: PCGCall = {
       ...activeCallAudit,
       disputeStatus: 'resolved',
       iqsScore: newScore,
       needsAttention: newScore < 85,
-      tlOverrideNote: approve ? 'Dispute approved by TL (+8 pts revised).' : 'Dispute reviewed and retained by TL.',
+      tlOverrideNote: note,
     };
 
     setCalls(prev => prev.map(c => c.id === activeCallAudit.id ? updatedCall : c));
+    setDisputes(prev => [updatedCall, ...prev.filter(c => c.id !== updatedCall.id)]);
     setActiveCallAudit(updatedCall);
     setOverrideFeedback(approve ? 'Dispute approved and score updated.' : 'Dispute resolved (original score maintained).');
+    fetchData();
     setTimeout(() => setOverrideFeedback(null), 5000);
   };
 
   // Action: Handle evaluation override from CallEvalPanel
-  const handleOverrideFromPanel = (
+  const handleOverrideFromPanel = async (
     callId: string,
     overrideData: {
       scores: Record<string, string>;
@@ -515,6 +608,24 @@ export default function PcgCallsClient() {
     }
   ) => {
     const newIqs = overrideData.iqsScore != null ? overrideData.iqsScore : 88;
+    const note = overrideData.note || 'TL score override from CallEvalPanel.';
+
+    try {
+      await fetch('/api/admin/pcg-calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'resolve_dispute',
+          callId,
+          status: 'resolved',
+          newScore: newIqs,
+          tlOverrideNote: note,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to save panel override API:', e);
+    }
+
     const updatedCalls: PCGCall[] = calls.map(c => {
       if (c.id === callId || c.callId === callId) {
         const updatedParams: CallParameter[] = c.parameters.map(p => {
@@ -539,7 +650,7 @@ export default function PcgCallsClient() {
           iqsScore: newIqs,
           needsAttention: newIqs < 85,
           parameters: updatedParams,
-          tlOverrideNote: overrideData.note || 'TL evaluation override submitted.',
+          tlOverrideNote: note,
           disputeStatus: c.disputeStatus === 'pending' ? 'resolved' : 'overridden',
         };
         return updatedCall;
@@ -552,6 +663,7 @@ export default function PcgCallsClient() {
       const updated = updatedCalls.find(c => c.id === callId || c.callId === callId);
       if (updated) setActiveCallAudit(updated);
     }
+    fetchData();
   };
 
   // Open Call View by ID (used by RM Scorecard evidence links)
@@ -565,7 +677,7 @@ export default function PcgCallsClient() {
       callId: cleanId,
       clientName: 'Rajesh Sharma',
       rmName: selectedRm || 'Aditya R',
-      tlName: selectedTl === 'all' ? 'Gokul' : selectedTl,
+      tlName: (!selectedTl || selectedTl === 'all') ? (teamLeads[0]?.tlName || 'Swetha') : selectedTl,
       phoneNumber: '+91 98765 43210',
       callType: 'Outbound',
       tag: '13% Pitch',
@@ -623,14 +735,28 @@ export default function PcgCallsClient() {
     );
   };
 
-  const disputeRaisedCalls = calls.filter((c) => c.disputeStatus === 'pending');
-  const disputeReviewedCalls = calls.filter((c) => c.disputeStatus === 'resolved' || c.disputeStatus === 'overridden');
+  const allDisputedCalls = useMemo(() => {
+    const map = new Map<string, PCGCall>();
+    (disputes || []).forEach(c => map.set(c.id, c));
+    (calls || []).forEach(c => {
+      if (c.disputeStatus && c.disputeStatus !== 'none') {
+        map.set(c.id, c);
+      }
+    });
+    return Array.from(map.values());
+  }, [disputes, calls]);
+
+  const disputeRaisedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'pending');
+  const disputeReviewedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'resolved' || c.disputeStatus === 'overridden');
 
   // Filtered evaluated calls list based on Min and Max IQS filter
   const displayedEvaluatedCalls = calls.filter((call) => {
     if (!call.isAnswered) return false;
     if (activePersona === 'agent' && selectedRm) {
-      if (call.rmName.toLowerCase() !== selectedRm.toLowerCase()) return false;
+      if (!isSamePcgAgent(call.rmName, selectedRm)) return false;
+    }
+    if (activePersona === 'tl' && teamRms.length > 0) {
+      if (!teamRms.some((rm) => isSamePcgAgent(rm, call.rmName))) return false;
     }
     if (minIqsFilter.trim() !== '' && minIqsFilter !== 'all') {
       const minVal = parseFloat(minIqsFilter);
@@ -644,29 +770,26 @@ export default function PcgCallsClient() {
   });
 
   // RM Scorecard lookups & real computed metrics for RM view
-  const currentRmScorecard = rmScorecards.find((r) => r.rmName.toLowerCase() === selectedRm.toLowerCase());
-  const rmAnsweredCalls = calls.filter((c) => c.isAnswered && (activePersona !== 'agent' || c.rmName.toLowerCase() === selectedRm.toLowerCase()));
-  const rmEvaluatedCalls = rmAnsweredCalls.filter((c) => c.iqsScore != null && c.iqsScore > 0);
-  const rmQualityScore = rmEvaluatedCalls.length > 0
-    ? (rmEvaluatedCalls.reduce((acc, c) => acc + (c.iqsScore || 0), 0) / rmEvaluatedCalls.length).toFixed(1)
+  // Metrics represent the selected date range & scope — NEVER the paginated table slice!
+  const currentRmScorecard = rmScorecards.find((r) => isSamePcgAgent(r.rmName, selectedRm));
+  const rmQualityScore = summary?.avgIqs != null
+    ? `${summary.avgIqs}`
     : (currentRmScorecard && currentRmScorecard.overallScore > 0 ? `${currentRmScorecard.overallScore}.0` : null);
 
-  const rmTotalCallsCount = activePersona === 'agent'
-    ? calls.filter((c) => c.rmName.toLowerCase() === selectedRm.toLowerCase()).length
-    : (summary?.totalCalls ?? calls.length);
-  const rmAnsweredCallsCount = rmAnsweredCalls.length;
-  const rmUnansweredCallsCount = Math.max(0, rmTotalCallsCount - rmAnsweredCallsCount);
-  const rmUnansweredByAgentCount = calls.filter((c) => !c.isAnswered && c.rmName.toLowerCase() === selectedRm.toLowerCase() && c.unansweredBy === 'RM').length;
+  const rmTotalCallsCount = summary?.totalCalls ?? (currentRmScorecard?.totalCalls ?? 0);
+  const rmAnsweredCallsCount = summary?.answeredCalls ?? (currentRmScorecard ? Math.round((currentRmScorecard.connectRate / 100) * currentRmScorecard.totalCalls) : 0);
+  const rmUnansweredCallsCount = summary?.unansweredCalls ?? Math.max(0, rmTotalCallsCount - rmAnsweredCallsCount);
+  const rmUnansweredByAgentCount = summary?.unansweredByRm ?? 0;
   const rmActionablePickupCalls = rmAnsweredCallsCount + rmUnansweredByAgentCount;
   const rmPickupRate = rmActionablePickupCalls > 0
     ? Math.round((rmAnsweredCallsCount / rmActionablePickupCalls) * 100)
-    : (rmTotalCallsCount > 0 ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100) : 0);
+    : (rmTotalCallsCount > 0 ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100) : (currentRmScorecard?.connectRate ?? 0));
   const rmConnectRate = rmTotalCallsCount > 0
     ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100)
-    : 0;
+    : (currentRmScorecard?.connectRate ?? 0);
 
   const rmRankIndex = rmScorecards.findIndex(
-    (s) => s.rmName.toLowerCase() === selectedRm.toLowerCase()
+    (s) => isSamePcgAgent(s.rmName, selectedRm)
   );
   const rmRankDisplay = rmRankIndex >= 0 ? `#${rmRankIndex + 1}` : '—';
 
@@ -748,31 +871,55 @@ export default function PcgCallsClient() {
     return '—';
   })();
 
-  const gokulRms = [
-    'Dheeraj Bhojwani', 'Ramita Kapoor', 'Aahan Thaker', 'Paritosh Ashiya', 'Sahil Joshi',
-    'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal', 'Dhanush', 'Samir', 'SM Naik', 'Nandani', 'Shruti', 'Sravanthi', 'Togarana Akash'
-  ];
-  const vaishnaviRms = [
-    'Antara Chakrabarty', 'Mahek Bihani', 'Kriya Maniyar', 'Vaishnavi', 'Shrey Jain', 'Ishaan Kapoor',
-    'Harshita Dhona', 'Diya Sharma', 'Richa Mishra', 'Sreeram', 'Saiyam Rastogi', 'Sujal Dadwani',
-    'Aravind', 'Swati Singh', 'Deshna Dugar', 'Renessa', 'Sahil Goyal', 'Shreya Mundada', 'Swetha Jayakumar', 'Tanisha Mittal', 'Vishal Yadav'
-  ];
-  const allKnownRms = [...gokulRms, ...vaishnaviRms];
-  const teamRms = selectedTl === 'Vaishnavi' ? vaishnaviRms : gokulRms;
-  const teamRmScorecards = rmScorecards.filter((r) =>
-    teamRms.some((name) => name.toLowerCase() === r.rmName.toLowerCase())
-  );
+  const allKnownRms: string[] = useMemo(() => {
+    const set = new Set<string>();
+    teamLeads.forEach((t) => t.rms.forEach((r: string) => set.add(r)));
+    rms.forEach((r) => set.add(r.name));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [teamLeads, rms]);
 
-  const availableRmsForTable = (rms.length > 0 ? rms : allKnownRms.map((name) => ({ name, count: 0 }))).filter((r) => {
+  // When activePersona is 'tl' and teamRms is loaded, ensure selectedRm is set to a team member
+  useEffect(() => {
+    if (activePersona === 'tl' && teamRms.length > 0) {
+      const isSelectedInTeam = teamRms.some(
+        (name: string) => isSamePcgAgent(name, selectedRm)
+      );
+      if (!isSelectedInTeam) {
+        setSelectedRm(teamRms[0]);
+      }
+    }
+  }, [activePersona, teamRms, selectedRm]);
+
+  const teamRmScorecards: RmScorecard[] = useMemo(() => {
+    return rmScorecards.filter((r) =>
+      teamRms.some((name: string) => isSamePcgAgent(name, r.rmName))
+    );
+  }, [rmScorecards, teamRms]);
+
+  const availableRmsForTable: { name: string; count: number }[] = useMemo(() => {
     if (activePersona === 'tl') {
-      return teamRms.includes(r.name);
+      const teamSet = new Set(teamRms.map((r: string) => r.toLowerCase()));
+      const matchedRms = rms.filter((r) => teamSet.has(r.name.toLowerCase()));
+      const existingNames = new Set(matchedRms.map((r) => r.name.toLowerCase()));
+      const zeroCountRms = teamRms
+        .filter((name: string) => !existingNames.has(name.toLowerCase()))
+        .map((name: string) => ({ name, count: 0 }));
+      const combined = [...matchedRms, ...zeroCountRms];
+      return combined.sort((a, b) => a.name.localeCompare(b.name));
     }
     if (activePersona === 'admin' && adminTlFilter !== 'all') {
-      if (adminTlFilter === 'Gokul') return gokulRms.includes(r.name);
-      if (adminTlFilter === 'Vaishnavi') return vaishnaviRms.includes(r.name);
+      const selectedAdminTeam = teamLeads.find(
+        (t) => t.tlName.toLowerCase() === adminTlFilter.toLowerCase()
+      );
+      if (selectedAdminTeam) {
+        const set = new Set(selectedAdminTeam.rms.map((r: string) => r.toLowerCase()));
+        return (rms.length > 0 ? rms : allKnownRms.map((name: string) => ({ name, count: 0 }))).filter((r: { name: string; count: number }) =>
+          set.has(r.name.toLowerCase())
+        );
+      }
     }
-    return true;
-  });
+    return rms.length > 0 ? rms : allKnownRms.map((name: string) => ({ name, count: 0 }));
+  }, [activePersona, teamRms, rms, allKnownRms, adminTlFilter, teamLeads]);
 
   const renderDisputesTable = () => (
     <div className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-sm">
@@ -913,7 +1060,7 @@ export default function PcgCallsClient() {
 
                       {isExpanded && (
                         <CallEvalPanel
-                          callId={formatCallId(call.callId, call.id)}
+                          callId={call.callId || call.id.toString()}
                           hideShowChat={true}
                           isPcg={true}
                           mobileNumber={call.phoneNumber}
@@ -939,11 +1086,11 @@ export default function PcgCallsClient() {
                               note: p.quote || 'Challenged parameter score.'
                             }))
                           }}
-                          colSpan={8}
+                          colSpan={activePersona === 'agent' ? 6 : 8}
                           onDone={() => setExpandedDisputeId(null)}
                           onClose={() => setExpandedDisputeId(null)}
                           onOverrideSubmit={async (overrideData) => {
-                            handleOverrideFromPanel(call.id, overrideData);
+                            handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
                           }}
                         />
                       )}
@@ -1046,7 +1193,7 @@ export default function PcgCallsClient() {
 
                       {isExpanded && (
                         <CallEvalPanel
-                          callId={formatCallId(call.callId, call.id)}
+                          callId={call.callId || call.id.toString()}
                           hideShowChat={true}
                           isPcg={true}
                           mobileNumber={call.phoneNumber}
@@ -1060,7 +1207,7 @@ export default function PcgCallsClient() {
                           initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
                           mode="view"
                           allowReevaluate={activePersona === 'tl'}
-                          colSpan={activePersona !== 'agent' ? 8 : 7}
+                          colSpan={activePersona !== 'agent' ? 8 : 6}
                           onDone={() => setExpandedDisputeId(null)}
                           onClose={() => setExpandedDisputeId(null)}
                         />
@@ -1098,7 +1245,10 @@ export default function PcgCallsClient() {
             <span className="text-xs text-[#71717A] font-semibold">Date Range:</span>
             <select
               value={dateRange}
-              onChange={(e) => setDateRange(e.target.value as any)}
+              onChange={(e) => {
+                setDateRange(e.target.value as any);
+                setPage(1);
+              }}
               className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-white text-[#111111] outline-none shadow-sm cursor-pointer"
             >
               <option value="7d">Last 7 Days</option>
@@ -1111,14 +1261,20 @@ export default function PcgCallsClient() {
                 <input
                   type="date"
                   value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  onChange={(e) => {
+                    setCustomStartDate(e.target.value);
+                    setPage(1);
+                  }}
                   className="text-xs tabular-nums font-medium bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
                 />
                 <span className="text-xs text-[#71717A] font-medium">to</span>
                 <input
                   type="date"
                   value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  onChange={(e) => {
+                    setCustomEndDate(e.target.value);
+                    setPage(1);
+                  }}
                   className="text-xs tabular-nums font-medium bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
                 />
               </div>
@@ -1302,17 +1458,18 @@ export default function PcgCallsClient() {
                 activePersona={activePersona}
                 selectedRm={selectedRm}
                 onSelectRm={(rm) => setSelectedRm(rm)}
-                selectedTl={selectedTl}
+                selectedTl={activeTlName}
                 onSelectTl={(tl) => setSelectedTl(tl)}
                 onOpenCallView={(cid) => handleOpenCallById(cid)}
                 onSwitchToCallsTab={() => handleTabChange('calls')}
+                allowedRms={activePersona === 'tl' ? teamRms : undefined}
               />
             </div>
           ) : activeTab === 'team_analytics' ? (
             <div>
               <PcgTeamAnalyticsDashboard
                 activePersona={activePersona}
-                selectedTl={selectedTl}
+                selectedTl={activeTlName}
                 onSelectTl={(tl) => setSelectedTl(tl as any)}
                 onSelectRm={(rm) => setSelectedRm(rm)}
                 onSwitchToMemberAnalytics={() => handleTabChange('member_analytics')}
@@ -1346,6 +1503,16 @@ export default function PcgCallsClient() {
                 calls={calls}
                 activePersona={activePersona}
                 rmScorecards={rmScorecards}
+                teamLeads={teamLeads}
+                tlName={activeTlName}
+                dateRange={dateRange}
+                onDateRangeChange={(range, from, to) => {
+                  setDateRange(range);
+                  if (from && to) {
+                    setCustomStartDate(from);
+                    setCustomEndDate(to);
+                  }
+                }}
               />
             </div>
           ) : (
@@ -1434,9 +1601,12 @@ export default function PcgCallsClient() {
                               }}
                               className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
                             >
-                              <option value="all">All Teams (Gokul &amp; Vaishnavi)</option>
-                              <option value="Gokul">Team Gokul ({gokulRms.length} RMs)</option>
-                              <option value="Vaishnavi">Team Vaishnavi ({vaishnaviRms.length} RMs)</option>
+                              <option value="all">All Teams</option>
+                              {teamLeads.map((tl) => (
+                                <option key={tl.tlName} value={tl.tlName}>
+                                  Team {tl.tlName} ({tl.rms.length} RMs)
+                                </option>
+                              ))}
                             </select>
                           </div>
 
@@ -1450,8 +1620,10 @@ export default function PcgCallsClient() {
                               <option value="all">All RMs ({rms.length})</option>
                               {rms
                                 .filter((r) => {
-                                  if (adminTlFilter === 'Gokul') return gokulRms.some(n => n.toLowerCase() === r.name.toLowerCase());
-                                  if (adminTlFilter === 'Vaishnavi') return vaishnaviRms.some(n => n.toLowerCase() === r.name.toLowerCase());
+                                  if (adminTlFilter !== 'all') {
+                                    const selectedAdminTeam = teamLeads.find(t => t.tlName.toLowerCase() === adminTlFilter.toLowerCase());
+                                    return selectedAdminTeam ? selectedAdminTeam.rms.some(n => n.toLowerCase() === r.name.toLowerCase()) : true;
+                                  }
                                   return true;
                                 })
                                 .map((r) => (
@@ -1471,7 +1643,7 @@ export default function PcgCallsClient() {
                         {activePersona === 'agent'
                           ? 'My Call Quality Overview'
                           : activePersona === 'tl'
-                            ? `Team ${selectedTl} Performance Overview`
+                            ? `Team ${activeTlName || 'Lead'} Performance Overview`
                             : 'Organization Performance Overview'}
                       </span>
                       <div className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700 bg-white border border-[#E4E4E7] px-2.5 py-1 rounded-lg shadow-2xs">
@@ -1521,12 +1693,12 @@ export default function PcgCallsClient() {
                         </div>
                         <div className="flex items-baseline gap-2 mt-1">
                           <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                            {activePersona === 'agent' ? rmTotalCallsCount : (summary?.totalCalls ?? calls.length)}
+                            {activePersona === 'agent' ? rmTotalCallsCount : (summary?.totalCalls ?? 0)}
                           </span>
                           <span className="text-xs text-[#71717A]">calls</span>
                         </div>
                         <p className="text-[11px] text-[#71717A] mt-1">
-                          {activePersona === 'agent' ? rmAnsweredCallsCount : (summary?.answeredCalls ?? calls.filter((c) => c.isAnswered).length)} connected · {activeDateInfo.datesOnly}
+                          {activePersona === 'agent' ? rmAnsweredCallsCount : (summary?.answeredCalls ?? 0)} connected · {activeDateInfo.datesOnly}
                         </p>
                       </div>
 
@@ -1543,14 +1715,14 @@ export default function PcgCallsClient() {
                           <span className="text-2xl font-bold tabular-nums text-[#111111]">
                             {activePersona === 'agent'
                               ? rmPickupRate
-                              : (summary?.totalCalls ? Math.round((summary.answeredCalls / summary.totalCalls) * 100) : (calls.length ? Math.round((calls.filter((c) => c.isAnswered).length / calls.length) * 100) : 0))}%
+                              : (summary?.totalCalls ? Math.round(((summary?.answeredCalls || 0) / summary.totalCalls) * 100) : 0)}%
                           </span>
                           <span className="text-xs text-[#71717A]">pickup</span>
                         </div>
                         <p className="text-[11px] text-[#71717A] mt-1">
                           {activePersona === 'agent'
                             ? `${rmUnansweredByAgentCount} unanswered · ${activeDateInfo.datesOnly}`
-                            : `${summary?.unansweredCalls ?? Math.max(0, (summary?.totalCalls ?? calls.length) - (summary?.answeredCalls ?? calls.filter((c) => c.isAnswered).length))} unanswered · ${activeDateInfo.datesOnly}`}
+                            : `${summary?.unansweredCalls ?? 0} unanswered · ${activeDateInfo.datesOnly}`}
                         </p>
                       </div>
                     </div>
@@ -1592,11 +1764,11 @@ export default function PcgCallsClient() {
                               {teamRmScorecards.length === 0 ? (
                                 <tr>
                                   <td colSpan={5} className="py-8 text-center text-xs text-gray-500">
-                                    No RM call data recorded for Team {selectedTl} in this period.
+                                    No RM call data recorded for Team {activeTlName || selectedTl} in this period.
                                   </td>
                                 </tr>
                               ) : (
-                                teamRmScorecards.map((rm) => (
+                                teamRmScorecards.map((rm: RmScorecard) => (
                                   <tr key={rm.rmName} className="hover:bg-gray-50/50 transition-colors">
                                     <td className="py-3 px-4 font-bold text-gray-900 flex items-center gap-2">
                                       <span className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-800 flex items-center justify-center font-bold text-[11px]">
@@ -1651,12 +1823,15 @@ export default function PcgCallsClient() {
                               <span className="text-xs font-semibold text-gray-500">Select Team Lead:</span>
                               <select
                                 value={adminBannerTlSelect}
-                                onChange={(e) => setAdminBannerTlSelect(e.target.value as 'all' | 'Gokul' | 'Vaishnavi')}
+                                onChange={(e) => setAdminBannerTlSelect(e.target.value)}
                                 className="text-xs font-bold bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-gray-800 outline-none focus:border-zinc-900 shadow-sm"
                               >
-                                <option value="all">All Team Leads (Gokul &amp; Vaishnavi)</option>
-                                <option value="Gokul">Team Gokul ({gokulRms.length} Relationship Managers)</option>
-                                <option value="Vaishnavi">Team Vaishnavi ({vaishnaviRms.length} Relationship Managers)</option>
+                                <option value="all">All Team Leads</option>
+                                {teamLeads.map((tl) => (
+                                  <option key={tl.tlName} value={tl.tlName}>
+                                    Team {tl.tlName} ({tl.rms.length} Relationship Managers)
+                                  </option>
+                                ))}
                               </select>
                             </div>
                           </div>
@@ -1736,7 +1911,7 @@ export default function PcgCallsClient() {
                                 </span>
                               </div>
                               <p className="text-xs text-gray-500 mt-0.5">
-                                Complete scorecards across all {rmScorecards.length} RMs in Team Gokul and Team Vaishnavi
+                                Complete scorecards across all {rmScorecards.length} Relationship Managers
                               </p>
                             </div>
 
@@ -1749,7 +1924,7 @@ export default function PcgCallsClient() {
                                   onChange={(e) => setAdminGridRmFilter(e.target.value)}
                                   className="text-xs font-bold bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-gray-800 outline-none focus:border-zinc-900 shadow-sm"
                                 >
-                                  <option value="all">All 8 Active RMs</option>
+                                  <option value="all">All {rmScorecards.length} Active RMs</option>
                                   {rmScorecards.map((rm) => (
                                     <option key={rm.rmName} value={rm.rmName}>{rm.rmName}</option>
                                   ))}
@@ -1777,7 +1952,10 @@ export default function PcgCallsClient() {
                               rmScorecards
                                 .filter((rm) => adminGridRmFilter === 'all' || rm.rmName.toLowerCase() === adminGridRmFilter.toLowerCase())
                                 .map((rm) => {
-                                  const tlAssignment = vaishnaviRms.some(n => n.toLowerCase() === rm.rmName.toLowerCase()) ? 'Vaishnavi' : 'Gokul';
+                                  const assignedTlObj = teamLeads.find((tl) =>
+                                    tl.rms.some((n) => n.toLowerCase() === rm.rmName.toLowerCase())
+                                  );
+                                  const tlAssignment = assignedTlObj?.tlName || 'PCG';
                                   return (
                                     <div
                                       key={rm.rmName}
@@ -1922,16 +2100,22 @@ export default function PcgCallsClient() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs text-[#71717A] font-semibold mr-1">Call Category:</span>
                       <button
-                        onClick={() => setSelectedCategory('all')}
+                        onClick={() => {
+                          setSelectedCategory('all');
+                          setPage(1);
+                        }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'all'
                           ? 'bg-[#111111] text-white shadow-sm'
                           : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
                           }`}
                       >
-                        All Categories ({calls.length})
+                        All Categories ({summary?.answeredCalls ?? summary?.totalCalls ?? totalCallsCount})
                       </button>
                       <button
-                        onClick={() => setSelectedCategory('13_pitching')}
+                        onClick={() => {
+                          setSelectedCategory('13_pitching');
+                          setPage(1);
+                        }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === '13_pitching'
                           ? 'bg-[#111111] text-white shadow-sm'
                           : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
@@ -1940,7 +2124,10 @@ export default function PcgCallsClient() {
                         13% Club / Pitching
                       </button>
                       <button
-                        onClick={() => setSelectedCategory('upselling')}
+                        onClick={() => {
+                          setSelectedCategory('upselling');
+                          setPage(1);
+                        }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'upselling'
                           ? 'bg-[#111111] text-white shadow-sm'
                           : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
@@ -1949,7 +2136,10 @@ export default function PcgCallsClient() {
                         Upselling Calls
                       </button>
                       <button
-                        onClick={() => setSelectedCategory('support')}
+                        onClick={() => {
+                          setSelectedCategory('support');
+                          setPage(1);
+                        }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'support'
                           ? 'bg-[#111111] text-white shadow-sm'
                           : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
@@ -2014,7 +2204,7 @@ export default function PcgCallsClient() {
                         <div className="flex items-center gap-2.5 flex-wrap">
                           {activePersona !== 'agent' && (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-[#71717A] font-medium">Agent:</span>
+                              <span className="text-xs text-[#71717A] font-medium">{activePersona === 'tl' ? 'Team Member:' : 'Agent:'}</span>
                               <select
                                 id="table-agent-filter"
                                 value={adminRmFilter}
@@ -2024,8 +2214,12 @@ export default function PcgCallsClient() {
                                 }}
                                 className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs focus:border-[#111111] cursor-pointer"
                               >
-                                <option value="all">All Agents ({availableRmsForTable.length})</option>
-                                {availableRmsForTable.map((r) => (
+                                <option value="all">
+                                  {activePersona === 'tl'
+                                    ? `All Team Members (${availableRmsForTable.length})`
+                                    : `All Agents (${availableRmsForTable.length})`}
+                                </option>
+                                {availableRmsForTable.map((r: { name: string; count: number }) => (
                                   <option key={r.name} value={r.name}>
                                     {r.name}
                                   </option>
@@ -2111,7 +2305,10 @@ export default function PcgCallsClient() {
                             type="text"
                             placeholder={activePersona === 'agent' ? "Search Client Name..." : "Search Client or RM Name..."}
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => {
+                              setSearchQuery(e.target.value);
+                              setPage(1);
+                            }}
                             className="text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 w-52 outline-none focus:border-[#111111] shadow-2xs bg-white"
                           />
                         </div>
@@ -2181,7 +2378,7 @@ export default function PcgCallsClient() {
                                         {call.gates.status === 'PASS' ? (
                                           <span className="text-zinc-600 font-medium" title="No compliance mistake detected">No</span>
                                         ) : (
-                                          <span className="text-black font-extrabold" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold text-red-700 bg-red-50 border border-red-200" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
                                         )}
                                       </td>
 
@@ -2203,7 +2400,7 @@ export default function PcgCallsClient() {
 
                                     {isExpanded && (
                                       <CallEvalPanel
-                                        callId={formatCallId(call.callId, call.id)}
+                                        callId={call.callId || call.id.toString()}
                                         hideShowChat={true}
                                         isPcg={true}
                                         mobileNumber={call.phoneNumber}
@@ -2221,8 +2418,9 @@ export default function PcgCallsClient() {
                                         colSpan={activePersona !== 'agent' ? 6 : 5}
                                         onDone={() => setExpandedCallId(null)}
                                         onClose={() => setExpandedCallId(null)}
+                                        onDisputeRaised={() => fetchData()}
                                         onOverrideSubmit={async (overrideData) => {
-                                          handleOverrideFromPanel(call.id, overrideData);
+                                          handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
                                           setExpandedCallId(null);
                                         }}
                                         onReevaluate={(cid, revisedIqs) => {
@@ -2283,7 +2481,7 @@ export default function PcgCallsClient() {
             {activeCallAudit.isAnswered ? (
               <CallEvalPanel
                 standalone={true}
-                callId={formatCallId(activeCallAudit.callId, activeCallAudit.id)}
+                callId={activeCallAudit.callId || activeCallAudit.id.toString()}
                 hideShowChat={true}
                 isPcg={true}
                 mobileNumber={activeCallAudit.phoneNumber}
@@ -2300,8 +2498,9 @@ export default function PcgCallsClient() {
                 allowReevaluate={activePersona === 'tl'}
                 onDone={() => setActiveCallAudit(null)}
                 onClose={() => setActiveCallAudit(null)}
+                onDisputeRaised={() => fetchData()}
                 onOverrideSubmit={async (overrideData) => {
-                  handleOverrideFromPanel(activeCallAudit.id, overrideData);
+                  handleOverrideFromPanel(activeCallAudit.callId || activeCallAudit.id.toString(), overrideData);
                 }}
                 onReevaluate={(cid, revisedIqs) => {
                   setCalls((prev) =>

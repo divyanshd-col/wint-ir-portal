@@ -209,18 +209,52 @@ export async function POST(req: NextRequest) {
     const createdAtTime = parseEpochTime(body.createdAt);
 
     if (recordingUrl) {
-      // Audio Recording URL Payload
+      // Audio Recording URL Payload (can also include duration, calledBy, etc.)
       await query(`
-        INSERT INTO pcg_call_recordings (call_id, recording_url, call_category, raw_payload)
-        VALUES ($1, $2, $3, $4::jsonb)
+        INSERT INTO pcg_call_recordings (
+          call_id, recording_url, call_category, raw_payload,
+          caller_id, called_by, agent_name, customer_id, phone_number,
+          user_phone, process_id, call_type, tag, duration_seconds,
+          start_time, created_at_time
+        )
+        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT (call_id) DO UPDATE SET
-          recording_url = EXCLUDED.recording_url,
-          call_category = COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category),
-          raw_payload   = pcg_call_recordings.raw_payload || EXCLUDED.raw_payload,
-          updated_at    = NOW()
-      `, [callId, String(recordingUrl).trim(), callCategory, JSON.stringify(body)]);
+          recording_url    = EXCLUDED.recording_url,
+          call_category    = COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category),
+          caller_id        = COALESCE(EXCLUDED.caller_id, pcg_call_recordings.caller_id),
+          called_by        = COALESCE(EXCLUDED.called_by, pcg_call_recordings.called_by),
+          agent_name       = COALESCE(EXCLUDED.agent_name, pcg_call_recordings.agent_name),
+          customer_id      = COALESCE(EXCLUDED.customer_id, pcg_call_recordings.customer_id),
+          phone_number     = COALESCE(EXCLUDED.phone_number, pcg_call_recordings.phone_number),
+          user_phone       = COALESCE(EXCLUDED.user_phone, pcg_call_recordings.user_phone),
+          process_id       = COALESCE(EXCLUDED.process_id, pcg_call_recordings.process_id),
+          call_type        = COALESCE(NULLIF(EXCLUDED.call_type, 'call_event'), pcg_call_recordings.call_type),
+          tag              = COALESCE(EXCLUDED.tag, pcg_call_recordings.tag),
+          duration_seconds = CASE WHEN EXCLUDED.duration_seconds > 0 THEN EXCLUDED.duration_seconds ELSE pcg_call_recordings.duration_seconds END,
+          start_time       = COALESCE(EXCLUDED.start_time, pcg_call_recordings.start_time),
+          created_at_time  = COALESCE(EXCLUDED.created_at_time, pcg_call_recordings.created_at_time),
+          raw_payload      = pcg_call_recordings.raw_payload || EXCLUDED.raw_payload,
+          updated_at       = NOW()
+      `, [
+        callId,
+        String(recordingUrl).trim(),
+        callCategory,
+        JSON.stringify(body),
+        callerId,
+        calledBy,
+        agentName,
+        customerId,
+        phoneNumber,
+        userPhone,
+        processId,
+        callType,
+        tag,
+        duration,
+        startTime,
+        createdAtTime,
+      ]);
 
-      console.log(`[runo-webhook] S3 Recording URL saved for PCG call ${callId}`);
+      console.log(`[runo-webhook] S3 Recording URL and call metadata saved for PCG call ${callId}`);
     } else {
       // Call Event Payload (Outgoing Answered, Unanswered, Incoming Missed, etc.)
       await query(`
@@ -237,9 +271,9 @@ export async function POST(req: NextRequest) {
           phone_number     = COALESCE(EXCLUDED.phone_number, pcg_call_recordings.phone_number),
           user_phone       = COALESCE(EXCLUDED.user_phone, pcg_call_recordings.user_phone),
           process_id       = COALESCE(EXCLUDED.process_id, pcg_call_recordings.process_id),
-          call_type        = COALESCE(EXCLUDED.call_type, pcg_call_recordings.call_type),
+          call_type        = COALESCE(NULLIF(EXCLUDED.call_type, 'call_event'), pcg_call_recordings.call_type),
           tag              = COALESCE(EXCLUDED.tag, pcg_call_recordings.tag),
-          duration_seconds = COALESCE(EXCLUDED.duration_seconds, pcg_call_recordings.duration_seconds),
+          duration_seconds = CASE WHEN EXCLUDED.duration_seconds > 0 THEN EXCLUDED.duration_seconds ELSE pcg_call_recordings.duration_seconds END,
           start_time       = COALESCE(EXCLUDED.start_time, pcg_call_recordings.start_time),
           created_at_time  = COALESCE(EXCLUDED.created_at_time, pcg_call_recordings.created_at_time),
           call_category    = COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category),
