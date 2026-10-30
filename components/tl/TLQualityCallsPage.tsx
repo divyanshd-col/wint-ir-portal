@@ -216,7 +216,7 @@ export default function TLQualityCallsPage() {
       const pAll: TLDisputeRow[] = Array.isArray(pData.disputes) ? pData.disputes : [];
       const rAll: TLDisputeRow[] = Array.isArray(rData.disputes) ? rData.disputes : [];
 
-      const isCallDispute = (d: TLDisputeRow) => Boolean(d.callId);
+      const isCallDispute = (d: TLDisputeRow) => Boolean(d.callId) && !d.messageId;
 
       setPendingDisputes(pAll.filter(isCallDispute));
       setReviewedDisputes(rAll.filter(isCallDispute));

@@ -16,6 +16,7 @@ export interface TLDisputeRow {
   flagId:           string;
   chatId:           string;
   callId?:          string;
+  messageId?:       string;
   agentName:        string;
   iqsScore:         number | null;
   botIqsScore?:     number | null;
@@ -80,11 +81,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const t0 = Date.now();
   const rawFlags = await storeGetIQSFlags();
 
-  // Filter by requested status
+  // Filter by requested status (excluding email disputes which have their own queue)
   const flags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .filter((f): f is IQSFlag => {
       if (!f) return false;
+      // Email disputes are managed exclusively in TLEmailQualityPage (/api/email-evaluations?disputeQueue=...)
+      // and must never appear in TL chat or call dispute queues.
+      if (f.messageId) return false;
       // 'pending' = awaiting TL action (the actionable "Disputes Raised" queue).
       // 'resolved' = already forwarded to QA or given a final decision (history).
       if (statusFilter === 'pending') return f.status === 'ir_pending_tl' || f.status === 'pending';
@@ -95,8 +99,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   if (!flags.length) return NextResponse.json({ disputes: [] });
 
   // Separate chat vs call flags
-  const chatFlags = flags.filter(f => !f.callId);
-  const callFlags = flags.filter(f => Boolean(f.callId));
+  const chatFlags = flags.filter(f => !f.callId && !f.messageId);
+  const callFlags = flags.filter(f => Boolean(f.callId) && !f.messageId);
 
   const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
   const targetCallIds = [...new Set(callFlags.map(f => f.callId).filter(Boolean))] as string[];
@@ -244,6 +248,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       flagId:           flag.id,
       chatId:           flag.chatId,
       callId:           isCall ? (callDb?.call_id || flag.callId) : undefined,
+      messageId:        flag.messageId || undefined,
       agentName:        agentName,
       iqsScore,
       botIqsScore,
@@ -274,9 +279,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const typeParam = new URL(req.url).searchParams.get('type');
   let finalDisputes = disputes;
   if (typeParam === 'calls') {
-    finalDisputes = disputes.filter(d => Boolean(d.callId));
+    finalDisputes = disputes.filter(d => Boolean(d.callId) && !d.messageId);
   } else if (typeParam === 'chats') {
-    finalDisputes = disputes.filter(d => !d.callId);
+    finalDisputes = disputes.filter(d => !d.callId && !d.messageId);
+  } else {
+    finalDisputes = disputes.filter(d => !d.messageId);
   }
 
   finalDisputes.sort((a, b) => b.raisedAt.localeCompare(a.raisedAt));
