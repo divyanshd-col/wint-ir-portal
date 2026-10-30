@@ -15,6 +15,7 @@ export interface DisputeRow {
   flagId:       string;
   chatId:       string;
   callId?:      string;
+  messageId?:   string;
   agentName:    string;
   agentEmail:   string;
   raisedBy:     string;   // 'IR' | 'TL' | role label
@@ -95,17 +96,19 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   // QA only sees disputes once TL has forwarded them — 'pending'/'ir_pending_tl'
   // are still awaiting TL review and stay off QA's queue until forwarded.
+  // Email disputes are managed exclusively in the Email Quality section (/api/email-evaluations?tab=disputes)
+  // and must never appear in QA chat or call dispute queues.
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
-    .filter((f): f is IQSFlag => f !== null && f.status === 'tl_forwarded');
+    .filter((f): f is IQSFlag => f !== null && f.status === 'tl_forwarded' && !f.messageId);
 
   log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });
 
   if (!pendingFlags.length) return NextResponse.json({ disputes: [] });
 
-  const chatFlags = pendingFlags.filter(f => !f.callId);
-  const callFlags = pendingFlags.filter(f => Boolean(f.callId));
+  const chatFlags = pendingFlags.filter(f => !f.callId && !f.messageId);
+  const callFlags = pendingFlags.filter(f => Boolean(f.callId) && !f.messageId);
   const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
   const targetCallIds = [...new Set(callFlags.map(f => f.callId).filter(Boolean))] as string[];
   const fallbackChatIds = [...new Set(callFlags.filter(f => !f.callId).map(f => f.chatId).filter(Boolean))];
@@ -405,6 +408,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       flagId:           flag.id,
       chatId:           flag.chatId,
       callId:           isCall ? (callDb?.call_id || flag.callId) : undefined,
+      messageId:        flag.messageId || undefined,
       agentName:        effectiveAgentName,
       agentEmail:       flag.agentEmail,
       raisedBy:         submitterRole,
@@ -437,9 +441,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const typeParam = searchParams.get('type');
   let finalDisputes = disputes;
   if (typeParam === 'calls') {
-    finalDisputes = disputes.filter(d => Boolean(d.callId));
+    finalDisputes = disputes.filter(d => Boolean(d.callId) && !d.messageId);
   } else if (typeParam === 'chats') {
-    finalDisputes = disputes.filter(d => !d.callId);
+    finalDisputes = disputes.filter(d => !d.callId && !d.messageId);
+  } else {
+    finalDisputes = disputes.filter(d => !d.messageId);
   }
 
   // Filter by agent_filter or has_calls if provided

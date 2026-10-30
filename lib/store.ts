@@ -295,7 +295,11 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
         param_category, parent_flag_id, status, reviewed_by, reviewed_at, review_note,
         original_score
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-      ON CONFLICT (id) DO NOTHING
+      ON CONFLICT (id) DO UPDATE SET
+        message_id = COALESCE(EXCLUDED.message_id, iqs_flags.message_id),
+        score_id = COALESCE(EXCLUDED.score_id, iqs_flags.score_id),
+        status = EXCLUDED.status,
+        updated_at = NOW()
     `, [
       entry.id,
       entry.scoreId || null,
@@ -324,18 +328,35 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
   }
 }
 
+export function isCallFlag(f: { callId?: string | null; messageId?: string | null }): boolean {
+  return Boolean(f.callId);
+}
+
+export function isEmailFlag(f: { callId?: string | null; messageId?: string | null }): boolean {
+  return Boolean(f.messageId);
+}
+
+export function isChatFlag(f: { callId?: string | null; messageId?: string | null }): boolean {
+  return !f.callId && !f.messageId;
+}
+
 export async function storeGetIQSFlags(): Promise<string[]> {
   try {
     const rows = await query(`
       SELECT
-        id, score_id AS "scoreId", chat_id AS "chatId", call_id AS "callId", message_id AS "messageId", agent_name AS "agentName",
-        agent_email AS "agentEmail", agent_note AS "agentNote", challenged_params AS "challengedParams",
-        flagged_at AS "flaggedAt", updated_at AS "updatedAt", raised_by_role AS "raisedByRole",
-        param_category AS "paramCategory", parent_flag_id AS "parentFlagId", status,
-        reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt", review_note AS "reviewNote",
-        original_score AS "originalScore"
-      FROM iqs_flags
-      ORDER BY flagged_at DESC
+        f.id, f.score_id AS "scoreId", f.chat_id AS "chatId", f.call_id AS "callId",
+        COALESCE(
+          f.message_id,
+          (SELECT e.message_id FROM email_reply_evaluations e WHERE e.flag_id = f.id LIMIT 1)
+        ) AS "messageId",
+        f.agent_name AS "agentName",
+        f.agent_email AS "agentEmail", f.agent_note AS "agentNote", f.challenged_params AS "challengedParams",
+        f.flagged_at AS "flaggedAt", f.updated_at AS "updatedAt", f.raised_by_role AS "raisedByRole",
+        f.param_category AS "paramCategory", f.parent_flag_id AS "parentFlagId", f.status,
+        f.reviewed_by AS "reviewedBy", f.reviewed_at AS "reviewedAt", f.review_note AS "reviewNote",
+        f.original_score AS "originalScore"
+      FROM iqs_flags f
+      ORDER BY f.flagged_at DESC
     `);
     // Map dates back to ISO strings, then stringify
     return rows.map(row => {

@@ -23,10 +23,18 @@ export async function GET(req: NextRequest) {
   let flags = all.filter(f => f.agentEmail === email && f.raisedByRole === 'ir' && f.status !== 'cancelled');
 
   const isCallFlag = (f: IQSFlag) => Boolean(f.callId);
+  const isEmailFlag = (f: IQSFlag) => Boolean(f.messageId);
+  const isChatFlag = (f: IQSFlag) => !f.callId && !f.messageId;
+
   if (typeFilter === 'calls') {
     flags = flags.filter(isCallFlag);
   } else if (typeFilter === 'chats') {
-    flags = flags.filter(f => !isCallFlag(f));
+    flags = flags.filter(isChatFlag);
+  } else if (typeFilter === 'emails') {
+    flags = flags.filter(isEmailFlag);
+  } else {
+    // Exclude email disputes by default since they are managed on /agent/quality-emails
+    flags = flags.filter(f => !isEmailFlag(f));
   }
 
   if (statusFilter === 'pending') {
@@ -38,8 +46,8 @@ export async function GET(req: NextRequest) {
   }
 
   // Enrich with iqs_score + closed_at + bot/call IQS + csat from DB (batch queries)
-  const chatFlags = flags.filter(f => !f.callId);
-  const callFlags = flags.filter(f => Boolean(f.callId));
+  const chatFlags = flags.filter(f => !f.callId && !f.messageId);
+  const callFlags = flags.filter(f => Boolean(f.callId) && !f.messageId);
   const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
   const targetCallIds = [...new Set(callFlags.map(f => f.callId).filter(Boolean))] as string[];
   const fallbackChatIds = [...new Set(callFlags.filter(f => !f.callId).map(f => f.chatId).filter(Boolean))];
@@ -130,6 +138,7 @@ export async function GET(req: NextRequest) {
       flagId: f.id,
       chatId: f.chatId,
       callId: isCall ? (cRow?.call_id || f.callId) : undefined,
+      messageId: f.messageId || undefined,
       iqsScore,
       botIqsScore,
       callIqsScore,
