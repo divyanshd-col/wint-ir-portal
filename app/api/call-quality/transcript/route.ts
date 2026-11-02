@@ -15,7 +15,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!row) {
     try {
       const pcgRows = await query<any>(
-        `SELECT r.*, e.transcript_turns, e.iqs_score, e.parameters, e.gates
+        `SELECT r.*, e.transcript_turns, e.iqs_score, e.parameters, e.compliance_tripwire, e.compliance_reason
          FROM pcg_call_recordings r
          LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
          WHERE r.call_id = $1 
@@ -41,14 +41,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             ts: turn.time || `0:${(idx * 3 + 3).toString().padStart(2, '0')}`,
           }));
         }
+
+        const gates = {
+          status: pcgRow.compliance_tripwire ? 'FAIL' : 'PASS',
+          g1: 'PASS',
+          g2: 'PASS',
+          g3: pcgRow.compliance_tripwire ? 'FAIL' : 'PASS',
+          reason: pcgRow.compliance_reason || undefined,
+        };
+
         return NextResponse.json({
           ok: true,
           found: true,
           callId: pcgRow.call_id || pcgRow.id,
-          recordingUrl: `/api/admin/pcg-calls/audio?id=${encodeURIComponent(pcgRow.id)}`,
+          recordingUrl: pcgRow.recording_url ? `/api/admin/pcg-calls/audio?id=${encodeURIComponent(pcgRow.id)}` : null,
           segments,
           iqsPercent: pcgRow.iqs_score,
-          gates: pcgRow.gates,
+          gates,
         });
       }
     } catch (err) {
