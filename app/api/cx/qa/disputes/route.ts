@@ -8,6 +8,7 @@ import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
 import { computeIqsFromRawParams } from '@/lib/quality';
+import { extractDurationFromTranscript } from '@/lib/call-quality';
 
 const ROUTE = 'cx/qa/disputes';
 
@@ -28,6 +29,7 @@ export interface DisputeRow {
   closedAt:     string;
   csatScore:    number | null;
   mobileNumber: string | null;
+  durationSeconds?: number | null;
   disposition:  string;
   subDisposition: string | null;
   agentNote:    string;
@@ -174,14 +176,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         call_id: string; chat_id: string | null; agent_name: string | null;
         called_at: string; disposition: string; sub_disposition: string | null;
         iqs_percent: string | null; parameters: any; gates: any; reviewed_by: string | null;
-        duration_seconds: number | null;
+        duration_seconds: number | null; transcript: any;
       }>(
         `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, '') AS agent_name,
                 cr.called_at, cr.call_disposition AS disposition,
                 cr.call_sub_disposition AS sub_disposition,
                 ce.iqs_percent, ce.iqs_scores AS parameters,
                 ce.gates,
-                ce.reviewed_by, cr.duration_seconds,
+                ce.reviewed_by, cr.duration_seconds, cr.transcript,
                 COALESCE(ct_cr.phone, ct_c.phone) AS mobile_number
          FROM call_evaluations ce
          JOIN call_recordings cr ON cr.id = ce.call_id
@@ -422,6 +424,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       closedAt:         db?.closed_at ? new Date(db.closed_at).toISOString() : (callDb?.called_at ? new Date(callDb.called_at).toISOString() : flag.flaggedAt || ''),
       csatScore:        db?.csat_score ? parseInt(db.csat_score) : null,
       mobileNumber:     isCall ? (callDb?.mobile_number || db?.mobile_number || null) : (db?.mobile_number || null),
+      durationSeconds:  isCall
+        ? (callDb?.duration_seconds && callDb.duration_seconds > 0
+            ? Number(callDb.duration_seconds)
+            : extractDurationFromTranscript(callDb?.transcript))
+        : null,
       disposition:      effectiveDisposition,
       subDisposition:   effectiveSubDisposition,
       agentNote:        flag.agentNote,

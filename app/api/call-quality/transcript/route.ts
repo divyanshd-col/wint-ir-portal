@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { getCallRecording } from '@/lib/robylon/db';
 import { query } from '@/lib/cx/db';
+import { extractDurationFromTranscript } from '@/lib/call-quality';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
@@ -53,6 +54,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     : (isObj && Array.isArray(transcriptData.segments) ? transcriptData.segments : []);
   const reevalCount = isObj ? Number(transcriptData.reevalCount || (transcriptData.editedAt ? 1 : 0)) : 0;
 
+  let durationSeconds = row.duration_seconds && row.duration_seconds > 0 ? Number(row.duration_seconds) : null;
+  if (durationSeconds === null && segments.length > 0) {
+    durationSeconds = extractDurationFromTranscript(segments);
+    if (durationSeconds !== null && row.id) {
+      query(
+        `UPDATE call_recordings SET duration_seconds = $1 WHERE id = $2 AND (duration_seconds IS NULL OR duration_seconds <= 0)`,
+        [durationSeconds, row.id]
+      ).catch(() => {});
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     found: true,
@@ -62,7 +74,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     language: row.language,
     interruptionCount: row.interruption_count,
     deadAirCount: row.dead_air_count,
-    durationSeconds: row.duration_seconds,
+    durationSeconds,
     calledAt: row.called_at,
     recordingUrl: row.recording_url,
     segments,
