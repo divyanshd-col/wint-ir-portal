@@ -650,6 +650,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             onDone={() => fetchEvaluatedCalls()}
                             onClose={() => setExpandedCallId(null)}
                             mobileNumber={call.mobileNumber}
+                            durationSeconds={call.durationSeconds}
                             colSpan={7}
                           />
                         )}

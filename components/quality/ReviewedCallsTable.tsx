@@ -79,6 +79,11 @@ const CallEvalRow = React.memo(function CallEvalRow({
         <td style={{ ...td, fontWeight: 500 }}>{call.agentName}</td>
         <td style={tdMono}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}</td>
         <td style={td}>{call.disposition}</td>
+        <td style={tdNum}>
+          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text)' }}>
+            {fmtDuration(call.durationSeconds)}
+          </span>
+        </td>
         <td style={td} onClick={e => e.stopPropagation()}>
           {call.chatId ? (
             <TicketLinkButton id={call.chatId} />
@@ -127,7 +132,8 @@ const CallEvalRow = React.memo(function CallEvalRow({
           onDone={() => onRemoveCall(call.callId)}
           onClose={onCloseExpand}
           mobileNumber={call.mobileNumber}
-          colSpan={8}
+          durationSeconds={call.durationSeconds}
+          colSpan={9}
         />
       )}
     </React.Fragment>
@@ -216,7 +222,14 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
   }, []);
 
   const [sort, toggleSort] = useSort();
-  const sortedCalls = sortRows(calls, sort, { agent: c => c.agentName, mobile: c => c.mobileNumber, disp: c => c.disposition, iqs: c => c.iqsScore, by: c => c.reviewedBy });
+  const sortedCalls = sortRows(calls, sort, {
+    agent: c => c.agentName,
+    mobile: c => c.mobileNumber,
+    disp: c => c.disposition,
+    duration: c => c.durationSeconds,
+    iqs: c => c.iqsScore,
+    by: c => c.reviewedBy,
+  });
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -365,6 +378,7 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
               <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
               <SortTh k="mobile" sort={sort} onSort={toggleSort} style={th}>Mobile</SortTh>
               <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
+              <SortTh k="duration" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Duration</SortTh>
               <th style={th}>Linked Chat</th>
               <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
               <SortTh k="by" sort={sort} onSort={toggleSort} style={th}>Reviewed By</SortTh>
@@ -373,9 +387,9 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ ...td, textAlign: 'center' }}>Loading…</td></tr>
+              <tr><td colSpan={9} style={{ ...td, textAlign: 'center' }}>Loading…</td></tr>
             ) : sortedCalls.length === 0 ? (
-              <tr><td colSpan={8} style={{ ...td, textAlign: 'center' }}>No reviewed calls</td></tr>
+              <tr><td colSpan={9} style={{ ...td, textAlign: 'center' }}>No reviewed calls</td></tr>
             ) : (
               sortedCalls.map(c => (
                 <CallEvalRow
