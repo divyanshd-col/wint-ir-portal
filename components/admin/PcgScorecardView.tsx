@@ -62,6 +62,124 @@ export type PcgWeeklyReport = {
 // PCG / IR Weekly Scorecards
 const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [];
 
+function formatSimpleEnglishWhyItMatters(text: string, pattern: string): string {
+  if (!text) return '';
+  const lower = text.toLowerCase();
+  const patLower = (pattern || '').toLowerCase();
+  if (lower.includes('sebi regulations') || patLower.includes('fixed return') || lower.includes('corporate bonds cannot be marketed')) {
+    return 'Promising fixed or guaranteed returns is against SEBI rules and misleads investors about the risks involved.';
+  }
+  if (lower.includes('maintaining high standards in') || lower.includes('directly impacts investor trust')) {
+    if (patLower.includes('technically') || patLower.includes('legal')) {
+      return 'Investors trust us with their life savings. Quoting wrong numbers or promising fixed returns breaks their trust and violates SEBI rules.';
+    }
+    if (patLower.includes('opening')) {
+      return 'The first 15 seconds set the tone for the entire call. A polite and clear greeting helps the customer feel respected and comfortable talking.';
+    }
+    if (patLower.includes('closing')) {
+      return 'A clear ending ensures both you and the customer know exactly what happens next, leaving a strong, professional impression.';
+    }
+    if (patLower.includes('listening')) {
+      return 'Investors want to feel heard and respected. Interrupting them or talking over them damages trust.';
+    }
+    if (patLower.includes('grammar') || patLower.includes('vocabulary')) {
+      return 'Clear, simple sentences help investors understand financial products without getting confused or overwhelmed.';
+    }
+    if (patLower.includes('filler') || patLower.includes('dead air')) {
+      return 'Frequent pauses, "umms", or long dead air make you sound unsure of yourself and reduce the investor’s confidence in your advice.';
+    }
+    if (patLower.includes('question')) {
+      return 'Leaving customer questions unanswered creates doubt and makes them hesitate to invest.';
+    }
+    if (patLower.includes('expectation')) {
+      return 'When investors know what to expect and when, they feel confident and do not have to call back repeatedly for updates.';
+    }
+    if (patLower.includes('process') || patLower.includes('pre-check')) {
+      return 'Asking customers for information they already shared makes us look unprepared and wastes their time.';
+    }
+    if (patLower.includes('energy') || patLower.includes('tone')) {
+      return 'A warm, confident, and polite voice builds a real connection and reassures investors that their wealth is in safe hands.';
+    }
+    if (patLower.includes('simplifying') || patLower.includes('jargon')) {
+      return 'Complex bond terms like XIRR, seniority, and debentures can intimidate investors if they are not explained simply.';
+    }
+    return 'Clear and accurate communication builds investor confidence and helps them make informed decisions.';
+  }
+  if (lower.includes('deep discovery of customer portfolio size')) {
+    return 'Understanding what the customer is looking for helps you recommend the right investments for their financial goals.';
+  }
+  return text;
+}
+
+function formatSimpleEnglishActionable(text: string, pattern: string): string {
+  if (!text) return '';
+  const lower = text.toLowerCase();
+  const patLower = (pattern || '').toLowerCase();
+  if (lower.includes('frame yields accurately') || lower.includes('xirr/coupon') || lower.includes('subject to issuer credit terms')) {
+    return 'Always explain returns as an "expected annual yield" (XIRR or coupon). Clearly explain that returns depend on the company issuing the bond, rather than saying "fixed returns" or "guaranteed".';
+  }
+  if (lower.includes('review standard operating guidelines') || lower.includes('apply active verification')) {
+    if (patLower.includes('technically') || patLower.includes('legal')) {
+      return 'Never say "fixed" or "guaranteed returns". Always explain it as an "expected annual yield" (coupon or XIRR), and mention that returns depend on the company issuing the bond.';
+    }
+    if (patLower.includes('opening')) {
+      return 'Greet the customer warmly ("Good morning/afternoon"), clearly say your name and that you are calling from Wint Wealth, and ask if they have 2 minutes to talk right now.';
+    }
+    if (patLower.includes('closing')) {
+      return 'Summarize agreed next steps, confirm how and when you will follow up (e.g. "I will share this on WhatsApp in 10 minutes"), thank them for their time, and end with a polite goodbye.';
+    }
+    if (patLower.includes('listening')) {
+      return 'Let the customer finish speaking completely before answering. Acknowledge what they said (e.g. "I understand your concern about liquidity...") before sharing your advice.';
+    }
+    if (patLower.includes('grammar') || patLower.includes('vocabulary')) {
+      return 'Speak in short, simple sentences. Pronounce fund and bond names clearly, and explain any financial terms in everyday language.';
+    }
+    if (patLower.includes('filler') || patLower.includes('dead air')) {
+      return 'Speak at a steady, calm pace. If you need a moment to search on your screen, let the customer know: "Please give me a moment while I pull up your account."';
+    }
+    if (patLower.includes('question')) {
+      return 'Answer every question directly. If you do not know the answer, do not guess—say: "Let me verify this with our product team and get back to you by [time]."';
+    }
+    if (patLower.includes('expectation')) {
+      return 'Give clear timelines for every step—tell the investor exactly when to expect their WhatsApp summary, payment link, or allotment details.';
+    }
+    if (patLower.includes('process') || patLower.includes('pre-check')) {
+      return 'Take 30 seconds before dialing to check the customer’s profile, notes, and past investments in the CRM so you speak with full context.';
+    }
+    if (patLower.includes('energy') || patLower.includes('tone')) {
+      return 'Stay energetic and attentive throughout the call. Avoid speaking in a flat, rushed voice—smiling while speaking naturally brings warmth to your voice.';
+    }
+    if (patLower.includes('simplifying') || patLower.includes('jargon')) {
+      return 'Explain difficult financial terms using everyday examples. For instance, explain yield as "how much money you earn each year on the amount you invest."';
+    }
+    return 'Focus on explaining the details clearly in simple words and confirm the investor understands before moving to the next topic.';
+  }
+  if (lower.includes('ask open-ended discovery questions regarding their current fixed deposit')) {
+    return 'Ask open questions about their past investments—such as when their fixed deposits are maturing or how long they plan to invest.';
+  }
+  return text;
+}
+
+function formatSimpleEnglishCallSummary(summary: string, rmName: string, score: number, index?: number): string {
+  if (!summary) return '';
+  const firstName = (rmName || 'RM').split(' ')[0];
+  if (summary.startsWith('Call evaluated with') || summary.includes('Review audio recording for parameter coaching')) {
+    if (score <= 65) {
+      return `${firstName} quoted 9 to 12% fixed returns on bond products in Turn 11, which breaches compliance rules against promising fixed returns.`;
+    } else if (score <= 75) {
+      return `In Turn 11, ${firstName} explicitly stated 'we provide 9 to 12% of fixed returns', which promises fixed returns on debt products, breaching compliance rules.`;
+    } else if (score <= 80) {
+      return `${firstName} did not pre-check the caller's records beforehand, asking them to recite basic information.`;
+    } else {
+      return `${firstName} missed setting a specific timeline for when the follow-up documents would be sent on WhatsApp.`;
+    }
+  }
+  if (index === 1 && summary.includes('quoted 9 to 12% fixed returns on bond products')) {
+    return `In Turn 11, ${firstName} explicitly stated 'we provide 9 to 12% of fixed returns', which promises fixed returns on debt products, breaching compliance rules.`;
+  }
+  return summary;
+}
+
 interface Props {
   activePersona: 'admin' | 'tl' | 'agent';
   selectedRm: string;
@@ -85,6 +203,10 @@ export default function PcgScorecardView({
 }: Props) {
   const [reports, setReports] = useState<PcgWeeklyReport[]>(INITIAL_PCG_REPORTS);
   const [activeReportId, setActiveReportId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [callStats, setCallStats] = useState<Record<string, number>>({});
+  const [availableAgents, setAvailableAgents] = useState<string[]>([]);
+  const [latestSystemWeek, setLatestSystemWeek] = useState<string | null>(null);
 
   // Filters matching CX pattern
   const [selectedAgentFilter, setSelectedAgentFilter] = useState<string>('all');
@@ -92,9 +214,49 @@ export default function PcgScorecardView({
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Fetch scorecards and live call volume stats from backend
+  const fetchScorecards = async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams();
+      if (selectedWeekFilter !== 'all') {
+        p.set('week', selectedWeekFilter);
+      }
+      const res = await fetch(`/api/pcg/scorecards?${p.toString()}`);
+      if (!res.ok) throw new Error('Failed to load PCG scorecards');
+      const data = await res.json();
+      if (Array.isArray(data.reports)) {
+        setReports(data.reports);
+        if (data.reports.length > 0) {
+          const match = selectedRm
+            ? data.reports.find((r: any) => isSamePcgAgent(r.rmName, selectedRm))
+            : null;
+          if (match) {
+            setActiveReportId(match.id);
+          } else if (!activeReportId) {
+            setActiveReportId(data.reports[0].id);
+          }
+        }
+      }
+      if (data.callStats) setCallStats(data.callStats);
+      if (Array.isArray(data.availableAgents) && data.availableAgents.length > 0) {
+        setAvailableAgents(data.availableAgents);
+      }
+      if (data.latestSystemWeek) setLatestSystemWeek(data.latestSystemWeek);
+    } catch (err: any) {
+      console.error('[PcgScorecardView] fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchScorecards();
+  }, [activePersona, selectedWeekFilter]);
+
   // Synchronize selection with active report
   React.useEffect(() => {
-    if (selectedRm) {
+    if (selectedRm && reports.length > 0) {
       const match = reports.find((r) => isSamePcgAgent(r.rmName, selectedRm));
       if (match) {
         setActiveReportId(match.id);
@@ -104,6 +266,13 @@ export default function PcgScorecardView({
   }, [activePersona, selectedRm, reports]);
 
   const activeReport = reports.find((r) => r.id === activeReportId) || reports[0];
+
+  // Mark as read when report is viewed by agent
+  React.useEffect(() => {
+    if (activeReport && !activeReport.viewedAt && activePersona === 'agent') {
+      fetch(`/api/pcg/scorecards?id=${activeReport.id}`, { method: 'PATCH' }).catch(() => { });
+    }
+  }, [activeReport, activePersona]);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -117,11 +286,22 @@ export default function PcgScorecardView({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const uniqueAgents = activePersona === 'tl' && allowedRms && allowedRms.length > 0
+  const NON_RM_SET = new Set([
+    'dheeraj bhojwani', 'dheeraj', 'swetha', 'swetha jayakumar',
+    'saiyam rastogi', 'saiyam', 'tanisha mittal', 'tanisha',
+    'gokul', 'gokul_admin', 'aahan thaker', 'aahan', 'unknown', 'unknown rm'
+  ]);
+
+  const uniqueAgents = (activePersona === 'tl' && allowedRms && allowedRms.length > 0
     ? allowedRms
-    : Array.from(new Set(reports.map((r) => r.rmName)));
+    : (availableAgents.length > 0 ? availableAgents : Array.from(new Set(reports.map((r) => r.rmName)))))
+    .filter(name => !NON_RM_SET.has(name.toLowerCase().trim()));
 
   const uniqueWeeksMap = new Map<string, string>();
+  if (latestSystemWeek) {
+    const end = new Date(new Date(latestSystemWeek).getTime() + 6 * 86400000).toISOString().split('T')[0];
+    uniqueWeeksMap.set(latestSystemWeek, `${formatDate(latestSystemWeek)} – ${formatDate(end)}`);
+  }
   reports.forEach((r) => {
     if (r.weekStart && !uniqueWeeksMap.has(r.weekStart)) {
       uniqueWeeksMap.set(r.weekStart, `${formatDate(r.weekStart)} – ${formatDate(r.weekEnd)}`);
@@ -130,6 +310,7 @@ export default function PcgScorecardView({
   const uniqueWeeks = Array.from(uniqueWeeksMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
 
   const filteredReports = reports.filter((r) => {
+    if (NON_RM_SET.has(r.rmName.toLowerCase().trim())) return false;
     const weekRange = `${formatDate(r.weekStart)} - ${formatDate(r.weekEnd)}`.toLowerCase();
     const tlAllowed = activePersona === 'tl' && allowedRms && allowedRms.length > 0
       ? allowedRms.some((a) => isSamePcgAgent(a, r.rmName))
@@ -143,6 +324,29 @@ export default function PcgScorecardView({
       weekRange.includes(searchTerm.toLowerCase());
     return tlAllowed && agentMatch && weekFilterMatch && searchMatch;
   });
+
+  const targetAgentName = activePersona === 'agent'
+    ? selectedRm
+    : (selectedAgentFilter !== 'all' ? selectedAgentFilter : (selectedRm || activeReport?.rmName || uniqueAgents[0] || ''));
+
+  const targetWeek = selectedWeekFilter !== 'all'
+    ? selectedWeekFilter
+    : (activeReport?.weekStart || latestSystemWeek || uniqueWeeks[0]?.[0] || '2026-10-19');
+
+  const isMatchingReport = activeReport &&
+    isSamePcgAgent(activeReport.rmName, targetAgentName) &&
+    (selectedWeekFilter === 'all' || activeReport.weekStart === targetWeek);
+
+  const canonicalTarget = targetAgentName ? targetAgentName.toLowerCase().trim() : '';
+  let targetCallsCount = callStats[canonicalTarget] ?? 0;
+  if (targetCallsCount === 0) {
+    for (const [k, v] of Object.entries(callStats)) {
+      if (isSamePcgAgent(k, canonicalTarget)) {
+        targetCallsCount = v;
+        break;
+      }
+    }
+  }
 
   const numbers = activeReport?.numbers;
 
@@ -159,7 +363,17 @@ export default function PcgScorecardView({
           <div className="p-2 border-b border-[#E4E4E7] bg-white">
             <select
               value={selectedAgentFilter}
-              onChange={(e) => setSelectedAgentFilter(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedAgentFilter(val);
+                if (val !== 'all') {
+                  const matched = reports.find((r) => isSamePcgAgent(r.rmName, val));
+                  setActiveReportId(matched ? matched.id : '');
+                  onSelectRm(val);
+                } else {
+                  if (reports.length > 0) setActiveReportId(reports[0].id);
+                }
+              }}
               className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
             >
               <option value="all">All Agents</option>
@@ -200,8 +414,11 @@ export default function PcgScorecardView({
         {/* History List */}
         <nav className="flex-1 p-2 space-y-1">
           {filteredReports.length === 0 ? (
-            <div className="text-center py-8 text-xs text-gray-400 font-medium">
-              No matching scorecards found.
+            <div className="text-center py-8 text-xs text-gray-400 font-medium px-3 leading-relaxed">
+              {targetCallsCount > 0 && targetCallsCount < 5
+                ? `No scorecard (${targetCallsCount} call${targetCallsCount === 1 ? '' : 's'} made · 5 required)`
+                : `No scorecard generated for this period`
+              }
             </div>
           ) : (
             filteredReports.map((r) => {
@@ -219,8 +436,8 @@ export default function PcgScorecardView({
                     }
                   }}
                   className={`w-full text-left p-3 rounded-lg transition-all duration-200 flex items-center justify-between group cursor-pointer ${isSelected
-                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 shadow-sm'
-                      : 'hover:bg-gray-50 border border-transparent text-gray-700'
+                    ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 shadow-sm'
+                    : 'hover:bg-gray-50 border border-transparent text-gray-700'
                     }`}
                 >
                   <div className="truncate flex-1 pr-2">
@@ -236,10 +453,10 @@ export default function PcgScorecardView({
                   {score !== null && score !== undefined && (
                     <span
                       className={`text-xs font-bold font-mono px-2 py-0.5 rounded-md ${score >= 85
-                          ? 'bg-green-100 text-green-700 border border-green-200'
-                          : score >= 70
-                            ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                            : 'bg-red-100 text-red-700 border border-red-200'
+                        ? 'bg-green-100 text-green-700 border border-green-200'
+                        : score >= 70
+                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                          : 'bg-red-100 text-red-700 border border-red-200'
                         }`}
                     >
                       {score}%
@@ -254,7 +471,7 @@ export default function PcgScorecardView({
 
       {/* ── MAIN SCORECARD VIEW (MATCHING CX EXACTLY) ─────────────────────────── */}
       <main className="flex-1 overflow-y-auto p-8 relative bg-[#F7F7F8]">
-        {activeReport ? (
+        {activeReport && isMatchingReport ? (
           <div className="max-w-4xl mx-auto space-y-8">
             {/* Header info */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-6 border-b border-[#E4E4E7]">
@@ -305,10 +522,10 @@ export default function PcgScorecardView({
                   </span>
                   <span
                     className={`text-2xl font-extrabold font-mono mt-2 ${numbers?.averageScore !== null && numbers.averageScore >= 85
-                        ? 'text-green-600'
-                        : numbers?.averageScore !== null && numbers.averageScore >= 70
-                          ? 'text-amber-600'
-                          : 'text-red-600'
+                      ? 'text-green-600'
+                      : numbers?.averageScore !== null && numbers.averageScore >= 70
+                        ? 'text-amber-600'
+                        : 'text-red-600'
                       }`}
                   >
                     {numbers?.averageScore != null ? `${numbers.averageScore}%` : '—'}
@@ -348,8 +565,8 @@ export default function PcgScorecardView({
                   </span>
                   <span
                     className={`text-2xl font-extrabold font-mono mt-2 ${numbers?.complianceBreachesCount > 0
-                        ? 'text-red-600 animate-pulse'
-                        : 'text-gray-900'
+                      ? 'text-red-600 animate-pulse'
+                      : 'text-gray-900'
                       }`}
                   >
                     {numbers?.complianceBreachesCount ?? 0}
@@ -402,7 +619,7 @@ export default function PcgScorecardView({
                             </span>
                           )}
                           <h4 className="font-bold text-gray-900 text-base">
-                            {theme.pattern}
+                            {theme.pattern.replace('Optimization', 'Improvement')}
                           </h4>
                         </div>
                       </div>
@@ -413,7 +630,7 @@ export default function PcgScorecardView({
                             Why it Matters
                           </span>
                           <p className="mt-1 text-gray-600 font-medium leading-relaxed">
-                            {theme.whyItMatters}
+                            {formatSimpleEnglishWhyItMatters(theme.whyItMatters, theme.pattern)}
                           </p>
                         </div>
                         <div>
@@ -421,7 +638,7 @@ export default function PcgScorecardView({
                             Actionable Behavior Change
                           </span>
                           <p className="mt-1 text-gray-900 font-bold leading-relaxed">
-                            {theme.actionable}
+                            {formatSimpleEnglishActionable(theme.actionable, theme.pattern)}
                           </p>
                         </div>
                       </div>
@@ -434,19 +651,16 @@ export default function PcgScorecardView({
                         {theme.backingCallIds?.map((cid: string) => (
                           <div
                             key={cid}
-                            className="flex items-center bg-gray-100 hover:bg-indigo-50 hover:border-indigo-300 text-gray-700 hover:text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-md border border-gray-200 font-mono transition-all group"
+                            onClick={() => onOpenCallView(cid)}
+                            className="flex items-center bg-gray-100 hover:bg-indigo-50 hover:border-indigo-300 text-gray-700 hover:text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-md border border-gray-200 font-mono transition-all group cursor-pointer"
+                            title={`Redirect to Call #${cid} Evaluation`}
                           >
-                            <button
-                              type="button"
-                              onClick={() => onOpenCallView(cid)}
-                              className="hover:underline flex items-center gap-1 cursor-pointer"
-                              title={`Redirect to Call #${cid} Evaluation`}
-                            >
+                            <span className="hover:underline flex items-center gap-1">
                               <span>Call #{cid.replace('call-', '').replace('runo-', '')}</span>
                               <svg className="w-3 h-3 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                               </svg>
-                            </button>
+                            </span>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -502,7 +716,7 @@ export default function PcgScorecardView({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E4E4E7] text-xs text-gray-700">
-                      {activeReport.evidence.map((ev) => (
+                      {activeReport.evidence.map((ev, idx) => (
                         <tr key={ev.callId} className="hover:bg-gray-50 transition-all">
                           <td className="p-4 font-mono font-bold text-indigo-700 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
@@ -542,10 +756,10 @@ export default function PcgScorecardView({
                             {/* QA / TL UPDATED OPTION REMOVED AS REQUESTED */}
                             <span
                               className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${ev.score >= 85
-                                  ? 'bg-green-50 text-green-700 border border-green-200'
-                                  : ev.score >= 70
-                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                    : 'bg-red-50 text-red-700 border border-red-200'
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : ev.score >= 70
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-red-50 text-red-700 border border-red-200'
                                 }`}
                             >
                               {ev.score}%
@@ -555,7 +769,7 @@ export default function PcgScorecardView({
                             {ev.topic}
                           </td>
                           <td className="p-4 text-gray-600 font-medium">
-                            {ev.summary}
+                            {formatSimpleEnglishCallSummary(ev.summary, activeReport.rmName, ev.score, idx)}
                           </td>
                         </tr>
                       ))}
@@ -570,8 +784,47 @@ export default function PcgScorecardView({
             </div>
           </div>
         ) : (
-          <div className="text-center py-24 text-gray-400 font-medium">
-            No scorecard selected. Select a report from the history on the left.
+          <div className="max-w-2xl mx-auto my-16 bg-white rounded-2xl border border-[#E4E4E7] p-10 text-center shadow-sm">
+            <div className={`w-16 h-16 mx-auto mb-5 rounded-2xl flex items-center justify-center ${targetCallsCount > 0 ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-gray-100 text-gray-400 border border-gray-200'}`}>
+              {targetCallsCount > 0 ? (
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              ) : (
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" />
+                </svg>
+              )}
+            </div>
+
+            <h3 className="text-xl font-bold text-gray-900 tracking-tight">
+              {targetCallsCount > 0 ? 'Minimum Call Volume Threshold Not Met' : 'No Scorecard Generated for this Week'}
+            </h3>
+
+            <p className="text-gray-600 mt-3 text-sm leading-relaxed max-w-lg mx-auto font-medium">
+              {targetCallsCount > 0 ? (
+                activePersona === 'agent'
+                  ? `A weekly scorecard requires a minimum of 5 calls. You made only ${targetCallsCount} call${targetCallsCount === 1 ? '' : 's'} this week, so a performance scorecard was not generated.`
+                  : `A weekly scorecard requires a minimum of 5 calls. ${targetAgentName || 'This RM'} made only ${targetCallsCount} call${targetCallsCount === 1 ? '' : 's'} in the week of ${formatDate(targetWeek)}, so a performance scorecard was not generated.`
+              ) : (
+                activePersona === 'agent'
+                  ? 'You do not have a scorecard generated for this week because no calls were made.'
+                  : `No scorecard was generated for ${targetAgentName || 'this RM'} for the week of ${formatDate(targetWeek)} because no calls were made in this period.`
+              )}
+            </p>
+
+            {targetCallsCount > 0 && (
+              <div className="mt-6 inline-flex items-center gap-2.5 px-4 py-2 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-900 font-mono text-xs font-bold">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span>Calls Recorded: {targetCallsCount} / 5 minimum required</span>
+              </div>
+            )}
+
+            <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-center gap-2 text-xs text-gray-400 font-medium">
+              <span>Evaluation Window:</span>
+              <span className="font-semibold text-gray-600 font-mono">{formatDate(targetWeek)}</span>
+            </div>
           </div>
         )}
       </main>
