@@ -245,11 +245,9 @@ export default function PcgCallsClient() {
     }
   }, [userRole, loggedInUserName]);
 
-  // When activePersona is admin, remove Call Quality view; for agent and tl, remove admin-only views
+  // For agent and tl, team_analytics and rm_performance are admin-only
   useEffect(() => {
-    if (activePersona === 'admin' && (activeTab === 'calls' || activeTab === 'disputes')) {
-      handleTabChange('team_analytics');
-    } else if ((activePersona === 'agent' || activePersona === 'tl') && (activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
+    if ((activePersona === 'agent' || activePersona === 'tl') && (activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
       handleTabChange('calls');
     }
   }, [activePersona, activeTab]);
@@ -260,13 +258,15 @@ export default function PcgCallsClient() {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
       if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance') {
-        if (activePersona === 'admin' && (tabParam === 'calls' || tabParam === 'disputes')) {
-          setActiveTab('team_analytics');
-        } else if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
+        if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
           setActiveTab('calls');
         } else {
           setActiveTab(tabParam as PcgTab);
         }
+      }
+      const callIdParam = urlParams.get('callId');
+      if (callIdParam) {
+        handleOpenCallById(callIdParam);
       }
     }
   }, [activePersona]);
@@ -397,7 +397,13 @@ export default function PcgCallsClient() {
       const res = await fetch(`/api/admin/pcg-calls?${p.toString()}`);
       if (!res.ok) throw new Error('Failed to load PCG calls');
       const data = await res.json();
-      setCalls(data.calls || []);
+      setCalls((prev) => {
+        const loaded = data.calls || [];
+        if (activeCallAudit && !loaded.some((c: PCGCall) => c.id === activeCallAudit.id || c.callId === activeCallAudit.callId)) {
+          return [activeCallAudit, ...loaded];
+        }
+        return loaded;
+      });
       setDisputes(data.disputes || []);
       setRmScorecards(data.rmScorecards || []);
       const leads = data.teamLeads || [];
@@ -437,6 +443,63 @@ export default function PcgCallsClient() {
     setOverrideNoteInput('');
     setOverrideFeedback(null);
     setIsPlaying(false);
+  };
+
+  // Close Call Evaluation Drawer
+  const handleCloseCallAudit = () => {
+    setActiveCallAudit(null);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('callId');
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  // Open Call View by ID (used by RM Scorecard evidence links)
+  const handleOpenCallById = async (cid: string) => {
+    const cleanId = cid.replace('#', '').trim();
+    handleTabChange('calls');
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', 'calls');
+      url.searchParams.set('callId', cleanId);
+      window.history.pushState({}, '', url.toString());
+    }
+
+    const found = calls.find(
+      (c) =>
+        c.id === cleanId ||
+        c.callId === cleanId ||
+        c.id.replace(/^call-/, '').replace(/^runo-/, '') === cleanId.replace(/^call-/, '').replace(/^runo-/, '') ||
+        c.callId?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId.replace(/^call-/, '').replace(/^runo-/, '') ||
+        c.id.includes(cleanId) ||
+        c.callId?.includes(cleanId)
+    );
+
+    if (found) {
+      setExpandedCallId(found.id);
+      handleOpenCallView(found);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/pcg-calls?call_id=${encodeURIComponent(cleanId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.call) {
+          setCalls((prev) => [
+            data.call,
+            ...prev.filter((c) => c.id !== data.call.id && c.callId !== data.call.callId),
+          ]);
+          setExpandedCallId(data.call.id);
+          handleOpenCallView(data.call);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('[PcgCallsClient] Failed to fetch call by ID:', err);
+    }
   };
 
   // Open coaching chat view for a given topic or RM
@@ -666,57 +729,6 @@ export default function PcgCallsClient() {
     fetchData();
   };
 
-  // Open Call View by ID (used by RM Scorecard evidence links)
-  const handleOpenCallById = (cid: string) => {
-    const cleanId = cid.replace('#', '').trim();
-    const found = calls.find(
-      (c) => c.id === cleanId || c.callId === cleanId || c.id.includes(cleanId) || c.callId.includes(cleanId)
-    );
-    const targetCall: PCGCall = found || {
-      id: cleanId,
-      callId: cleanId,
-      clientName: 'Rajesh Sharma',
-      rmName: selectedRm || 'Aditya R',
-      tlName: (!selectedTl || selectedTl === 'all') ? (teamLeads[0]?.tlName || 'Swetha') : selectedTl,
-      phoneNumber: '+91 98765 43210',
-      callType: 'Outbound',
-      tag: '13% Pitch',
-      durationSeconds: 245,
-      startTime: '2026-10-18 14:30',
-      isAnswered: true,
-      hasRecording: true,
-      category: '13% Club / Pitching',
-      categoryKey: '13_pitching',
-      iqsScore: 78,
-      gates: { status: 'PASS' },
-      needsAttention: true,
-      unansweredBy: null,
-      unansweredReason: null,
-      disputeStatus: 'none',
-      aiCoachingTip: 'Ensure date fields and allotment timelines are verified against CRM before quoting to investor.',
-      transcriptTurns: [
-        { speaker: 'RM', time: '00:05', text: `Good afternoon, this is ${selectedRm || 'Aditya'} from Wint Wealth PCG team. Am I speaking with Mr. Sharma?` },
-        { speaker: 'Customer', time: '00:10', text: 'Yes, speaking. What is this regarding?' },
-        { speaker: 'RM', time: '00:15', text: 'I am calling regarding your recent coupon payout on 13% Club debentures.' },
-        { speaker: 'Customer', time: '00:22', text: 'Yes, when will the interest credit reflect in my bank account?' },
-        { speaker: 'RM', time: '00:28', text: 'It will reflect by Friday, and you can also download your tax deduction certificate on the portal.' },
-        { speaker: 'Customer', time: '00:35', text: 'Okay, please email me the consolidated statement.' },
-        { speaker: 'RM', time: '00:40', text: 'Sure, I will email that right away. Thank you!' },
-      ],
-      parameters: [
-        { id: 'P1', name: 'Greeting & Consent', maxScore: 10, earnedScore: 10, status: 'Yes', quote: 'Professional greeting confirmed.' },
-        { id: 'P2', name: 'Information Accuracy', maxScore: 25, earnedScore: 18, status: 'Half', quote: 'Inaccurate date disclosure on allotment cycle.' },
-        { id: 'P3', name: 'Issue Resolution', maxScore: 25, earnedScore: 18, status: 'Half', quote: 'Missed secondary customer request on tax certificate.' },
-        { id: 'P4', name: 'Professionalism & Tone', maxScore: 20, earnedScore: 20, status: 'Yes', quote: 'Warm, readable tone maintained.' },
-        { id: 'P5', name: 'Compliance & Verification', maxScore: 10, earnedScore: 10, status: 'Yes', quote: 'Mandatory verification passed.' },
-        { id: 'P6', name: 'Call Closing & Follow-up', maxScore: 10, earnedScore: 7, status: 'Half', quote: 'Did not confirm preferred follow-up callback slot.' },
-      ],
-    };
-
-    handleTabChange('calls');
-    setExpandedCallId(targetCall.id);
-    handleOpenCallView(targetCall);
-  };
 
   // Helper formatting
   const formatDuration = (secs: number) => {
@@ -1358,27 +1370,25 @@ export default function PcgCallsClient() {
             <span className="flex-1">{activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}</span>
           </button>
 
-          {/* 3. Call Quality Navigation Link (Hidden for Admin) */}
-          {activePersona !== 'admin' && (
-            <button
-              type="button"
-              onClick={() => handleTabChange('calls')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'calls' || activeTab === 'disputes'
-                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+          {/* 3. Call Quality Navigation Link */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('calls')}
+            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'calls' || activeTab === 'disputes'
+              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+              }`}
+          >
+            <span
+              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'calls' || activeTab === 'disputes' ? 'text-[#18181b]' : 'text-[#71717a]'
                 }`}
             >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'calls' || activeTab === 'disputes' ? 'text-[#18181b]' : 'text-[#71717a]'
-                  }`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3-8.63 2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-                </svg>
-              </span>
-              <span className="flex-1">Call Quality</span>
-            </button>
-          )}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3-8.63 2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+              </svg>
+            </span>
+            <span className="flex-1">Call Quality</span>
+          </button>
 
           {/* 4. RM Scorecard Navigation Link */}
           <button
@@ -2496,8 +2506,8 @@ export default function PcgCallsClient() {
                 mode={activePersona === 'tl' ? 'submit' : 'view'}
                 allowRaiseDispute={activePersona === 'agent'}
                 allowReevaluate={activePersona === 'tl'}
-                onDone={() => setActiveCallAudit(null)}
-                onClose={() => setActiveCallAudit(null)}
+                onDone={handleCloseCallAudit}
+                onClose={handleCloseCallAudit}
                 onDisputeRaised={() => fetchData()}
                 onOverrideSubmit={async (overrideData) => {
                   handleOverrideFromPanel(activeCallAudit.callId || activeCallAudit.id.toString(), overrideData);
@@ -2522,7 +2532,7 @@ export default function PcgCallsClient() {
                     Call Evaluation Panel — ID: {formatCallId(activeCallAudit.callId, activeCallAudit.id)} ({activeCallAudit.rmName})
                   </h3>
                   <button
-                    onClick={() => setActiveCallAudit(null)}
+                    onClick={handleCloseCallAudit}
                     className="w-7 h-7 rounded border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 text-sm font-bold"
                   >
                     ✕
