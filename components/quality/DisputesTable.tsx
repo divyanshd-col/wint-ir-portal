@@ -439,6 +439,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                       onDone={() => removeDispute(rowKey)}
                       onClose={() => setExpandedId(null)}
                       mobileNumber={d.mobileNumber}
+                      durationSeconds={d.durationSeconds}
                       colSpan={8}
                     />
                   ) : (

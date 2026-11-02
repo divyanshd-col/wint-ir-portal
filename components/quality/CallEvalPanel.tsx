@@ -100,6 +100,7 @@ export interface CallEvalPanelProps {
   callId:            string;
   chatId?:           string | null;
   mobileNumber?:     string | null;
+  durationSeconds?:  number | null;
   agentName:         string;
   iqsScore:          number;
   calledAt?:         string | null;
@@ -389,10 +390,17 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateP
   return { status, reasoning };
 }
 
+function fmtDuration(secs: number | null | undefined): string {
+  if (secs == null) return '—';
+  const m = Math.floor(secs / 60), s = Math.floor(secs % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 export default function CallEvalPanel({
   callId,
   chatId,
   mobileNumber,
+  durationSeconds,
   agentName,
   iqsScore,
   calledAt,
@@ -421,6 +429,7 @@ export default function CallEvalPanel({
 
   const [segments, setSegments] = useState<any[]>(initialSegments || []);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(initialRecordingUrl || null);
+  const [durationSecs, setDurationSecs] = useState<number | null>(durationSeconds ?? null);
   const [loading, setLoading] = useState(!initialSegments || initialSegments.length === 0);
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
@@ -535,6 +544,9 @@ export default function CallEvalPanel({
     if (initialRecordingUrl) {
       setRecordingUrl(initialRecordingUrl);
     }
+    if (durationSeconds != null) {
+      setDurationSecs(durationSeconds);
+    }
     fetch(`/api/call-quality/transcript?callId=${encodeURIComponent(callId)}`)
       .then(r => r.json())
       .then(d => {
@@ -542,6 +554,7 @@ export default function CallEvalPanel({
           setSegments(d.segments);
         }
         if (d.recordingUrl) setRecordingUrl(d.recordingUrl);
+        if (d.durationSeconds != null) setDurationSecs(d.durationSeconds);
         if (d.chatId) setFetchedChatId(d.chatId);
         if (d.chatStatus) setFetchedChatStatus(d.chatStatus);
         if (d.mobileNumber) setFetchedMobileNumber(d.mobileNumber);
@@ -560,7 +573,7 @@ export default function CallEvalPanel({
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [callId, initialSegments, initialRecordingUrl]);
+  }, [callId, initialSegments, initialRecordingUrl, durationSeconds]);
 
   const challengedMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1123,6 +1136,32 @@ export default function CallEvalPanel({
             )}
           </div>
 
+          {recordingUrl && (
+            <div style={{
+              padding: '10px 14px',
+              background: 'var(--qa-gray-50)',
+              borderBottom: '1px solid var(--qa-border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
+                {durationSecs != null && (
+                  <span style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)', fontWeight: 500 }}>
+                    {fmtDuration(durationSecs)}
+                  </span>
+                )}
+              </div>
+              <audio
+                src={recordingUrl.startsWith('/') ? recordingUrl : `/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
+                controls
+                style={{ width: '100%', height: 32 }}
+              />
+            </div>
+          )}
+
           <div className="eval-scroll-t" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
             {allowReevaluate && !hasReevaluated && isTranscriptModified && (
               <div style={{
@@ -1159,26 +1198,6 @@ export default function CallEvalPanel({
                 >
                   {isSavingTranscript ? 'Saving transcript…' : isReevaluating ? 'Re-evaluating…' : 'Save & Re-evaluate Call'}
                 </button>
-              </div>
-            )}
-
-            {recordingUrl && (
-              <div style={{
-                padding: '10px 14px',
-                background: 'var(--qa-gray-50)',
-                border: '1px solid var(--qa-border)',
-                borderRadius: 8,
-                marginBottom: 12,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4
-              }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
-                <audio
-                  src={recordingUrl.startsWith('/') ? recordingUrl : `/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
-                  controls
-                  style={{ width: '100%', height: 32 }}
-                />
               </div>
             )}
 
@@ -1260,6 +1279,7 @@ export default function CallEvalPanel({
                 <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
                   <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{callId}</span>
                   {callDateStr && (<><span>·</span><span>{callDateStr}</span></>)}
+                  {durationSecs != null && (<><span>·</span><span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{fmtDuration(durationSecs)}</span></>)}
                   {disposition && (<><span>·</span><span>{disposition}</span></>)}
                   {effectiveMobile && (<><span>·</span><span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{effectiveMobile}</span></>)}
                 </div>

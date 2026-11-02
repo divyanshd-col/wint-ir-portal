@@ -115,6 +115,35 @@ export function calculateCallIQS(scores: Record<string, CallParamScore>): number
   return possible > 0 ? Math.round((total / possible) * 100) : null;
 }
 
+/**
+ * Extracts call duration in seconds from transcript segments.
+ * Inspects segments from end to start for numeric `end`, timestamp `ts` (e.g. "M:SS", "H:MM:SS"), or `start`.
+ */
+export function extractDurationFromTranscript(transcript: any): number | null {
+  if (!transcript) return null;
+  const parsed = typeof transcript === 'string'
+    ? (() => { try { return JSON.parse(transcript); } catch { return null; } })()
+    : transcript;
+  if (!parsed) return null;
+  const segments: any[] = Array.isArray(parsed) ? parsed : Array.isArray(parsed.segments) ? parsed.segments : [];
+  if (!segments.length) return null;
+
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const s = segments[i];
+    if (!s) continue;
+    if (typeof s.end === 'number' && s.end > 0) return Math.round(s.end);
+    if (s.ts && typeof s.ts === 'string') {
+      const parts = s.ts.trim().split(':').map(Number);
+      if (parts.every((n: number) => !isNaN(n))) {
+        if (parts.length === 2) return parts[0] * 60 + parts[1];
+        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      }
+    }
+    if (typeof s.start === 'number' && s.start > 0) return Math.round(s.start);
+  }
+  return null;
+}
+
 // ── Build readable text from segments (for LLM scoring input) ─────────────────
 export function segmentsToText(segments: CallSegment[]): string {
   const lines: string[] = [];

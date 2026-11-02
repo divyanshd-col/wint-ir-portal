@@ -492,25 +492,17 @@ export async function GET(req: NextRequest) {
       statsFrom = `
         FROM email_reply_evaluations e
         JOIN email_conversations c ON e.ticket_id = c.id
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
-          FROM robylon_webhook_payloads w,
-               jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
-          WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
-            AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
-          ORDER BY w.received_at DESC LIMIT 1
-        ) intent ON true
       `;
 
       if (singleDisposition === '__FORBIDDEN__') {
         statsClauses.push('1 = 0');
       } else if (singleDisposition) {
         statsParams.push(singleDisposition.toLowerCase());
-        statsClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = $${statsParams.length}`);
+        statsClauses.push(`LOWER(TRIM(COALESCE(c.intent_l1, ''))) = $${statsParams.length}`);
       } else if (effectiveDispositions) {
         const lowerDisps = effectiveDispositions.map(d => d.trim().toLowerCase());
         statsParams.push(lowerDisps);
-        statsClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${statsParams.length}::text[])`);
+        statsClauses.push(`LOWER(TRIM(COALESCE(c.intent_l1, ''))) = ANY($${statsParams.length}::text[])`);
       }
     }
 
@@ -559,11 +551,11 @@ export async function GET(req: NextRequest) {
           scopeClauses.push('1 = 0');
         } else if (singleDisposition) {
           scopeParams.push(singleDisposition.toLowerCase());
-          scopeClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = $${scopeParams.length}`);
+          scopeClauses.push(`LOWER(TRIM(COALESCE(c.intent_l1, ''))) = $${scopeParams.length}`);
         } else if (effectiveDispositions) {
           const lowerDisps = effectiveDispositions.map(d => d.trim().toLowerCase());
           scopeParams.push(lowerDisps);
-          scopeClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${scopeParams.length}::text[])`);
+          scopeClauses.push(`LOWER(TRIM(COALESCE(c.intent_l1, ''))) = ANY($${scopeParams.length}::text[])`);
         }
       }
       const totalPendingQuery = `SELECT COUNT(*)::int AS total_pending ${statsFrom} WHERE ${scopeClauses.join(' AND ')}`;
@@ -593,25 +585,17 @@ export async function GET(req: NextRequest) {
       tlBreakdownFrom = `
         FROM email_reply_evaluations e
         JOIN email_conversations c ON e.ticket_id = c.id
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
-          FROM robylon_webhook_payloads w,
-               jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
-          WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
-            AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
-          ORDER BY w.received_at DESC LIMIT 1
-        ) intent ON true
       `;
 
       if (singleDisposition === '__FORBIDDEN__') {
         tlBreakdownClauses.push('1 = 0');
       } else if (singleDisposition) {
         tlBreakdownParams.push(singleDisposition.toLowerCase());
-        tlBreakdownClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = $${tlBreakdownParams.length}`);
+        tlBreakdownClauses.push(`LOWER(TRIM(COALESCE(c.intent_l1, ''))) = $${tlBreakdownParams.length}`);
       } else if (effectiveDispositions) {
         const lowerDisps = effectiveDispositions.map(d => d.trim().toLowerCase());
         tlBreakdownParams.push(lowerDisps);
-        tlBreakdownClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${tlBreakdownParams.length}::text[])`);
+        tlBreakdownClauses.push(`LOWER(TRIM(COALESCE(c.intent_l1, ''))) = ANY($${tlBreakdownParams.length}::text[])`);
       }
     }
 
@@ -632,23 +616,29 @@ export async function GET(req: NextRequest) {
     `;
     const agentBreakdown = await query(tlBreakdownQuery, tlBreakdownParams);
 
-    const mappedItems = await Promise.all(
-      (items || []).map(async (item: any) => {
-        let reviewer = item.reviewed_by;
-        if (reviewer) {
-          reviewer = await getSubmitterName(reviewer);
-        }
-        let qaName = item.qa_name;
-        if (qaName) {
-          qaName = await getSubmitterName(qaName);
-        }
-        return {
-          ...item,
-          reviewed_by: reviewer,
-          qa_name: qaName || reviewer || 'Yashvi Chajjer',
-        };
-      })
+    // Pre-resolve unique submitter and reviewer names in batch to avoid redundant lookups
+    const uniqueReviewers = Array.from(
+      new Set(
+        (items || []).flatMap((i: any) => [i.reviewed_by, i.qa_name].filter(Boolean))
+      )
     );
+    await Promise.all(uniqueReviewers.map(r => getSubmitterName(r)));
+
+    const mappedItems = (items || []).map((item: any) => {
+      let reviewer = item.reviewed_by;
+      if (reviewer) {
+        reviewer = submitterCache.get(reviewer.trim().toLowerCase()) || reviewer;
+      }
+      let qaName = item.qa_name;
+      if (qaName) {
+        qaName = submitterCache.get(qaName.trim().toLowerCase()) || qaName;
+      }
+      return {
+        ...item,
+        reviewed_by: reviewer,
+        qa_name: qaName || reviewer || 'Yashvi Chajjer',
+      };
+    });
 
     return NextResponse.json({
       ok: true,
@@ -719,17 +709,9 @@ export async function POST(req: NextRequest) {
         const { scopedDispositions } = await getScopedDispositionsForUser(reviewerEmail, role, false);
         if (scopedDispositions !== null && scopedDispositions.length > 0) {
           const intentRows = await query<any>(`
-            SELECT intent.val AS intent_l1
+            SELECT c.intent_l1
             FROM email_reply_evaluations e
             JOIN email_conversations c ON e.ticket_id = c.id
-            LEFT JOIN LATERAL (
-              SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
-              FROM robylon_webhook_payloads w,
-                   jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
-              WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
-                AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
-              ORDER BY w.received_at DESC LIMIT 1
-            ) intent ON true
             WHERE e.message_id = $1
           `, [messageId]);
           const itemIntent = (intentRows[0]?.intent_l1 || '').trim().toLowerCase();
@@ -974,17 +956,9 @@ export async function POST(req: NextRequest) {
         const { scopedDispositions } = await getScopedDispositionsForUser(reviewerEmail, role, false);
         if (scopedDispositions !== null && scopedDispositions.length > 0) {
           const intentRows = await query<any>(`
-            SELECT intent.val AS intent_l1
+            SELECT c.intent_l1
             FROM email_reply_evaluations e
             JOIN email_conversations c ON e.ticket_id = c.id
-            LEFT JOIN LATERAL (
-              SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
-              FROM robylon_webhook_payloads w,
-                   jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
-              WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
-                AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
-              ORDER BY w.received_at DESC LIMIT 1
-            ) intent ON true
             WHERE e.message_id = $1
           `, [messageId]);
           const itemIntent = (intentRows[0]?.intent_l1 || '').trim().toLowerCase();
