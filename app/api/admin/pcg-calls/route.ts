@@ -392,6 +392,57 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const config = await readConfig().catch(() => null);
   const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
 
+  // If requesting a specific single call by call_id or id
+  const requestedCallId = searchParams.get('call_id')?.trim();
+  if (requestedCallId) {
+    const cleanId = requestedCallId.replace(/^#/, '').replace(/^call-/, '').replace(/^runo-/, '').trim();
+    const singleSql = `
+      SELECT
+        r.id,
+        r.call_id,
+        r.called_by,
+        r.agent_name,
+        r.phone_number,
+        r.call_type,
+        r.tag,
+        r.duration_seconds,
+        r.start_time,
+        r.recording_url,
+        r.call_category,
+        r.raw_payload,
+        e.rm_name AS eval_rm_name,
+        e.tl_name AS eval_tl_name,
+        e.call_category AS eval_call_category,
+        e.secondary_categories,
+        e.iqs_score,
+        e.parameters,
+        e.compliance_tripwire,
+        e.compliance_reason,
+        e.ai_coaching_tip,
+        e.transcript_turns,
+        e.dispute_status,
+        e.dispute_reason,
+        e.tl_override_note
+      FROM pcg_call_recordings r
+      LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
+      WHERE r.call_id = $1 
+         OR r.call_id = $2
+         OR r.call_id = $3
+         OR r.call_id LIKE $4
+         OR e.call_id = $1
+         OR e.call_id LIKE $4
+         OR r.id::text = $1
+      LIMIT 1
+    `;
+    const rows = await query<any>(singleSql, [cleanId, `call-${cleanId}`, `runo-${cleanId}`, `%${cleanId}%`]);
+    if (rows && rows.length > 0) {
+      const call = mapRowToCall(rows[0], customTeamMap);
+      return NextResponse.json({ success: true, call });
+    } else {
+      return NextResponse.json({ success: false, error: 'Call not found' }, { status: 404 });
+    }
+  }
+
   // Fetch PCG users to get real TLs and canonical RM casing
   const allUsers = await listUsers().catch(() => []);
   const pcgUsers = allUsers.filter(
