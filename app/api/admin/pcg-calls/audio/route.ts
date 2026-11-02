@@ -76,9 +76,11 @@ export async function GET(req: NextRequest) {
     const s3 = getS3Client();
     if (s3 && bucket && key) {
       try {
+        const rangeHeader = req.headers.get('range');
         const getCommand = new GetObjectCommand({
           Bucket: bucket,
           Key: key,
+          Range: rangeHeader || undefined,
         });
 
         const s3Response = await s3.send(getCommand);
@@ -91,9 +93,12 @@ export async function GET(req: NextRequest) {
           if (s3Response.ContentLength) {
             headers.set('Content-Length', s3Response.ContentLength.toString());
           }
+          if (s3Response.ContentRange) {
+            headers.set('Content-Range', s3Response.ContentRange);
+          }
 
           return new NextResponse(stream, {
-            status: 200,
+            status: s3Response.ContentRange ? 206 : 200,
             headers,
           });
         }
