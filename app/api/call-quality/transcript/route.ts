@@ -13,7 +13,59 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!callId) return NextResponse.json({ error: 'callId required' }, { status: 400 });
 
   const row = await getCallRecording(callId);
-  if (!row) return NextResponse.json({ ok: true, found: false });
+  if (!row) {
+    try {
+      const pcgRows = await query<any>(
+        `SELECT r.*, e.transcript_turns, e.iqs_score, e.parameters, e.compliance_tripwire, e.compliance_reason
+         FROM pcg_call_recordings r
+         LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
+         WHERE r.call_id = $1 
+            OR r.call_id = 'call-' || $1 
+            OR r.call_id = 'runo-' || $1 
+            OR r.call_id LIKE '%' || $1 || '%'
+            OR e.call_id = $1
+            OR r.id::text = $1
+         LIMIT 1`,
+        [callId]
+      );
+      if (pcgRows.length > 0) {
+        const pcgRow = pcgRows[0];
+        let rawTurns = pcgRow.transcript_turns || pcgRow.raw_payload?.transcript || [];
+        if (typeof rawTurns === 'string') {
+          try { rawTurns = JSON.parse(rawTurns); } catch { rawTurns = []; }
+        }
+        let segments: any[] = [];
+        if (Array.isArray(rawTurns)) {
+          segments = rawTurns.map((turn: any, idx: number) => ({
+            speaker: turn.speaker === 'RM' ? 'IR_EXECUTIVE' : 'INVESTOR',
+            text: turn.text,
+            ts: turn.time || `0:${(idx * 3 + 3).toString().padStart(2, '0')}`,
+          }));
+        }
+
+        const gates = {
+          status: pcgRow.compliance_tripwire ? 'FAIL' : 'PASS',
+          g1: 'PASS',
+          g2: 'PASS',
+          g3: pcgRow.compliance_tripwire ? 'FAIL' : 'PASS',
+          reason: pcgRow.compliance_reason || undefined,
+        };
+
+        return NextResponse.json({
+          ok: true,
+          found: true,
+          callId: pcgRow.call_id || pcgRow.id,
+          recordingUrl: pcgRow.recording_url ? `/api/admin/pcg-calls/audio?id=${encodeURIComponent(pcgRow.id)}` : null,
+          segments,
+          iqsPercent: pcgRow.iqs_score,
+          gates,
+        });
+      }
+    } catch (err) {
+      console.error('[transcript] PCG lookup failed:', err);
+    }
+    return NextResponse.json({ ok: true, found: false });
+  }
 
   let evalData: any = null;
   try {

@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import UsersManager, { type User } from './settings/UsersManager';
 import PcgUsersManager from './settings/PcgUsersManager';
+import SecuritySection from './settings/SecuritySection';
 
 interface SafeConfig {
   llmProvider?: string;
@@ -232,7 +234,7 @@ export default function SettingsClient({
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
-      const data = await fetch('/api/users').then(r => r.json());
+      const data = await fetch('/api/users?domain=cx').then(r => r.json());
       setUsers(Array.isArray(data) ? data : []);
       const agentData = await fetch('/api/cx/admin/agents').then(r => r.ok ? r.json() : []).catch(() => []);
       const assignMap: Record<string, { tl_name: string | null; qa_name: string | null }> = {};
@@ -580,8 +582,17 @@ export default function SettingsClient({
     <div className="min-h-screen bg-[#f5f3ee] flex font-sans antialiased">
       {/* Left nav */}
       <aside className="w-56 shrink-0 bg-[var(--sb-bg)] border-r border-[var(--sb-border)] flex flex-col sticky top-0 h-screen">
-        <div className="px-5 py-5 border-b border-[var(--sb-border)]">
+        <div className="px-5 py-5 border-b border-[var(--sb-border)] flex items-center justify-between">
           <h1 className="text-base font-bold text-gray-900">Settings</h1>
+          {(activeDomain === 'pcg' || platformDomain === 'pcg') && (
+            <Link
+              href="/admin/pcg-calls"
+              className="text-xs text-[#1f7a4d] hover:underline font-semibold"
+              title="Back to PCG Calls"
+            >
+              PCG Calls →
+            </Link>
+          )}
         </div>
         <nav className="flex-1 px-3 py-4 space-y-0.5">
           {SECTIONS.map(s => (
@@ -1201,56 +1212,7 @@ export default function SettingsClient({
 
         {/* ── SECURITY ── */}
         {activeSection === 'security' && (
-          <div className="space-y-8">
-            <h2 className="text-xl font-bold text-gray-900">Security</h2>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5 max-w-md">
-              <h3 className="text-sm font-bold text-gray-900">Change Password</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Current Password</label>
-                  <input
-                    type="password"
-                    value={currentPassword}
-                    onChange={e => setCurrentPassword(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
-                    placeholder="Enter current password"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">New Password</label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
-                    placeholder="At least 8 characters"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Confirm New Password</label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
-                    placeholder="Repeat new password"
-                  />
-                </div>
-              </div>
-              {passwordMsg && (
-                <p className={`text-sm font-medium ${passwordMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {passwordMsg.text}
-                </p>
-              )}
-              <button
-                onClick={changePassword}
-                disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
-                className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition"
-              >
-                {changingPassword ? 'Saving…' : 'Update Password'}
-              </button>
-            </div>
-          </div>
+          <SecuritySection onSuccess={() => showToast('Password updated successfully')} />
         )}
 
       </main>

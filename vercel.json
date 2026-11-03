@@ -3,6 +3,12 @@
     "app/api/cron/generate-scorecards/route.ts": {
       "maxDuration": 300
     },
+    "app/api/cron/generate-pcg-scorecards/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/process-pcg-evaluations/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/cron/generate-kb-suggestions/route.ts": {
       "maxDuration": 300
     },
@@ -23,7 +29,15 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/cron/process-pcg-evaluations",
+      "schedule": "0 2 * * *"
+    },
+    {
       "path": "/api/cron/generate-scorecards",
+      "schedule": "30 2 * * 1"
+    },
+    {
+      "path": "/api/cron/generate-pcg-scorecards",
       "schedule": "30 2 * * 1"
     },
     {

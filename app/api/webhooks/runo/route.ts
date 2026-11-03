@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { savePcgWebhookPayload } from '@/lib/pcg/db';
 import { query } from '@/lib/cx/db';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 /**
  * Runo PCG Call Webhook / Ingestion Route
@@ -300,6 +301,17 @@ export async function POST(req: NextRequest) {
 
       console.log(`[runo-webhook] Call event (${callType}) stored for PCG call ${callId}`);
     }
+
+    // Automatically trigger AI evaluation in the background without blocking Runo webhook response
+    after(async () => {
+      try {
+        const { runPcgCallPipeline } = await import('@/lib/scoring/pcg-pipeline');
+        await runPcgCallPipeline(callId);
+        console.log(`[runo-webhook] Auto-evaluation finished for call ${callId}`);
+      } catch (pipeErr: any) {
+        console.error(`[runo-webhook] Auto-evaluation failed for call ${callId}:`, pipeErr?.message || pipeErr);
+      }
+    });
 
     return NextResponse.json({
       success: true,
