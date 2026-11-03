@@ -1363,8 +1363,8 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
               </div>
             )}
 
-            {/* Sticky commit footer: score, gate status, optional KB flag, submit. Turns red on any gate breach. */}
-            <div className={`eval-foot${gateFail ? ' failed' : ''}`}>
+            {/* Sticky commit footer: score, gate status, optional KB flag, submit. */}
+            <div className="eval-foot">
               {submitErr && <div className="eval-foot-err" role="alert">{submitErr}</div>}
               <div className="eval-status">
                 <div className="eval-big">
@@ -1390,8 +1390,8 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                 </>
               )}
               {(mode === 'submit' || mode === 'resolve' || isModified || needsKbUpdate !== initialNeedsKbUpdate) && (
-                <button type="button" className={`eval-submit${gateFail ? ' danger' : ''}`} onClick={submit} disabled={submitting}>
-                  {submitting ? 'Saving…' : gateFail && mode === 'submit' ? 'Submit as failed' : primaryLabel}
+                <button type="button" className="eval-submit" onClick={submit} disabled={submitting}>
+                  {submitting ? 'Saving…' : gateFail && mode === 'submit' ? 'Submit Evaluation Override' : primaryLabel}
                 </button>
               )}
             </div>

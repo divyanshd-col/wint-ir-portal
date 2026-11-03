@@ -2192,39 +2192,6 @@ export default function PcgCallsClient() {
                       >
                         General / Support
                       </button>
-
-                      {/* Admin Dedicated View Pills */}
-                      {activePersona === 'admin' && (
-                        <>
-                          <button
-                            onClick={() => setSelectedCategory(selectedCategory === 'tl_analytics' ? 'all' : 'tl_analytics')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${selectedCategory === 'tl_analytics'
-                              ? 'bg-[#111111] text-white shadow-sm'
-                              : 'bg-zinc-100 text-zinc-800 border border-zinc-200 hover:bg-zinc-200'
-                              }`}
-                          >
-                            Overall TL Analytics
-                          </button>
-                          <button
-                            onClick={() => setSelectedCategory(selectedCategory === 'rm_performance' ? 'all' : 'rm_performance')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${selectedCategory === 'rm_performance'
-                              ? 'bg-[#111111] text-white shadow-sm'
-                              : 'bg-zinc-100 text-zinc-800 border border-zinc-200 hover:bg-zinc-200'
-                              }`}
-                          >
-                            Team-Wide RM Performance
-                          </button>
-                          <button
-                            onClick={() => setSelectedCategory(selectedCategory === 'ai_coaching_insights' ? 'all' : 'ai_coaching_insights')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${selectedCategory === 'ai_coaching_insights'
-                              ? 'bg-[#111111] text-white shadow-sm'
-                              : 'bg-zinc-100 text-zinc-800 border border-zinc-200 hover:bg-zinc-200'
-                              }`}
-                          >
-                            Team Coaching Insights
-                          </button>
-                        </>
-                      )}
                     </div>
                   </div>
 
