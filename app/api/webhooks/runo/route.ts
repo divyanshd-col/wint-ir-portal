@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { saveRobylonWebhookPayload } from '@/lib/robylon/db';
+import { savePcgWebhookPayload } from '@/lib/pcg/db';
 import { query } from '@/lib/cx/db';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
  * POST /api/webhooks/runo
  *
  * Dedicated endpoint for Runo PCG call events & S3 recording URL webhooks.
- * Stores raw payloads into `robylon_webhook_payloads` (source='runo')
+ * Stores raw payloads into `pcg_webhook_payloads` (source='runo', channel='call')
  * and populates the dedicated `pcg_call_recordings` table.
  */
 
@@ -180,10 +180,11 @@ export async function POST(req: NextRequest) {
   const headers = sanitizeHeaders(req);
   const callCategory = extractCallCategory(body);
 
-  // 1. Instantly store raw payload into robylon_webhook_payloads
+  // 1. Instantly store raw payload into pcg_webhook_payloads
   try {
-    await saveRobylonWebhookPayload({
+    await savePcgWebhookPayload({
       source: 'runo',
+      channel: 'call',
       eventType: callType.toUpperCase(),
       eventId: callId,
       chatId: callId,

@@ -4,11 +4,11 @@ import type { DoubleTickTranscriptItem } from '../lib/pcg/doubletick';
 async function fastBackfill() {
   console.log('=====================================================');
   console.log(' Starting Fast DoubleTick Backfill into pcg_conversations');
-  console.log(' (robylon_webhook_payloads remains completely untouched)');
+  console.log(' (pcg_webhook_payloads remains completely untouched)');
   console.log('=====================================================');
 
   const [initialRaw] = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM robylon_webhook_payloads WHERE source = 'doubletick'`
+    `SELECT COUNT(*) as count FROM pcg_webhook_payloads WHERE source = 'doubletick'`
   );
   console.log(`Total DoubleTick payloads to process: ${initialRaw.count}`);
 
@@ -16,7 +16,7 @@ async function fastBackfill() {
   console.log('Fetching all payloads from DB...');
   const rows = await query<{ id: number; payload: any; received_at: string }>(
     `SELECT id, payload, received_at 
-     FROM robylon_webhook_payloads 
+     FROM pcg_webhook_payloads 
      WHERE source = 'doubletick' 
      ORDER BY id ASC`
   );
@@ -263,7 +263,7 @@ async function fastBackfill() {
 
   // 4. Verify integrity
   const [finalRaw] = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM robylon_webhook_payloads WHERE source = 'doubletick'`
+    `SELECT COUNT(*) as count FROM pcg_webhook_payloads WHERE source = 'doubletick'`
   );
   const [finalConv] = await query<{ count: string; total_msgs: string }>(
     `SELECT COUNT(*) as count, COALESCE(SUM(total_messages), 0) as total_msgs FROM pcg_conversations`
@@ -272,7 +272,7 @@ async function fastBackfill() {
   console.log('\n=====================================================');
   console.log(' Fast Backfill Successfully Completed! ');
   console.log('=====================================================');
-  console.log(`robylon_webhook_payloads: ${finalRaw.count} (Verified untouched, nothing deleted)`);
+  console.log(`pcg_webhook_payloads: ${finalRaw.count} (Verified untouched, nothing deleted)`);
   console.log(`pcg_conversations total threads: ${finalConv.count}`);
   console.log(`pcg_conversations total message turns: ${finalConv.total_msgs}`);
 }
