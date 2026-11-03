@@ -2,12 +2,16 @@
  * POST /api/webhooks/email
  *
  * Dedicated Email Webhook Endpoint for Robylon Email Tickets.
- * Receives email payloads, saves raw payloads, and updates email_conversations table.
+ * Receives email payloads, saves raw payloads, updates email_conversations,
+ * and automatically triggers quality evaluation for outbound agent replies.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { saveRobylonWebhookPayload } from '@/lib/robylon/db';
 import { query } from '@/lib/cx/db';
+import { ingestEmailReply } from '@/lib/email/ingest';
+import { evaluateSingleReplySync } from '@/lib/email/gemini-batch-evaluator';
 
 // ── Auth ────────────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
@@ -50,19 +54,13 @@ export async function POST(req: NextRequest) {
     payload: body,
   });
 
+  let messageId: string | null = null;
+
   try {
     const createdAt = body?.created_at || body?.data?.created_at || new Date().toISOString();
     const customerEmail = body?.requester_info?.email || body?.data?.requester_info?.email || body?.user_email || '';
     const customerPhone = body?.requester_info?.phone_number || body?.data?.requester_info?.phone_number || '';
     const subjectLine = body?.data?.subject || body?.subject || '';
-    const agentName =
-      body?.data?.message?.sender ||
-      body?.data?.message?.sender_name ||
-      body?.human_agent_info?.name ||
-      body?.handled_by_name ||
-      body?.data?.handled_by_name ||
-      body?.agent_name ||
-      null;
 
     const props = Array.isArray(body?.data?.properties) ? body.data.properties : (Array.isArray(body?.properties) ? body.properties : []);
     const intentProp = props.find((p: any) => p?.name === 'Intents_L1');
@@ -81,16 +79,22 @@ export async function POST(req: NextRequest) {
         [ticketId, chatId, subjectLine, customerEmail, customerPhone, createdAt, JSON.stringify(body), intentL1]
       );
     } else if (eventType === 'REPLY_SENT') {
-      await query(
-        `UPDATE email_conversations SET
-           first_response_at = COALESCE(first_response_at, $1),
-           status = 'RESOLVED',
-           agent_name = COALESCE($2, agent_name),
-           intent_l1 = COALESCE($3, intent_l1),
-           updated_at = NOW()
-         WHERE id = $4`,
-        [createdAt, agentName, intentL1, ticketId]
-      );
+      // Ingest reply into email_conversations and email_reply_evaluations
+      const ingestRes = await ingestEmailReply(body);
+      messageId = ingestRes.messageId;
+
+      if (ingestRes.inserted && ingestRes.messageId) {
+        // Automatically evaluate in the background without holding the webhook HTTP response
+        try {
+          waitUntil(
+            evaluateSingleReplySync(ingestRes.messageId).catch(err => {
+              console.error(`[email-webhook] Error during auto-evaluation of reply ${ingestRes.messageId}:`, err);
+            })
+          );
+        } catch (wErr: any) {
+          console.warn(`[email-webhook] waitUntil not available, reply queued for batch:`, wErr.message);
+        }
+      }
     } else if (eventType === 'TICKET_CLOSED') {
       await query(
         `UPDATE email_conversations SET
@@ -111,7 +115,7 @@ export async function POST(req: NextRequest) {
       );
     }
   } catch (err: any) {
-    console.error(`[email-webhook] Error updating email_conversations for ticket ${ticketId}:`, err);
+    console.error(`[email-webhook] Error updating email tables for ticket ${ticketId}:`, err);
   }
 
   return NextResponse.json({
@@ -119,5 +123,6 @@ export async function POST(req: NextRequest) {
     channel: 'EMAIL',
     event_type: eventType,
     ticket_id: ticketId,
+    message_id: messageId,
   });
 }
