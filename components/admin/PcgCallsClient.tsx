@@ -13,6 +13,7 @@ import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
 import { ThemeToggle, AccountMenu } from '@/components/shell/TopBar';
 import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
+import SecuritySection from '@/components/settings/SecuritySection';
 
 // Type definitions
 interface CallParameter {
@@ -93,7 +94,7 @@ interface TeamLeadSummary {
   rms: string[];
 }
 
-export type PcgTab = 'calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes';
+export type PcgTab = 'calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security';
 
 export const getRunoCallUrl = (callId: string | null | undefined) => {
   if (!callId) return 'https://app-call.runo.in';
@@ -245,9 +246,11 @@ export default function PcgCallsClient() {
     }
   }, [userRole, loggedInUserName]);
 
-  // For agent and tl, team_analytics and rm_performance are admin-only
+  // For agent and tl, team_analytics and rm_performance are admin-only; security is TL & Admin only
   useEffect(() => {
     if ((activePersona === 'agent' || activePersona === 'tl') && (activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
+      handleTabChange('calls');
+    } else if (activePersona === 'agent' && activeTab === 'security') {
       handleTabChange('calls');
     }
   }, [activePersona, activeTab]);
@@ -257,8 +260,10 @@ export default function PcgCallsClient() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
-      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance') {
+      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security') {
         if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
+          setActiveTab('calls');
+        } else if (activePersona === 'agent' && tabParam === 'security') {
           setActiveTab('calls');
         } else {
           setActiveTab(tabParam as PcgTab);
@@ -1253,45 +1258,47 @@ export default function PcgCallsClient() {
         {/* Global Date Selector, Workspace Switcher, User Profile */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Global Date Selector */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-[#71717A] font-semibold">Date Range:</span>
-            <select
-              value={dateRange}
-              onChange={(e) => {
-                setDateRange(e.target.value as any);
-                setPage(1);
-              }}
-              className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-white text-[#111111] outline-none shadow-sm cursor-pointer"
-            >
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="custom">Custom Range</option>
-            </select>
+          {activeTab !== 'security' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-[#71717A] font-semibold">Date Range:</span>
+              <select
+                value={dateRange}
+                onChange={(e) => {
+                  setDateRange(e.target.value as any);
+                  setPage(1);
+                }}
+                className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-white text-[#111111] outline-none shadow-sm cursor-pointer"
+              >
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="custom">Custom Range</option>
+              </select>
 
-            {dateRange === 'custom' && (
-              <div className="flex items-center gap-1.5 bg-white border border-[#E4E4E7] px-2 py-1 rounded-lg shadow-sm">
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => {
-                    setCustomStartDate(e.target.value);
-                    setPage(1);
-                  }}
-                  className="text-xs tabular-nums font-medium bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
-                />
-                <span className="text-xs text-[#71717A] font-medium">to</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => {
-                    setCustomEndDate(e.target.value);
-                    setPage(1);
-                  }}
-                  className="text-xs tabular-nums font-medium bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
-                />
-              </div>
-            )}
-          </div>
+              {dateRange === 'custom' && (
+                <div className="flex items-center gap-1.5 bg-white border border-[#E4E4E7] px-2 py-1 rounded-lg shadow-sm">
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => {
+                      setCustomStartDate(e.target.value);
+                      setPage(1);
+                    }}
+                    className="text-xs tabular-nums font-medium bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
+                  />
+                  <span className="text-xs text-[#71717A] font-medium">to</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => {
+                      setCustomEndDate(e.target.value);
+                      setPage(1);
+                    }}
+                    className="text-xs tabular-nums font-medium bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Workspace Switcher for Super Admins */}
           {(isSuperAdmin || platformDomain === 'both') && (
@@ -1441,28 +1448,56 @@ export default function PcgCallsClient() {
             </button>
           )}
 
-          {/* 6. Settings Link (Admin Only) */}
-          {activePersona === 'admin' && (
+          {/* Bottom section: Security & Settings */}
+          {(activePersona === 'admin' || activePersona === 'tl') && (
             <div className="mt-4 pt-3 border-t border-[#e6e2d8]">
-              <Link
-                href="/settings?section=pcg-users"
-                className="w-[calc(100%-24px)] mx-3 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]"
+              {/* Security Navigation Link (For TL and Admin) */}
+              <button
+                type="button"
+                onClick={() => handleTabChange('security')}
+                className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'security'
+                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+                  }`}
               >
-                <span className="inline-flex items-center justify-center shrink-0 text-[#71717a]">
+                <span
+                  className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'security' ? 'text-[#18181b]' : 'text-[#71717a]'
+                    }`}
+                >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
                 </span>
-                <span className="flex-1">Settings</span>
-              </Link>
+                <span className="flex-1">Security</span>
+              </button>
+
+              {/* Settings Link (Admin Only) */}
+              {activePersona === 'admin' && (
+                <Link
+                  href="/settings?section=pcg-users"
+                  className="w-[calc(100%-24px)] mx-3 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]"
+                >
+                  <span className="inline-flex items-center justify-center shrink-0 text-[#71717a]">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </span>
+                  <span className="flex-1">Settings</span>
+                </Link>
+              )}
             </div>
           )}
         </aside>
 
         {/* Main Content Area */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto min-w-0 max-w-7xl">
-          {activeTab === 'scorecard' ? (
+          {activeTab === 'security' ? (
+            <div>
+              <SecuritySection />
+            </div>
+          ) : activeTab === 'scorecard' ? (
             <div>
               <PcgScorecardView
                 activePersona={activePersona}
