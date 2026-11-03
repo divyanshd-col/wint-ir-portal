@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { savePcgWebhookPayload } from '@/lib/pcg/db';
-import { ingestDoubleTickPayload } from '@/lib/pcg/doubletick';
+import { ingestDoubleTickPayload, closeInactivePcgConversations } from '@/lib/pcg/doubletick';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,6 +102,17 @@ export async function POST(req: NextRequest) {
     ingestedCount = res?.ingestedCount || 0;
   } catch (err: any) {
     console.error('[doubletick-webhook] Failed to ingest into pcg_conversations:', err?.message || err);
+  }
+
+  // 3. Background maintenance: sweep and close any conversations inactive >= 48 hours
+  try {
+    waitUntil(
+      closeInactivePcgConversations().catch((err: any) => {
+        console.warn('[doubletick-webhook] Background inactive conversation closure warning:', err?.message || err);
+      })
+    );
+  } catch {
+    closeInactivePcgConversations().catch(() => {});
   }
 
   return NextResponse.json({
