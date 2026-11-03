@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { saveRobylonWebhookPayload } from '@/lib/robylon/db';
-import { ingestDoubleTickPayload } from '@/lib/pcg/doubletick';
+import { waitUntil } from '@vercel/functions';
+import { savePcgWebhookPayload } from '@/lib/pcg/db';
+import { ingestDoubleTickPayload, closeInactivePcgConversations } from '@/lib/pcg/doubletick';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,8 +9,8 @@ export const dynamic = 'force-dynamic';
  * DoubleTick Webhook / Ingestion Route
  * POST /api/webhooks/doubletick
  *
- * 1. Dumps incoming DoubleTick chat JSON payloads directly into `robylon_webhook_payloads`
- *    with channel='doubletick' and source='doubletick'.
+ * 1. Dumps incoming DoubleTick chat JSON payloads directly into `pcg_webhook_payloads`
+ *    with source='doubletick' and channel='whatsapp'.
  * 2. Parses and threads messages into `pcg_conversations` in real-time.
  *
  * Auth Verification:
@@ -79,10 +80,11 @@ export async function POST(req: NextRequest) {
   const safeEventId = eventId ? String(eventId).trim() : null;
   const headers = sanitizeHeaders(req);
 
-  // 1. Instantly store raw payload into robylon_webhook_payloads (data safety)
+  // 1. Instantly store raw payload into pcg_webhook_payloads (data safety)
   try {
-    await saveRobylonWebhookPayload({
+    await savePcgWebhookPayload({
       source: 'doubletick',
+      channel: 'whatsapp',
       eventType: 'CHAT_EXPORT',
       eventId: safeEventId,
       chatId: safeChatId,
@@ -100,6 +102,17 @@ export async function POST(req: NextRequest) {
     ingestedCount = res?.ingestedCount || 0;
   } catch (err: any) {
     console.error('[doubletick-webhook] Failed to ingest into pcg_conversations:', err?.message || err);
+  }
+
+  // 3. Background maintenance: sweep and close any conversations inactive >= 48 hours
+  try {
+    waitUntil(
+      closeInactivePcgConversations().catch((err: any) => {
+        console.warn('[doubletick-webhook] Background inactive conversation closure warning:', err?.message || err);
+      })
+    );
+  } catch {
+    closeInactivePcgConversations().catch(() => {});
   }
 
   return NextResponse.json({
