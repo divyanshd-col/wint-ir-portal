@@ -232,7 +232,7 @@ export default function SettingsClient({
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
-      const data = await fetch('/api/users').then(r => r.json());
+      const data = await fetch('/api/users?domain=cx').then(r => r.json());
       setUsers(Array.isArray(data) ? data : []);
       const agentData = await fetch('/api/cx/admin/agents').then(r => r.ok ? r.json() : []).catch(() => []);
       const assignMap: Record<string, { tl_name: string | null; qa_name: string | null }> = {};
