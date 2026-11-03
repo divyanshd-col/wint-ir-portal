@@ -27,13 +27,13 @@ export async function GET(req: NextRequest) {
   const now = Date.now();
   try {
     const { searchParams } = new URL(req.url);
-    const domain = searchParams.get('domain');
+    const domain = searchParams.get('domain') || 'cx';
     const users = await listUsers();
-    const filtered = domain
-      ? users.filter(u => domain === 'cx'
+    const filtered = domain === 'all'
+      ? users
+      : users.filter(u => domain === 'cx'
           ? (u.platform_domain === 'cx' || u.platform_domain === 'both' || u.is_super_admin)
-          : (u.platform_domain === 'pcg' || u.platform_domain === 'both' || u.is_super_admin))
-      : users;
+          : (u.platform_domain === 'pcg' || u.platform_domain === 'both' || u.is_super_admin));
     return NextResponse.json(filtered.map(u => ({
       userId: u.user_id,
       email: u.email,
