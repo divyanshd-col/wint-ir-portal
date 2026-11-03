@@ -134,12 +134,12 @@ async function runTest() {
   console.log(rows);
 
   const rawRows = await query(`
-    SELECT id, source, event_type, chat_id, received_at
-    FROM robylon_webhook_payloads
+    SELECT id, source, channel, event_type, chat_id, received_at
+    FROM pcg_webhook_payloads
     WHERE source = 'runo'
     ORDER BY id DESC LIMIT 5
   `);
-  console.log('\nRaw payloads in robylon_webhook_payloads:', rawRows);
+  console.log('\nRaw payloads in pcg_webhook_payloads:', rawRows);
 
   if (rows.length >= 4 && rawRows.length >= 5) {
     console.log('\n🎉 TEST PASSED: All Runo sample call payloads ingested and verified in database cleanly!');

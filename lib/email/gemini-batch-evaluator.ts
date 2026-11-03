@@ -86,15 +86,27 @@ export async function submitPendingEmailBatchJob(options?: {
   const inlinedRequests: any[] = [];
   const processedMessageIds: string[] = [];
 
+  // Performance optimization: Pre-fetch prior replies for all tickets in batch in a single query
+  const ticketIds = Array.from(new Set(pendingRows.map((r: any) => r.ticket_id)));
+  const allPriorReplies = await query(
+    `SELECT ticket_id, agent_name, agent_reply_text, sent_at
+     FROM email_reply_evaluations
+     WHERE ticket_id = ANY($1::varchar[])
+     ORDER BY sent_at ASC`,
+    [ticketIds]
+  ).catch(() => []);
+
+  const priorRepliesByTicket = new Map<string, any[]>();
+  for (const pr of (allPriorReplies || [])) {
+    const list = priorRepliesByTicket.get(pr.ticket_id) || [];
+    list.push(pr);
+    priorRepliesByTicket.set(pr.ticket_id, list);
+  }
+
   for (const row of pendingRows) {
     // 1. Fetch prior replies count & text for this ticket to satisfy <= 3 vs > 3 rule
-    const priorReplies = await query(
-      `SELECT agent_name, agent_reply_text, sent_at
-       FROM email_reply_evaluations
-       WHERE ticket_id = $1 AND sent_at < $2
-       ORDER BY sent_at ASC`,
-      [row.ticket_id, row.sent_at]
-    );
+    const ticketHistory = priorRepliesByTicket.get(row.ticket_id) || [];
+    const priorReplies = ticketHistory.filter((p: any) => new Date(p.sent_at) < new Date(row.sent_at));
 
     const historyCount = priorReplies ? priorReplies.length : 0;
     let rawHistory = '';

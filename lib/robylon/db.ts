@@ -1435,8 +1435,31 @@ export interface RobylonWebhookPayloadRecord {
 /**
  * Stores incoming webhook payloads as-is into `robylon_webhook_payloads`.
  * Catches and logs errors so that failure to log never interrupts webhook processing.
+ *
+ * NOTE: Any PCG sources ('doubletick', 'runo') are automatically routed to
+ * the dedicated `pcg_webhook_payloads` table.
  */
 export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRecord): Promise<void> {
+  // Defensive routing: ensure PCG payloads always go to pcg_webhook_payloads
+  if (record.source === 'doubletick' || record.source === 'runo') {
+    try {
+      const { savePcgWebhookPayload } = await import('@/lib/pcg/db');
+      await savePcgWebhookPayload({
+        source: record.source,
+        channel: record.source === 'doubletick' ? 'whatsapp' : 'call',
+        eventType: record.eventType,
+        eventId: record.eventId,
+        chatId: record.chatId,
+        payload: record.payload,
+        headers: record.headers,
+      });
+      return;
+    } catch (err: any) {
+      console.error('[db] Failed to route PCG webhook payload to pcg_webhook_payloads:', err?.message || err);
+      return;
+    }
+  }
+
   try {
     await query(
       `INSERT INTO robylon_webhook_payloads (source, event_type, event_id, chat_id, payload, headers)
