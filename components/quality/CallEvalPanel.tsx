@@ -1310,9 +1310,6 @@ export default function CallEvalPanel({
                   {gateFail ? 'BREACHED' : 'PASS'}
                 </span>
               </div>
-              {!isReadOnly && (
-                <div className="eval-small" style={{ marginBottom: 2 }}>Any breach marks the call as Critical Fail</div>
-              )}
               {COMPLIANCE_GATES_LIST.map(g => {
                 const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
                 return (
@@ -1539,40 +1536,20 @@ export default function CallEvalPanel({
             </div>
           </div>
 
-          {/* Sticky commit footer: score, gate status, review note, submit. Turns red on any gate breach. */}
-          <div className={`eval-foot${gateFail ? ' failed' : ''}`} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 12px' }}>
-              <div className="eval-status">
-                <div className="eval-big">
-                  <span style={{ fontFamily: 'ui-monospace, monospace' }}>IQS {displayedIqs != null && !isNaN(displayedIqs) ? `${displayedIqs}%` : '—'}</span>
-                  <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
-                </div>
-                <div className="eval-small">
-                  {gateFail ? 'Critical Fail on submit' : isReadOnly ? 'Saved evaluation' : 'Check the score before you submit'}
-                </div>
-              </div>
+          {/* Sticky commit footer: submit evaluation override */}
+          {!isReadOnly && (
+            <div className="eval-foot" style={{ padding: '12px 16px' }}>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSubmitOverride}
+                className="eval-submit"
+                style={{ width: '100%' }}
+              >
+                {saving ? 'Saving…' : (isReviewMode ? 'Resolve Dispute & Submit Review' : 'Submit Evaluation Override')}
+              </button>
             </div>
-            {!isReadOnly && (
-              <>
-                <textarea
-                  placeholder={isReviewMode ? 'QA Dispute Resolution / Review Note…' : 'Internal review note explaining why score was overridden…'}
-                  value={note}
-                  onChange={e => setNote(e.target.value)}
-                  className="eval-reason-input"
-                  style={{ height: 52, resize: 'none', borderColor: 'var(--line-strong)' }}
-                />
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={handleSubmitOverride}
-                  className={`eval-submit${gateFail ? ' danger' : ''}`}
-                  style={{ width: '100%' }}
-                >
-                  {saving ? 'Saving…' : gateFail && !isReviewMode ? 'Submit as failed' : (isReviewMode ? 'Resolve Dispute & Submit Review' : 'Submit Evaluation Override')}
-                </button>
-              </>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </>
