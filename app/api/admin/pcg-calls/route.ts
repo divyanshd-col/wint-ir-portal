@@ -980,7 +980,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     allUsers.forEach((u) => {
       if (u.role === 'admin' || u.role === 'tl' || u.role === 'quality' || u.is_super_admin) {
         nonRmNames.add(u.name.trim().toLowerCase());
-        nonRmNames.add(canonicalizePcgRmName(u.name).toLowerCase());
+        // Do NOT blindly canonicalize non-RM user names to prevent QA/admin users
+        // with names like "Nandani" from colliding with genuine RMs like "Nandini"
+        if (u.role === 'admin' || u.role === 'tl') {
+          nonRmNames.add(canonicalizePcgRmName(u.name).toLowerCase());
+        }
       }
     });
 
@@ -1007,6 +1011,43 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       'test-cx-tl',
       'test cx tl',
     ].forEach((n) => nonRmNames.add(n.toLowerCase()));
+
+    // Collect all genuine RMs and their telephony aliases so they are NEVER excluded
+    const activeRmNames = new Set<string>();
+    allUsers.forEach((u) => {
+      if (u.role === 'agent') {
+        const can = canonicalizePcgRmName(u.name).toLowerCase().trim();
+        activeRmNames.add(u.name.toLowerCase().trim());
+        activeRmNames.add(can);
+      }
+    });
+    Object.values(TL_TEAMS).flat().forEach((rm) => {
+      const can = canonicalizePcgRmName(rm).toLowerCase().trim();
+      activeRmNames.add(rm.toLowerCase().trim());
+      activeRmNames.add(can);
+    });
+    Object.values(dynamicTlTeams).flat().forEach((rm) => {
+      const can = canonicalizePcgRmName(rm).toLowerCase().trim();
+      activeRmNames.add(rm.toLowerCase().trim());
+      activeRmNames.add(can);
+    });
+    Object.keys(customTeamMap).forEach((rm) => {
+      const can = canonicalizePcgRmName(rm).toLowerCase().trim();
+      activeRmNames.add(rm.toLowerCase().trim());
+      activeRmNames.add(can);
+    });
+
+    // Also collect telephony aliases that map to active RMs
+    for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+      if (activeRmNames.has(can.toLowerCase().trim())) {
+        activeRmNames.add(telName.toLowerCase().trim());
+      }
+    }
+
+    // Exclude actual non-RMs, but NEVER active RMs or their aliases
+    activeRmNames.forEach((name) => {
+      nonRmNames.delete(name);
+    });
 
     // RM counts
     const rmsCountMap = new Map<string, number>();
