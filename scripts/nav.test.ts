@@ -4,24 +4,25 @@ import { topTabs, activeTab, isAuthPath, hasNavSkill } from '../lib/nav';
 
 const labels = (role: string, skills?: string[]) => topTabs(role, skills).map((t) => t.label);
 
-test('admin sees all four tabs, Chat first, with their hrefs', () => {
+test('admin sees four tabs, Chat first, Roster last (Settings moved to the account menu)', () => {
   assert.deepEqual(topTabs('admin', []).map((t) => [t.label, t.href]), [
-    ['Chat', '/chat'], ['MCP', '/analytics'], ['Quality', '/quality'], ['Settings', '/settings'],
+    ['Chat', '/chat'], ['MCP', '/analytics'], ['Quality', '/quality'], ['Roster', '/roster'],
   ]);
 });
 
-test('team lead: Chat, MCP, Quality but no Settings', () => {
-  assert.deepEqual(labels('tl'), ['Chat', 'MCP', 'Quality']);
+test('team lead: Chat, MCP, Quality, Roster', () => {
+  assert.deepEqual(labels('tl'), ['Chat', 'MCP', 'Quality', 'Roster']);
 });
 
-test('quality analyst and agent: no Analytics (no analytics access), no Settings', () => {
-  assert.deepEqual(labels('quality'), ['Chat', 'Quality']);
-  assert.deepEqual(labels('agent'), ['Chat', 'Quality']);
+test('quality analyst and agent: no Analytics (no analytics access), but Roster', () => {
+  assert.deepEqual(labels('quality'), ['Chat', 'Quality', 'Roster']);
+  assert.deepEqual(labels('agent'), ['Chat', 'Quality', 'Roster']);
 });
 
 test('explicit skills override the role defaults', () => {
   assert.deepEqual(labels('agent', ['chat:access']), ['Chat']);
-  assert.deepEqual(labels('agent', ['analytics:access', 'settings:manage:access']), ['MCP', 'Settings']);
+  assert.deepEqual(labels('agent', ['analytics:access', 'settings:manage:access']), ['MCP']); // Settings is no longer a tab
+  assert.deepEqual(labels('agent', ['analytics:access', 'roster:view:access']), ['MCP', 'Roster']);
 });
 
 test('hasNavSkill - admin always passes; others need the skill', () => {
@@ -35,9 +36,10 @@ test('activeTab - Analytics group, Quality group, Chat, Settings (incl. Token Us
   for (const p of ['/analytics', '/call-analysis', '/cx']) assert.equal(activeTab(p), 'analytics', p);
   for (const p of ['/quality', '/quality/chat-evaluation', '/tl', '/tl/member-analytics', '/agent/quality-chats']) assert.equal(activeTab(p), 'quality', p);
   assert.equal(activeTab('/chat'), 'chat');
-  assert.equal(activeTab('/settings'), 'settings');
-  assert.equal(activeTab('/tokens'), 'settings'); // reached from Settings, Token Usage is not in the Analytics sidebar
+  assert.equal(activeTab('/settings'), 'settings'); // no tab shows it: Settings is in the account menu
+  assert.equal(activeTab('/tokens'), 'settings');
   assert.equal(activeTab('/kb-gaps'), null);
+  assert.equal(activeTab('/roster'), 'roster'); // its own tab, not Quality
   assert.equal(activeTab('/qualityx'), null); // segment match, not prefix match
 });
 

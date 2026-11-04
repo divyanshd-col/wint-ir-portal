@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { activeTab, isAuthPath, topTabs } from '@/lib/nav';
+import { activeTab, hasNavSkill, isAuthPath, topTabs } from '@/lib/nav';
 
 const ROLE_LABELS: Record<string, string> = { admin: 'Admin', quality: 'QA Analyst', tl: 'Team Lead', agent: 'IR Agent' };
 const THEME_KEY = 'wint_theme';
@@ -38,7 +38,7 @@ export function ThemeToggle() {
   );
 }
 
-export function AccountMenu({ name, email, role, roleLabel }: { name: string; email: string; role: string; roleLabel?: string }) {
+export function AccountMenu({ name, email, role, roleLabel, showSettings }: { name: string; email: string; role: string; roleLabel?: string; showSettings?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -62,6 +62,12 @@ export function AccountMenu({ name, email, role, roleLabel }: { name: string; em
             {email && <div className="topbar-menu-sub">{email}</div>}
             <span className="topbar-role">{roleLabel ?? (ROLE_LABELS[role] ?? role)}</span>
           </div>
+          {showSettings && (
+            <Link href="/settings" role="menuitem" className="topbar-menu-item" onClick={() => setOpen(false)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+              Settings
+            </Link>
+          )}
           <button type="button" role="menuitem" className="topbar-menu-item" onClick={() => signOut({ callbackUrl: '/login' })}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" /></svg>
             Sign out
@@ -116,7 +122,7 @@ export default function TopBar() {
             </div>
           )}
           <ThemeToggle />
-          {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} />}
+          {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} showSettings={hasNavSkill(role, user?.skills, 'settings:manage:access')} />}
         </div>
       </header>
     </>

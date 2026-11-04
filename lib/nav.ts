@@ -1,13 +1,13 @@
 /** Top-level navigation rules: which tabs a user sees, which one is active, where each role lands. Pure, so it is unit-tested. */
 
-export type TabKey = 'chat' | 'analytics' | 'quality' | 'settings' | 'pcg-calls' | 'pcg-scorecard' | 'pcg-disputes';
+export type TabKey = 'chat' | 'analytics' | 'quality' | 'roster' | 'settings' | 'pcg-calls' | 'pcg-scorecard' | 'pcg-disputes';
 export interface NavTab { key: TabKey; label: string; href: string }
 
 // Same defaults the sidebars use when a session carries no explicit skills.
 const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
-  tl: ['chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access', 'quality:analytics:access'],
-  quality: ['chat:access', 'cx_dashboard:access', 'quality:analytics:access'],
-  agent: ['chat:access', 'quality:analytics:access'],
+  tl: ['chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access', 'quality:analytics:access', 'roster:view:access', 'roster:manage:access'],
+  quality: ['chat:access', 'cx_dashboard:access', 'quality:analytics:access', 'roster:view:access'],
+  agent: ['chat:access', 'quality:analytics:access', 'roster:view:access'],
 };
 
 export function hasNavSkill(role: string | undefined, skills: string[] | undefined, req: string): boolean {
@@ -20,7 +20,7 @@ const TABS: (NavTab & { skill: string })[] = [
   { key: 'chat',      label: 'Chat',      href: '/chat',      skill: 'chat:access' },
   { key: 'analytics', label: 'MCP', href: '/analytics', skill: 'analytics:access' },
   { key: 'quality',   label: 'Quality',   href: '/quality',   skill: 'quality:analytics:access' },
-  { key: 'settings',  label: 'Settings',  href: '/settings',  skill: 'settings:manage:access' },
+  { key: 'roster',    label: 'Roster',    href: '/roster',    skill: 'roster:view:access' },
 ];
 
 export function topTabs(role: string | undefined, skills: string[] | undefined, activeDomain: 'cx' | 'pcg' = 'cx'): NavTab[] {
@@ -34,7 +34,8 @@ const AREAS: [TabKey, string[]][] = [
   ['chat', ['/chat']],
   ['analytics', ['/analytics', '/call-analysis', '/cx']],
   ['quality', ['/quality', '/tl', '/agent']],
-  ['settings', ['/settings', '/tokens']],
+  ['roster', ['/roster']],
+  ['settings', ['/settings', '/tokens']], // reached from the account menu, not a top tab
   ['pcg-calls', ['/admin/pcg-calls', '/pcg']],
 ];
 

@@ -45,6 +45,7 @@ export async function middleware(req: NextRequest) {
   // Fallback map if token was minted before skills array was attached
   const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
     admin: [
+      'roster:view:access', 'roster:manage:access',
       'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
       'quality:analytics:access', 'quality:chat_eval:access', 'quality:call_eval:access',
       'tl:team_analytics:access', 'tl:member_analytics:access', 'tl:quality_chats:access',
@@ -52,15 +53,18 @@ export async function middleware(req: NextRequest) {
       'users:manage:access', 'skills:manage:access',
     ],
     tl: [
+      'roster:view:access', 'roster:manage:access',
       'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
       'quality:analytics:access', 'tl:member_analytics:access',
       'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
     ],
     quality: [
+      'roster:view:access',
       'chat:access', 'cx_dashboard:access', 'quality:analytics:access',
       'quality:chat_eval:access', 'quality:call_eval:access',
     ],
     agent: [
+      'roster:view:access',
       'chat:access', 'quality:analytics:access', 'agent:my_analytics:access',
       'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access',
     ],
@@ -94,7 +98,8 @@ export async function middleware(req: NextRequest) {
       pathname.startsWith('/quality') ||
       pathname.startsWith('/cx') ||
       pathname.startsWith('/tl') ||
-      pathname.startsWith('/agent')
+      pathname.startsWith('/agent') ||
+      pathname.startsWith('/roster') // roster is for the CX team only
     ) {
       return NextResponse.redirect(new URL('/admin/pcg-calls', req.url));
     }
@@ -157,6 +162,13 @@ export async function middleware(req: NextRequest) {
   // CX Dashboard
   if (pathname.startsWith('/cx')) {
     if (!checkSkill('cx_dashboard:access')) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
+  // Roster
+  if (pathname === '/roster' || pathname.startsWith('/roster/')) {
+    if (!checkSkill('roster:view:access')) {
       return NextResponse.redirect(new URL('/', req.url));
     }
   }
