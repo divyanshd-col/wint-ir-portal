@@ -29,6 +29,7 @@ import {
   parseTranscriptionResponse,
   parseCallDispositionClassified,
   segmentsToText,
+  extractDurationFromTranscript,
 } from '@/lib/call-quality';
 import {
   upsertAgent,
@@ -501,6 +502,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
       const { language, segments } = await fetchAndTranscribeAudio(recordingUrl, geminiKeys);
       const interruptionCount = segments.filter(s => s.type === 'interruption').length;
       const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
+      const finalDuration     = (durationSeconds && durationSeconds > 0) ? durationSeconds : extractDurationFromTranscript(segments);
 
       // Update the placeholder row with the real transcript
       await insertCallRecording({
@@ -509,7 +511,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
         agentId,
         contactId,
         recordingUrl,
-        durationSeconds,
+        durationSeconds: finalDuration,
         calledAt,
         language,
         transcript: segments,

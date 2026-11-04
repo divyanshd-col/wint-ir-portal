@@ -460,7 +460,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
-          const list = data.disputes ?? [];
+          const list = (data.disputes ?? []).filter((d: any) => !d.callId && !d.messageId);
           setDisputes(list);
           setDefinedTopics(data.definedDispositions ?? []);
           onTotalChange?.(list.length);

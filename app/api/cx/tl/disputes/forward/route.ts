@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   // A chat with no topic (or one no QA owns) cannot be routed to the responsible QA. The TL must pick a defined topic;
   // it is saved on the chat so the dispute reaches that topic's QA.
-  if (flag.chatId && !flag.callId) {
+  if (flag.chatId && !flag.callId && !flag.messageId) {
     const defined = await getDefinedDispositions();
     const conv = await getConversation(String(flag.chatId));
     const current = String((conv?.tags as any)?.disposition ?? '').trim();

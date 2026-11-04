@@ -1,14 +1,14 @@
 import { query } from '../lib/cx/db';
-import type { DoubleTickTranscriptItem } from '../lib/pcg/doubletick';
+import { type DoubleTickTranscriptItem, closeInactivePcgConversations, PCG_INACTIVITY_MS } from '../lib/pcg/doubletick';
 
 async function fastBackfill() {
   console.log('=====================================================');
   console.log(' Starting Fast DoubleTick Backfill into pcg_conversations');
-  console.log(' (robylon_webhook_payloads remains completely untouched)');
+  console.log(' (pcg_webhook_payloads remains completely untouched)');
   console.log('=====================================================');
 
   const [initialRaw] = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM robylon_webhook_payloads WHERE source = 'doubletick'`
+    `SELECT COUNT(*) as count FROM pcg_webhook_payloads WHERE source = 'doubletick'`
   );
   console.log(`Total DoubleTick payloads to process: ${initialRaw.count}`);
 
@@ -16,7 +16,7 @@ async function fastBackfill() {
   console.log('Fetching all payloads from DB...');
   const rows = await query<{ id: number; payload: any; received_at: string }>(
     `SELECT id, payload, received_at 
-     FROM robylon_webhook_payloads 
+     FROM pcg_webhook_payloads 
      WHERE source = 'doubletick' 
      ORDER BY id ASC`
   );
@@ -216,13 +216,22 @@ async function fastBackfill() {
 
     const lastTurn = allTurns[allTurns.length - 1];
     const totalMessages = allTurns.length;
+    const lastMsgTime = acc.lastMessageAt && acc.lastMessageAt !== new Date(0).toISOString()
+      ? acc.lastMessageAt
+      : (lastTurn?.timestamp || null);
+
+    const isOld = lastMsgTime && (Date.now() - new Date(lastMsgTime).getTime() >= PCG_INACTIVITY_MS);
+    const convStatus = isOld ? 'CLOSED' : 'OPEN';
+    const closedAt = isOld && lastMsgTime
+      ? new Date(new Date(lastMsgTime).getTime() + PCG_INACTIVITY_MS).toISOString()
+      : null;
 
     await query(
       `INSERT INTO pcg_conversations (
          customer_phone, waba_number, customer_name, customer_id, assigned_rm_id, rm_name,
          transcript, total_messages, last_message_text, last_event_type, last_direction,
-         last_status, last_message_at, raw_payload, updated_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+         last_status, last_message_at, raw_payload, status, closed_at, updated_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
        ON CONFLICT (customer_phone, waba_number) DO UPDATE SET
          customer_name     = COALESCE(EXCLUDED.customer_name, pcg_conversations.customer_name),
          customer_id       = COALESCE(EXCLUDED.customer_id, pcg_conversations.customer_id),
@@ -236,6 +245,8 @@ async function fastBackfill() {
          last_status       = COALESCE(EXCLUDED.last_status, pcg_conversations.last_status),
          last_message_at   = EXCLUDED.last_message_at,
          raw_payload       = COALESCE(EXCLUDED.raw_payload, pcg_conversations.raw_payload),
+         status            = EXCLUDED.status,
+         closed_at         = EXCLUDED.closed_at,
          updated_at        = NOW()`,
       [
         acc.customerPhone,
@@ -250,8 +261,10 @@ async function fastBackfill() {
         lastTurn?.event_type || 'message_received',
         lastTurn?.direction || 'inbound',
         lastTurn?.status || null,
-        acc.lastMessageAt,
+        lastMsgTime,
         acc.lastPayload ? JSON.stringify(acc.lastPayload) : '{}',
+        convStatus,
+        closedAt,
       ]
     );
 
@@ -261,20 +274,31 @@ async function fastBackfill() {
     }
   }
 
+  console.log('Running inactivity sweep to close any conversations inactive > 48h...');
+  const { closedCount } = await closeInactivePcgConversations(48);
+  console.log(`Auto-closed ${closedCount} conversations.`);
+
   // 4. Verify integrity
   const [finalRaw] = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM robylon_webhook_payloads WHERE source = 'doubletick'`
+    `SELECT COUNT(*) as count FROM pcg_webhook_payloads WHERE source = 'doubletick'`
   );
   const [finalConv] = await query<{ count: string; total_msgs: string }>(
     `SELECT COUNT(*) as count, COALESCE(SUM(total_messages), 0) as total_msgs FROM pcg_conversations`
+  );
+  const [statusBreakdown] = await query<{ open_count: string; closed_count: string }>(
+    `SELECT 
+       COUNT(*) FILTER (WHERE status = 'OPEN') as open_count,
+       COUNT(*) FILTER (WHERE status = 'CLOSED') as closed_count
+     FROM pcg_conversations`
   );
 
   console.log('\n=====================================================');
   console.log(' Fast Backfill Successfully Completed! ');
   console.log('=====================================================');
-  console.log(`robylon_webhook_payloads: ${finalRaw.count} (Verified untouched, nothing deleted)`);
+  console.log(`pcg_webhook_payloads: ${finalRaw.count} (Verified untouched, nothing deleted)`);
   console.log(`pcg_conversations total threads: ${finalConv.count}`);
   console.log(`pcg_conversations total message turns: ${finalConv.total_msgs}`);
+  console.log(`pcg_conversations status breakdown -> OPEN: ${statusBreakdown.open_count}, CLOSED: ${statusBreakdown.closed_count}`);
 }
 
 fastBackfill()

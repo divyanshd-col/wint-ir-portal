@@ -277,7 +277,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
       const pAll: DisputeRow[] = Array.isArray(pData.disputes) ? pData.disputes : [];
       const rAll: DisputeRow[] = Array.isArray(rData.disputes) ? rData.disputes : [];
 
-      const isCallDispute = (d: DisputeRow) => Boolean(d.callId);
+      const isCallDispute = (d: DisputeRow) => Boolean(d.callId) && !(d as any).messageId;
 
       setPendingDisputes(pAll.filter(isCallDispute));
       setReviewedDisputes(rAll.filter(isCallDispute));
@@ -650,6 +650,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             onDone={() => fetchEvaluatedCalls()}
                             onClose={() => setExpandedCallId(null)}
                             mobileNumber={call.mobileNumber}
+                            durationSeconds={call.durationSeconds}
                             colSpan={7}
                           />
                         )}

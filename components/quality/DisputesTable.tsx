@@ -70,8 +70,16 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
-          setDisputes(data.disputes ?? []);
-          onCountChange?.(data.disputes?.length ?? 0);
+          let list: DisputeRow[] = data.disputes ?? [];
+          // Safeguard: Email disputes must never appear in chat or call disputes table
+          list = list.filter((d: any) => !d.messageId);
+          if (type === 'chats') {
+            list = list.filter((d: any) => !d.callId);
+          } else if (type === 'calls') {
+            list = list.filter((d: any) => Boolean(d.callId));
+          }
+          setDisputes(list);
+          onCountChange?.(list.length);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -431,6 +439,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                       onDone={() => removeDispute(rowKey)}
                       onClose={() => setExpandedId(null)}
                       mobileNumber={d.mobileNumber}
+                      durationSeconds={d.durationSeconds}
                       colSpan={8}
                     />
                   ) : (

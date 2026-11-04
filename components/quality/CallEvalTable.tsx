@@ -87,6 +87,11 @@ const CallEvalRow = React.memo(function CallEvalRow({
         <td style={{ ...td, fontWeight: 500 }}>{call.agentName}</td>
         <td style={tdMono}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}</td>
         <td style={td}>{call.disposition}</td>
+        <td style={tdNum}>
+          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text)' }}>
+            {fmtDuration(call.durationSeconds)}
+          </span>
+        </td>
         <td style={td} onClick={e => e.stopPropagation()}>
           {call.chatId ? (
             <TicketLinkButton id={call.chatId} />
@@ -139,7 +144,8 @@ const CallEvalRow = React.memo(function CallEvalRow({
           onDone={() => onRemoveCall(call.callId)}
           onClose={onCloseExpand}
           mobileNumber={call.mobileNumber}
-          colSpan={8}
+          durationSeconds={call.durationSeconds}
+          colSpan={9}
         />
       )}
     </React.Fragment>
@@ -237,7 +243,14 @@ export default function CallEvalTable({ leadingFilter, dispositions, onCountChan
   }, []);
 
   const [sort, toggleSort] = useSort();
-  const sortedCalls = sortRows(calls, sort, { agent: c => c.agentName, mobile: c => c.mobileNumber, disp: c => c.disposition, iqs: c => c.iqsScore, status: c => c.status });
+  const sortedCalls = sortRows(calls, sort, {
+    agent: c => c.agentName,
+    mobile: c => c.mobileNumber,
+    disp: c => c.disposition,
+    duration: c => c.durationSeconds,
+    iqs: c => c.iqsScore,
+    status: c => c.status,
+  });
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -400,21 +413,23 @@ export default function CallEvalTable({ leadingFilter, dispositions, onCountChan
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '15.4%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '10.6%' }} />
-            </colgroup>
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '10%' }} />
+          </colgroup>
           <thead>
             <tr>
               <th style={th}>Call ID</th>
               <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
               <SortTh k="mobile" sort={sort} onSort={toggleSort} style={th}>Mobile</SortTh>
               <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
+              <SortTh k="duration" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Duration</SortTh>
               <th style={th}>Linked Chat</th>
               <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
               <SortTh k="status" sort={sort} onSort={toggleSort} style={th}>Status</SortTh>
@@ -423,9 +438,9 @@ export default function CallEvalTable({ leadingFilter, dispositions, onCountChan
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ ...td, textAlign: 'center' }}>Loading…</td></tr>
+              <tr><td colSpan={9} style={{ ...td, textAlign: 'center' }}>Loading…</td></tr>
             ) : sortedCalls.length === 0 ? (
-              <tr><td colSpan={8} style={{ ...td, textAlign: 'center' }}>No calls pending review</td></tr>
+              <tr><td colSpan={9} style={{ ...td, textAlign: 'center' }}>No calls pending review</td></tr>
             ) : (
               sortedCalls.map(c => (
                 <CallEvalRow

@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/api-guard';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
+import { extractDurationFromTranscript } from '@/lib/call-quality';
 
 const ROUTE = 'cx/qa/calls-to-review';
 
@@ -220,7 +221,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const rows = await query<any>(
     `SELECT ce.call_id, COALESCE(ce.chat_id, cr.chat_id) as chat_id, COALESCE(a.name, 'Unknown') as agent_name,
             ce.iqs_percent, ce.verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
-            cr.duration_seconds, cr.language, cr.interruption_count, cr.dead_air_count,
+            cr.duration_seconds, cr.transcript, cr.language, cr.interruption_count, cr.dead_air_count,
             ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores,
             COALESCE(ct_cr.phone, ct_c.phone, c.phone_number) AS mobile_number
      FROM call_evaluations ce
@@ -235,27 +236,40 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     dataSqlParams
   );
 
-  const calls: CallToReviewRow[] = rows.map(r => ({
-    callId:                 r.call_id,
-    chatId:                 r.chat_id,
-    agentName:              r.agent_name,
-    iqsScore:               r.iqs_percent ? Math.round(parseFloat(r.iqs_percent)) : null,
-    verdict:                r.verdict,
-    calledAt:               r.called_at,
-    disposition:            r.call_disposition,
-    subDisposition:         r.call_sub_disposition,
-    durationSeconds:        r.duration_seconds,
-    language:               r.language,
-    interruptionCount:      r.interruption_count || 0,
-    deadAirCount:           r.dead_air_count || 0,
-    reviewedBy:             r.reviewed_by,
-    reviewedAt:             r.reviewed_at,
-    reviewNote:             r.review_note,
-    status:                 r.status,
-    gates:                  r.gates,
-    iqsScores:              r.iqs_scores,
-    mobileNumber:           r.mobile_number || null,
-  }));
+  const calls: CallToReviewRow[] = rows.map(r => {
+    let dur = r.duration_seconds && r.duration_seconds > 0 ? Number(r.duration_seconds) : null;
+    if (dur === null && r.transcript) {
+      dur = extractDurationFromTranscript(r.transcript);
+      if (dur !== null && r.call_id) {
+        // Asynchronously self-heal call_recordings so future queries have it cached
+        query(
+          `UPDATE call_recordings SET duration_seconds = $1 WHERE id = $2 AND (duration_seconds IS NULL OR duration_seconds <= 0)`,
+          [dur, r.call_id]
+        ).catch(() => {});
+      }
+    }
+    return {
+      callId:                 r.call_id,
+      chatId:                 r.chat_id,
+      agentName:              r.agent_name,
+      iqsScore:               r.iqs_percent ? Math.round(parseFloat(r.iqs_percent)) : null,
+      verdict:                r.verdict,
+      calledAt:               r.called_at,
+      disposition:            r.call_disposition,
+      subDisposition:         r.call_sub_disposition,
+      durationSeconds:        dur,
+      language:               r.language,
+      interruptionCount:      r.interruption_count || 0,
+      deadAirCount:           r.dead_air_count || 0,
+      reviewedBy:             r.reviewed_by,
+      reviewedAt:             r.reviewed_at,
+      reviewNote:             r.review_note,
+      status:                 r.status,
+      gates:                  r.gates,
+      iqsScores:              r.iqs_scores,
+      mobileNumber:           r.mobile_number || null,
+    };
+  });
 
   return NextResponse.json({ calls, total });
 });

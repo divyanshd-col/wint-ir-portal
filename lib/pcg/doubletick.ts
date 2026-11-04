@@ -1,5 +1,8 @@
 import { query } from '@/lib/cx/db';
 
+export const PCG_INACTIVITY_HOURS = 48;
+export const PCG_INACTIVITY_MS = PCG_INACTIVITY_HOURS * 60 * 60 * 1000;
+
 export interface DoubleTickTranscriptItem {
   message_id: string | null;
   event_type: 'message_received' | 'status_update';
@@ -13,6 +16,72 @@ export interface DoubleTickTranscriptItem {
   timestamp: string;
   delivered_at?: string | null;
   read_at?: string | null;
+}
+
+/**
+ * Checks whether a conversation has had no message activity for >= 48 hours.
+ */
+export function isConversationInactive(
+  lastMessageAt: string | Date | null | undefined,
+  referenceTime: Date = new Date()
+): boolean {
+  if (!lastMessageAt) return false;
+  const lastTime = new Date(lastMessageAt).getTime();
+  if (isNaN(lastTime)) return false;
+  return referenceTime.getTime() - lastTime >= PCG_INACTIVITY_MS;
+}
+
+let schemaEnsured = false;
+
+/**
+ * Ensures pcg_conversations has status and closed_at columns.
+ * Runs once per process lifecycle to prevent missing column errors across environments.
+ */
+export async function ensurePcgSchema(): Promise<void> {
+  if (schemaEnsured) return;
+  try {
+    await query(`
+      ALTER TABLE pcg_conversations
+        ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
+        ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_pcg_conv_status ON pcg_conversations(status);
+      CREATE INDEX IF NOT EXISTS idx_pcg_conv_closed_at ON pcg_conversations(closed_at);
+    `);
+    schemaEnsured = true;
+  } catch (err: any) {
+    console.warn('[pcg/doubletick] Schema check warning:', err?.message || err);
+  }
+}
+
+/**
+ * Closes all OPEN pcg_conversations that have had no message activity for >= 48 hours.
+ * Sets status = 'CLOSED' and closed_at = last_message_at + 48 hours (or created_at + 48 hours).
+ * Returns the count and identifiers of updated conversations.
+ */
+export async function closeInactivePcgConversations(
+  inactivityHours: number = PCG_INACTIVITY_HOURS
+): Promise<{ closedCount: number; closed: { customer_phone: string; waba_number: string }[] }> {
+  try {
+    await ensurePcgSchema();
+    const res = await query<{ customer_phone: string; waba_number: string }>(
+      `UPDATE pcg_conversations
+       SET status = 'CLOSED',
+           closed_at = COALESCE(last_message_at + ($1 || ' hours')::interval, created_at + ($1 || ' hours')::interval, NOW()),
+           updated_at = NOW()
+       WHERE (status IS NULL OR status = 'OPEN')
+         AND COALESCE(last_message_at, created_at) < NOW() - ($1 || ' hours')::interval
+       RETURNING customer_phone, waba_number`,
+      [inactivityHours.toString()]
+    );
+
+    return {
+      closedCount: res.length,
+      closed: res,
+    };
+  } catch (err: any) {
+    console.error('[pcg/doubletick] Failed to close inactive PCG conversations:', err?.message || err);
+    return { closedCount: 0, closed: [] };
+  }
 }
 
 /**
@@ -37,6 +106,7 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
   }
 
   let ingestedCount = 0;
+  await ensurePcgSchema();
 
   for (const item of items) {
     if (!item || typeof item !== 'object') continue;
@@ -102,8 +172,11 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
         customer_id: string | null;
         assigned_rm_id: string | null;
         last_status: string | null;
+        status?: string | null;
+        closed_at?: string | null;
+        last_message_at?: string | null;
       }>(
-        `SELECT transcript, total_messages, customer_name, customer_id, assigned_rm_id, last_status
+        `SELECT transcript, total_messages, customer_name, customer_id, assigned_rm_id, last_status, status, closed_at, last_message_at
          FROM pcg_conversations
          WHERE customer_phone = $1 AND waba_number = $2`,
         [customerPhone, wabaNumber]
@@ -126,12 +199,19 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
           read_at: status === 'READ' ? messageTime : null,
         };
 
+        const msgDate = new Date(messageTime);
+        const isOld = !isNaN(msgDate.getTime()) && (Date.now() - msgDate.getTime() >= PCG_INACTIVITY_MS);
+        const initialStatus = isOld ? 'CLOSED' : 'OPEN';
+        const initialClosedAt = isOld && !isNaN(msgDate.getTime())
+          ? new Date(msgDate.getTime() + PCG_INACTIVITY_MS).toISOString()
+          : null;
+
         await query(
           `INSERT INTO pcg_conversations (
             customer_phone, waba_number, customer_name, customer_id, assigned_rm_id, rm_name,
             transcript, total_messages, last_message_text, last_event_type, last_direction,
-            last_status, last_message_at, raw_payload
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13)`,
+            last_status, last_message_at, raw_payload, status, closed_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13, $14, $15)`,
           [
             customerPhone,
             wabaNumber,
@@ -146,6 +226,8 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
             status,
             messageTime,
             JSON.stringify(item),
+            initialStatus,
+            initialClosedAt,
           ]
         );
       } else {
@@ -165,6 +247,12 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
           if (status === 'READ' && !targetTurn.read_at) targetTurn.read_at = messageTime;
           if (text && !targetTurn.text) targetTurn.text = text;
 
+          const isInactive = isConversationInactive(row.last_message_at);
+          const targetStatus = isInactive ? 'CLOSED' : (row.status || 'OPEN');
+          const targetClosedAt = isInactive
+            ? (row.last_message_at ? new Date(new Date(row.last_message_at).getTime() + PCG_INACTIVITY_MS).toISOString() : new Date().toISOString())
+            : (row.status === 'CLOSED' ? (row.closed_at || null) : null);
+
           await query(
             `UPDATE pcg_conversations
              SET transcript = $1,
@@ -173,9 +261,11 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
                  customer_id = COALESCE($4, customer_id),
                  assigned_rm_id = COALESCE($5, assigned_rm_id),
                  rm_name = COALESCE($6, rm_name),
+                 status = $7,
+                 closed_at = $8,
                  updated_at = NOW(),
-                 raw_payload = $7
-             WHERE customer_phone = $8 AND waba_number = $9`,
+                 raw_payload = $9
+             WHERE customer_phone = $10 AND waba_number = $11`,
             [
               JSON.stringify(currentTranscript),
               status,
@@ -183,6 +273,8 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
               customerId,
               assignedRmId,
               rmName,
+              targetStatus,
+              targetClosedAt,
               JSON.stringify(item),
               customerPhone,
               wabaNumber,
@@ -208,6 +300,13 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
           currentTranscript.push(newTurn);
           totalMessages += 1;
 
+          const msgDate = new Date(messageTime);
+          const isOld = !isNaN(msgDate.getTime()) && (Date.now() - msgDate.getTime() >= PCG_INACTIVITY_MS);
+          const convStatus = isOld ? 'CLOSED' : 'OPEN';
+          const convClosedAt = isOld && !isNaN(msgDate.getTime())
+            ? new Date(msgDate.getTime() + PCG_INACTIVITY_MS).toISOString()
+            : null;
+
           await query(
             `UPDATE pcg_conversations
              SET transcript = $1,
@@ -221,9 +320,11 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
                  customer_id = COALESCE($9, customer_id),
                  assigned_rm_id = COALESCE($10, assigned_rm_id),
                  rm_name = COALESCE($11, rm_name),
+                 status = $12,
+                 closed_at = $13,
                  updated_at = NOW(),
-                 raw_payload = $12
-             WHERE customer_phone = $13 AND waba_number = $14`,
+                 raw_payload = $14
+             WHERE customer_phone = $15 AND waba_number = $16`,
             [
               JSON.stringify(currentTranscript),
               totalMessages,
@@ -236,6 +337,8 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
               customerId,
               assignedRmId,
               rmName,
+              convStatus,
+              convClosedAt,
               JSON.stringify(item),
               customerPhone,
               wabaNumber,

@@ -45,11 +45,12 @@ async function runTest() {
     }
   ];
 
-  // Insert test payload directly via saveRobylonWebhookPayload
-  const { saveRobylonWebhookPayload } = await import('../lib/robylon/db');
+  // Insert test payload directly via savePcgWebhookPayload
+  const { savePcgWebhookPayload } = await import('../lib/pcg/db');
   
-  await saveRobylonWebhookPayload({
+  await savePcgWebhookPayload({
     source: 'doubletick',
+    channel: 'whatsapp',
     eventType: 'CHAT_EXPORT',
     eventId: testPayload[0]["Message ID"],
     chatId: testPayload[0]["Chat ID"],
@@ -57,10 +58,10 @@ async function runTest() {
     headers: { "user-agent": "doubletick-test" }
   });
 
-  console.log('✅ Ingestion completed. Querying robylon_webhook_payloads for inserted record...');
+  console.log('✅ Ingestion completed. Querying pcg_webhook_payloads for inserted record...');
 
   const result = await query(`
-    SELECT * FROM robylon_webhook_payloads 
+    SELECT * FROM pcg_webhook_payloads 
     WHERE source = 'doubletick' AND chat_id = $1 
     ORDER BY id DESC LIMIT 1
   `, [testPayload[0]["Chat ID"]]);

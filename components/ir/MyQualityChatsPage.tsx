@@ -311,8 +311,8 @@ export default function MyQualityChatsPage({ agentName }: Props) {
         fetch('/api/ir/disputes?status=resolved&type=chats'),
       ]);
       const [pData, rData] = await Promise.all([pRes.json(), rRes.json()]);
-      setPendingDisputes(Array.isArray(pData.disputes) ? pData.disputes : []);
-      setReviewedDisputes(Array.isArray(rData.disputes) ? rData.disputes : []);
+      setPendingDisputes(Array.isArray(pData.disputes) ? pData.disputes.filter((d: any) => !d.callId && !d.messageId) : []);
+      setReviewedDisputes(Array.isArray(rData.disputes) ? rData.disputes.filter((d: any) => !d.callId && !d.messageId) : []);
     } catch {
       setPendingDisputes([]);
       setReviewedDisputes([]);
