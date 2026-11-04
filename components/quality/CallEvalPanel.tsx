@@ -97,28 +97,28 @@ export const PCG_PARAM_ALIASES: Record<string, string[]> = {
 };
 
 export interface CallEvalPanelProps {
-  callId:            string;
-  chatId?:           string | null;
-  mobileNumber?:     string | null;
-  agentName:         string;
-  iqsScore:          number;
-  calledAt?:         string | null;
-  disposition?:      string | null;
-  gates?:            any;
-  iqsScores?:        any;
-  mode?:             'submit' | 'view' | 'review' | 'resolve';
-  dispute?:          any;
+  callId: string;
+  chatId?: string | null;
+  mobileNumber?: string | null;
+  agentName: string;
+  iqsScore: number | null;
+  calledAt?: string | null;
+  disposition?: string | null;
+  gates?: any;
+  iqsScores?: any;
+  mode?: 'submit' | 'view' | 'review' | 'resolve';
+  dispute?: any;
   allowRaiseDispute?: boolean;
-  allowReevaluate?:  boolean;
-  onDisputeRaised?:  () => void;
-  onDone:            () => void;
-  onClose:           () => void;
-  colSpan?:          number;
-  initialSegments?:  any[];
+  allowReevaluate?: boolean;
+  onDisputeRaised?: () => void;
+  onDone: () => void;
+  onClose: () => void;
+  colSpan?: number;
+  initialSegments?: any[];
   initialRecordingUrl?: string | null;
-  standalone?:       boolean;
-  hideShowChat?:     boolean;
-  isPcg?:            boolean;
+  standalone?: boolean;
+  hideShowChat?: boolean;
+  isPcg?: boolean;
   onOverrideSubmit?: (data: {
     callId: string;
     scores: Record<string, string>;
@@ -404,7 +404,7 @@ export default function CallEvalPanel({
   allowRaiseDispute = false,
   allowReevaluate = false,
   onDisputeRaised,
-  onDone = () => {},
+  onDone = () => { },
   onClose,
   colSpan = 6,
   initialSegments,
@@ -509,7 +509,7 @@ export default function CallEvalPanel({
   useEffect(() => {
     let raw = currentIqsScores || dispute?.parameters || iqsScores;
     if (typeof raw === 'string') {
-      try { raw = JSON.parse(raw); } catch {}
+      try { raw = JSON.parse(raw); } catch { }
     }
     const state: Record<string, { score: string; reasoning: string }> = {};
 
@@ -558,7 +558,7 @@ export default function CallEvalPanel({
           setCurrentIqs(parseFloat(d.iqsPercent));
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [callId, initialSegments, initialRecordingUrl]);
 
@@ -940,8 +940,8 @@ export default function CallEvalPanel({
     ? pathname.startsWith('/agent')
       ? `/agent/quality-chats?chatId=${encodeURIComponent(effectiveChatId)}`
       : pathname.startsWith('/tl')
-      ? `/tl/quality-chats?chatId=${encodeURIComponent(effectiveChatId)}`
-      : `/quality/chat-evaluation?chatId=${encodeURIComponent(effectiveChatId)}&tab=${qaChatTab}`
+        ? `/tl/quality-chats?chatId=${encodeURIComponent(effectiveChatId)}`
+        : `/quality/chat-evaluation?chatId=${encodeURIComponent(effectiveChatId)}&tab=${qaChatTab}`
     : '#';
 
   const callDateStr = calledAt
@@ -1203,7 +1203,7 @@ export default function CallEvalPanel({
                       </div>
                     );
                   }
-                  
+
                   const textContent = (seg.text || seg.message || seg.translation || seg.content || '').trim();
                   if (!textContent) return null;
 

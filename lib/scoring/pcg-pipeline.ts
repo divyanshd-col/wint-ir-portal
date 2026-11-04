@@ -399,6 +399,148 @@ Return ONLY valid JSON matching this schema:
 }
 `;
 
+// ── Call Category Types & Definitions ──────────────────────────────────────────
+export type PcgCallCategory =
+  | '13_pitching'
+  | 'upselling'
+  | 'support'
+  | 'hiring'
+  | 'telemarketing'
+  | 'delivery_logistics'
+  | 'wrong_number'
+  | 'internal_personal';
+
+export interface PcgCallTriageResult {
+  detected_category: PcgCallCategory;
+  is_evaluable: boolean;
+  confidence: number;
+  opening_quote: string;
+  reason: string;
+}
+
+export const PCG_CLASSIFICATION_SYSTEM_PROMPT = `You are a Call Purpose & Nature Classifier for Wint Wealth's Private Client Group (PCG) Relationship Managers (RMs).
+
+Your mission is to analyze the OPENING 45–60 SECONDS of a recorded phone call and determine its exact nature.
+Not every call made or received by an RM is a client business call. RMs frequently receive delivery calls, recruitment screenings, telemarketing/loan spam, wrong numbers, or make personal/internal calls.
+
+You must categorize the call into EXACTLY ONE of the following 8 categories:
+
+=== GROUP A: EVALUABLE CLIENT CALLS (is_evaluable = true) ===
+1. "13_pitching":
+   - The RM is introducing, pitching, or discussing Wint Wealth's 13% Debt Fund, AIF offerings, or new bond investment opportunities to a prospective HNI investor.
+   - Mention of Wint Wealth, 13% fund, debt opportunities, high-yield bonds, or wealth portfolio.
+
+2. "upselling":
+   - The RM is contacting an existing investor to discuss additional investments, bond reinvestment, upcoming maturity proceeds, fresh bond tranches, or Market Linked Debentures (MLDs).
+
+3. "support":
+   - General investor servicing: Demat accounts, KYC, withdrawals, interest payouts, TDS queries, Form 121, Form 26AS, or order placement support for Wint Wealth platform.
+
+=== GROUP B: EXCLUDED NON-CLIENT CALLS (is_evaluable = false) ===
+4. "hiring":
+   - Recruitment or job screening discussions. Discussions about resumes, interviews, job openings, CTC, notice periods, or candidate evaluation.
+   - Spoken examples: "I am calling regarding your application for the IR / RM role", "Are you available for an interview?", "What is your current CTC?", "Notice period".
+
+5. "telemarketing":
+   - Inbound unsolicited sales, spam, or telemarketing from banks, NBFCs, or third parties trying to sell personal loans, credit cards, insurance policies, or real estate to the RM.
+   - Spoken examples: "Sir, are you looking for a pre-approved personal loan?", "Calling from HDFC credit card division".
+
+6. "delivery_logistics":
+   - Delivery agents, courier executives, or logistics personnel delivering packages or food.
+   - Spoken examples: "Courier parcel delivery", "I am standing at your gate/office", "Please confirm OTP for delivery", "Amazon / Flipkart / Blue Dart / Ecom Delivery".
+
+7. "wrong_number":
+   - Misdialed numbers where the caller or RM realizes they reached the wrong person.
+   - Spoken examples: "Galat number hai", "Wrong number", "Sorry, whom were you trying to call?", "I dialed the wrong person".
+
+8. "internal_personal":
+   - Internal colleague discussions unrelated to client servicing, or personal/family phone calls.
+   - Spoken examples: Talking to colleagues (e.g. Rupika, team members) about personal catchups, lunch, internal logistics, WhatsApp testing, or speaking to family/friends.
+
+=== CRITICAL SAFEGUARD ===
+If the opening 45–60 seconds is ambiguous, unclear, or you are not completely sure whether it is a business call or not:
+- Set detected_category to "support"
+- Set is_evaluable to true
+- Set confidence below 0.65
+NEVER wrongly exclude a genuine investor conversation! Only exclude when the conversation clearly and unambiguously belongs to one of the 5 excluded categories (hiring, telemarketing, delivery_logistics, wrong_number, internal_personal).
+
+=== OUTPUT SCHEMA (JSON ONLY) ===
+{
+  "detected_category": "13_pitching" | "upselling" | "support" | "hiring" | "telemarketing" | "delivery_logistics" | "wrong_number" | "internal_personal",
+  "is_evaluable": boolean,
+  "confidence": number,
+  "opening_quote": "Exact spoken quote from opening dialogue demonstrating the classification",
+  "reason": "Concise justification for why this call belongs to the detected category"
+}
+`;
+
+export async function classifyPcgCallOpening(
+  openingDialogueText: string,
+  geminiKeys: string[]
+): Promise<PcgCallTriageResult> {
+  const prompt = `OPENING 45–60 SECONDS CALL TRANSCRIPT:
+${openingDialogueText}
+
+Analyze this opening portion and classify the call purpose according to the instructions. Return valid JSON only.`;
+
+  try {
+    const rawResponse = await geminiGenerate(
+      geminiKeys,
+      DEFAULT_GEMINI_MODEL,
+      [{ role: 'user', parts: [{ text: prompt }] }],
+      {
+        systemInstruction: PCG_CLASSIFICATION_SYSTEM_PROMPT,
+        responseMimeType: 'application/json',
+      }
+    );
+
+    const parsed = JSON.parse(rawResponse.replace(/```json/g, '').replace(/```/g, '').trim());
+    const validCategories: PcgCallCategory[] = [
+      '13_pitching', 'upselling', 'support',
+      'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'
+    ];
+
+    let category = (parsed.detected_category || 'support') as PcgCallCategory;
+    if (!validCategories.includes(category)) {
+      category = 'support';
+    }
+
+    const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0.8;
+    const isExcluded = ['hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(category);
+
+    // Safeguard: If confidence is low or doubtful, do NOT exclude genuine investors
+    if (isExcluded && confidence < 0.65) {
+      log.warn(ROUTE, `Triage confidence too low (${confidence}) for exclusion (${category}). Defaulting to evaluable support call.`);
+      return {
+        detected_category: 'support',
+        is_evaluable: true,
+        confidence,
+        opening_quote: parsed.opening_quote || '',
+        reason: `Ambiguous opening defaulted to support call (confidence ${confidence})`,
+      };
+    }
+
+    const isEvaluable = !isExcluded;
+
+    return {
+      detected_category: category,
+      is_evaluable: isEvaluable,
+      confidence,
+      opening_quote: parsed.opening_quote || '',
+      reason: parsed.reason || 'Classification complete',
+    };
+  } catch (err: any) {
+    log.error(ROUTE, `Failed to classify call opening: ${err.message}. Defaulting to evaluable support call.`);
+    return {
+      detected_category: 'support',
+      is_evaluable: true,
+      confidence: 0.5,
+      opening_quote: '',
+      reason: 'Classifier error fallback to support',
+    };
+  }
+}
+
 // ── Run Evaluation Pipeline for a Single PCG Call ─────────────────────────────
 export async function runPcgCallPipeline(callId: string, options?: { forceTranscript?: boolean }): Promise<any> {
   log.info(ROUTE, `Starting PCG evaluation pipeline for callId: ${callId}`);
@@ -430,10 +572,10 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
       INSERT INTO pcg_call_evaluations (
         call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
         iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
-        verdict, parameters, transcript_turns, compliance_tripwire, scored_at
-      ) VALUES ($1, $2, $3, $4, 'support', $5, null, null, null, null, 0, 'NOT_SCOREABLE', $6, '[]'::jsonb, false, NOW())
+        verdict, is_evaluable, parameters, transcript_turns, compliance_tripwire, scored_at
+      ) VALUES ($1, $2, $3, $4, 'support', $5, null, null, null, null, 0, 'NOT_SCOREABLE', true, $6, '[]'::jsonb, false, NOW())
       ON CONFLICT (call_id) DO UPDATE SET
-        verdict = 'NOT_SCOREABLE', scored_at = NOW()
+        verdict = 'NOT_SCOREABLE', is_evaluable = true, scored_at = NOW()
     `, [call.call_id, resolvedRm, resolvedTl, call.phone_number, call.duration_seconds || 0, JSON.stringify(paramsMap)]);
 
     return { callId: call.call_id, verdict: 'NOT_SCOREABLE', iqs: null };
@@ -525,7 +667,80 @@ Return JSON matching:
 
   const transcriptText = transcriptTurns.map((t) => `Turn ${t.turnIndex} [${t.speaker} - ${t.time}]: ${t.text}`).join('\n');
 
-  // 4. Retrieve PCG-Exclusive KB Context
+  // 4. Stage 1: Initial Call Classification & Triage (Opening 45-60 seconds)
+  const openingTurns = transcriptTurns.slice(0, 8);
+  const openingDialogueText = openingTurns.map((t) => `Turn ${t.turnIndex} [${t.speaker} - ${t.time}]: ${t.text}`).join('\n');
+  const triage = await classifyPcgCallOpening(openingDialogueText, [apiKey]);
+
+  log.info(ROUTE, `Stage 1 Triage for call ${call.call_id}: category=${triage.detected_category}, is_evaluable=${triage.is_evaluable}, confidence=${triage.confidence}`);
+
+  // If excluded: immediately store as EXCLUDED_NON_CLIENT with NULL IQS score and abort evaluation
+  if (!triage.is_evaluable) {
+    const exclusionText = `${triage.reason}${triage.opening_quote ? ` (Quote: "${triage.opening_quote}")` : ''}`;
+    log.info(ROUTE, `Call ${call.call_id} excluded from quality evaluation: ${exclusionText}`);
+
+    await query(`
+      INSERT INTO pcg_call_evaluations (
+        call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
+        iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
+        verdict, is_evaluable, exclusion_reason, parameters, transcript_turns, compliance_tripwire, scored_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, null, null, null, null, 0, 'EXCLUDED_NON_CLIENT', false, $7, '[]'::jsonb, $8, false, NOW(), NOW())
+      ON CONFLICT (call_id) DO UPDATE SET
+        rm_name = EXCLUDED.rm_name,
+        tl_name = EXCLUDED.tl_name,
+        customer_phone = EXCLUDED.customer_phone,
+        call_category = EXCLUDED.call_category,
+        duration_seconds = EXCLUDED.duration_seconds,
+        iqs_score = null,
+        process_score = null,
+        communication_score = null,
+        customer_service_score = null,
+        applicable_weight = 0,
+        verdict = 'EXCLUDED_NON_CLIENT',
+        is_evaluable = false,
+        exclusion_reason = EXCLUDED.exclusion_reason,
+        parameters = '[]'::jsonb,
+        transcript_turns = EXCLUDED.transcript_turns,
+        compliance_tripwire = false,
+        compliance_reason = null,
+        scored_at = NOW(),
+        updated_at = NOW()
+    `, [
+      call.call_id,
+      resolvedRm,
+      resolvedTl,
+      call.phone_number,
+      triage.detected_category,
+      call.duration_seconds,
+      exclusionText,
+      JSON.stringify(transcriptTurns),
+    ]);
+
+    await query(`
+      UPDATE pcg_call_recordings
+      SET
+        call_nature = 'non_client',
+        exclusion_reason = $1,
+        call_category = $1,
+        category_source = 'ai_triage'
+      WHERE call_id = $2
+    `, [triage.detected_category, call.call_id]);
+
+    return {
+      callId: call.call_id,
+      rmName: resolvedRm,
+      tlName: resolvedTl,
+      category: triage.detected_category,
+      isEvaluable: false,
+      verdict: 'EXCLUDED_NON_CLIENT',
+      exclusionReason: exclusionText,
+      iqs: null,
+      parameters: [],
+      transcriptTurns,
+    };
+  }
+
+  // 5. Retrieve PCG-Exclusive KB Context
   const kbContext = await getPcgKbContextForScoring(transcriptText.slice(0, 800), 6);
 
   // 5. LLM Quality & Compliance Evaluation
@@ -625,16 +840,18 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     verdict = 'COMPLIANCE_BREACH';
   }
 
-  const category = evalJson.call_category || call.call_category || '13_pitching';
+  const category = (evalJson.call_category && ['13_pitching', 'upselling', 'support'].includes(evalJson.call_category))
+    ? evalJson.call_category
+    : (triage.detected_category || '13_pitching');
 
   // 7. Store Result in pcg_call_evaluations
   await query(`
     INSERT INTO pcg_call_evaluations (
       call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
       iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
-      verdict, parameters, compliance_tripwire, compliance_reason, ai_coaching_tip,
+      verdict, is_evaluable, exclusion_reason, parameters, compliance_tripwire, compliance_reason, ai_coaching_tip,
       transcript_turns, scored_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, null, $16, NOW(), NOW())
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, null, $13, $14, $15, null, $16, NOW(), NOW())
     ON CONFLICT (call_id) DO UPDATE SET
       rm_name = EXCLUDED.rm_name,
       tl_name = EXCLUDED.tl_name,
@@ -647,6 +864,8 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
       customer_service_score = EXCLUDED.customer_service_score,
       applicable_weight = EXCLUDED.applicable_weight,
       verdict = EXCLUDED.verdict,
+      is_evaluable = true,
+      exclusion_reason = null,
       parameters = EXCLUDED.parameters,
       compliance_tripwire = EXCLUDED.compliance_tripwire,
       compliance_reason = EXCLUDED.compliance_reason,
@@ -673,12 +892,23 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     JSON.stringify(transcriptTurns),
   ]);
 
+  await query(`
+    UPDATE pcg_call_recordings
+    SET
+      call_nature = 'client',
+      call_category = $1,
+      category_source = 'ai_triage'
+    WHERE call_id = $2
+  `, [category, call.call_id]);
+
   log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}`);
 
   return {
     callId: call.call_id,
     rmName: resolvedRm,
     tlName: resolvedTl,
+    category,
+    isEvaluable: true,
     iqs: iqsScore,
     verdict,
     parameters: formattedParameters,

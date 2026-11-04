@@ -16,7 +16,7 @@ export interface PcgMemberAnalyticsProps {
   calls?: Array<{
     id: string;
     rmName: string;
-    iqsScore: number;
+    iqsScore: number | null;
     durationSeconds: number;
     isAnswered: boolean;
     category: string;
@@ -164,9 +164,9 @@ export default function PcgMemberAnalyticsDashboard({
   // Derive call analytics for this RM
   const rmScorecard = rmScorecards.find(s => isSamePcgAgent(s.rmName, effectiveRm));
   const rmCalls = calls.filter(c => isSamePcgAgent(c.rmName, effectiveRm));
-  const rmAnswered = rmCalls.filter(c => c.isAnswered);
+  const rmAnswered = rmCalls.filter(c => c.isAnswered && c.iqsScore != null);
   const rmAvgIqs = rmScorecard?.overallScore ?? (rmAnswered.length > 0
-    ? Math.round(rmAnswered.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnswered.length)
+    ? Math.round(rmAnswered.reduce((acc, c) => acc + (c.iqsScore ?? 0), 0) / rmAnswered.length)
     : 0);
   const callsVol = rmScorecard?.totalCalls ?? rmCalls.length;
   const callsIqs = rmAvgIqs;
@@ -1176,10 +1176,10 @@ export default function PcgMemberAnalyticsDashboard({
                     {lowestParam && lowestParam.key.toLowerCase().includes('open')
                       ? 'Ensure professional greeting with client name, self-introduction, and confirmation of availability upfront.'
                       : lowestParam && lowestParam.key.toLowerCase().includes('clos')
-                      ? 'Summarize agreed next steps and establish a firm calendar callback slot before concluding the call.'
-                      : lowestParam && lowestParam.key.toLowerCase().includes('legal')
-                      ? 'Ensure mandatory regulatory disclosures and clear return vs risk positioning without promising guaranteed returns.'
-                      : 'Maintain clear pace, proactive expectation setting, and concise follow-ups.'}
+                        ? 'Summarize agreed next steps and establish a firm calendar callback slot before concluding the call.'
+                        : lowestParam && lowestParam.key.toLowerCase().includes('legal')
+                          ? 'Ensure mandatory regulatory disclosures and clear return vs risk positioning without promising guaranteed returns.'
+                          : 'Maintain clear pace, proactive expectation setting, and concise follow-ups.'}
                   </span>
                 </div>
               </div>

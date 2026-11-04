@@ -545,18 +545,39 @@ export default function PcgScorecardView({
                   </span>
                 </div>
 
-                {/* Pickup Rate */}
-                <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col col-span-2 justify-between">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-                    Pickup Rate
-                  </span>
-                  <span
-                    className="text-xs font-semibold text-gray-800 mt-3 bg-zinc-50 p-1.5 rounded-lg border border-zinc-200 text-center truncate"
-                    title={numbers?.pickupRateText || numbers?.connectRateText}
-                  >
-                    {numbers?.pickupRateText || numbers?.connectRateText || '92% pickup rate'}
-                  </span>
-                </div>
+                {/* Client Pickup Rate */}
+                {(() => {
+                  const rawPickupText = (numbers?.pickupRateText || numbers?.connectRateText || '')
+                    .replace(/pickup rate/gi, 'client pickup rate')
+                    .replace(/calls connected/gi, 'client calls answered');
+                  const pctMatch = rawPickupText.match(/^(\d+%)/);
+                  const detailsMatch = rawPickupText.match(/\((.*?)\)/);
+                  const pickupPct = pctMatch ? pctMatch[1] : (rawPickupText.includes('%') ? rawPickupText.split(' ')[0] : '—');
+                  const pickupDetails = detailsMatch
+                    ? detailsMatch[1]
+                    : rawPickupText.replace(/^\d+%\s*(client\s*)?pickup\s*rate\s*/i, '').replace(/[()]/g, '').trim();
+
+                  return (
+                    <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col col-span-2 justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                          Client Pickup Rate
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-2 mt-2">
+                        <span className="text-2xl font-extrabold font-mono text-gray-900">
+                          {pickupPct}
+                        </span>
+                        <span className="text-xs font-semibold text-zinc-500">
+                          pickup
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-medium text-zinc-600 mt-1 leading-normal" title={rawPickupText}>
+                        {pickupDetails || 'All client calls answered'}
+                      </p>
+                    </div>
+                  );
+                })()}
 
                 {/* Compliance Breaches */}
                 <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between">
