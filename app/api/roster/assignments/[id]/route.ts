@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
-import { rosterActor, assertCanEdit, audit } from '@/lib/roster-server';
+import { rosterActor, assertCanEdit, audit, withRosterErrors } from '@/lib/roster-server';
 import { todayIST, isIsoDate } from '@/lib/ist';
 
 async function load(id: number, today: string) {
@@ -11,7 +11,7 @@ async function load(id: number, today: string) {
 }
 
 /** Edit a scheduled change. Body: { toPattern, start, reason, expectedUpdatedAt } — 409 if edited since loaded. */
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+const PATCH_ = async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
   const { actor, response } = await rosterActor('roster:manage:access');
   if (response) return response;
   const id = Number((await ctx.params).id), today = todayIST();
@@ -35,9 +35,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   await audit(actor.userId, 'roster_pattern_edited', row.user_id, { id, toPattern, start: b.start, reason: b.reason });
   return NextResponse.json({ ok: true });
 }
+export const PATCH = withRosterErrors(PATCH_);
 
 /** Cancel a scheduled change (reason required). The prior pattern simply stays in force. */
-export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+const DELETE_ = async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
   const { actor, response } = await rosterActor('roster:manage:access');
   if (response) return response;
   const id = Number((await ctx.params).id), today = todayIST();
@@ -51,3 +52,4 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   await audit(actor.userId, 'roster_pattern_cancelled', row.user_id, { id, reason: b.reason });
   return NextResponse.json({ ok: true });
 }
+export const DELETE = withRosterErrors(DELETE_);

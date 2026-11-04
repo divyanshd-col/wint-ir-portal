@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
-import { rosterActor } from '@/lib/roster-server';
+import { rosterActor, withRosterErrors } from '@/lib/roster-server';
 import { todayIST, addDays, isIsoDate } from '@/lib/ist';
 import { clampAnchor, periodDays, isRosterView, cellKind, patternOn, ROSTER_START, type Assignment, type CellKind, type ExtraMark, type Pattern } from '@/lib/roster';
 
-export async function GET(req: NextRequest) {
+const GET_ = async (req: NextRequest) => {
   const { actor, response } = await rosterActor('roster:view:access');
   if (response) return response;
   const today = todayIST();
@@ -50,3 +50,4 @@ export async function GET(req: NextRequest) {
   });
   return NextResponse.json({ today, view, anchor, days, patterns, people: rows, scheduled: scheduledOut, viewer: actor });
 }
+export const GET = withRosterErrors(GET_);

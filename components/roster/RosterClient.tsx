@@ -12,7 +12,7 @@ const card: React.CSSProperties = { background: 'var(--qa-card)', border: '1px s
 
 export default function RosterClient() {
   const [data, setData] = useState<RosterData | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<RosterView>('week');
   const [anchor, setAnchor] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('grid');
@@ -20,13 +20,17 @@ export default function RosterClient() {
   const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async (v: RosterView, a: string | null) => {
-    setError(false);
+    setError(null);
     try {
       const r = await fetch(`/api/roster?view=${v}${a ? `&date=${a}` : ''}`);
-      if (!r.ok) throw new Error();
+      if (!r.ok) {
+        const msg = (await r.json().catch(() => ({})))?.error as string | undefined;
+        setError(r.status === 403 ? 'You don’t have access to the roster.' : msg || 'Something went wrong on our side. Try again in a moment.');
+        return;
+      }
       const d: RosterData = await r.json();
       setData(d); setAnchor(d.anchor); setView(d.view);
-    } catch { setError(true); }
+    } catch { setError('Couldn’t reach the server. Try again in a moment.'); }
   }, []);
   useEffect(() => {
     let v: RosterView = 'week';
@@ -56,7 +60,7 @@ export default function RosterClient() {
     </button>);
 
   let body: React.ReactNode;
-  if (error) body = <div style={card}><EmptyState title="Couldn’t load the roster" body="Something went wrong on our side. Try again in a moment." /><div style={{ textAlign: 'center', paddingBottom: 24 }}><button type="button" style={btnSecondary} onClick={() => reload()}>Try again</button></div></div>;
+  if (error) body = <div style={card}><EmptyState title="Couldn’t load the roster" body={error} /><div style={{ textAlign: 'center', paddingBottom: 24 }}><button type="button" style={btnSecondary} onClick={() => reload()}>Try again</button></div></div>;
   else if (!data) body = <div style={card} aria-busy="true" aria-label="Loading">{Array.from({ length: 8 }).map((_, i) => <div key={i} style={{ height: 46, borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)', opacity: .5 }} />)}</div>;
   else if (!data.people.length) body = <div style={card}><EmptyState title="No one on the roster yet" body="People show here once they are active agents or team leads." /></div>;
   else if (tab === 'grid') {

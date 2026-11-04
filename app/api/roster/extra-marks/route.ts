@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
-import { rosterActor, assertCanEdit, audit } from '@/lib/roster-server';
+import { rosterActor, assertCanEdit, audit, withRosterErrors } from '@/lib/roster-server';
 import { todayIST, isIsoDate } from '@/lib/ist';
 import { isOff, patternOn, validateExtraDay, type Pattern } from '@/lib/roster';
 
-export async function POST(req: NextRequest) {
+const POST_ = async (req: NextRequest) => {
   const { actor, response } = await rosterActor('roster:manage:access');
   if (response) return response;
   const b = await req.json().catch(() => ({}));
@@ -29,3 +29,4 @@ export async function POST(req: NextRequest) {
   await audit(actor.userId, 'roster_extra_marked', userId, { day: b.day, half, reason: b.reason });
   return NextResponse.json({ ok: true });
 }
+export const POST = withRosterErrors(POST_);

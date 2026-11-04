@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMissingTable } from '../lib/roster-server';
 import { todayIST, toIstDate } from '../lib/ist';
 import { patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, ROSTER_START, canEditTarget, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
 
@@ -116,4 +117,11 @@ test('roster skills - defaults agree in all copies and the migration grants them
   }
   const mig = read('db/migrations/035_roster.sql');
   for (const k of ["('quality','roster:view:access'", "('agent','roster:view:access'", "('tl','roster:manage:access'", "('admin','roster:manage:access'"]) assert.ok(mig.includes(k), k);
+});
+
+test('isMissingTable - only Postgres undefined_table (42P01) counts', () => {
+  assert.equal(isMissingTable({ code: '42P01' }), true);
+  assert.equal(isMissingTable({ code: '23505' }), false);
+  assert.equal(isMissingTable(new Error('boom')), false);
+  assert.equal(isMissingTable(null), false);
 });

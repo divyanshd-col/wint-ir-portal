@@ -31,3 +31,23 @@ export async function audit(actorId: number, action: string, targetId: number | 
   await query(`INSERT INTO hrms_audit (actor_user_id, action, target_user_id, detail) VALUES ($1,$2,$3,$4)`,
     [actorId, action, targetId, JSON.stringify(detail)]);
 }
+
+/** Postgres "undefined_table": migration 035 hasn't been applied to this database. */
+export function isMissingTable(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === '42P01';
+}
+
+/** Wrap a route handler so DB failures return a clear JSON error instead of an opaque 500. */
+export function withRosterErrors<A extends unknown[]>(fn: (...args: A) => Promise<NextResponse>) {
+  return async (...args: A): Promise<NextResponse> => {
+    try {
+      return await fn(...args);
+    } catch (err) {
+      console.error('[roster]', (err as Error)?.message);
+      if (isMissingTable(err)) {
+        return NextResponse.json({ error: 'Roster tables are missing. Run migration 035 on this database.' }, { status: 503 });
+      }
+      return NextResponse.json({ error: 'Something went wrong loading the roster.' }, { status: 500 });
+    }
+  };
+}
