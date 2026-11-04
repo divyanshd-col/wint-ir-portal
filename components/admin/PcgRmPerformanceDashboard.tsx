@@ -13,6 +13,9 @@ export interface RmPerformanceItem {
   callsVolume: number;
   focusArea: string;
   improvementDriver?: string;
+  offHoursClientTotal: number;
+  offHoursClientAnswered: number;
+  offHoursPickupRate: number;
 }
 
 interface PcgRmPerformanceProps {
@@ -29,6 +32,12 @@ interface PcgRmPerformanceProps {
     topWeakness: string;
     prev2WkIqs?: number;
     delta2Wk?: number;
+    offHoursClientTotal?: number;
+    offHoursClientAnswered?: number;
+    offHoursPickupRate?: number;
+    clientTotalCalls?: number;
+    clientAnsweredCalls?: number;
+    clientPickupRate?: number;
   }>;
   teamLeads?: Array<{
     tlName: string;
@@ -97,6 +106,9 @@ export default function PcgRmPerformanceDashboard({
             callsVolume: sc.totalCalls,
             focusArea: sc.topWeakness || '—',
             improvementDriver: undefined,
+            offHoursClientTotal: sc.offHoursClientTotal || 0,
+            offHoursClientAnswered: sc.offHoursClientAnswered || 0,
+            offHoursPickupRate: sc.offHoursPickupRate || 0,
           };
         })
     : [];
@@ -133,6 +145,33 @@ export default function PcgRmPerformanceDashboard({
       .slice(0, 5);
   }
 
+  // 4. Top 5 Contributors in Answering Valid Client Calls during Non-Working Hours & Weekends
+  const offHoursTopContributors = [...rmsList]
+    .filter((rm) => (rm.offHoursClientAnswered || 0) > 0)
+    .sort((a, b) => {
+      // Primary: Highest number of valid client calls answered during off-hours/weekends
+      if (b.offHoursClientAnswered !== a.offHoursClientAnswered) {
+        return b.offHoursClientAnswered - a.offHoursClientAnswered;
+      }
+      // Tie-breaker 1: Higher off-hours pickup rate %
+      if (b.offHoursPickupRate !== a.offHoursPickupRate) {
+        return b.offHoursPickupRate - a.offHoursPickupRate;
+      }
+      // Tie-breaker 2: Total off-hours client calls volume
+      if (b.offHoursClientTotal !== a.offHoursClientTotal) {
+        return b.offHoursClientTotal - a.offHoursClientTotal;
+      }
+      // Tie-breaker 3: Overall IQS
+      return b.currentIqs - a.currentIqs;
+    })
+    .slice(0, 5);
+
+  const totalDeptOffHoursAnswered = rmsList.reduce((sum, rm) => sum + (rm.offHoursClientAnswered || 0), 0);
+  const totalDeptOffHoursReceived = rmsList.reduce((sum, rm) => sum + (rm.offHoursClientTotal || 0), 0);
+  const deptOffHoursPickupRate = totalDeptOffHoursReceived > 0
+    ? Math.round((totalDeptOffHoursAnswered / totalDeptOffHoursReceived) * 100)
+    : 0;
+
   return (
     <div style={{ fontFamily: 'Inter, sans-serif', maxWidth: 1280, margin: '0 auto', color: '#18181b' }}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -150,7 +189,7 @@ export default function PcgRmPerformanceDashboard({
             </span>
           </div>
           <p style={{ fontSize: 13, color: '#71717a', margin: '4px 0 0 0' }}>
-            Top performers (Top 5), Bottom performers (IQS ≤ 70%), and Most improved performers for the whole PCG department.
+            Top performers (Top 5 by IQS), bottom performers (IQS ≤ 70%), most improved performers, and top contributors during off-hours & weekends for the whole PCG department.
           </p>
         </div>
       </div>
@@ -516,10 +555,297 @@ export default function PcgRmPerformanceDashboard({
       </div>
       )}
 
+      {/* ── SEPARATE BANNER: TOP 5 NON-WORKING HOURS & WEEKENDS CONTRIBUTORS ── */}
+      {rmsList.length > 0 && (
+        <div
+          style={{
+            marginTop: 24,
+            marginBottom: 24,
+            background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+            border: '1px solid #cbd5e1',
+            borderRadius: 14,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03), 0 10px 15px -3px rgba(15, 23, 42, 0.04)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Banner Header */}
+          <div
+            style={{
+              padding: '16px 20px',
+              background: 'linear-gradient(90deg, #f1f5f9 0%, #ffffff 100%)',
+              borderBottom: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <h2
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    margin: 0,
+                    color: '#0f172a',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  Top 5 Contributors: Non-Working Hours & Weekends
+                </h2>
+              </div>
+              <p style={{ margin: '3px 0 0 0', fontSize: 12, color: '#64748b' }}>
+                Highest contributors in answering valid client calls received during non-working hours (&lt;10:00 AM, &ge;7:00 PM Mon–Fri) and weekends (Saturday &amp; Sunday).
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#334155',
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  padding: '5px 12px',
+                  borderRadius: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span style={{ color: '#64748b' }}>Department Off-Hours:</span>
+                <strong style={{ color: '#0f172a', fontFamily: 'monospace' }}>
+                  {totalDeptOffHoursAnswered} answered
+                </strong>
+                <span style={{ color: '#94a3b8' }}>/</span>
+                <span style={{ color: '#64748b', fontSize: 11 }}>
+                  {totalDeptOffHoursReceived} calls ({deptOffHoursPickupRate}% pickup)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Banner Content: Top 5 RMs Cards */}
+          <div style={{ padding: '16px 20px' }}>
+            {offHoursTopContributors.length === 0 ? (
+              <div style={{ padding: '28px 16px', textAlign: 'center', color: '#64748b' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>
+                  No Off-Hours or Weekend Client Calls Answered Yet
+                </div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                  Rankings will automatically appear here as Relationship Managers answer incoming client calls outside regular business hours.
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                  gap: 14,
+                }}
+              >
+                {offHoursTopContributors.map((rm, idx) => {
+                  const rankBadges = [
+                    { label: '🥇 1st', bg: '#fef3c7', text: '#92400e', border: '#fde68a', cardBg: '#fffdf5', cardBorder: '#fde68a', avatarBg: '#fef3c7', avatarText: '#92400e', avatarBorder: '#fde68a' },
+                    { label: '🥈 2nd', bg: '#f1f5f9', text: '#334155', border: '#cbd5e1', cardBg: '#ffffff', cardBorder: '#e2e8f0', avatarBg: '#f1f5f9', avatarText: '#334155', avatarBorder: '#cbd5e1' },
+                    { label: '🥉 3rd', bg: '#ffedd5', text: '#9a3412', border: '#fed7aa', cardBg: '#ffffff', cardBorder: '#e2e8f0', avatarBg: '#ffedd5', avatarText: '#9a3412', avatarBorder: '#fed7aa' },
+                    { label: '#4', bg: '#f8fafc', text: '#475569', border: '#e2e8f0', cardBg: '#ffffff', cardBorder: '#e2e8f0', avatarBg: '#e0e7ff', avatarText: '#4338ca', avatarBorder: '#c7d2fe' },
+                    { label: '#5', bg: '#f8fafc', text: '#475569', border: '#e2e8f0', cardBg: '#ffffff', cardBorder: '#e2e8f0', avatarBg: '#e0e7ff', avatarText: '#4338ca', avatarBorder: '#c7d2fe' },
+                  ];
+                  const badge = rankBadges[idx] || rankBadges[3];
+
+                  return (
+                    <div
+                      key={rm.id}
+                      onClick={() => onSelectRm && onSelectRm(rm.name)}
+                      style={{
+                        background: badge.cardBg,
+                        border: `1px solid ${badge.cardBorder}`,
+                        borderRadius: 10,
+                        padding: '14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        cursor: onSelectRm ? 'pointer' : 'default',
+                        transition: 'all 0.15s ease',
+                        boxShadow: idx === 0 ? '0 1px 3px rgba(245, 158, 11, 0.1)' : '0 1px 2px rgba(0,0,0,0.02)',
+                      }}
+                      className="hover:border-indigo-300 hover:shadow-md"
+                    >
+                      {/* Top Row: Rank & Pickup Rate Badge */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            background: badge.bg,
+                            color: badge.text,
+                            border: `1px solid ${badge.border}`,
+                            padding: '2px 7px',
+                            borderRadius: 6,
+                            letterSpacing: '0.02em',
+                          }}
+                        >
+                          {badge.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            background: '#ecfdf5',
+                            color: '#065f46',
+                            border: '1px solid #a7f3d0',
+                            padding: '2px 6px',
+                            borderRadius: 6,
+                            fontFamily: 'monospace',
+                          }}
+                          title={`${rm.offHoursPickupRate}% pickup rate during off-hours & weekends`}
+                        >
+                          {rm.offHoursPickupRate}% pickup
+                        </span>
+                      </div>
+
+                      {/* Middle Row: RM Info */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <div
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            background: badge.avatarBg,
+                            color: badge.avatarText,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            flexShrink: 0,
+                            border: `1px solid ${badge.avatarBorder}`,
+                          }}
+                        >
+                          {rm.ini}
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: '#0f172a',
+                              lineHeight: '18px',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                            title={rm.name}
+                          >
+                            {rm.name}
+                          </div>
+                          {rm.tl ? (
+                            <div style={{ marginTop: 2 }}>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  color: '#475569',
+                                  background: '#f1f5f9',
+                                  padding: '1px 5px',
+                                  borderRadius: 4,
+                                  display: 'inline-block',
+                                  maxWidth: '100%',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {/* Metric Highlight: Calls Answered */}
+                      <div
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 8,
+                          padding: '8px 10px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                            <span
+                              style={{
+                                fontSize: 18,
+                                fontWeight: 800,
+                                fontFamily: 'monospace',
+                                color: '#0f172a',
+                              }}
+                            >
+                              {rm.offHoursClientAnswered}
+                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>
+                              answered
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>
+                            of {rm.offHoursClientTotal} calls
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action Button */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 2 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenScorecard && onOpenScorecard(rm.name);
+                          }}
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: '#4338ca',
+                            background: '#eef2ff',
+                            border: '1px solid #c7d2fe',
+                            borderRadius: 5,
+                            padding: '2px 8px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 2,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            whiteSpace: 'nowrap',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#e0e7ff';
+                            e.currentTarget.style.color = '#3730a3';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#eef2ff';
+                            e.currentTarget.style.color = '#4338ca';
+                          }}
+                        >
+                          Show Scorecard →
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Footer Explanatory Note ────────────────────────────────────── */}
       <div style={{ marginTop: 28, padding: '14px 18px', background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <p style={{ margin: 0, fontSize: 12, color: '#71717a' }}>
-          <strong>Ranking Methodology:</strong> Top category ranks the top 5 RMs by average call IQS. Bottom category highlights RMs scoring 70% or below for active coaching. Most Improved tracks the top 5 net score gainers over a 14-day rolling window.
+          <strong>Ranking Methodology:</strong> Off-Hours &amp; Weekend banner highlights the top 5 RMs who answered the highest volume of valid client calls outside regular business hours (Mon–Fri &lt;10:00 AM, &ge;7:00 PM IST) and on weekends. Top category ranks the top 5 RMs by average call IQS. Bottom category highlights RMs scoring 70% or below for active coaching. Most Improved tracks the top 5 net score gainers over a 14-day rolling window.
         </p>
         <span style={{ fontSize: 11, color: '#a1a1aa' }}>
           Updated for Calls only

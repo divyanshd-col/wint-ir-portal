@@ -54,7 +54,16 @@ export interface PcgTeamAnalyticsProps {
     tlName: string;
     teamSize: number;
     totalCalls: number;
+    answeredCalls?: number;
+    clientTotalCalls?: number;
+    clientAnsweredCalls?: number;
+    clientUnansweredCalls?: number;
+    otherUnansweredCalls?: number;
     connectRate: number;
+    clientPickupRate?: number;
+    offHoursClientTotal?: number;
+    offHoursClientAnswered?: number;
+    offHoursPickupRate?: number;
     avgScore: number;
     callsUnder85: number;
     rms: string[];
@@ -74,6 +83,10 @@ export interface PcgTeamAnalyticsProps {
   departmentStats?: {
     totalCalls: number;
     answeredCalls: number;
+    clientTotal?: number;
+    clientAnswered?: number;
+    clientUnanswered?: number;
+    otherUnanswered?: number;
     pickupRate: number;
     avgIqs: number | null;
     parameterScores?: Record<string, number>;
@@ -184,11 +197,15 @@ function StatCard({
   teamValue,
   cxValue,
   cxLabel = 'Department',
+  teamSubtext,
+  cxSubtext,
 }: {
   label: string;
   teamValue: string;
   cxValue: string;
   cxLabel?: string;
+  teamSubtext?: React.ReactNode;
+  cxSubtext?: React.ReactNode;
 }) {
   return (
     <div
@@ -212,8 +229,9 @@ function StatCard({
       >
         {label}
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+        {/* Team side */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
           <span
             style={{
               fontSize: 11,
@@ -228,9 +246,17 @@ function StatCard({
           <span style={{ fontSize: 32, fontWeight: 700, color: 'var(--qa-text, #18181b)', lineHeight: 1 }}>
             {teamValue}
           </span>
+          {teamSubtext && (
+            <div style={{ fontSize: 11, color: 'var(--qa-text-2, #71717a)', marginTop: 4, lineHeight: 1.35 }}>
+              {teamSubtext}
+            </div>
+          )}
         </div>
-        <div style={{ width: 1, background: 'var(--qa-border, #e4e4e7)', alignSelf: 'stretch', marginBottom: 3 }} />
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, paddingBottom: 3 }}>
+
+        <div style={{ width: 1, background: 'var(--qa-border, #e4e4e7)', alignSelf: 'stretch', margin: '4px 0' }} />
+
+        {/* Department side */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
           <span
             style={{
               fontSize: 11,
@@ -242,9 +268,14 @@ function StatCard({
           >
             {cxLabel}
           </span>
-          <span style={{ fontSize: 20, fontWeight: 600, color: 'var(--qa-text-2, #71717a)', lineHeight: 1 }}>
+          <span style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text-2, #71717a)', lineHeight: 1 }}>
             {cxValue}
           </span>
+          {cxSubtext && (
+            <div style={{ fontSize: 11, color: 'var(--qa-text-3, #a1a1aa)', marginTop: 4, lineHeight: 1.35 }}>
+              {cxSubtext}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -647,6 +678,10 @@ export default function PcgTeamAnalyticsDashboard({
     let deptTotalCalls: number | undefined = departmentStats?.totalCalls;
     let deptPickup: number | null | undefined = departmentStats?.pickupRate;
     let deptIqs: number | null | undefined = departmentStats?.avgIqs;
+    const deptClientTotal = departmentStats?.clientTotal ?? teamLeads?.reduce((acc, t) => acc + (t.clientTotalCalls || 0), 0) ?? 0;
+    const deptClientAnswered = departmentStats?.clientAnswered ?? teamLeads?.reduce((acc, t) => acc + (t.clientAnsweredCalls || 0), 0) ?? 0;
+    const deptClientUnanswered = departmentStats?.clientUnanswered ?? teamLeads?.reduce((acc, t) => acc + (t.clientUnansweredCalls || 0), 0) ?? 0;
+    const deptOtherUnanswered = departmentStats?.otherUnanswered ?? teamLeads?.reduce((acc, t) => acc + (t.otherUnansweredCalls || 0), 0) ?? 0;
 
     if ((deptTotalCalls === undefined || deptTotalCalls === 0) && teamLeads && teamLeads.length > 0) {
       deptTotalCalls = teamLeads.reduce((acc, t) => acc + (t.totalCalls || 0), 0);
@@ -662,13 +697,42 @@ export default function PcgTeamAnalyticsDashboard({
       deptIqs = deptTotalCalls > 0 ? Math.round((totalWeightedIqs / deptTotalCalls) * 10) / 10 : null;
     }
 
+    const teamClientTotal = currentTlData?.clientTotalCalls ?? 0;
+    const teamClientAnswered = currentTlData?.clientAnsweredCalls ?? 0;
+    const teamClientUnanswered = currentTlData?.clientUnansweredCalls ?? 0;
+    const teamOtherUnanswered = currentTlData?.otherUnansweredCalls ?? 0;
+
     return {
-      pickupTeam: currentTlData && currentTlData.totalCalls > 0 ? `${currentTlData.connectRate}%` : '—',
+      pickupTeam: currentTlData && currentTlData.totalCalls > 0 ? `${currentTlData.clientPickupRate ?? currentTlData.connectRate}%` : '—',
+      pickupTeamSubtext: currentTlData ? (
+        <span>
+          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{teamClientUnanswered}</strong> client unans · {teamOtherUnanswered} other unans
+        </span>
+      ) : undefined,
+
       pickupCx: deptPickup != null ? `${deptPickup}%` : '—',
+      pickupCxSubtext: (
+        <span>
+          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{deptClientUnanswered}</strong> client unans · {deptOtherUnanswered} other unans
+        </span>
+      ),
+
       iqsTeam: currentTlData && currentTlData.avgScore ? `${currentTlData.avgScore}%` : '—',
       iqsCx: deptIqs != null ? `${deptIqs}%` : '—',
+
       volumeTeam: currentTlData ? fmtVol(currentTlData.totalCalls) : '—',
+      volumeTeamSubtext: currentTlData ? (
+        <span>
+          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{fmtVol(teamClientTotal)}</strong> client ({fmtVol(teamClientAnswered)} answered)
+        </span>
+      ) : undefined,
+
       volumeCx: deptTotalCalls != null ? fmtVol(deptTotalCalls) : '—',
+      volumeCxSubtext: (
+        <span>
+          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{fmtVol(deptClientTotal)}</strong> client ({fmtVol(deptClientAnswered)} answered)
+        </span>
+      ),
     };
   };
 
@@ -880,8 +944,17 @@ export default function PcgTeamAnalyticsDashboard({
               teamValue={metrics.volumeTeam}
               cxValue={metrics.volumeCx}
               cxLabel="Department"
+              teamSubtext={metrics.volumeTeamSubtext}
+              cxSubtext={metrics.volumeCxSubtext}
             />
-            <StatCard label="PICKUP RATE" teamValue={metrics.pickupTeam} cxValue={metrics.pickupCx} cxLabel="Department" />
+            <StatCard
+              label="PICKUP RATE"
+              teamValue={metrics.pickupTeam}
+              cxValue={metrics.pickupCx}
+              cxLabel="Department"
+              teamSubtext={metrics.pickupTeamSubtext}
+              cxSubtext={metrics.pickupCxSubtext}
+            />
           </>
         )}
       </div>
