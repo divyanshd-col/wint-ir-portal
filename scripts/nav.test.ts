@@ -38,6 +38,7 @@ test('activeTab - Analytics group, Quality group, Chat, Settings (incl. Token Us
   assert.equal(activeTab('/settings'), 'settings');
   assert.equal(activeTab('/tokens'), 'settings'); // reached from Settings, Token Usage is not in the Analytics sidebar
   assert.equal(activeTab('/kb-gaps'), null);
+  assert.equal(activeTab('/roster'), null); // Roster is its own page, it doesn't light up the Quality tab
   assert.equal(activeTab('/qualityx'), null); // segment match, not prefix match
 });
 

@@ -80,6 +80,7 @@ export const NAV_ALL: NavItem[] = [
   { label: 'My Quality Calls', href: '/agent/quality-calls',    icon: PhoneIcon,      roles: ['agent'],                           skill: 'agent:my_calls:access', section: 'IR Agent' },
   { label: 'My Quality Emails', href: '/agent/quality-emails',  icon: MailIcon,       roles: ['agent'],                           section: 'IR Agent' },
   { label: 'My Reports',       href: '/agent/reports',          icon: DocumentIcon,   roles: ['agent'],                           skill: 'agent:reports:access', section: 'IR Agent' },
+  { label: 'Roster',           href: '/roster',                 icon: UsersIcon,      roles: ['admin', 'tl', 'quality', 'agent'], skill: 'roster:view:access', section: 'Team' },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
