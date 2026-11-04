@@ -33,12 +33,13 @@ export function mondayOf(date: string): string {
 export function gridDays(start: string, n = 14): string[] {
   return Array.from({ length: n }, (_, i) => addDays(start, i));
 }
-/** Paging bounds: 1 Jan of the current IST year back, 12 months forward. Returns a Monday inside the range. */
+/** Earliest day the roster shows: launch date, no backfill before it. */
+export const ROSTER_START = '2026-11-01';
+/** Paging bounds: ROSTER_START back, 12 months forward. Normal starts are Mondays; the earliest is ROSTER_START itself. */
 export function clampStart(start: string, today: string): string {
-  const min = mondayOf(`${today.slice(0, 4)}-01-01`);
   const max = mondayOf(addDays(today, 365));
   const s = mondayOf(start);
-  return s < min ? min : s > max ? max : s;
+  return s < ROSTER_START ? ROSTER_START : s > max ? max : s;
 }
 
 export interface Actor { userId: number; role: string }

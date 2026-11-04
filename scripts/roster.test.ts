@@ -74,9 +74,11 @@ test('canEditTarget - TL only for members reporting to them by id; near-identica
   assert.equal(canEditTarget({ userId: 3, role: 'agent' }, 2002, 3), false);
 });
 
-test('grid paging - Monday start, clamped to this year and 12 months ahead', () => {
+test('grid paging - Monday start, no earlier than 1 Nov 2026, 12 months ahead', () => {
   assert.equal(mondayOf('2026-11-08'), '2026-11-02'); // Sunday belongs to the week starting Monday
-  assert.equal(clampStart('2025-01-01', '2026-11-04'), '2025-12-29');
+  assert.equal(clampStart('2026-11-04', '2026-11-04'), '2026-11-02');
+  assert.equal(clampStart('2026-10-19', '2026-11-04'), '2026-11-01'); // paged back past the bound
+  assert.equal(clampStart('2025-01-01', '2026-11-04'), '2026-11-01');
   assert.equal(clampStart('2030-01-01', '2026-11-04'), mondayOf('2027-11-04'));
 });
 

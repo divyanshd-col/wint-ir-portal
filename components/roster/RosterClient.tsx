@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { ROSTER_START } from '@/lib/roster';
 import { CancelDialog, MarkExtraDialog, PatternDialog } from './Dialogs';
 import { Avatar, EmptyState, Switch, btnSecondary, fmtDay, fmtShort, wdOf, type Person, type RosterData, type Scheduled } from './ui';
 
@@ -59,7 +60,7 @@ export default function RosterClient() {
     body = (<>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" style={btnSecondary} aria-label="Previous two weeks" onClick={() => page(-14)}>‹</button>
+          <button type="button" style={{ ...btnSecondary, opacity: data.start <= ROSTER_START ? .4 : 1 }} aria-label="Previous two weeks" disabled={data.start <= ROSTER_START} onClick={() => page(-14)}>‹</button>
           <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--qa-text)' }}>{fmtShort(data.days[0])} – {fmtDay(data.days[data.days.length - 1])}</span>
           <button type="button" style={btnSecondary} aria-label="Next two weeks" onClick={() => page(14)}>›</button>
         </div>
