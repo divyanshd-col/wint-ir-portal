@@ -98,7 +98,8 @@ export async function middleware(req: NextRequest) {
       pathname.startsWith('/quality') ||
       pathname.startsWith('/cx') ||
       pathname.startsWith('/tl') ||
-      pathname.startsWith('/agent')
+      pathname.startsWith('/agent') ||
+      pathname.startsWith('/roster') // roster is for the CX team only
     ) {
       return NextResponse.redirect(new URL('/admin/pcg-calls', req.url));
     }

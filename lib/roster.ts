@@ -74,6 +74,9 @@ export function canGoPrev(view: RosterView, anchor: string): boolean {
   return days[days.length - 1] >= ROSTER_START;
 }
 
+/** The roster covers the Wint CX team only. PCG-only users are excluded; 'both' (cross-workspace admins) are in. */
+export const isCxDomain = (platformDomain: string | null | undefined) => platformDomain !== 'pcg';
+
 export interface Actor { userId: number; role: string }
 /** Who may change a target. Admin: anyone. TL: only members reporting to them by user id, never themselves. */
 export function canEditTarget(actor: Actor, targetUserId: number, tlOfTarget: number | null): boolean {

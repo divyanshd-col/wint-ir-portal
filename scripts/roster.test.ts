@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMissingTable } from '../lib/roster-server';
 import { todayIST, toIstDate } from '../lib/ist';
-import { patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, ROSTER_START, canEditTarget, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
+import { patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, ROSTER_START, canEditTarget, isCxDomain, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
 
 const P: Pattern[] = [
   { id: 1, label: 'Sun-Thu', off_weekdays: [5, 6] },
@@ -124,4 +124,11 @@ test('isMissingTable - only Postgres undefined_table (42P01) counts', () => {
   assert.equal(isMissingTable({ code: '23505' }), false);
   assert.equal(isMissingTable(new Error('boom')), false);
   assert.equal(isMissingTable(null), false);
+});
+
+test('roster is CX only - PCG-only users are out, cx and both are in', () => {
+  assert.equal(isCxDomain('cx'), true);
+  assert.equal(isCxDomain('both'), true);
+  assert.equal(isCxDomain('pcg'), false);
+  assert.equal(isCxDomain(undefined), true); // older rows default to cx
 });

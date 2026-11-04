@@ -18,7 +18,7 @@ const GET_ = async (req: NextRequest) => {
 
   const [patterns, people, assigns, marks, lines, scheduled, channels] = await Promise.all([
     query<Pattern>(`SELECT id, label, off_weekdays FROM roster_patterns ORDER BY id`),
-    query<{ user_id: number; name: string; role: string }>(`SELECT user_id, name, role FROM users WHERE status = 'active' AND role IN ('agent','tl') ORDER BY name`),
+    query<{ user_id: number; name: string; role: string }>(`SELECT user_id, name, role FROM users WHERE status = 'active' AND role IN ('agent','tl') AND platform_domain <> 'pcg' ORDER BY name`),
     query<Assignment & { user_id: number }>(`SELECT user_id, pattern_id, to_char(effective_from,'YYYY-MM-DD') AS effective_from, cancelled_at FROM roster_assignments WHERE cancelled_at IS NULL`),
     query<ExtraMark & { user_id: number }>(`SELECT user_id, to_char(day,'YYYY-MM-DD') AS day, half FROM roster_extra_marks WHERE reversed_at IS NULL AND day BETWEEN $1 AND $2`, [start, last]),
     query<{ user_id: number; tl_user_id: number; effective_from: string }>(`SELECT DISTINCT ON (user_id) user_id, tl_user_id, to_char(effective_from,'YYYY-MM-DD') AS effective_from FROM reporting_lines WHERE effective_from <= $1 ORDER BY user_id, effective_from DESC`, [today]),
