@@ -31,6 +31,28 @@ export function isConversationInactive(
   return referenceTime.getTime() - lastTime >= PCG_INACTIVITY_MS;
 }
 
+let schemaEnsured = false;
+
+/**
+ * Ensures pcg_conversations has status and closed_at columns.
+ * Runs once per process lifecycle to prevent missing column errors across environments.
+ */
+export async function ensurePcgSchema(): Promise<void> {
+  if (schemaEnsured) return;
+  try {
+    await query(`
+      ALTER TABLE pcg_conversations
+        ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
+        ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_pcg_conv_status ON pcg_conversations(status);
+      CREATE INDEX IF NOT EXISTS idx_pcg_conv_closed_at ON pcg_conversations(closed_at);
+    `);
+    schemaEnsured = true;
+  } catch (err: any) {
+    console.warn('[pcg/doubletick] Schema check warning:', err?.message || err);
+  }
+}
+
 /**
  * Closes all OPEN pcg_conversations that have had no message activity for >= 48 hours.
  * Sets status = 'CLOSED' and closed_at = last_message_at + 48 hours (or created_at + 48 hours).
@@ -40,6 +62,7 @@ export async function closeInactivePcgConversations(
   inactivityHours: number = PCG_INACTIVITY_HOURS
 ): Promise<{ closedCount: number; closed: { customer_phone: string; waba_number: string }[] }> {
   try {
+    await ensurePcgSchema();
     const res = await query<{ customer_phone: string; waba_number: string }>(
       `UPDATE pcg_conversations
        SET status = 'CLOSED',
@@ -83,6 +106,7 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
   }
 
   let ingestedCount = 0;
+  await ensurePcgSchema();
 
   for (const item of items) {
     if (!item || typeof item !== 'object') continue;
