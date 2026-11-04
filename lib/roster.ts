@@ -3,7 +3,7 @@ import { addDays, weekday } from '@/lib/ist';
 export interface Pattern { id: number; label: string; off_weekdays: number[] }
 export interface Assignment { id?: number; pattern_id: number; effective_from: string; cancelled_at?: string | null }
 export interface ExtraMark { day: string; half: 'full' | 'first' | 'second'; reversed_at?: string | null }
-export type CellKind = 'work' | 'off' | 'extra';
+export type CellKind = 'work' | 'off' | 'extra' | 'none'; // 'none' = before the roster starts
 export const CHANNELS = ['Chats', 'Calls', 'Emails', 'ORM'] as const;
 
 /** The pattern a person is on for one given date: latest non-cancelled row starting on/before it. */
@@ -30,16 +30,48 @@ export function cellKind(patterns: Pattern[], assignments: Assignment[], marks: 
 export function mondayOf(date: string): string {
   return addDays(date, -((weekday(date) + 6) % 7));
 }
-export function gridDays(start: string, n = 14): string[] {
+export function gridDays(start: string, n = 7): string[] {
   return Array.from({ length: n }, (_, i) => addDays(start, i));
 }
+
 /** Earliest day the roster shows: launch date, no backfill before it. */
 export const ROSTER_START = '2026-11-01';
-/** Paging bounds: ROSTER_START back, 12 months forward. Normal starts are Mondays; the earliest is ROSTER_START itself. */
-export function clampStart(start: string, today: string): string {
-  const max = mondayOf(addDays(today, 365));
-  const s = mondayOf(start);
-  return s < ROSTER_START ? ROSTER_START : s > max ? max : s;
+
+export type RosterView = 'day' | 'week' | 'month';
+export const isRosterView = (v: unknown): v is RosterView => v === 'day' || v === 'week' || v === 'month';
+
+/** Anchor date kept inside ROSTER_START … 12 months ahead. */
+export function clampAnchor(anchor: string, today: string): string {
+  const max = addDays(today, 365);
+  return anchor < ROSTER_START ? ROSTER_START : anchor > max ? max : anchor;
+}
+
+const daysInMonth = (ym: string) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+
+/** Days the calendar shows for a view: one day; Monday-to-Sunday week; or the month's full Monday-aligned weeks. */
+export function periodDays(view: RosterView, anchor: string): string[] {
+  if (view === 'day') return [anchor];
+  if (view === 'week') return gridDays(mondayOf(anchor), 7);
+  const first = `${anchor.slice(0, 7)}-01`;
+  const lead = (weekday(first) + 6) % 7;
+  const weeks = Math.ceil((lead + daysInMonth(anchor.slice(0, 7))) / 7);
+  return gridDays(mondayOf(first), weeks * 7);
+}
+
+/** Move the calendar one step back (-1) or forward (+1). A month step lands on the 1st. */
+export function shiftAnchor(view: RosterView, anchor: string, dir: -1 | 1): string {
+  if (view === 'day') return addDays(anchor, dir);
+  if (view === 'week') return addDays(anchor, 7 * dir);
+  const [y, m] = anchor.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + dir, 1));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Can the calendar still go back without showing only pre-launch days? */
+export function canGoPrev(view: RosterView, anchor: string): boolean {
+  if (view === 'month') return anchor.slice(0, 7) > ROSTER_START.slice(0, 7);
+  const days = periodDays(view, shiftAnchor(view, anchor, -1));
+  return days[days.length - 1] >= ROSTER_START;
 }
 
 export interface Actor { userId: number; role: string }

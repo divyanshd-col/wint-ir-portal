@@ -109,7 +109,7 @@ export function MarkExtraDialog({ person, patterns, days, today, onClose, onDone
   return (
     <Modal title="Mark extra day worked" onClose={onClose}>
       <PersonHead p={person} patterns={patterns} />
-      {opts.length === 0 ? <Banner kind="info">No week-off in this month’s visible weeks to mark. Page the grid to the week you need.</Banner> : (
+      {opts.length === 0 ? <Banner kind="info">No week-off to mark in the days on screen. Switch to Week view and open the week you need.</Banner> : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Week-off they worked" help="Today or past week-offs this month."><select className={inputCls} value={day} onChange={e => setDay(e.target.value)}>{opts.map(d => <option key={d} value={d}>{fmtDay(d)}</option>)}</select></Field>
           <Field label="Full day or which half"><select className={inputCls} value={half} onChange={e => setHalf(e.target.value)}><option value="full">Full day</option><option value="first">First half</option><option value="second">Second half</option></select></Field>

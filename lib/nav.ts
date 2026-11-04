@@ -1,6 +1,6 @@
 /** Top-level navigation rules: which tabs a user sees, which one is active, where each role lands. Pure, so it is unit-tested. */
 
-export type TabKey = 'chat' | 'analytics' | 'quality' | 'settings' | 'pcg-calls' | 'pcg-scorecard' | 'pcg-disputes';
+export type TabKey = 'chat' | 'analytics' | 'quality' | 'roster' | 'settings' | 'pcg-calls' | 'pcg-scorecard' | 'pcg-disputes';
 export interface NavTab { key: TabKey; label: string; href: string }
 
 // Same defaults the sidebars use when a session carries no explicit skills.
@@ -20,7 +20,7 @@ const TABS: (NavTab & { skill: string })[] = [
   { key: 'chat',      label: 'Chat',      href: '/chat',      skill: 'chat:access' },
   { key: 'analytics', label: 'MCP', href: '/analytics', skill: 'analytics:access' },
   { key: 'quality',   label: 'Quality',   href: '/quality',   skill: 'quality:analytics:access' },
-  { key: 'settings',  label: 'Settings',  href: '/settings',  skill: 'settings:manage:access' },
+  { key: 'roster',    label: 'Roster',    href: '/roster',    skill: 'roster:view:access' },
 ];
 
 export function topTabs(role: string | undefined, skills: string[] | undefined, activeDomain: 'cx' | 'pcg' = 'cx'): NavTab[] {
@@ -34,7 +34,8 @@ const AREAS: [TabKey, string[]][] = [
   ['chat', ['/chat']],
   ['analytics', ['/analytics', '/call-analysis', '/cx']],
   ['quality', ['/quality', '/tl', '/agent']],
-  ['settings', ['/settings', '/tokens']],
+  ['roster', ['/roster']],
+  ['settings', ['/settings', '/tokens']], // reached from the account menu, not a top tab
   ['pcg-calls', ['/admin/pcg-calls', '/pcg']],
 ];
 

@@ -3,15 +3,17 @@
 import React from 'react';
 
 export interface Pattern { id: number; label: string; off_weekdays: number[] }
-export interface Person { userId: number; name: string; role: string; tlUserId: number | null; tlName: string | null; pattern: number | null; cells: ('work' | 'off' | 'extra')[]; channels: string[]; canEdit: boolean }
+export interface Person { userId: number; name: string; role: string; tlUserId: number | null; tlName: string | null; pattern: number | null; cells: ('work' | 'off' | 'extra' | 'none')[]; channels: string[]; canEdit: boolean }
 export interface Scheduled { id: number; user_id: number; name: string; from_pattern: number | null; to_pattern: number; starts_on: string; reason: string; set_by: string | null; set_at: string; updated_at: string; canEdit: boolean }
-export interface RosterData { today: string; start: string; days: string[]; patterns: Pattern[]; people: Person[]; scheduled: Scheduled[]; viewer: { userId: number; role: string } }
+export interface RosterData { today: string; view: 'day' | 'week' | 'month'; anchor: string; days: string[]; patterns: Pattern[]; people: Person[]; scheduled: Scheduled[]; viewer: { userId: number; role: string } }
 
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const parts = (iso: string) => { const d = new Date(iso + 'T00:00:00Z'); return { wd: WD[d.getUTCDay()], d: d.getUTCDate(), m: MON[d.getUTCMonth()], y: d.getUTCFullYear() }; };
 export const fmtDay = (iso: string) => { const p = parts(iso); return `${p.wd}, ${p.d} ${p.m} ${p.y}`; };
 export const fmtShort = (iso: string) => { const p = parts(iso); return `${p.d} ${p.m}`; };
+export const fmtMonth = (iso: string) => { const p = parts(iso); return `${['January','February','March','April','May','June','July','August','September','October','November','December'][['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(p.m)]} ${p.y}`; };
+export const dayNum = (iso: string) => parts(iso).d;
 export const wdOf = (iso: string) => parts(iso).wd;
 export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?';
 

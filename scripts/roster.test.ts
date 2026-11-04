@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { todayIST, toIstDate } from '../lib/ist';
-import { patternOn, cellKind, mondayOf, clampStart, canEditTarget, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
+import { patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, ROSTER_START, canEditTarget, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
 
 const P: Pattern[] = [
   { id: 1, label: 'Sun-Thu', off_weekdays: [5, 6] },
@@ -74,12 +74,32 @@ test('canEditTarget - TL only for members reporting to them by id; near-identica
   assert.equal(canEditTarget({ userId: 3, role: 'agent' }, 2002, 3), false);
 });
 
-test('grid paging - Monday start, no earlier than 1 Nov 2026, 12 months ahead', () => {
-  assert.equal(mondayOf('2026-11-08'), '2026-11-02'); // Sunday belongs to the week starting Monday
-  assert.equal(clampStart('2026-11-04', '2026-11-04'), '2026-11-02');
-  assert.equal(clampStart('2026-10-19', '2026-11-04'), '2026-11-01'); // paged back past the bound
-  assert.equal(clampStart('2025-01-01', '2026-11-04'), '2026-11-01');
-  assert.equal(clampStart('2030-01-01', '2026-11-04'), mondayOf('2027-11-04'));
+test('calendar - day is one date, week is Monday to Sunday, month is whole Monday-aligned weeks', () => {
+  assert.deepEqual(periodDays('day', '2026-11-04'), ['2026-11-04']);
+  const w = periodDays('week', '2026-11-08'); // a Sunday belongs to the week starting Monday
+  assert.equal(w.length, 7); assert.equal(w[0], '2026-11-02'); assert.equal(w[6], '2026-11-08');
+  const m = periodDays('month', '2026-11-15'); // Nov 2026 starts on a Sunday (6 days of lead-in) and has 30 days
+  assert.equal(m[0], '2026-10-26'); assert.equal(m.length % 7, 0); assert.equal(m.length, 42); assert.equal(m[41], '2026-12-06'); // 6 leading + 30 days = 6 weeks
+  assert.equal(periodDays('month', '2026-12-10').length, 35); // 1 Dec is a Tuesday
+});
+
+test('calendar - stepping: day, week, and month (lands on the 1st, crosses year end)', () => {
+  assert.equal(shiftAnchor('day', '2026-11-04', 1), '2026-11-05');
+  assert.equal(shiftAnchor('week', '2026-11-04', -1), '2026-10-28');
+  assert.equal(shiftAnchor('month', '2026-11-20', 1), '2026-12-01');
+  assert.equal(shiftAnchor('month', '2026-12-20', 1), '2027-01-01');
+  assert.equal(shiftAnchor('month', '2026-01-31', 1), '2026-02-01');
+});
+
+test('calendar - nothing before 1 Nov 2026, at most 12 months ahead', () => {
+  assert.equal(clampAnchor('2025-01-01', '2026-11-04'), ROSTER_START);
+  assert.equal(clampAnchor('2030-01-01', '2026-11-04'), '2027-11-04');
+  assert.equal(canGoPrev('day', '2026-11-01'), false);
+  assert.equal(canGoPrev('day', '2026-11-02'), true);
+  assert.equal(canGoPrev('week', '2026-11-04'), true);  // previous week still holds Sun 1 Nov
+  assert.equal(canGoPrev('week', '2026-10-28'), false); // that week is the first one; one more back is all pre-launch
+  assert.equal(canGoPrev('month', '2026-11-20'), false);
+  assert.equal(canGoPrev('month', '2026-12-01'), true);
 });
 
 test('roster skills - defaults agree in all copies and the migration grants them', () => {

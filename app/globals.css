@@ -462,3 +462,17 @@ tr[style*="--accent-weak"] > td:first-child { box-shadow: inset 3px 0 0 var(--ac
 .roster-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--qa-card); transition: left 120ms; }
 .roster-switch.on { background: var(--accent); } .roster-switch.on i { left: 18px; }
 .roster-switch:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Roster month view (Google-Calendar-style) ───────────────────────────── */
+.roster-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.roster-month-h { padding: 8px 10px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--qa-text-2); background: var(--qa-gray-50); border-bottom: 1px solid var(--qa-border); }
+.roster-month-c { display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-height: 108px; padding: 6px; text-align: left; background: var(--qa-card); color: var(--qa-text); border: 0; border-right: 1px solid var(--qa-border-sub); border-bottom: 1px solid var(--qa-border-sub); cursor: pointer; }
+.roster-month-c:disabled { cursor: default; background: var(--qa-gray-50); }
+.roster-month-c:hover:not(:disabled) { background: var(--qa-gray-50); }
+.roster-month-c.out { opacity: .55; }
+.roster-month-c .n { align-self: flex-start; min-width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 11px; font-size: 12px; font-weight: 600; }
+.roster-month-c.today .n { background: var(--accent); color: var(--accent-on); }
+.roster-month-c .chip { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roster-month-c .chip.k-off { background: var(--roster-off-bg); color: var(--roster-off-fg); }
+.roster-month-c .chip.k-extra { background: var(--roster-extra-bg); color: var(--roster-extra-fg); }
+.roster-month-c .more { font-size: 11px; color: var(--qa-text-3); padding-left: 2px; }

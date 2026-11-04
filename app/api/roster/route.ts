@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { rosterActor } from '@/lib/roster-server';
 import { todayIST, addDays, isIsoDate } from '@/lib/ist';
-import { clampStart, gridDays, cellKind, patternOn, type Assignment, type ExtraMark, type Pattern } from '@/lib/roster';
+import { clampAnchor, periodDays, isRosterView, cellKind, patternOn, ROSTER_START, type Assignment, type CellKind, type ExtraMark, type Pattern } from '@/lib/roster';
 
 export async function GET(req: NextRequest) {
   const { actor, response } = await rosterActor('roster:view:access');
   if (response) return response;
   const today = todayIST();
-  const qs = req.nextUrl.searchParams.get('start');
-  const start = clampStart(isIsoDate(qs) ? qs : today, today);
-  const days = gridDays(start);
+  const qv = req.nextUrl.searchParams.get('view');
+  const qd = req.nextUrl.searchParams.get('date');
+  const view = isRosterView(qv) ? qv : 'week';
+  const anchor = clampAnchor(isIsoDate(qd) ? qd : today, today);
+  const days = periodDays(view, anchor);
+  const start = days[0];
   const last = days[days.length - 1];
 
   const [patterns, people, assigns, marks, lines, scheduled, channels] = await Promise.all([
@@ -36,7 +39,7 @@ export async function GET(req: NextRequest) {
       userId: p.user_id, name: p.name, role: p.role, tlUserId: tlByUser.get(p.user_id) ?? null,
       tlName: nameById.get(tlByUser.get(p.user_id) ?? -1) ?? null,
       pattern: patternOn(a, today),
-      cells: days.map(d => cellKind(patterns, a, m, d)),
+      cells: days.map((d): CellKind => d < ROSTER_START ? 'none' : cellKind(patterns, a, m, d)),
       channels: channels.filter(c => c.user_id === p.user_id).map(c => c.channel),
       canEdit: canEdit(p.user_id),
     };
@@ -45,5 +48,5 @@ export async function GET(req: NextRequest) {
     const cur = patternOn(assigns.filter(x => x.user_id === s.user_id), addDays(s.starts_on, -1));
     return { ...s, from_pattern: cur, name: nameById.get(s.user_id) ?? '', canEdit: canEdit(s.user_id) };
   });
-  return NextResponse.json({ today, start, days, patterns, people: rows, scheduled: scheduledOut, viewer: actor });
+  return NextResponse.json({ today, view, anchor, days, patterns, people: rows, scheduled: scheduledOut, viewer: actor });
 }
