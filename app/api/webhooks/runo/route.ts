@@ -210,6 +210,21 @@ export async function POST(req: NextRequest) {
     const startTime    = parseEpochTime(body.startTime);
     const createdAtTime = parseEpochTime(body.createdAt);
 
+    // Identify if incoming / unanswered call is from a valid client vs unverified external/non-client
+    const isUnanswered = (duration === 0) || tag === 'unanswered' || callType === 'missed';
+    let determinedCallNature = 'client';
+    if (isUnanswered) {
+      if (customerId) {
+        determinedCallNature = 'client';
+      } else if (phoneNumber) {
+        const cleanPhone = phoneNumber.replace(/\+/g, '').trim();
+        const contactCheck = await query(`SELECT 1 FROM contacts WHERE phone = $1 LIMIT 1`, [cleanPhone]);
+        determinedCallNature = contactCheck.length > 0 ? 'client' : 'non_client';
+      } else {
+        determinedCallNature = 'non_client';
+      }
+    }
+
     if (recordingUrl) {
       // Audio Recording URL Payload (can also include duration, calledBy, etc.)
       await query(`
@@ -217,9 +232,9 @@ export async function POST(req: NextRequest) {
           call_id, recording_url, call_category, raw_payload,
           caller_id, called_by, agent_name, customer_id, phone_number,
           user_phone, process_id, call_type, tag, duration_seconds,
-          start_time, created_at_time
+          start_time, created_at_time, call_nature
         )
-        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (call_id) DO UPDATE SET
           recording_url    = EXCLUDED.recording_url,
           call_category    = COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category),
@@ -236,6 +251,7 @@ export async function POST(req: NextRequest) {
           start_time       = COALESCE(EXCLUDED.start_time, pcg_call_recordings.start_time),
           created_at_time  = COALESCE(EXCLUDED.created_at_time, pcg_call_recordings.created_at_time),
           raw_payload      = pcg_call_recordings.raw_payload || EXCLUDED.raw_payload,
+          call_nature      = COALESCE(pcg_call_recordings.call_nature, EXCLUDED.call_nature),
           updated_at       = NOW()
       `, [
         callId,
@@ -254,6 +270,7 @@ export async function POST(req: NextRequest) {
         duration,
         startTime,
         createdAtTime,
+        determinedCallNature,
       ]);
 
       console.log(`[runo-webhook] S3 Recording URL and call metadata saved for PCG call ${callId}`);
@@ -263,8 +280,9 @@ export async function POST(req: NextRequest) {
         INSERT INTO pcg_call_recordings (
           call_id, caller_id, called_by, agent_name, customer_id,
           phone_number, user_phone, process_id, call_type, tag,
-          duration_seconds, start_time, created_at_time, call_category, raw_payload
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
+          duration_seconds, start_time, created_at_time, call_category, raw_payload,
+          call_nature
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16)
         ON CONFLICT (call_id) DO UPDATE SET
           caller_id        = COALESCE(EXCLUDED.caller_id, pcg_call_recordings.caller_id),
           called_by        = COALESCE(EXCLUDED.called_by, pcg_call_recordings.called_by),
@@ -280,6 +298,7 @@ export async function POST(req: NextRequest) {
           created_at_time  = COALESCE(EXCLUDED.created_at_time, pcg_call_recordings.created_at_time),
           call_category    = COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category),
           raw_payload      = pcg_call_recordings.raw_payload || EXCLUDED.raw_payload,
+          call_nature      = COALESCE(pcg_call_recordings.call_nature, EXCLUDED.call_nature),
           updated_at       = NOW()
       `, [
         callId,
@@ -297,6 +316,7 @@ export async function POST(req: NextRequest) {
         createdAtTime,
         callCategory,
         JSON.stringify(body),
+        determinedCallNature,
       ]);
 
       console.log(`[runo-webhook] Call event (${callType}) stored for PCG call ${callId}`);
