@@ -89,10 +89,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       // Email disputes are managed exclusively in TLEmailQualityPage (/api/email-evaluations?disputeQueue=...)
       // and must never appear in TL chat or call dispute queues.
       if (f.messageId) return false;
-      // 'pending' = awaiting TL action (the actionable "Disputes Raised" queue).
+      // 'pending' / 'forwarded_to_tl' = awaiting TL review (the actionable "Disputes Raised" queue).
       // 'resolved' = already forwarded to QA or given a final decision (history).
-      if (statusFilter === 'pending') return f.status === 'ir_pending_tl' || f.status === 'pending';
+      // 'reviewed' = reviewed by TL or QA.
+      if (statusFilter === 'pending' || statusFilter === 'forwarded_to_tl') return f.status === 'ir_pending_tl' || f.status === 'pending';
       if (statusFilter === 'resolved') return f.status === 'tl_forwarded' || f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
+      if (statusFilter === 'reviewed') return f.status === 'reviewed' || f.status === 'tl_resolved';
+      if (statusFilter === 'all') return f.status !== 'cancelled';
       return false;
     });
 

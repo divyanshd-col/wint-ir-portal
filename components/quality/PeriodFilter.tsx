@@ -55,6 +55,9 @@ export default function PeriodFilter({
       </div>
       {showPicker && (
         <DateRangePicker
+          align="left"
+          initialFrom={value.customFrom}
+          initialTo={value.customTo}
           onApply={(from, to) => { onChange({ period: 'custom', customFrom: from, customTo: to }); setShowPicker(false); }}
           onCancel={() => setShowPicker(false)}
         />

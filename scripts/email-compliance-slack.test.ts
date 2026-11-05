@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getEmailComplianceSlackChannel } from '../lib/email/compliance-alert';
+import { getEmailComplianceSlackChannel, cleanEmailReplySnippet } from '../lib/email/compliance-alert';
+
+test('cleanEmailReplySnippet - cleans HTML and inline styles to human readable text', () => {
+  const dirty = '<p data-pm-slice="1 1 []" style="margin: 0px; font-family: system-ui, &quot;Segoe UI&quot;;"><span>Dear Investor,</span></p><p>&nbsp;</p><p>We have attached your master report. Thank you &amp; regards.</p>';
+  const clean = cleanEmailReplySnippet(dirty);
+  assert.equal(clean, 'Dear Investor,\n\nWe have attached your master report. Thank you & regards.');
+});
+
+test('cleanEmailReplySnippet - returns empty string on null or empty input', () => {
+  assert.equal(cleanEmailReplySnippet(''), '');
+  assert.equal(cleanEmailReplySnippet(null), '');
+  assert.equal(cleanEmailReplySnippet(undefined), '');
+});
 
 test('getEmailComplianceSlackChannel - defaults to C0CERSWEXTM when no env set', () => {
   const origWebhook = process.env.COMPLIANCE_EMAIL_SLACK_WEBHOOK_URL;

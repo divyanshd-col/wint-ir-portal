@@ -769,9 +769,9 @@ export async function getScoredConversationsSummary(opts: GetScoredConversations
       COUNT(*) FILTER (WHERE c.bot_to_team_seconds <= 180)::int AS "slaOk",
       COUNT(c.bot_to_team_seconds)::int AS "slaTotal",
       AVG(c.resolution_seconds) AS "avgResolution",
-      AVG(s.iqs_score) AS "avgIqs",
-      COUNT(s.iqs_score)::int AS "iqsSampleSize",
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+      AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AS "avgIqs",
+      COUNT(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::int AS "iqsSampleSize",
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
@@ -819,11 +819,11 @@ export async function getScoredConversationsAgentStats(opts: GetScoredConversati
     SELECT
       COALESCE(a.name, 'Unknown') AS "agent",
       COUNT(*)::int AS "chats",
-      AVG(s.iqs_score) AS "avgIqs",
+      AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AS "avgIqs",
       MIN(s.iqs_score)::int AS "minIqs",
       MAX(s.iqs_score)::int AS "maxIqs",
-      COUNT(*) FILTER (WHERE s.iqs_score >= 90)::int AS "high",
-      COUNT(*) FILTER (WHERE s.iqs_score IS NOT NULL AND s.iqs_score < 70)::int AS "atRisk",
+      COUNT(*) FILTER (WHERE (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score >= 90)::int AS "high",
+      COUNT(*) FILTER (WHERE (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score IS NOT NULL AND s.iqs_score < 70)::int AS "atRisk",
       AVG(c.frt_seconds) AS "avgFrt",
       AVG(c.resolution_seconds) AS "avgResolution",
       AVG(c.bot_to_team_seconds) AS "avgBotToTeam",
@@ -831,7 +831,7 @@ export async function getScoredConversationsAgentStats(opts: GetScoredConversati
       COUNT(*) FILTER (WHERE c.csat_score = 3)::int AS "csatCbb",
       COUNT(*) FILTER (WHERE c.csat_score = 1)::int AS "csatBad",
       COUNT(*) FILTER (WHERE c.csat_score IN (1, 3, 5))::int AS "csatTotal",
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
@@ -1237,6 +1237,7 @@ export async function getAllScoredCalls(opts: {
   maxScore?: number;
   unreviewedOnly?: boolean;
   dispositions?: string[];
+  disputeStatus?: string;
   page?: number;
   pageSize?: number;
 } = {}): Promise<{ rows: any[]; total: number }> {
@@ -1284,6 +1285,25 @@ export async function getAllScoredCalls(opts: {
     params.push(opts.dispositions);
     conditions.push(`r.call_disposition = ANY($${params.length})`);
   }
+  if (opts.disputeStatus === 'forwarded_to_tl' || opts.disputeStatus === 'pending_tl') {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM iqs_flags f
+      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
+        AND f.status IN ('pending', 'ir_pending_tl')
+    )`);
+  } else if (opts.disputeStatus === 'reviewed') {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM iqs_flags f
+      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
+        AND f.status IN ('reviewed', 'tl_resolved')
+    )`);
+  } else if (opts.disputeStatus === 'none') {
+    conditions.push(`NOT EXISTS (
+      SELECT 1 FROM iqs_flags f
+      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
+        AND f.status NOT IN ('cancelled')
+    )`);
+  }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
 
@@ -1325,7 +1345,8 @@ export async function getAllScoredCalls(opts: {
       COALESCE(ce.reviewed_by, s.reviewed_by) AS "reviewedBy",
       COALESCE(ce.reviewed_at, s.reviewed_at) AS "reviewedAt",
       COALESCE(ce.review_note, s.review_note) AS "reviewNote",
-      COALESCE(ct_cr.phone, ct_c.phone)       AS "mobileNumber"
+      COALESCE(ct_cr.phone, ct_c.phone)       AS "mobileNumber",
+      (SELECT f.status FROM iqs_flags f WHERE (f.call_id = r.id OR f.chat_id = r.chat_id) AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1) AS "disputeStatus"
     FROM call_recordings r
     LEFT JOIN call_evaluations ce ON ce.call_id = r.id
     LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id

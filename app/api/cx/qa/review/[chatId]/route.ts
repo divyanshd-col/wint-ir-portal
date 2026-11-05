@@ -25,8 +25,8 @@ export async function PATCH(
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role = (session.user as any).role as string;
-  // QA reviews chats; TL is view-only and has no mutating access here.
-  if (!['quality', 'admin'].includes(role)) {
+  // QA, Admin and TL can review chats / dispute overrides
+  if (!['quality', 'admin', 'tl'].includes(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

@@ -112,6 +112,7 @@ interface CallScoreEntry {
   gates?: any;
   rawParameters?: any;
   mobileNumber?: string | null;
+  disputeStatus?: string | null;
 }
 
 export default function TLQualityCallsPage() {
@@ -129,6 +130,7 @@ export default function TLQualityCallsPage() {
   const [dateTo, setDateTo] = useState('');
   const [iqsMin, setIqsMin] = useState('');
   const [iqsMax, setIqsMax] = useState('');
+  const [disputeFilter, setDisputeFilter] = useState('');
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(20);
   const [totalEntries, setTotalEntries] = useState(0);
@@ -175,6 +177,7 @@ export default function TLQualityCallsPage() {
       if (dateTo) p.set('dateTo', dateTo);
       if (iqsMin) p.set('minScore', iqsMin);
       if (iqsMax) p.set('maxScore', iqsMax);
+      if (disputeFilter) p.set('disputeStatus', disputeFilter);
 
       const res = await fetch(`/api/call-quality/scores?${p}`);
       if (!res.ok) throw new Error('Fetch failed');
@@ -196,7 +199,7 @@ export default function TLQualityCallsPage() {
     } finally {
       setLoadingEntries(false);
     }
-  }, [agentFilter, dateFrom, dateTo, iqsMin, iqsMax, page, limit]);
+  }, [agentFilter, dateFrom, dateTo, iqsMin, iqsMax, disputeFilter, page, limit]);
 
   useEffect(() => {
     fetchEvaluatedCalls();
@@ -283,7 +286,17 @@ export default function TLQualityCallsPage() {
   // Filter pending disputes
   const filteredPendingDisputes = pendingDisputes.filter(d => {
     if (pendingAgentFilter && d.agentName !== pendingAgentFilter) return false;
-    if (pendingOutcomeFilter && getDisputeOutcomeKey(d) !== pendingOutcomeFilter) return false;
+    if (pendingOutcomeFilter) {
+      if (pendingOutcomeFilter === 'forwarded_to_tl') {
+        if (d.status !== 'pending' && d.status !== 'ir_pending_tl') return false;
+      } else if (pendingOutcomeFilter === 'raised_ir') {
+        if (d.raisedByRole !== 'ir' && d.raisedBy !== 'IR') return false;
+      } else if (pendingOutcomeFilter === 'raised_tl') {
+        if (d.raisedByRole !== 'tl' && d.raisedBy !== 'TL') return false;
+      } else if (getDisputeOutcomeKey(d) !== pendingOutcomeFilter) {
+        return false;
+      }
+    }
     if (pendingFromFilter) {
       const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
       if (dDate < pendingFromFilter) return false;
@@ -298,7 +311,15 @@ export default function TLQualityCallsPage() {
   // Filter reviewed disputes
   const filteredReviewedDisputes = reviewedDisputes.filter(d => {
     if (reviewedAgentFilter && d.agentName !== reviewedAgentFilter) return false;
-    if (reviewedOutcomeFilter && getDisputeOutcomeKey(d) !== reviewedOutcomeFilter) return false;
+    if (reviewedOutcomeFilter) {
+      if (reviewedOutcomeFilter === 'reviewed_tl') {
+        if (d.status !== 'tl_resolved' && !(d.status === 'reviewed' && (d.reviewNote?.toLowerCase().includes('tl') || d.reviewedBy?.toLowerCase().includes('tl')))) return false;
+      } else if (reviewedOutcomeFilter === 'reviewed') {
+        if (d.status !== 'reviewed' && d.status !== 'tl_resolved') return false;
+      } else if (getDisputeOutcomeKey(d) !== reviewedOutcomeFilter) {
+        return false;
+      }
+    }
     if (reviewedFromFilter) {
       const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
       if (dDate < reviewedFromFilter) return false;
@@ -411,13 +432,24 @@ export default function TLQualityCallsPage() {
 </span>
 
             <DateRangeChip from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); setPage(0); }} />
-            <button type="button" className="qf-chip" disabled={!(agentFilter || dateFrom || dateTo || iqsMin || iqsMax)}
+            <UISelect
+              value={disputeFilter}
+              onChange={e => { setDisputeFilter(e.target.value); setPage(0); }}
+              style={{ ...chipInputStyle, minWidth: 150 }}
+            >
+              <option value="">All Calls</option>
+              <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+              <option value="reviewed">Reviewed Disputes</option>
+              <option value="none">No Dispute</option>
+            </UISelect>
+            <button type="button" className="qf-chip" disabled={!(agentFilter || dateFrom || dateTo || iqsMin || iqsMax || disputeFilter)}
                 onClick={() => {
                   setAgentFilter('');
                   setDateFrom('');
                   setDateTo('');
                   setIqsMin('');
                   setIqsMax('');
+                  setDisputeFilter('');
                   setPage(0);
                 }}
               >
@@ -504,7 +536,19 @@ export default function TLQualityCallsPage() {
                             transition: 'background 0.15s ease',
                           }}
                         >
-                          <td style={TD_MONO}>{call.callId}</td>
+                          <td style={TD_MONO}>
+                            {call.callId}
+                            {call.disputeStatus && (call.disputeStatus === 'pending' || call.disputeStatus === 'ir_pending_tl') && (
+                              <span style={{ display: 'block', fontSize: 10, color: '#b45309', fontWeight: 600, marginTop: 2 }}>
+                                Pending TL Review
+                              </span>
+                            )}
+                            {call.disputeStatus && (call.disputeStatus === 'reviewed' || call.disputeStatus === 'tl_resolved') && (
+                              <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
+                                Reviewed
+                              </span>
+                            )}
+                          </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{call.agentName}</td>
                           <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>
@@ -609,9 +653,10 @@ export default function TLQualityCallsPage() {
             <UISelect
               value={pendingOutcomeFilter}
               onChange={e => { setPendingOutcomeFilter(e.target.value); setPendingPage(1); }}
-              style={{ ...chipInputStyle, minWidth: 140 }}
+              style={{ ...chipInputStyle, minWidth: 180 }}
             >
-              <option value="">All Statuses</option>
+              <option value="">All Dispute Statuses</option>
+              <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
               <option value="raised_ir">Dispute raised by IR</option>
               <option value="raised_tl">Dispute raised by TL</option>
             </UISelect>
@@ -834,13 +879,13 @@ export default function TLQualityCallsPage() {
             <UISelect
               value={reviewedOutcomeFilter}
               onChange={e => { setReviewedOutcomeFilter(e.target.value); setReviewedPage(1); }}
-              style={{ ...chipInputStyle, minWidth: 140 }}
+              style={{ ...chipInputStyle, minWidth: 150 }}
             >
               <option value="">All Outcomes</option>
-              <option value="updated">Updated by QA</option>
+              <option value="reviewed_tl">Reviewed by TL</option>
               <option value="resolved_qa">Resolved by QA</option>
-              <option value="resolved_tl">Resolved by TL</option>
-              <option value="forwarded">Forwarded by TL</option>
+              <option value="updated">Updated by QA</option>
+              <option value="forwarded">Forwarded to QA</option>
               <option value="cancelled">Cancelled</option>
             </UISelect>
 

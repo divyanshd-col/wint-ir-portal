@@ -141,10 +141,10 @@ export async function GET(req: NextRequest) {
   }>(`
     SELECT
       COUNT(c.id)::text                                                AS total,
-      COUNT(s.iqs_score)::text                                         AS with_iqs,
+      COUNT(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::text AS with_iqs,
       COUNT(CASE WHEN c.csat_score = 5 THEN 1 END)::text              AS csat_good,
       COUNT(CASE WHEN c.csat_score IN (1,3,5) THEN 1 END)::text       AS csat_total,
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
     FROM conversations c
     JOIN agents a ON a.id = c.agent_id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -159,7 +159,11 @@ export async function GET(req: NextRequest) {
   }>(`
     SELECT
       COUNT(cr.id)::text                                                AS call_vol,
-      AVG(s.call_iqs_score)::text                                       AS avg_call_iqs,
+      AVG(s.call_iqs_score) FILTER (
+        WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+          AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+          AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+      )::text                                                           AS avg_call_iqs,
       COUNT(CASE WHEN c.csat_score = 5 THEN 1 END)::text               AS csat_good,
       COUNT(CASE WHEN c.csat_score IN (1,3,5) THEN 1 END)::text        AS csat_total
     FROM call_recordings cr
@@ -275,10 +279,10 @@ export async function GET(req: NextRequest) {
     SELECT
       TO_CHAR(date_trunc('week', COALESCE(c.closed_at, NOW())), 'YYYY-MM-DD') AS week_key,
       COUNT(c.id)::text                                                         AS chat_vol,
-      AVG(s.iqs_score)::text                                                    AS avg_chat_iqs,
+      AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::text AS avg_chat_iqs,
       COUNT(CASE WHEN c.csat_score = 5 THEN 1 END)::text                       AS csat_good,
       COUNT(CASE WHEN c.csat_score IN (1,3,5) THEN 1 END)::text                AS csat_total,
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL)           AS parameters
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
     FROM conversations c
     JOIN agents a ON a.id = c.agent_id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -293,7 +297,10 @@ export async function GET(req: NextRequest) {
     SELECT
       TO_CHAR(date_trunc('week', cr.called_at), 'YYYY-MM-DD') AS week_key,
       COUNT(cr.id)::text                                        AS call_vol,
-      AVG(s.call_iqs_score)::text                               AS avg_call_iqs
+      AVG(s.call_iqs_score) FILTER (
+        WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+          AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+      )::text                                                   AS avg_call_iqs
     FROM call_recordings cr
     JOIN agents a ON a.id = cr.agent_id
     LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id

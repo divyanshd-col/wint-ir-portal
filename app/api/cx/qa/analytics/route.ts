@@ -189,12 +189,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const pendingChats = parseInt(pendingRows.find(r => r.channel === 'chat')?.cnt ?? '0');
   const pendingCalls = parseInt(pendingRows.find(r => r.channel === 'call')?.cnt ?? '0');
 
-  // ── 2. Overall IQS by channel (for ring cards) ───────────────────────────
+  // ── 2. Overall IQS by channel (for ring cards) — EXCLUDING JUNK ──────────
   const iqsOverview = await query<{ avg_iqs: string | null; avg_call_iqs: string | null; parameters: any }>(
     `SELECT
-       AVG(i.iqs_score)      FILTER (WHERE i.iqs_score      IS NOT NULL) AS avg_iqs,
-       AVG(i.call_iqs_score) FILTER (WHERE i.call_iqs_score IS NOT NULL) AS avg_call_iqs,
-       jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL) AS parameters
+       AVG(i.iqs_score)      FILTER (WHERE i.iqs_score      IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS avg_iqs,
+       AVG(i.call_iqs_score) FILTER (WHERE i.call_iqs_score IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS avg_call_iqs,
+       jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
      FROM iqs_scores i
      JOIN conversations c ON c.id = i.chat_id
      WHERE c.tags->>'disposition' = ANY($1)
@@ -205,6 +205,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const pooledOverviewParams = extractPooledParams(iqsOverview[0]?.parameters);
   const chatIQS = calculateWeightedOverallIQS(pooledOverviewParams, 'human') ?? (iqsOverview[0]?.avg_iqs != null ? Math.round(parseFloat(iqsOverview[0].avg_iqs)) : null);
   const callIQS = iqsOverview[0]?.avg_call_iqs != null ? Math.round(parseFloat(iqsOverview[0].avg_call_iqs)) : null;
+
+  // Email IQS (excluding junk emails)
+  const emailIqsRes = await query<{ avg_email_iqs: string | null }>(
+    `SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score))::numeric, 1)::float AS avg_email_iqs
+     FROM email_reply_evaluations e
+     LEFT JOIN email_conversations ec ON ec.id = e.ticket_id
+     WHERE e.evaluation_status = 'Completed'
+       AND e.sent_at >= $1 AND e.sent_at <= $2
+       AND (ec.intent_l1 IS NULL OR ec.intent_l1 NOT ILIKE '%junk%')`,
+    [fromISO, toISO]
+  ).catch(() => [{ avg_email_iqs: null }]);
+  const emailIQS = emailIqsRes[0]?.avg_email_iqs != null ? Math.round(Number(emailIqsRes[0].avg_email_iqs)) : null;
 
   // ── 3. Per-disposition aggregation ───────────────────────────────────────
   const aggRows = await query<AggRow & { parameters?: any }>(
@@ -367,7 +379,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     iqs: {
       chat:  chatIQS,
       call:  callIQS,
-      email: null,
+      email: emailIQS,
     },
     byDisposition,
   });

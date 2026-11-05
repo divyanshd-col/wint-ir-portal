@@ -66,21 +66,27 @@ export function periodBounds(period: Period, customFrom?: string, customTo?: str
 }
 
 const DISPUTE_LABELS: Record<string, string> = {
-  Raised: 'Raised by agent',
+  Raised: 'Forwarded to TL (Pending Review)',
   Under_Review: 'Forwarded to QA',
-  TL_Resolved: 'Resolved by TL',
-  Resolved: 'Resolved by QA',
+  TL_Resolved: 'Reviewed by TL',
+  Resolved: 'Reviewed',
   Rejected: 'Rejected by QA',
 };
 
 /** Dispute status in plain words (mirrors the chat dispute labels); a dash when there is no dispute. */
 export function disputeLabel(status: string | null | undefined, qaName?: any): string {
   const nameStr = typeof qaName === 'string' && qaName.trim() ? qaName.trim() : null;
+  if (status === 'Raised') {
+    return 'Forwarded to TL (Pending Review)';
+  }
   if (status === 'Under_Review') {
     return nameStr && nameStr.toLowerCase() !== 'qa' ? `Forwarded to ${nameStr}` : 'Forwarded to QA';
   }
+  if (status === 'TL_Resolved') {
+    return 'Reviewed by TL';
+  }
   if (status === 'Resolved') {
-    return nameStr && nameStr.toLowerCase() !== 'qa' ? `Resolved by ${nameStr}` : 'Resolved by QA';
+    return nameStr && nameStr.toLowerCase() !== 'qa' ? `Reviewed by ${nameStr}` : 'Reviewed';
   }
   if (status === 'Rejected') {
     return nameStr && nameStr.toLowerCase() !== 'qa' ? `Rejected by ${nameStr}` : 'Rejected by QA';
