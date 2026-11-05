@@ -384,7 +384,7 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
 /**
  * Full implementation of the 5-stage Call Evaluation Pipeline.
  */
-export async function runCallPipeline(callId: string, options?: { forceTranscript?: boolean }): Promise<any> {
+export async function runCallPipeline(callId: string, options?: { forceTranscript?: boolean; skipSlackAlert?: boolean }): Promise<any> {
   log.info('call-pipeline', `Starting pipeline for call ${callId}`);
 
   // Fetch the call recording row
@@ -507,16 +507,20 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   const speechSegments = segments.filter((s: any) => s.type === 'turn' || s.type === 'speech');
   const isSystemOnly = speechSegments.every((s: any) => s.speaker === 'SYSTEM');
   const isPureSilence = speechSegments.length === 0;
+  const isJunkCall = Boolean(
+    (call.call_disposition && call.call_disposition.toLowerCase().includes('junk')) ||
+    (call.call_sub_disposition && call.call_sub_disposition.toLowerCase().includes('junk'))
+  );
 
-  if (isSystemOnly || isPureSilence) {
-    log.info('call-pipeline', `Call ${callId} marked as NOT_SCOREABLE (system only or pure silence)`);
+  if (isSystemOnly || isPureSilence || isJunkCall) {
+    log.info('call-pipeline', `Call ${callId} marked as NOT_SCOREABLE (${isJunkCall ? 'junk call' : 'system only or pure silence'})`);
     
     await query(`
       INSERT INTO call_evaluations (
         call_id, chat_id, agent_id, call_sequence_in_thread, scored_at, source,
         call_gate_result, gates, iqs_scores, iqs_percent, applicable_weight, verdict, status
       ) VALUES ($1, $2, $3, 1, NOW(), 'audio', 'PASS', '{}', '{}', null, 0, 'NOT_SCOREABLE', 'reviewed')
-      ON CONFLICT (call_id) DO UPDATE SET verdict = 'NOT_SCOREABLE', status = 'reviewed', scored_at = NOW()
+      ON CONFLICT (call_id) DO UPDATE SET verdict = 'NOT_SCOREABLE', status = 'reviewed', scored_at = NOW(), iqs_percent = null, applicable_weight = 0
     `, [callId, call.chat_id, call.agent_id]);
 
     await query(`UPDATE call_recordings SET status = 'scored', updated_at = NOW() WHERE id = $1`, [callId]);
@@ -788,41 +792,54 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
 
   log.info('call-pipeline', `Pipeline complete for call ${callId} — IQS ${iqs_percent}% — Verdict: ${finalVer}`);
 
-  // Trigger compliance alert for call if call gate failed
-  if (gateVerdict === 'FAIL') {
+  // Trigger compliance alert for call if call gate failed (suppressed during QA re-evaluations or if already alerted)
+  if (gateVerdict === 'FAIL' && !options?.skipSlackAlert) {
     try {
-      const { fireQualityAlert } = await import('@/lib/quality-alert');
-      const { getAgentName } = await import('@/lib/robylon/db');
-      const agentId = call.agent_id ?? call.conv_agent_id;
-      const agentName = agentId ? await getAgentName(agentId) : '';
+      // Check if compliance alert was already dispatched for this call in PostgreSQL
+      const prevAlert = await query<{ compliance_alerted_at: string | null }>(
+        `SELECT compliance_alerted_at FROM call_evaluations WHERE call_id = $1`,
+        [callId]
+      );
+      if (prevAlert[0]?.compliance_alerted_at) {
+        log.info('call-pipeline', `Skipping duplicate compliance alert for call ${callId} — already alerted at ${prevAlert[0].compliance_alerted_at}`);
+      } else {
+        const { fireQualityAlert } = await import('@/lib/quality-alert');
+        const { getAgentName } = await import('@/lib/robylon/db');
+        const agentId = call.agent_id ?? call.conv_agent_id;
+        const agentName = agentId ? await getAgentName(agentId) : '';
 
-      const breaches: Array<{ type: string; quote: string; note: string }> = [];
-      const gates = gatesResult.gates || {};
-      for (const [gKey, gObj] of Object.entries<any>(gates)) {
-        if (gObj?.status === 'fail') {
-          const evList = gObj.evidence || [];
-          const quote = evList.map((e: any) => e.quote || e.why).join('; ') || 'Call gate requirement failed';
-          breaches.push({
-            type: gKey,
-            quote,
-            note: gObj.reason_code ? `Reason code: ${gObj.reason_code}` : 'Call gate failure',
-          });
+        const breaches: Array<{ type: string; quote: string; note: string }> = [];
+        const gates = gatesResult.gates || {};
+        for (const [gKey, gObj] of Object.entries<any>(gates)) {
+          if (gObj?.status === 'fail') {
+            const evList = gObj.evidence || [];
+            const quote = evList.map((e: any) => e.quote || e.why).join('; ') || 'Call gate requirement failed';
+            breaches.push({
+              type: gKey,
+              quote,
+              note: gObj.reason_code ? `Reason code: ${gObj.reason_code}` : 'Call gate failure',
+            });
+          }
         }
-      }
 
-      fireQualityAlert({
-        callId: String(callId),
-        chatId: call.chat_id ? String(call.chat_id) : undefined,
-        channel: 'call',
-        agentName,
-        scores: {},
-        reasoning: {},
-        iqs: iqs_percent ?? undefined,
-        breaches: breaches.length ? breaches : [{ type: 'CALL_GATE_FAILURE', quote: 'Call compliance gate audit failed' }],
-        complianceFlag: true,
-      }).catch((err) => {
-        log.error('call-pipeline', `fireQualityAlert error for call ${callId}: ${err?.message}`);
-      });
+        await fireQualityAlert({
+          callId: String(callId),
+          chatId: call.chat_id ? String(call.chat_id) : undefined,
+          channel: 'call',
+          agentName,
+          scores: {},
+          reasoning: {},
+          iqs: iqs_percent ?? undefined,
+          breaches: breaches.length ? breaches : [{ type: 'CALL_GATE_FAILURE', quote: 'Call compliance gate audit failed' }],
+          complianceFlag: true,
+        });
+
+        // Mark in database that compliance alert was dispatched for this call
+        await query(
+          `UPDATE call_evaluations SET compliance_alerted_at = NOW() WHERE call_id = $1 AND compliance_alerted_at IS NULL`,
+          [callId]
+        );
+      }
     } catch (alertErr: any) {
       log.error('call-pipeline', `Failed to fire compliance alert for call ${callId}: ${alertErr.message}`);
     }

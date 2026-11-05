@@ -22,7 +22,7 @@ async function _POST(req: NextRequest): Promise<NextResponse> {
   const forceTranscript = body.forceTranscript ?? body.reevaluate ?? false;
 
   try {
-    const result = await runCallPipeline(callId.trim(), { forceTranscript });
+    const result = await runCallPipeline(callId.trim(), { forceTranscript, skipSlackAlert: true });
     
     // Fetch updated evaluation record to return gates and iqsScores
     const evalRows = await query<any>(

@@ -41,7 +41,7 @@ async function _GET(req: NextRequest): Promise<NextResponse> {
         const callId = evaluations[i].call_id;
         try {
           // Trigger the pipeline (runs with the latest Gemini 3.1 Flash Lite model configuration)
-          const result = await runCallPipeline(callId);
+          const result = await runCallPipeline(callId, { skipSlackAlert: true });
           successCount++;
           send(controller, 'progress', {
             index: i + 1,
