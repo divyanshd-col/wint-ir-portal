@@ -495,7 +495,7 @@ export async function listConnections(): Promise<OAuthConnection[]> {
        JOIN users u ON u.user_id = t.user_id
        LEFT JOIN oauth_clients c ON c.client_id = t.client_id
       GROUP BY t.user_id, u.email, u.name, t.client_id, c.client_name
-      ORDER BY active_count = 0, MAX(t.last_used_at) DESC NULLS LAST, MIN(t.created_at) DESC`,
+      ORDER BY (COUNT(*) FILTER (WHERE t.revoked_at IS NULL AND t.expires_at > NOW()) = 0), MAX(t.last_used_at) DESC NULLS LAST, MIN(t.created_at) DESC`,
   );
   return rows.map((r) => ({
     userId: r.user_id,

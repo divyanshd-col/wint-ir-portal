@@ -19,8 +19,13 @@ async function requireAdmin() {
 export async function GET() {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const connections = await listConnections();
-  return NextResponse.json({ connections });
+  try {
+    const connections = await listConnections();
+    return NextResponse.json({ connections });
+  } catch (err) {
+    console.error('[mcp-connections] list failed:', (err as Error)?.message);
+    return NextResponse.json({ error: 'Failed to load connections' }, { status: 500 });
+  }
 }
 
 // DELETE — revoke a connection (all access + refresh tokens for a user+client).

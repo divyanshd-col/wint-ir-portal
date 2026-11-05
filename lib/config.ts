@@ -70,7 +70,28 @@ const DEFAULT_CONFIG: PortalConfig = {
   pyannoteApiKey: '',
 };
 
+// Short-lived per-instance cache. readConfig() is called from ~86 places and each
+// call used to be an uncached Upstash HTTP round trip. 5s keeps admin changes
+// near-instant (writeConfig also invalidates this instance) while collapsing
+// bursts of parallel requests into one fetch. Callers get a clone so mutating
+// the result before writeConfig() can't corrupt the cache.
+const CONFIG_CACHE_TTL_MS = 5000;
+let configCache: { value: PortalConfig; at: number } | null = null;
+let configInflight: Promise<PortalConfig> | null = null;
+
 export async function readConfig(): Promise<PortalConfig> {
+  if (configCache && Date.now() - configCache.at < CONFIG_CACHE_TTL_MS) {
+    return structuredClone(configCache.value);
+  }
+  if (!configInflight) {
+    configInflight = loadConfig()
+      .then(value => { configCache = { value, at: Date.now() }; return value; })
+      .finally(() => { configInflight = null; });
+  }
+  return structuredClone(await configInflight);
+}
+
+async function loadConfig(): Promise<PortalConfig> {
   // 1. KV store — persists admin changes on Vercel
   const fromKV = await storeGetConfig();
   if (fromKV?.isConfigured) return fromKV;
@@ -128,6 +149,7 @@ export async function writeConfig(config: PortalConfig): Promise<void> {
     storeSetConfig(config),
     writeToFile(config),
   ]);
+  configCache = null; // next read on this instance sees the new value
 }
 
 async function writeToFile(config: PortalConfig): Promise<void> {
