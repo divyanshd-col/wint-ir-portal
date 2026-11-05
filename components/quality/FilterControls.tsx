@@ -13,11 +13,14 @@ export function DateRangeChip({ from, to, onChange }: { from: string; to: string
   return (
     <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
       <button type="button" className={`qf-chip${active ? ' on' : ''}`} onClick={() => setOpen(v => !v)}>
-        {active ? `${fmtShort(from)} – ${fmtShort(to)}` : 'Date range'}
+        {active ? (from === to ? fmtShort(from) : `${fmtShort(from)} – ${fmtShort(to)}`) : 'Date range'}
         <span style={{ fontSize: 9 }}>▾</span>
       </button>
       {open && (
         <DateRangePicker
+          align="left"
+          initialFrom={from}
+          initialTo={to}
           onApply={(f, t) => { onChange(f, t); setOpen(false); }}
           onCancel={() => setOpen(false)}
         />
@@ -39,10 +42,11 @@ export function ResetFilters({ active, onReset }: { active: boolean; onReset: ()
 export function PeriodRangeChip({ value, onChange }: { value: PeriodState; onChange: (v: PeriodState) => void }) {
   const [open, setOpen] = useState(false);
   const label =
-    value.period === 'custom' && value.customFrom && value.customTo ? `${fmtShort(value.customFrom)} – ${fmtShort(value.customTo)}`
-    : value.period === '7' ? 'Last 7 days'
-    : value.period === '30' ? 'Last 30 days'
-    : 'Date range';
+    value.period === 'custom' && value.customFrom && value.customTo
+      ? (value.customFrom === value.customTo ? fmtShort(value.customFrom) : `${fmtShort(value.customFrom)} – ${fmtShort(value.customTo)}`)
+      : value.period === '7' ? 'Last 7 days'
+        : value.period === '30' ? 'Last 30 days'
+          : 'Date range';
   return (
     <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
       <button type="button" className={`qf-chip${value.period !== 'all' ? ' on' : ''}`} onClick={() => setOpen(v => !v)}>
@@ -51,6 +55,9 @@ export function PeriodRangeChip({ value, onChange }: { value: PeriodState; onCha
       </button>
       {open && (
         <DateRangePicker
+          align="left"
+          initialFrom={value.customFrom}
+          initialTo={value.customTo}
           onApply={(f, t) => { onChange({ period: 'custom', customFrom: f, customTo: t }); setOpen(false); }}
           onCancel={() => setOpen(false)}
         />

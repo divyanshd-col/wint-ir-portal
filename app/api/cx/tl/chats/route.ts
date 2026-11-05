@@ -27,6 +27,7 @@ export interface TLChatRow {
   reviewedBy:    string | null;
   reviewedAt:    string | null;
   conversationType?: 'bot' | 'agent' | 'hybrid';
+  disputeStatus?: string | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -132,6 +133,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   if (role === 'tl' || role === 'agent') {
     extraWhere += ` AND i.iqs_score IS NOT NULL`;
   }
+
+  const disputeStatus = searchParams.get('dispute_status') || searchParams.get('disputeStatus');
+  if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl') {
+    extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status IN ('pending', 'ir_pending_tl'))`;
+  } else if (disputeStatus === 'reviewed') {
+    extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status IN ('reviewed', 'tl_resolved'))`;
+  } else if (disputeStatus === 'none') {
+    extraWhere += ` AND NOT EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status NOT IN ('cancelled'))`;
+  }
+
   const statusFilter = searchParams.get('status');
   if (statusFilter === 'reviewed') {
     extraWhere += ` AND i.status = 'reviewed'`;
@@ -173,7 +184,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             c.tags->>'sub_disposition' AS sub_disposition,
             c.csat_score, i.parameters,
             ct.phone AS mobile_number,
-            i.reviewed_by, i.reviewed_at, c.conversation_type
+            i.reviewed_by, i.reviewed_at, c.conversation_type,
+            (SELECT f.status FROM iqs_flags f WHERE f.chat_id = c.id AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1) AS dispute_status
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -246,6 +258,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       reviewedBy:     r.reviewed_by ?? null,
       reviewedAt:     r.reviewed_at ?? null,
       conversationType: r.conversation_type as any,
+      disputeStatus:    (r as any).dispute_status ?? null,
     };
   });
 

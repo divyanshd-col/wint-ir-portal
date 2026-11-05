@@ -103,6 +103,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const tagFilter   = url.searchParams.get('disposition') || url.searchParams.get('tag') || '';
   const minScore    = url.searchParams.get('minScore') ? parseInt(url.searchParams.get('minScore')!, 10) : undefined;
   const maxScore    = url.searchParams.get('maxScore') ? parseInt(url.searchParams.get('maxScore')!, 10) : undefined;
+  const disputeStatus = url.searchParams.get('disputeStatus') || url.searchParams.get('dispute_status') || '';
 
   // Role-based agent scoping
   let scopedAgentId: number | undefined;
@@ -240,6 +241,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       dateTo: dateTo || undefined,
       minScore,
       maxScore,
+      disputeStatus: disputeStatus || undefined,
       page,
       pageSize: limit,
     }));
@@ -273,11 +275,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       modelVersion:      r.modelVersion || '',
       scoredAt:          r.scoredAt || '',
       mobileNumber:      r.mobileNumber || null,
+      disputeStatus:     r.disputeStatus || null,
     };
   });
 
-  // Calculate aggregates
-  const iqsScores = entries.map(e => e.iqs).filter((s): s is number => s !== null);
+  // Calculate aggregates — exclude junk calls from total/average IQS
+  const iqsScores = entries
+    .filter(e => !e.disposition?.toLowerCase().includes('junk') && !e.subDisposition?.toLowerCase().includes('junk'))
+    .map(e => e.iqs)
+    .filter((s): s is number => s !== null);
   const avgIqs = avg(iqsScores);
   const avgInterruptions = entries.length
     ? +(entries.reduce((s, e) => s + e.interruptionCount, 0) / entries.length).toFixed(1)

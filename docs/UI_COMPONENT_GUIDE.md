@@ -188,7 +188,7 @@ Follow these on every quality table so views stay consistent.
 | Route | Component | Audience |
 |---|---|---|
 | `/quality/email-evaluation` | `components/quality/EmailEvaluationPage.tsx` | QA (admin, quality): review, override scores, resolve disputes |
-| `/tl/quality-emails` | `components/tl/TLEmailQualityPage.tsx` | TL/admin: team cards, member table, replies, disputes |
+| `/tl/quality-emails` | `components/tl/TLEmailQualityPage.tsx` | TL/admin: team cards, member table, replies, raise disputes, review/forward agent disputes |
 | `/agent/quality-emails` | `components/ir/MyQualityEmailsPage.tsx` | Agent (and admin via the admin shell): own replies, raise disputes |
 
 Data: `GET/POST /api/email-evaluations` (`app/api/email-evaluations/route.ts`) over `email_reply_evaluations` joined to `email_conversations`, with the latest Robylon `Intents_L1` per ticket (`intent_l1`).
@@ -201,7 +201,7 @@ Data: `GET/POST /api/email-evaluations` (`app/api/email-evaluations/route.ts`) o
 | QA, Reviewed Emails | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Reviewed By, Reviewed At, Action |
 | QA, Disputes | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Dispute, Action |
 | QA, Awaiting AI | Ticket ID, Date & Time, Agent, Intent, Action (no IQS yet) |
-| TL, replies | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Action |
+| TL, replies | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Dispute, Action |
 | TL, members | Agent Name, Replies, Avg Score, Disputes, Action (Filter) |
 | TL, Disputes Raised | Ticket ID, Date & Time, Agent, IQS, CSAT, Raised, Status, Action (Resolve, Forward to QA, View) |
 | TL, Reviewed Disputes | Ticket ID, Date & Time, Agent, IQS, CSAT, Updated, Outcome, Action (View) |

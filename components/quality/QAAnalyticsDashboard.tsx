@@ -41,7 +41,7 @@ export interface SubDispositionRow {
 
 export interface AnalyticsData {
   pending: { total: number; chats: number; calls: number; emails: number };
-  iqs:     { chat: number | null; call: number | null; email: null };
+  iqs:     { chat: number | null; call: number | null; email: number | null };
   byDisposition: DispositionRow[];
 }
 
@@ -197,6 +197,7 @@ export default function QAAnalyticsDashboard() {
           periodLabel={periodLabel}
           totalChatIQS={data?.iqs?.chat}
           totalCallIQS={data?.iqs?.call}
+          totalEmailIQS={data?.iqs?.email}
         />
       </section>
 
