@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     params.push(dateTo);
     filterConditions.push(`c.closed_at::date <= $${params.length}`);
   }
+  filterConditions.push(`(c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')`);
   const where = filterConditions.length ? `WHERE ${filterConditions.join(' AND ')}` : '';
 
   // v4 nests params under __agent_parameters; legacy v3 rows store them at the top

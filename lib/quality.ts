@@ -375,6 +375,11 @@ export function analyzeConversationTiming(
 // every key would miss and the old `?? 'Yes'` default silently returned 100.
 // Skipping instead surfaces the mismatch as an obviously-wrong low score.
 // Pass the correct isV4 flag at every call site so the weight set matches the scores.
+export function isJunkDisposition(disposition?: string | null): boolean {
+  if (!disposition) return false;
+  return disposition.toLowerCase().trim().includes('junk');
+}
+
 export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, isV4 = true): number | null {
   const activeWeights = isBot ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
   let total = 0, possible = 0;

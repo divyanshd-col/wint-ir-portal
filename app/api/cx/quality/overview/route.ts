@@ -44,14 +44,14 @@ export async function GET(req: NextRequest) {
     SELECT
       COUNT(c.id)::int AS total_convs,
       COUNT(s.chat_id)::int AS scored_count,
-      ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs,
-      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score < 60 THEN 1 END)::int AS low_iqs_count,
+      ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric, 1)::float AS avg_iqs,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score < 60 THEN 1 END)::int AS low_iqs_count,
       COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::int AS bad_csat_count,
       ROUND(
         COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS bad_csat_pct,
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
     FROM conversations c
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
@@ -70,13 +70,13 @@ export async function GET(req: NextRequest) {
       a.name AS agent_name,
       COUNT(c.id)::int AS conv_count,
       COUNT(s.chat_id)::int AS scored_count,
-      ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs,
-      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score < 60 THEN 1 END)::int AS low_iqs_count,
+      ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric, 1)::float AS avg_iqs,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score < 60 THEN 1 END)::int AS low_iqs_count,
       ROUND(
         COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS bad_csat_pct,
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
     FROM agents a
     JOIN conversations c ON c.agent_id = a.id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id

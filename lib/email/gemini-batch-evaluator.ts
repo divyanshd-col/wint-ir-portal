@@ -144,6 +144,7 @@ export async function submitPendingEmailBatchJob(options?: {
         message_id: String(row.message_id),
         ticket_id: String(row.ticket_id),
         agent_name: String(row.agent_name || 'Unknown'),
+        agent_id: row.agent_id ? String(row.agent_id) : '',
         sent_at: new Date(row.sent_at).toISOString(),
       },
       config: {
@@ -281,10 +282,22 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
               ...(Object.keys(parameterReasoning).length > 0 ? { __reasoning: parameterReasoning } : {}),
               ...(coreQuery ? { core_query: coreQuery } : {}),
             };
-            const calculatedScore = calculateEmailIQS(rawParamScores);
-            const qualityScore = !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
-              ? calculatedScore
-              : Number(parsedResult.quality_score ?? 0);
+            const ticketId = item.metadata?.ticket_id;
+            let emailIntent: string | null = null;
+            let isJunkEmail = false;
+            if (ticketId) {
+              const tRows = await query<{ intent_l1: string }>(`SELECT intent_l1 FROM email_conversations WHERE id = $1 LIMIT 1`, [ticketId]);
+              emailIntent = tRows[0]?.intent_l1 || null;
+              if (emailIntent && emailIntent.toLowerCase().includes('junk')) {
+                isJunkEmail = true;
+              }
+            }
+            const calculatedScore = calculateEmailIQS(rawParamScores, undefined, emailIntent);
+            const qualityScore = isJunkEmail || calculatedScore === null
+              ? null
+              : (calculatedScore !== null && !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
+                  ? calculatedScore
+                  : Number(parsedResult.quality_score ?? 0));
             const compliancePassed = Boolean(parsedResult.compliance_passed ?? true);
             const complianceIssues = Array.isArray(parsedResult.compliance_issues)
               ? parsedResult.compliance_issues
@@ -314,7 +327,6 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
             );
 
             // Persist synthesized core_query to email_conversations.thread_summary
-            const ticketId = item.metadata?.ticket_id;
             if (coreQuery && ticketId) {
               await query(
                 `UPDATE email_conversations
@@ -339,6 +351,7 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
                 ticketId: item.metadata?.ticket_id || 'Unknown',
                 messageId,
                 agentName: item.metadata?.agent_name || 'Agent',
+                agentId: item.metadata?.agent_id ? Number(item.metadata.agent_id) : undefined,
                 qualityScore,
                 complianceIssues,
                 replySnippet,
@@ -400,7 +413,7 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
   const { ai, model } = await getGeminiClient();
 
   const rows = await query(
-    `SELECT e.*, c.subject_line, c.thread_summary, c.merged_into_ticket_id
+    `SELECT e.*, c.subject_line, c.thread_summary, c.merged_into_ticket_id, c.intent_l1
      FROM email_reply_evaluations e
      JOIN email_conversations c ON e.ticket_id = c.id
      WHERE e.message_id = $1`,
@@ -469,10 +482,14 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
     ...(Object.keys(parameterReasoning).length > 0 ? { __reasoning: parameterReasoning } : {}),
     ...(coreQuery ? { core_query: coreQuery } : {}),
   };
-  const calculatedScore = calculateEmailIQS(rawParamScores);
-  const qualityScore = !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
-    ? calculatedScore
-    : Number(parsed.quality_score ?? 0);
+  const ticketId = row.ticket_id;
+  const isJunkEmail = Boolean(row.intent_l1 && row.intent_l1.toLowerCase().includes('junk'));
+  const calculatedScore = calculateEmailIQS(rawParamScores, undefined, row.intent_l1);
+  const qualityScore = isJunkEmail || calculatedScore === null
+    ? null
+    : (calculatedScore !== null && !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
+        ? calculatedScore
+        : Number(parsed.quality_score ?? 0));
   const compliancePassed = Boolean(parsed.compliance_passed ?? true);
   const complianceIssues = Array.isArray(parsed.compliance_issues)
     ? parsed.compliance_issues
@@ -522,6 +539,7 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
       ticketId: row.ticket_id,
       messageId,
       agentName: row.agent_name || 'Agent',
+      agentId: row.agent_id ? Number(row.agent_id) : undefined,
       qualityScore,
       complianceIssues,
       replySnippet: row.agent_reply_text || '',

@@ -39,6 +39,9 @@ export interface DisputeRow {
   tlForwarded:  boolean;
   conversationType?: 'bot' | 'agent' | 'hybrid';
   reviewedBy?:  string | null;
+  reviewedAt?:  string | null;
+  reviewNote?:  string | null;
+  status:       string;
   originalScore?: number | null;
 }
 
@@ -96,14 +99,33 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
   }
 
-  // QA only sees disputes once TL has forwarded them — 'pending'/'ir_pending_tl'
-  // are still awaiting TL review and stay off QA's queue until forwarded.
-  // Email disputes are managed exclusively in the Email Quality section (/api/email-evaluations?tab=disputes)
-  // and must never appear in QA chat or call dispute queues.
+  // Dispute status filtering:
+  // - 'forwarded_to_tl': dispute raised by agent, pending TL review
+  // - 'forwarded_to_qa': TL forwarded to QA
+  // - 'reviewed': dispute reviewed/resolved by TL or QA
+  // - 'all': all non-cancelled disputes
+  // Default: returns all open disputes awaiting review (both forwarded to TL and forwarded to QA)
+  const disputeStatusParam = searchParams.get('dispute_status') || searchParams.get('disputeStatus') || searchParams.get('status');
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
-    .filter((f): f is IQSFlag => f !== null && f.status === 'tl_forwarded' && !f.messageId);
+    .filter((f): f is IQSFlag => {
+      if (!f || f.messageId) return false;
+      if (disputeStatusParam === 'forwarded_to_tl' || disputeStatusParam === 'pending_tl') {
+        return f.status === 'ir_pending_tl' || f.status === 'pending';
+      }
+      if (disputeStatusParam === 'forwarded_to_qa') {
+        return f.status === 'tl_forwarded';
+      }
+      if (disputeStatusParam === 'reviewed') {
+        return f.status === 'reviewed' || f.status === 'tl_resolved';
+      }
+      if (disputeStatusParam === 'all') {
+        return f.status !== 'cancelled';
+      }
+      // Default: show open disputes (both forwarded to TL and forwarded to QA)
+      return f.status === 'tl_forwarded' || f.status === 'pending' || f.status === 'ir_pending_tl';
+    });
 
   log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });
 
@@ -439,6 +461,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       parameters:       params,
       gates:            callDb?.gates ?? null,
       tlForwarded:      flag.status === 'tl_forwarded',
+      status:           flag.status,
       conversationType: (db?.conversation_type ?? null) as any,
       originalScore:    flag.originalScore != null ? parseFloat(flag.originalScore as any) : null,
     } as any);
