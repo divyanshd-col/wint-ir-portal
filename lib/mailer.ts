@@ -18,7 +18,14 @@ const EMAIL_FROM = process.env.EMAIL_FROM || EMAIL_USER;
 let transporter: Transporter | null = null;
 
 export function mailerConfigured(): boolean {
-  return !!(EMAIL_USER && EMAIL_PASSWORD);
+  const ok = !!(EMAIL_USER && EMAIL_PASSWORD);
+  if (!ok) console.error('[mailer] not configured: EMAIL_USER / EMAIL_APP_PASSWORD missing in this environment');
+  return ok;
+}
+
+/** Opens an SMTP connection and authenticates without sending. Used by scripts/mail-check.ts. */
+export async function verifyMailer(): Promise<void> {
+  await getTransporter().verify();
 }
 
 function getTransporter(): Transporter {
@@ -60,7 +67,14 @@ export async function sendMail(input: SendMailInput): Promise<boolean> {
     });
     return true;
   } catch (err) {
-    console.error('[mailer] send failed:', (err as Error)?.message ?? err);
+    const e = err as Error & { code?: string; responseCode?: number; response?: string; command?: string };
+    // code: EAUTH (bad/revoked app password), ESOCKET/ETIMEDOUT/ECONNECTION (network/port blocked),
+    // EENVELOPE (bad recipient). Never log the password or the signup link.
+    console.error('[mailer] send failed:', {
+      code: e?.code, responseCode: e?.responseCode, command: e?.command,
+      response: e?.response, message: e?.message ?? String(err),
+      host: SMTP_HOST, port: SMTP_PORT, user: EMAIL_USER,
+    });
     return false;
   }
 }
