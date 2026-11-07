@@ -236,6 +236,8 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
         <DateRangeChip from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
         <UISelect value={disputeFilter} onChange={e => setDisputeFilter(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
           <option value="">All Dispute Statuses</option>
+          <option value="forwarded_to_qa">Forwarded to QA</option>
+          <option value="updated_by_qa">Updated by QA</option>
           <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
           <option value="reviewed">Reviewed Disputes</option>
           <option value="none">No Dispute</option>
@@ -345,12 +347,17 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                     <ChatIdCell chatId={chat.chatId} />
                     {chat.disputeStatus && (chat.disputeStatus === 'pending' || chat.disputeStatus === 'ir_pending_tl') && (
                       <span style={{ display: 'block', fontSize: 10, color: '#b45309', fontWeight: 600, marginTop: 2 }}>
-                        Pending TL Review
+                        Forwarded to TL (Pending Review)
+                      </span>
+                    )}
+                    {chat.disputeStatus && chat.disputeStatus === 'tl_forwarded' && (
+                      <span style={{ display: 'block', fontSize: 10, color: '#2563eb', fontWeight: 600, marginTop: 2 }}>
+                        Forwarded to QA
                       </span>
                     )}
                     {chat.disputeStatus && (chat.disputeStatus === 'reviewed' || chat.disputeStatus === 'tl_resolved') && (
                       <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
-                        Reviewed
+                        {chat.disputeStatus === 'reviewed' ? 'Updated by QA' : 'Reviewed by TL'}
                       </span>
                     )}
                   </td>

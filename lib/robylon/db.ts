@@ -1291,6 +1291,18 @@ export async function getAllScoredCalls(opts: {
       WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
         AND f.status IN ('pending', 'ir_pending_tl')
     )`);
+  } else if (opts.disputeStatus === 'forwarded_to_qa') {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM iqs_flags f
+      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
+        AND f.status = 'tl_forwarded'
+    )`);
+  } else if (opts.disputeStatus === 'updated_by_qa') {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM iqs_flags f
+      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
+        AND f.status = 'reviewed'
+    )`);
   } else if (opts.disputeStatus === 'reviewed') {
     conditions.push(`EXISTS (
       SELECT 1 FROM iqs_flags f

@@ -438,6 +438,8 @@ export default function TLQualityCallsPage() {
               style={{ ...chipInputStyle, minWidth: 150 }}
             >
               <option value="">All Calls</option>
+              <option value="forwarded_to_qa">Forwarded to QA</option>
+              <option value="updated_by_qa">Updated by QA</option>
               <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
               <option value="reviewed">Reviewed Disputes</option>
               <option value="none">No Dispute</option>
@@ -540,12 +542,17 @@ export default function TLQualityCallsPage() {
                             {call.callId}
                             {call.disputeStatus && (call.disputeStatus === 'pending' || call.disputeStatus === 'ir_pending_tl') && (
                               <span style={{ display: 'block', fontSize: 10, color: '#b45309', fontWeight: 600, marginTop: 2 }}>
-                                Pending TL Review
+                                Forwarded to TL (Pending Review)
+                              </span>
+                            )}
+                            {call.disputeStatus && call.disputeStatus === 'tl_forwarded' && (
+                              <span style={{ display: 'block', fontSize: 10, color: '#2563eb', fontWeight: 600, marginTop: 2 }}>
+                                Forwarded to QA
                               </span>
                             )}
                             {call.disputeStatus && (call.disputeStatus === 'reviewed' || call.disputeStatus === 'tl_resolved') && (
                               <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
-                                Reviewed
+                                {call.disputeStatus === 'reviewed' ? 'Updated by QA' : 'Reviewed by TL'}
                               </span>
                             )}
                           </td>

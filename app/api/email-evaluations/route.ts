@@ -330,26 +330,33 @@ export async function GET(req: NextRequest) {
     } else if (disputeQueue === 'tl_history') {
       if (disputeStatus === 'reviewed') {
         whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
+      } else if (disputeStatus === 'updated_by_qa') {
+        whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
       } else if (disputeStatus === 'forwarded_to_qa' || disputeStatus === 'Under_Review') {
         whereClauses.push(`e.dispute_status = 'Under_Review'`);
       } else {
         whereClauses.push(`e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
       }
     } else if (tab === 'disputes') {
-      if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl' || disputeStatus === 'Raised') {
-        whereClauses.push(`e.dispute_status = 'Raised'`);
+      // QA dispute view: QA must NEVER see disputes awaiting TL review ('Raised')
+      if (disputeStatus === 'forwarded_to_qa' || disputeStatus === 'pending_review' || !disputeStatus) {
+        // Pending dispute review / Forwarded to QA
+        whereClauses.push(`e.dispute_status = 'Under_Review'`);
+      } else if (disputeStatus === 'updated_by_qa') {
+        whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
       } else if (disputeStatus === 'reviewed') {
         whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
       } else if (disputeStatus === 'all') {
-        whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
+        whereClauses.push(`e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected')`);
       } else {
-        // Default QA dispute queue shows forwarded disputes ('Under_Review')
         whereClauses.push(`e.dispute_status = 'Under_Review'`);
       }
     } else if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl' || disputeStatus === 'Raised') {
       whereClauses.push(`e.dispute_status = 'Raised'`);
     } else if (disputeStatus === 'forwarded_to_qa' || disputeStatus === 'Under_Review') {
       whereClauses.push(`e.dispute_status = 'Under_Review'`);
+    } else if (disputeStatus === 'updated_by_qa') {
+      whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
     } else if (disputeStatus === 'reviewed') {
       whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
     } else if (disputeStatus === 'none') {
@@ -841,10 +848,12 @@ export async function POST(req: NextRequest) {
       const flagId = existing.flag_id || randomUUID();
       const paramsArray = Array.isArray(challengedParams) ? challengedParams : [];
 
+      const safeChatId = String(existing.ticket_id || messageId).slice(0, 100);
+
       const flag: IQSFlag = {
         id: flagId,
         scoreId: messageId,
-        chatId: existing.ticket_id || messageId,
+        chatId: safeChatId,
         messageId,
         agentName: existing.agent_name || submitterName,
         agentEmail: email,
@@ -856,7 +865,11 @@ export async function POST(req: NextRequest) {
         status: initialFlagStatus,
       };
 
-      await storeAppendIQSFlag(flag);
+      try {
+        await storeAppendIQSFlag(flag);
+      } catch (flagErr) {
+        console.warn('[email-evaluations] Error appending IQS flag:', flagErr);
+      }
 
       await query(
         `UPDATE email_reply_evaluations
@@ -870,30 +883,47 @@ export async function POST(req: NextRequest) {
       );
 
       if (isTL) {
-        const agentRows = await query<any>(`SELECT qa_name FROM agents WHERE name ILIKE $1`, [existing.agent_name]);
-        const targetQa = agentRows[0]?.qa_name ? await getSubmitterName(agentRows[0].qa_name) : 'Yashvi Chajjer';
+        let targetQa = 'Yashvi Chajjer';
+        try {
+          if (existing.agent_name) {
+            const agentRows = await query<any>(`SELECT qa_name FROM agents WHERE name ILIKE $1`, [existing.agent_name]);
+            if (agentRows[0]?.qa_name) {
+              targetQa = await getSubmitterName(agentRows[0].qa_name);
+            }
+          }
+        } catch (e) {
+          console.warn('[email-evaluations] Could not resolve QA for agent:', e);
+        }
 
-        await storeAppendFlagComment({
-          id: randomUUID(),
-          flagId,
-          authorEmail: email,
-          authorName: submitterName,
-          role: 'tl',
-          content: notes ? `Forwarded to ${targetQa}: ${notes}` : `Forwarded to ${targetQa}`,
-          createdAt: new Date().toISOString(),
-        });
+        try {
+          await storeAppendFlagComment({
+            id: randomUUID(),
+            flagId,
+            authorEmail: email,
+            authorName: submitterName,
+            role: 'tl',
+            content: notes ? `Forwarded to ${targetQa}: ${notes}` : `Forwarded to ${targetQa}`,
+            createdAt: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn('[email-evaluations] Could not append flag comment:', e);
+        }
       }
 
-      const auditAction = isTL ? 'tl_dispute_raised' : 'ir_dispute_raised';
-      await storeAppendAuditEntry({
-        id: randomUUID(),
-        action: auditAction,
-        chatId: existing.ticket_id || messageId,
-        actorEmail: email,
-        actorRole: role,
-        ts: new Date().toISOString(),
-        meta: { flagId, messageId, challengedParams: paramsArray, agentName: existing.agent_name, submitterName },
-      } as any);
+      try {
+        const auditAction = isTL ? 'tl_dispute_raised' : 'ir_dispute_raised';
+        await storeAppendAuditEntry({
+          id: randomUUID(),
+          action: auditAction,
+          chatId: safeChatId,
+          actorEmail: email,
+          actorRole: role,
+          ts: new Date().toISOString(),
+          meta: { flagId, messageId, challengedParams: paramsArray, agentName: existing.agent_name, submitterName },
+        } as any);
+      } catch (e) {
+        console.warn('[email-evaluations] Could not append audit entry:', e);
+      }
 
       return NextResponse.json({ ok: true, flagId, message: 'Dispute submitted successfully' });
     }
