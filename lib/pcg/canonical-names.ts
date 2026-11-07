@@ -65,6 +65,17 @@ export const PCG_RM_TELEPHONY_TO_CANONICAL: Record<string, string> = {
   'vishyata tulsani': 'Vishyata Tulsani',
   'sreeram': 'Sreeram',
   'sreeram v': 'Sreeram',
+
+  // Team Leads
+  'swetha': 'Swetha',
+  'swetha jayakumar': 'Swetha',
+  'tanisha': 'Tanisha Mittal',
+  'tanisha mittal': 'Tanisha Mittal',
+  'saiyam': 'Saiyam Rastogi',
+  'saiyam rastogi': 'Saiyam Rastogi',
+  'dheeraj': 'Dheeraj Bhojwani',
+  'dheeraj bhojwani': 'Dheeraj Bhojwani',
+  'sravanthi': 'Sravanthi',
 };
 
 /**

@@ -52,6 +52,7 @@ RULES
 - When a claim is ambiguous between fact and advice, quote it and mark "borderline": true rather than failing the gate. Borderline items route to human review, they do not fail the call.
 - Judge the rep's words, never the customer's.
 - Do not evaluate anything else about call quality. Gates only.
+- LANGUAGE & TRANSLATION REQUIREMENT: For any non-English, Hindi, or Hinglish speech cited as evidence, ALL "quote" and "why" fields MUST be translated into fluent English. Never quote raw Hindi or Romanized Hinglish.
 
 OUTPUT: return ONLY this JSON, no other text, no markdown fences:
 {
@@ -152,6 +153,7 @@ breach_mentions: every customer statement implying a previously promised action 
 EVIDENCE RULES:
 - You MUST provide a non-empty string in "note" for EVERY parameter (P1, P2, P3, P5, P6, P7, P8, P9, P10, P11) in the "evidence" object.
 - Never leave "note": "" or empty arrays. Every score (whether 2, 1, 0, or "NA") must have a clear explanation of what happened or why it was scored as such.
+- LANGUAGE & TRANSLATION REQUIREMENT: For any non-English, Hindi, or Hinglish speech cited as evidence, ALL parameter notes, explanations, and dialogue quotes MUST be translated into fluent English. Never quote raw Hindi or Romanized Hinglish.
 - For P11 (Tone/Energy): state the confidence/empathy ratings or specify if tone analysis was unavailable.
 - For NA parameters: explain why the condition was not applicable.
 
@@ -384,8 +386,18 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
 /**
  * Full implementation of the 5-stage Call Evaluation Pipeline.
  */
-export async function runCallPipeline(callId: string, options?: { forceTranscript?: boolean }): Promise<any> {
+export async function runCallPipeline(callId: string, options?: { forceTranscript?: boolean; forceReevaluate?: boolean }): Promise<any> {
   log.info('call-pipeline', `Starting pipeline for call ${callId}`);
+
+  // ── Guard: Skip already-reviewed calls unless explicitly forced ──────────────
+  const existingEvalRows = await query<any>(
+    `SELECT call_id, verdict, iqs_percent, status FROM call_evaluations WHERE call_id = $1`,
+    [callId]
+  );
+  if (existingEvalRows.length && existingEvalRows[0].status === 'reviewed' && !options?.forceTranscript && !options?.forceReevaluate) {
+    log.info('call-pipeline', `Call ${callId} is already reviewed (status='reviewed'). Skipping automated pipeline.`);
+    return { callId, verdict: existingEvalRows[0].verdict, iqs: existingEvalRows[0].iqs_percent };
+  }
 
   // Fetch the call recording row
   const rows = await query(`
@@ -517,6 +529,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
         call_gate_result, gates, iqs_scores, iqs_percent, applicable_weight, verdict, status
       ) VALUES ($1, $2, $3, 1, NOW(), 'audio', 'PASS', '{}', '{}', null, 0, 'NOT_SCOREABLE', 'reviewed')
       ON CONFLICT (call_id) DO UPDATE SET verdict = 'NOT_SCOREABLE', status = 'reviewed', scored_at = NOW()
+      WHERE call_evaluations.status != 'reviewed'
     `, [callId, call.chat_id, call.agent_id]);
 
     await query(`UPDATE call_recordings SET status = 'scored', updated_at = NOW() WHERE id = $1`, [callId]);
@@ -757,6 +770,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
       breach_mentions = EXCLUDED.breach_mentions,
       borderline_items = EXCLUDED.borderline_items,
       status = 'pending'
+    ${options?.forceReevaluate ? '' : "WHERE call_evaluations.status != 'reviewed'"}
   `, [
     callId,
     call.chat_id,

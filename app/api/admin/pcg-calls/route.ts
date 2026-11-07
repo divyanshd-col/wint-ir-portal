@@ -515,12 +515,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
   });
 
-  if (allTlNamesSet.size === 0) {
-    Object.keys(TL_TEAMS).forEach((tl) => allTlNamesSet.add(tl));
-  }
+  // Always guarantee standard PCG Team Leads are present
+  ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani', 'Sravanthi'].forEach((tl) => {
+    allTlNamesSet.add(tl);
+  });
 
-  // Canonical preferred TL order: Swetha, Saiyam Rastogi, Tanisha Mittal, Dheeraj Bhojwani
-  const preferredTlOrder = ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani'];
+  // Canonical preferred TL order: Swetha, Saiyam Rastogi, Tanisha Mittal, Dheeraj Bhojwani, Sravanthi
+  const preferredTlOrder = ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani', 'Sravanthi'];
   const allTlNames = Array.from(allTlNamesSet).sort((a, b) => {
     const idxA = preferredTlOrder.findIndex((p) => p.toLowerCase() === a.toLowerCase());
     const idxB = preferredTlOrder.findIndex((p) => p.toLowerCase() === b.toLowerCase());
@@ -605,6 +606,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   const personaParam = searchParams.get('persona')?.trim();
+  const callerRoleParam = searchParams.get('caller_role')?.trim(); // 'tl' | 'rm'
   const rmFilter = searchParams.get('rm_name')?.trim();
   const tlFilter = searchParams.get('tl_name')?.trim();
   const callStatusFilter = searchParams.get('status')?.trim(); // 'all' | 'answered' | 'unanswered' | 'needs_attention'
@@ -656,63 +658,100 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const scopeWhereClauses: string[] = ['r.start_time >= $1 AND r.start_time <= $2'];
   const scopeQueryParams: any[] = [startDateIso, endDateIso];
 
-  if (rmFilter && rmFilter !== 'all') {
-    const canonical = canonicalizePcgRmName(rmFilter);
-    const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
-    for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-      if (can.toLowerCase() === canonical.toLowerCase()) {
-        variations.push(telName.toLowerCase());
-      }
+  if (callerRoleParam === 'tl') {
+    // When querying for TL Call Quality: filter by specific selected agent or Team Lead names
+    let targetCallers: string[] = [];
+    if (rmFilter && rmFilter !== 'all') {
+      targetCallers = [rmFilter.trim()];
+    } else if (tlFilter && tlFilter !== 'all') {
+      targetCallers = [tlFilter.replace(/^Team\s+/i, '').trim()];
+    } else {
+      targetCallers = allTlNames;
     }
-    const uniqueVars = Array.from(new Set(variations));
-    scopeQueryParams.push(uniqueVars);
-    scopeWhereClauses.push(
-      `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
-    );
-  }
 
-  if (tlFilter && tlFilter !== 'all') {
-    const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
-    const matchedTlKey = allTlNames.find((t) => t.toLowerCase() === cleanTl);
-    const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
-    const directRms = Object.entries(customTeamMap)
-      .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
-      .map(([rm]) => rm.toLowerCase());
-    const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
-
-    const memberSet = new Set<string>();
-    [...mappedRms, ...directRms, ...fallbackRms].forEach((m) => {
-      const lower = m.toLowerCase().trim();
-      memberSet.add(lower);
-      const can = canonicalizePcgRmName(m).toLowerCase().trim();
-      memberSet.add(can);
+    const tlNamesSet = new Set<string>();
+    targetCallers.forEach((tl) => {
+      const lower = tl.toLowerCase().trim();
+      tlNamesSet.add(lower);
+      const can = canonicalizePcgRmName(tl).toLowerCase().trim();
+      tlNamesSet.add(can);
       for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-        if (c.toLowerCase().trim() === can) {
-          memberSet.add(telName.toLowerCase().trim());
+        if (c.toLowerCase().trim() === can || telName.toLowerCase().trim() === lower) {
+          tlNamesSet.add(telName.toLowerCase().trim());
         }
       }
+      if (lower.includes('swetha') || can.includes('swetha')) {
+        tlNamesSet.add('swetha');
+        tlNamesSet.add('swetha jayakumar');
+      }
     });
 
-    // Exclude other TLs and Admins so other TLs/Admins are NEVER included in a TL's team calls
-    allTlNames.forEach((tl) => {
-      memberSet.delete(tl.toLowerCase().trim());
-      memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-    });
-    Object.keys(TL_TEAMS).forEach((tl) => {
-      memberSet.delete(tl.toLowerCase().trim());
-      memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-    });
-    ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
-
-    const allTeamMembers = Array.from(memberSet);
-
-    if (allTeamMembers.length > 0) {
-      scopeQueryParams.push(allTeamMembers);
+    const uniqueTlCallers = Array.from(tlNamesSet);
+    if (uniqueTlCallers.length > 0) {
+      scopeQueryParams.push(uniqueTlCallers);
       scopeWhereClauses.push(
         `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
       );
-    } else {
-      scopeWhereClauses.push(`1 = 0`);
+    }
+  } else {
+    if (rmFilter && rmFilter !== 'all') {
+      const canonical = canonicalizePcgRmName(rmFilter);
+      const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
+      for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+        if (can.toLowerCase() === canonical.toLowerCase()) {
+          variations.push(telName.toLowerCase());
+        }
+      }
+      const uniqueVars = Array.from(new Set(variations));
+      scopeQueryParams.push(uniqueVars);
+      scopeWhereClauses.push(
+        `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
+      );
+    }
+
+    if (tlFilter && tlFilter !== 'all') {
+      const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
+      const matchedTlKey = allTlNames.find((t) => t.toLowerCase() === cleanTl);
+      const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
+      const directRms = Object.entries(customTeamMap)
+        .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
+        .map(([rm]) => rm.toLowerCase());
+      const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
+
+      const memberSet = new Set<string>();
+      [...mappedRms, ...directRms, ...fallbackRms].forEach((m) => {
+        const lower = m.toLowerCase().trim();
+        memberSet.add(lower);
+        const can = canonicalizePcgRmName(m).toLowerCase().trim();
+        memberSet.add(can);
+        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (c.toLowerCase().trim() === can) {
+            memberSet.add(telName.toLowerCase().trim());
+          }
+        }
+      });
+
+      // Exclude other TLs and Admins so other TLs/Admins are NEVER included in a TL's team calls
+      allTlNames.forEach((tl) => {
+        memberSet.delete(tl.toLowerCase().trim());
+        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+      });
+      Object.keys(TL_TEAMS).forEach((tl) => {
+        memberSet.delete(tl.toLowerCase().trim());
+        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+      });
+      ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
+
+      const allTeamMembers = Array.from(memberSet);
+
+      if (allTeamMembers.length > 0) {
+        scopeQueryParams.push(allTeamMembers);
+        scopeWhereClauses.push(
+          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
+        );
+      } else {
+        scopeWhereClauses.push(`1 = 0`);
+      }
     }
   }
 
@@ -1079,7 +1118,39 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     ];
     const disputeQueryParams: any[] = [];
 
-    if (rmFilter && rmFilter !== 'all') {
+    if (callerRoleParam === 'tl') {
+      let targetTls: string[] = [];
+      if (rmFilter && rmFilter !== 'all') {
+        targetTls = [rmFilter.trim()];
+      } else if (tlFilter && tlFilter !== 'all') {
+        targetTls = [tlFilter.replace(/^Team\s+/i, '').trim()];
+      } else {
+        targetTls = allTlNames;
+      }
+      const tlNamesSet = new Set<string>();
+      targetTls.forEach((tl) => {
+        const lower = tl.toLowerCase().trim();
+        tlNamesSet.add(lower);
+        const can = canonicalizePcgRmName(tl).toLowerCase().trim();
+        tlNamesSet.add(can);
+        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (c.toLowerCase().trim() === can || telName.toLowerCase().trim() === lower) {
+            tlNamesSet.add(telName.toLowerCase().trim());
+          }
+        }
+        if (lower.includes('swetha') || can.includes('swetha')) {
+          tlNamesSet.add('swetha');
+          tlNamesSet.add('swetha jayakumar');
+        }
+      });
+      const uniqueTlCallers = Array.from(tlNamesSet);
+      if (uniqueTlCallers.length > 0) {
+        disputeQueryParams.push(uniqueTlCallers);
+        disputeWhereClauses.push(
+          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+        );
+      }
+    } else if (rmFilter && rmFilter !== 'all') {
       const canonical = canonicalizePcgRmName(rmFilter);
       const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
       for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {

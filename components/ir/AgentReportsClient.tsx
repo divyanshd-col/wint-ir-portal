@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 const StarIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -51,11 +52,26 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   // Copy Feedback State
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const searchParams = useSearchParams();
+  const urlAgentParam = searchParams?.get('agent')?.trim() || '';
+
   // Search Filter State
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedAgentFilter, setSelectedAgentFilter] = useState('all');
+  const [selectedAgentFilter, setSelectedAgentFilter] = useState(() => urlAgentParam || 'all');
   const [selectedWeekFilter, setSelectedWeekFilter] = useState('all');
   const [latestSystemWeek, setLatestSystemWeek] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (urlAgentParam) {
+      setSelectedAgentFilter(urlAgentParam);
+      if (reports && reports.length > 0) {
+        const match = reports.find((r: any) => r.agent_name?.toLowerCase().trim() === urlAgentParam.toLowerCase());
+        if (match) {
+          setActiveReportId(match.id);
+        }
+      }
+    }
+  }, [urlAgentParam, reports]);
 
   const fetchReports = async () => {
     try {
@@ -67,8 +83,19 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
       const data = await res.json();
       setReports(data.reports || []);
       setLatestSystemWeek(data.latestSystemWeek || null);
-      if (data.reports && data.reports.length > 0 && !activeReportId) {
-        setActiveReportId(data.reports[0].id);
+      if (data.reports && data.reports.length > 0) {
+        const urlAgent = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('agent') : null;
+        if (urlAgent) {
+          const match = data.reports.find((r: any) => r.agent_name?.toLowerCase() === urlAgent.toLowerCase());
+          if (match) {
+            setActiveReportId(match.id);
+            setSelectedAgentFilter(match.agent_name);
+          } else {
+            setActiveReportId(data.reports[0].id);
+          }
+        } else if (!activeReportId) {
+          setActiveReportId(data.reports[0].id);
+        }
       }
     } catch (err: any) {
       setError(err.message);
