@@ -100,31 +100,36 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   // Dispute status filtering:
-  // - 'forwarded_to_tl': dispute raised by agent, pending TL review
-  // - 'forwarded_to_qa': TL forwarded to QA
+  // - 'forwarded_to_qa' / 'pending_review': TL forwarded to QA (pending dispute review)
+  // - 'updated_by_qa': dispute reviewed/updated by QA
   // - 'reviewed': dispute reviewed/resolved by TL or QA
-  // - 'all': all non-cancelled disputes
-  // Default: returns all open disputes awaiting review (both forwarded to TL and forwarded to QA)
+  // - 'all': all QA-actionable/reviewed disputes (excluding pending TL disputes)
+  // Default: returns open disputes forwarded to QA awaiting review ('tl_forwarded')
+  // Note: QA must NEVER see disputes pending TL review ('pending' / 'ir_pending_tl')
   const disputeStatusParam = searchParams.get('dispute_status') || searchParams.get('disputeStatus') || searchParams.get('status');
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .filter((f): f is IQSFlag => {
       if (!f || f.messageId) return false;
-      if (disputeStatusParam === 'forwarded_to_tl' || disputeStatusParam === 'pending_tl') {
-        return f.status === 'ir_pending_tl' || f.status === 'pending';
+      // QA should never see disputes awaiting TL review
+      if (f.status === 'ir_pending_tl' || f.status === 'pending') {
+        return false;
       }
-      if (disputeStatusParam === 'forwarded_to_qa') {
+      if (disputeStatusParam === 'forwarded_to_qa' || disputeStatusParam === 'pending_review') {
         return f.status === 'tl_forwarded';
+      }
+      if (disputeStatusParam === 'updated_by_qa') {
+        return f.status === 'reviewed';
       }
       if (disputeStatusParam === 'reviewed') {
         return f.status === 'reviewed' || f.status === 'tl_resolved';
       }
       if (disputeStatusParam === 'all') {
-        return f.status !== 'cancelled';
+        return f.status === 'tl_forwarded' || f.status === 'reviewed' || f.status === 'tl_resolved';
       }
-      // Default: show open disputes (both forwarded to TL and forwarded to QA)
-      return f.status === 'tl_forwarded' || f.status === 'pending' || f.status === 'ir_pending_tl';
+      // Default: show open disputes forwarded to QA (Pending dispute review)
+      return f.status === 'tl_forwarded';
     });
 
   log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });

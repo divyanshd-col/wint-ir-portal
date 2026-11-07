@@ -137,6 +137,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const disputeStatus = searchParams.get('dispute_status') || searchParams.get('disputeStatus');
   if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl') {
     extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status IN ('pending', 'ir_pending_tl'))`;
+  } else if (disputeStatus === 'forwarded_to_qa') {
+    extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status = 'tl_forwarded')`;
+  } else if (disputeStatus === 'updated_by_qa') {
+    extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status = 'reviewed')`;
   } else if (disputeStatus === 'reviewed') {
     extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status IN ('reviewed', 'tl_resolved'))`;
   } else if (disputeStatus === 'none') {

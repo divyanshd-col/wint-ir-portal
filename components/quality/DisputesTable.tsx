@@ -237,11 +237,11 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
             minWidth: 160,
           }}
         >
-          <option value="">All Open Disputes</option>
-          <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+          <option value="">Pending dispute review</option>
           <option value="forwarded_to_qa">Forwarded to QA</option>
+          <option value="updated_by_qa">Updated by QA</option>
           <option value="reviewed">Reviewed Disputes</option>
-          <option value="all">All Disputes (incl. Reviewed)</option>
+          <option value="all">All Disputes (Forwarded &amp; Reviewed)</option>
         </UISelect>
 
         <button

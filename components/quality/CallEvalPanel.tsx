@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { normalizeScore } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
@@ -430,6 +430,15 @@ export default function CallEvalPanel({
   const [segments, setSegments] = useState<any[]>(initialSegments || []);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(initialRecordingUrl || null);
   const [durationSecs, setDurationSecs] = useState<number | null>(durationSeconds ?? null);
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handlePlaybackRateChange = (rate: number) => {
+    setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
   const [loading, setLoading] = useState(!initialSegments || initialSegments.length === 0);
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
@@ -1146,17 +1155,56 @@ export default function CallEvalPanel({
               gap: 4,
               flexShrink: 0,
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
-                {durationSecs != null && (
-                  <span style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)', fontWeight: 500 }}>
-                    {fmtDuration(durationSecs)}
-                  </span>
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
+                  {durationSecs != null && (
+                    <span style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)', fontWeight: 500 }}>
+                      {fmtDuration(durationSecs)}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 10, color: 'var(--qa-text-3)', fontWeight: 600, marginRight: 2 }}>SPEED:</span>
+                  {([1, 1.5, 2] as const).map(rate => {
+                    const active = playbackRate === rate;
+                    return (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => handlePlaybackRateChange(rate)}
+                        style={{
+                          height: 22,
+                          padding: '0 6px',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          borderRadius: 4,
+                          border: `1px solid ${active ? 'var(--marker, #111111)' : 'var(--qa-border)'}`,
+                          background: active ? 'var(--ink, #111111)' : 'var(--qa-card)',
+                          color: active ? 'var(--ink-fg, #ffffff)' : 'var(--qa-text-2)',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {rate}x
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <audio
+                ref={audioRef}
                 src={recordingUrl.startsWith('/') ? recordingUrl : `/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
                 controls
+                onPlay={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+                }}
+                onLoadedMetadata={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+                }}
                 style={{ width: '100%', height: 32 }}
               />
             </div>
