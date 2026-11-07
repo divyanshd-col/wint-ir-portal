@@ -212,6 +212,17 @@ For EVERY parameter without exception, you MUST provide a detailed, context-spec
    - NEVER evaluate Product Accuracy inside Active Listening or Simplifying.
    - NEVER evaluate Questions Addressed inside Expectation Setting.
 5. NEVER return generic boilerplate or vague one-liners (such as "Parameter satisfied", "Good call", or "All product information consistent"). Provide thorough, real, context-specific analysis citing spoken facts.
+6. MANDATORY 100% ENGLISH TRANSLATION FOR ALL PARAMETERS, EVIDENCE, QUOTES & EXPLANATIONS:
+   - For ANY non-English, Hindi, Hinglish, or regional dialogue cited as evidence:
+     You MUST TRANSLATE the spoken dialogue turns into natural, fluent English inside the explanation and quote fields.
+   - NEVER quote raw Hindi, Devanagari script, or Romanized Hinglish.
+   - Example (Wrong): In Turn 50 [RM] ('Theek hai, bhaiya. Okay, aur kuch ho toh batana. Theek hai, bhaiya.'), the RM failed to use a polite Sir/Ma'am sign-off (addressed client as 'bhaiya')...
+   - Example (Correct): In Turn 50 [RM] ('All right, brother. Okay, let me know if there is anything else. All right, brother.'), the RM failed to use a polite Sir/Ma'am sign-off (addressed client casually as 'brother/bhaiya')...
+   - Example (Wrong): In Turn 34 [RM] ('Pura HNI ka hi aaya. Matlab humara toh 20 Cr humne jo dala tha wo tha.')...
+   - Example (Correct): In Turn 34 [RM] ('It was entirely from HNIs. Meaning, our contribution that we put in was 20 Cr.')...
+   - Example (Wrong): In Turn 48 [RM] ('Aap Ahaan se baat kar sakte ho is cheez ke liye')...
+   - Example (Correct): In Turn 48 [RM] ('You can speak to Ahaan regarding this')...
+   - Every single word of the evaluation explanation, reasoning, and cited quotes MUST be readable in fluent English by executives and auditors.
 
 ---
 
@@ -338,60 +349,60 @@ Return ONLY valid JSON matching this schema:
   "parameters": {
     "CallOpening": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ... (ALL cited dialogue TRANSLATED to fluent English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "CallClosing": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ... (ALL cited dialogue TRANSLATED to fluent English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "TechnicallyLegal": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ... and KB doc/section",
-      "quote": "Short exact dialogue quote",
+      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ... and KB doc/section (ALL cited dialogue TRANSLATED to fluent English)",
+      "quote": "Short dialogue quote translated into fluent English",
       "compliance_breach": false,
       "breach_reason": null
     },
     "AllQuestions": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation enumerating questions and answers citing Turn X...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation enumerating questions and answers citing Turn X... (ALL cited dialogue TRANSLATED to fluent English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "Expectation": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of timeline/next steps citing Turn X [RM]...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation of timeline/next steps citing Turn X [RM]... (ALL cited dialogue TRANSLATED to fluent English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "Process": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of pre-check context citing Turn X [RM]...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation of pre-check context citing Turn X [RM]... (ALL cited dialogue TRANSLATED to fluent English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "VocabularyGrammar": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of grammar and language quality...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation of grammar and language quality... (100% in English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "FillersDeadAir": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of delivery fluency and dead air...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation of delivery fluency and dead air... (100% in English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "EnergyTone": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of vocal demeanor and composure...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation of vocal demeanor and composure... (100% in English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "ActiveListening": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of listening patience and empathy citing Turn X [RM]...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation of listening patience and empathy citing Turn X [RM]... (ALL cited dialogue TRANSLATED to fluent English)",
+      "quote": "Short dialogue quote translated into fluent English"
     },
     "Simplifying": {
       "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of financial simplification citing Turn X [RM]...",
-      "quote": "Short exact dialogue quote"
+      "explanation": "Thorough, context-specific explanation of financial simplification citing Turn X [RM]... (ALL cited dialogue TRANSLATED to fluent English)",
+      "quote": "Short dialogue quote translated into fluent English"
     }
   },
   "compliance_tripwire": false,
@@ -469,8 +480,8 @@ NEVER wrongly exclude a genuine investor conversation! Only exclude when the con
   "detected_category": "13_pitching" | "upselling" | "support" | "hiring" | "telemarketing" | "delivery_logistics" | "wrong_number" | "internal_personal",
   "is_evaluable": boolean,
   "confidence": number,
-  "opening_quote": "Exact spoken quote from opening dialogue demonstrating the classification",
-  "reason": "Concise justification for why this call belongs to the detected category"
+  "opening_quote": "Exact spoken quote from opening dialogue demonstrating the classification (TRANSLATED into fluent English)",
+  "reason": "Concise justification in English for why this call belongs to the detected category"
 }
 `;
 
@@ -539,6 +550,57 @@ Analyze this opening portion and classify the call purpose according to the inst
       reason: 'Classifier error fallback to support',
     };
   }
+}
+
+// ── Non-English Text Detection & Parameter Translation ─────────────────────────
+export function hasNonEnglishText(text: string): boolean {
+  if (!text) return false;
+  if (/[\u0900-\u0D7F]/.test(text)) return true;
+  const hinglishPattern = /\b(haan|nahi|nahin|kya|toh|karna|bol raha|accha|theek|bhi|aur|kaise|mera|aapka|sir ji|bataiye|samajh|paise|rupaye|boliye|kariye|dekh lijiye|batata hoon|kar deta hoon|bhaiya|bhai|humne|humara|dala|matlab|kaunse|apne|baat kar|is cheez|hume pata)\b/i;
+  return hinglishPattern.test(text);
+}
+
+export async function translateParametersToEnglish(
+  params: any[],
+  geminiKeys: string[]
+): Promise<any[]> {
+  if (!Array.isArray(params) || params.length === 0) return params;
+  const needsTranslation = params.some(
+    (p) => hasNonEnglishText(p.explanation || '') || hasNonEnglishText(p.quote || '') || hasNonEnglishText(p.reasoning || '')
+  );
+  if (!needsTranslation) return params;
+
+  log.info(ROUTE, `Non-English dialogue quotes detected in parameter explanations. Running translation pass to English...`);
+  const prompt = `You are a QA Auditor translation specialist for Wint Wealth.
+The following QA evaluation parameter objects contain dialogue citations in Hindi, Hinglish, or regional speech in their "explanation", "reasoning", or "quote" fields (e.g., 'Theek hai, bhaiya', 'Pura HNI ka hi aaya', 'Aap Ahaan se baat kar sakte ho', etc.).
+
+TASK:
+- Translate all non-English / Hindi / Hinglish dialogue quotes, phrases, and words into fluent, natural English.
+- Example: "Turn 50 [RM] ('Theek hai, bhaiya. Okay, aur kuch ho toh batana.')" -> "Turn 50 [RM] ('All right, brother. Okay, let me know if there is anything else.')"
+- Example: "Turn 34 [RM] ('Pura HNI ka hi aaya. Matlab humara toh 20 Cr humne jo dala tha wo tha.')" -> "Turn 34 [RM] ('It was entirely from HNIs. Meaning, the 20 Cr that we had contributed was that.')"
+- Example: "Turn 48 [RM] ('Aap Ahaan se baat kar sakte ho is cheez ke liye')" -> "Turn 48 [RM] ('You can speak to Ahaan regarding this')"
+- Keep all parameter IDs, names, maxScores, earnedScores, and statuses ('Yes', 'Half', 'No', 'NA') exactly unchanged.
+- Return ONLY the updated JSON array matching the input schema.
+
+INPUT PARAMETERS:
+${JSON.stringify(params, null, 2)}`;
+
+  try {
+    const raw = await geminiGenerate(
+      geminiKeys,
+      DEFAULT_GEMINI_MODEL,
+      [{ role: 'user', parts: [{ text: prompt }] }],
+      { responseMimeType: 'application/json' }
+    );
+    const translated = JSON.parse(raw.replace(/```json/g, '').replace(/```/g, '').trim());
+    if (Array.isArray(translated) && translated.length === params.length) {
+      log.info(ROUTE, `Successfully translated all parameter explanations to English.`);
+      return translated;
+    }
+  } catch (err: any) {
+    log.warn(ROUTE, `Parameter translation pass failed: ${err.message}. Preserving original parameters.`);
+  }
+  return params;
 }
 
 // ── Run Evaluation Pipeline for a Single PCG Call ─────────────────────────────
@@ -614,20 +676,70 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
       time: t.time || '00:00',
       turnIndex: t.turnIndex || (idx + 1),
     }));
+
+    // If existing transcript still contains non-English dialogue, translate it into English before scoring
+    const hasRegionalSpeech = transcriptTurns.some(t => hasNonEnglishText(t.text));
+    if (hasRegionalSpeech) {
+      log.info(ROUTE, `Existing transcript turns contain non-English dialogue. Translating dialogue to English...`);
+      try {
+        const transPrompt = `Translate the following dialogue turns into fluent, natural English.
+Preserve speaker ('RM' vs 'Customer'), timestamps ('time'), turn indices ('turnIndex'), and financial/brand terms ('Wint Wealth', bond names, percentages).
+Return valid JSON array matching the exact input structure:
+${JSON.stringify(transcriptTurns, null, 2)}`;
+        const rawTrans = await geminiGenerate(
+          geminiKeys,
+          DEFAULT_GEMINI_MODEL,
+          [{ role: 'user', parts: [{ text: transPrompt }] }],
+          { responseMimeType: 'application/json' }
+        );
+        const parsed = JSON.parse(rawTrans.replace(/```json/g, '').replace(/```/g, '').trim());
+        if (Array.isArray(parsed) && parsed.length === transcriptTurns.length) {
+          transcriptTurns = parsed;
+        }
+      } catch (err: any) {
+        log.warn(ROUTE, `Dialogue translation failed: ${err.message}. Proceeding with existing turns.`);
+      }
+    }
   } else {
     log.info(ROUTE, `Transcribing audio from S3 for PCG call ${call.call_id}: ${call.recording_url}`);
     const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(call.recording_url, apiKey);
 
+    const durationMins = Math.floor((call.duration_seconds || 0) / 60);
+    const durationSecs = ((call.duration_seconds || 0) % 60).toString().padStart(2, '0');
+    const formattedDuration = `${durationMins}:${durationSecs}`;
+
     const diarizationPrompt = `Listen carefully to this phone call between a Wint Wealth Relationship Manager (RM) and an investor (Customer).
-Transcribe the entire call verbatim into chronological speaker dialogue turns.
-Identify whether each speaker is "RM" (the Wint Wealth representative) or "Customer" (the client/investor).
-Return JSON matching:
+The total duration of this audio recording is exactly ${formattedDuration} (${call.duration_seconds || 0} seconds).
+
+Transcribe the entire call into chronological speaker dialogue turns from 00:00 to the very last second of the audio (${formattedDuration}).
+
+CRITICAL COMPLETION & END-OF-CALL REQUIREMENTS (ABSOLUTELY NO CUTTING OFF):
+- You MUST transcribe the entire conversation from beginning to the absolute end of the audio file.
+- ABSOLUTELY DO NOT STOP EARLY or truncate the transcript. Every second of audio up to ${formattedDuration} must be listened to and transcribed.
+- THE FINAL INSTANCES OF THE CALL ARE MANDATORY:
+  * Capture all closing statements, next-step summaries, customer confirmation, closing pleasantries, 'thank you', 'take care', 'okay bye', and disconnection sign-offs in full detail.
+  * Do not stop transcribing when the main discussion winds down. The final 30–60 seconds of wrap-up and farewell dialogue MUST appear in the transcript.
+  * If there is a brief silence or lookup pause near the end, continue listening until the call terminates.
+- The timestamp of your last transcript turn MUST be near the end of the call (${formattedDuration}).
+
+CRITICAL LANGUAGE & TRANSLATION REQUIREMENT:
+- Detect the primary spoken language (e.g. English, Hindi, Hinglish, Tamil, Telugu, Marathi, Gujarati, etc.).
+- TRANSLATE ALL NON-ENGLISH AND REGIONAL SPEECH DIRECTLY INTO FLUENT, NATURAL ENGLISH.
+- The returned transcript turns must be entirely in English so that quality evaluators, TLs, and managers can read and audit the dialogue clearly.
+- Preserve proper nouns, entity names, and financial terms accurately:
+  * Representative names and investor names (e.g., Sreeram, Nandini, Vishal, Sahil, Shruti, Gaurav, etc.)
+  * "Wint Wealth" or "Wint Wealth PCG" brand mentions
+  * Financial products, bond names, interest/yield rates, fixed deposit mentions, and specific numbers (e.g. "9 to 12%", "13% Club", "Senior Secured Bonds").
+- Identify whether each speaker is "RM" (the Wint Wealth representative) or "Customer" (the client/investor).
+- Provide the timestamp in "MM:SS" format for each turn.
+
+Return valid JSON matching:
 {
-  "detected_language": "English" | "Hindi" | "Hinglish",
+  "detected_language": "English" | "Hindi" | "Hinglish" | "Tamil" | "Telugu" | "Marathi" | "Gujarati" | "Other",
   "dead_air_count": number,
   "interruption_count": number,
   "turns": [
-    { "speaker": "RM" | "Customer", "time": "MM:SS", "text": "..." }
+    { "speaker": "RM" | "Customer", "time": "MM:SS", "text": "fluent English dialogue..." }
   ]
 }`;
 
@@ -656,6 +768,72 @@ Return JSON matching:
         time: t.time || '00:00',
         turnIndex: idx + 1,
       }));
+
+      // ── Automated Tail Verification & Recovery Pass ─────────────────────────
+      // If the transcript stopped prematurely (>20s before call duration ends),
+      // execute a targeted closing pass to capture the final instances of the call.
+      const parseTsSecs = (ts: string): number => {
+        if (!ts) return 0;
+        const parts = ts.trim().split(':');
+        if (parts.length === 2) return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+        if (parts.length === 3) return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
+        return 0;
+      };
+
+      const lastTurn = transcriptTurns[transcriptTurns.length - 1];
+      const lastTurnSecs = lastTurn ? parseTsSecs(lastTurn.time) : 0;
+      const callDurationSecs = call.duration_seconds || 0;
+      const missingTailSeconds = callDurationSecs - lastTurnSecs;
+
+      if (callDurationSecs > 45 && missingTailSeconds > 20) {
+        log.info(ROUTE, `Transcript stopped early at ${lastTurn?.time || '00:00'} (${lastTurnSecs}s), but call duration is ${formattedDuration} (${callDurationSecs}s). Missing ${missingTailSeconds}s. Running tail recovery pass to capture final instances...`);
+        try {
+          const tailPrompt = `The previous transcription of this phone call ended early at timestamp ${lastTurn?.time || '00:00'}, but the call audio continues until ${formattedDuration} (${callDurationSecs} seconds).
+The final instances of the call (closing pleasantries, wrap-up discussion, next steps, 'thank you', 'take care', 'okay bye', and call disconnect) were cut off and must be captured.
+
+Listen to the audio starting from ${lastTurn?.time || '00:00'} until the very end of the recording (${formattedDuration}).
+Transcribe ALL remaining turns of conversation until the call ends into fluent English.
+
+Return valid JSON:
+{
+  "tail_turns": [
+    { "speaker": "RM" | "Customer", "time": "MM:SS", "text": "fluent English dialogue..." }
+  ]
+}`;
+
+          const tailRaw = await callGeminiForCall(
+            geminiKeys,
+            [{
+              parts: [
+                { file_data: { mime_type: mimeType, file_uri: fileUri } },
+                { text: tailPrompt },
+              ]
+            }],
+            undefined,
+            120_000
+          );
+
+          const parsedTail = JSON.parse(tailRaw.replace(/```json/g, '').replace(/```/g, '').trim());
+          const newTurns = parsedTail.tail_turns || parsedTail.turns || [];
+          if (Array.isArray(newTurns) && newTurns.length > 0) {
+            let nextIdx = transcriptTurns.length + 1;
+            for (const nt of newTurns) {
+              const ntSecs = parseTsSecs(nt.time);
+              if (ntSecs > lastTurnSecs || (ntSecs === lastTurnSecs && nt.text !== lastTurn?.text)) {
+                transcriptTurns.push({
+                  speaker: nt.speaker === 'Customer' ? 'Customer' : 'RM',
+                  text: nt.text || '',
+                  time: nt.time || formattedDuration,
+                  turnIndex: nextIdx++,
+                });
+              }
+            }
+            log.info(ROUTE, `Successfully recovered ${newTurns.length} closing turns. Transcript now has ${transcriptTurns.length} turns ending at ${transcriptTurns[transcriptTurns.length - 1]?.time}.`);
+          }
+        } catch (tailErr: any) {
+          log.warn(ROUTE, `Tail recovery pass encountered error: ${tailErr.message}. Keeping initial ${transcriptTurns.length} turns.`);
+        }
+      }
     } finally {
       // Clean up Gemini File API upload
       try {
@@ -844,6 +1022,9 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     ? evalJson.call_category
     : (triage.detected_category || '13_pitching');
 
+  // 6b. Mandatory English Translation Guard: Ensure all cited parameter quotes & explanations are 100% in English
+  const cleanedParameters = await translateParametersToEnglish(formattedParameters, [apiKey, ...geminiKeys]);
+
   // 7. Store Result in pcg_call_evaluations
   await query(`
     INSERT INTO pcg_call_evaluations (
@@ -886,7 +1067,7 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     csScore,
     totalApplicable,
     verdict,
-    JSON.stringify(formattedParameters),
+    JSON.stringify(cleanedParameters),
     complianceTripwire,
     complianceReason,
     JSON.stringify(transcriptTurns),
@@ -911,7 +1092,7 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     isEvaluable: true,
     iqs: iqsScore,
     verdict,
-    parameters: formattedParameters,
+    parameters: cleanedParameters,
     transcriptTurns,
   };
 }

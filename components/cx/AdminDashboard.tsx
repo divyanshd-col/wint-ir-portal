@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import Link from 'next/link';
+import CxIrPerformanceDashboard from './CxIrPerformanceDashboard';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type DatePreset = 'today' | '7d' | '30d' | '90d' | 'all' | 'custom';
 type ViewTab    = 'tl' | 'qa';
-type MainTab    = 'metrics' | 'teams';
+type MainTab    = 'metrics' | 'teams' | 'ir_performance';
 
 interface OverviewData {
   volume: number;
@@ -506,13 +507,13 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold text-gray-900">CX Performance</h1>
           <div className="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
-            {(['metrics', 'teams'] as const).map(t => (
+            {(['metrics', 'teams', 'ir_performance'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setMainTab(t)}
                 className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition ${mainTab === t ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
               >
-                {t === 'metrics' ? 'Metrics' : 'Teams'}
+                {t === 'metrics' ? 'Metrics' : t === 'teams' ? 'Teams' : 'IR Performance'}
               </button>
             ))}
           </div>
@@ -558,6 +559,13 @@ export default function AdminDashboard() {
             <p className="text-gray-400 text-xs mt-0.5">Teams, TLs, assigned agents and QA reviewers</p>
           </div>
           <TeamsView />
+        </div>
+      )}
+
+      {/* ── IR Performance view ── */}
+      {mainTab === 'ir_performance' && (
+        <div className="bg-white border border-gray-100 rounded-xl p-6 overflow-hidden">
+          <CxIrPerformanceDashboard />
         </div>
       )}
 

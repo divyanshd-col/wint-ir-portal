@@ -127,11 +127,9 @@ export async function geminiGenerate(
 // Raw-fetch implementation: responseMimeType=application/json, thinkingBudget=0 for flash,
 // reverse-part iteration to skip thought entries, 5 retries with 10s gaps, model fallback.
 const CALL_MODEL_CHAIN = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
   'gemini-3.5-flash',
-  'gemini-3.5-flash',
-  'gemini-3.5-pro',
-  'gemini-1.5-pro',
-  'gemini-1.5-flash',
 ];
 
 export async function callGeminiForCall(
@@ -316,6 +314,7 @@ YOUR TASKS:
    - INVESTOR: The customer.
 2. Transcribe and Translate:
    - For each "turn" event in the structure above, transcribe the exact words spoken during that time window.
+   - CRITICAL COMPLETENESS: Transcribe through to the very last event until the end of the recording. DO NOT STOP EARLY. Ensure the final instances of the call (closing pleasantries, wrap-up remarks, 'thank you', 'take care', 'bye', and disconnect) are fully transcribed.
    - Translate all non-English content to fluent natural English. Set "translated": true for any segment with translated content.
 3. Detect Active Listening:
    - For any turn where the IR EXECUTIVE indicates they could not hear or understand (e.g., "could you repeat", "pardon", "sorry what did you say"), add an "active_listening" flag object immediately after that speech segment.

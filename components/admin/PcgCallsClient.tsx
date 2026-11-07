@@ -14,6 +14,8 @@ import CallEvalPanel from '@/components/quality/CallEvalPanel';
 import { ThemeToggle, AccountMenu } from '@/components/shell/TopBar';
 import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
 import SecuritySection from '@/components/settings/SecuritySection';
+import PcgQualityParametersView from './PcgQualityParametersView';
+import PcgTlCallsView from './PcgTlCallsView';
 
 // Type definitions
 interface CallParameter {
@@ -124,7 +126,7 @@ interface TeamLeadSummary {
   rms: string[];
 }
 
-export type PcgTab = 'calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security';
+export type PcgTab = 'calls' | 'tl_calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security' | 'parameter_definitions';
 
 export const getRunoCallUrl = (callId: string | null | undefined) => {
   if (!callId) return 'https://app-call.runo.in';
@@ -276,9 +278,12 @@ export default function PcgCallsClient() {
     }
   }, [userRole, loggedInUserName]);
 
-  // For agent and tl, team_analytics and rm_performance are admin-only
+  // For agent and tl, team_analytics, rm_performance and tl_calls are admin-only; parameter_definitions is TL & Admin only
   useEffect(() => {
-    if ((activePersona === 'agent' || activePersona === 'tl') && (activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
+    if ((activePersona === 'agent' || activePersona === 'tl') && (activeTab === 'team_analytics' || activeTab === 'rm_performance' || activeTab === 'tl_calls')) {
+      handleTabChange('calls');
+    }
+    if (activePersona === 'agent' && activeTab === 'parameter_definitions') {
       handleTabChange('calls');
     }
   }, [activePersona, activeTab]);
@@ -288,8 +293,10 @@ export default function PcgCallsClient() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
-      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security') {
-        if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
+      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security' || tabParam === 'parameter_definitions' || tabParam === 'tl_calls') {
+        if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'tl_calls')) {
+          setActiveTab('calls');
+        } else if (activePersona === 'agent' && tabParam === 'parameter_definitions') {
           setActiveTab('calls');
         } else {
           setActiveTab(tabParam as PcgTab);
@@ -1321,7 +1328,7 @@ export default function PcgCallsClient() {
         {/* Global Date Selector, Workspace Switcher, User Profile */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Global Date Selector */}
-          {activeTab !== 'security' && (
+          {activeTab !== 'security' && activeTab !== 'parameter_definitions' && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-[#71717A] font-semibold">Date Range:</span>
               <select
@@ -1460,6 +1467,31 @@ export default function PcgCallsClient() {
             <span className="flex-1">Call Quality</span>
           </button>
 
+          {/* 3b. TL Call Quality Navigation Link (For Admin) */}
+          {activePersona === 'admin' && (
+            <button
+              type="button"
+              onClick={() => handleTabChange('tl_calls')}
+              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'tl_calls'
+                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+                }`}
+            >
+              <span
+                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'tl_calls' ? 'text-[#18181b]' : 'text-[#71717a]'
+                  }`}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </span>
+              <span className="flex-1">TL Call Quality</span>
+            </button>
+          )}
+
           {/* 4. RM Scorecard Navigation Link */}
           <button
             type="button"
@@ -1511,6 +1543,31 @@ export default function PcgCallsClient() {
             </button>
           )}
 
+          {/* 6. Quality Parameter Definitions Navigation Link (For TL and Admin) */}
+          {(activePersona === 'admin' || activePersona === 'tl') && (
+            <button
+              type="button"
+              onClick={() => handleTabChange('parameter_definitions')}
+              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'parameter_definitions'
+                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+                }`}
+            >
+              <span
+                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'parameter_definitions' ? 'text-[#18181b]' : 'text-[#71717a]'
+                  }`}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
+                  <path d="M8 7h8" />
+                  <path d="M8 11h8" />
+                  <path d="M8 15h5" />
+                </svg>
+              </span>
+              <span className="flex-1">Quality Parameters</span>
+            </button>
+          )}
+
           {/* Bottom section: Security & Settings */}
           <div className="mt-4 pt-3 border-t border-[#e6e2d8]">
             {/* Security Navigation Link (For Agent, TL and Admin) */}
@@ -1557,6 +1614,10 @@ export default function PcgCallsClient() {
           {activeTab === 'security' ? (
             <div>
               <SecuritySection />
+            </div>
+          ) : activeTab === 'parameter_definitions' ? (
+            <div>
+              <PcgQualityParametersView />
             </div>
           ) : activeTab === 'scorecard' ? (
             <div>
@@ -1619,6 +1680,15 @@ export default function PcgCallsClient() {
                     setCustomEndDate(to);
                   }
                 }}
+              />
+            </div>
+          ) : activeTab === 'tl_calls' ? (
+            <div>
+              <PcgTlCallsView
+                onOpenCallDrawer={(cid) => handleOpenCallById(cid)}
+                globalDateRange={dateRange}
+                globalCustomStartDate={customStartDate}
+                globalCustomEndDate={customEndDate}
               />
             </div>
           ) : (
