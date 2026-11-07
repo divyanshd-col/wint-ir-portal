@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -109,23 +110,42 @@ function Panel({ children, style }: { children: React.ReactNode; style?: React.C
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function MemberAnalyticsDashboard() {
+  const searchParams = useSearchParams();
+  const urlAgent = searchParams?.get('agent')?.trim() || '';
+  const urlChannel = searchParams?.get('channel')?.trim() || '';
+
   const [period, setPeriod]           = useState<Period>('7');
   const [customFrom, setCustomFrom]   = useState('');
   const [customTo, setCustomTo]       = useState('');
   const [showPicker, setShowPicker]   = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState(() => urlAgent);
   const [agents, setAgents]           = useState<string[]>([]);
   const [data, setData]               = useState<MemberData | null>(null);
   const [loading, setLoading]         = useState(true);
-  const [wowChannel, setWowChannel]   = useState<'chats' | 'calls'>('chats');
+  const [wowChannel, setWowChannel]   = useState<'chats' | 'calls'>(() => (urlChannel === 'calls' ? 'calls' : 'chats'));
   const [wowTab, setWowTab]           = useState<'metrics' | 'params'>('metrics');
   const [showAgentDrop, setShowAgentDrop] = useState(false);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [aiStates, setAiStates]       = useState<Record<string, 'empty'|'loading'|'insights'>>({ chats: 'empty', calls: 'empty' });
   const [aiResults, setAiResults]     = useState<Record<string, AiResult|null>>({ chats: null, calls: null });
-  const [aiChannel, setAiChannel]     = useState<'chats' | 'calls'>('chats');
+  const [aiChannel, setAiChannel]     = useState<'chats' | 'calls'>(() => (urlChannel === 'calls' ? 'calls' : 'chats'));
 
   const agentDropRef = useRef<HTMLDivElement>(null);
+
+  // Sync state if URL query params change
+  useEffect(() => {
+    if (urlAgent && urlAgent !== selectedAgent) {
+      setSelectedAgent(urlAgent);
+      setExpandedCats(new Set());
+    }
+  }, [urlAgent]);
+
+  useEffect(() => {
+    if (urlChannel === 'calls' || urlChannel === 'chats') {
+      setWowChannel(urlChannel);
+      setAiChannel(urlChannel);
+    }
+  }, [urlChannel]);
 
   // ── Data fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -134,7 +154,8 @@ export default function MemberAnalyticsDashboard() {
     let cancelled = false;
     setLoading(true);
     const qs = new URLSearchParams({ period });
-    if (selectedAgent) qs.set('agent', selectedAgent);
+    const targetAgent = selectedAgent || urlAgent;
+    if (targetAgent) qs.set('agent', targetAgent);
     if (period === 'custom' && customFrom && customTo) { qs.set('from', customFrom); qs.set('to', customTo); }
 
     fetch(`/api/cx/tl/member-analytics?${qs}`)
@@ -153,7 +174,7 @@ export default function MemberAnalyticsDashboard() {
         }
         setData(json);
         if (json.agents?.length) setAgents(json.agents);
-        if (!selectedAgent && json.agentName) {
+        if (!selectedAgent && !urlAgent && json.agentName) {
           setSelectedAgent(json.agentName);
         }
         setLoading(false);
@@ -164,7 +185,7 @@ export default function MemberAnalyticsDashboard() {
       });
 
     return () => { cancelled = true; };
-  }, [selectedAgent, period, customFrom, customTo]);
+  }, [selectedAgent, urlAgent, period, customFrom, customTo]);
 
   // ── Click outside agent dropdown ───────────────────────────────────────────────
   useEffect(() => {

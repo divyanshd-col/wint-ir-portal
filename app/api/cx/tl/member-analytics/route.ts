@@ -232,14 +232,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ agentName: null, agents: [], wowWeekStarts: wowWeeks, channels: { chats: null, calls: null, emails: null } });
   }
 
-  const requestedAgent = searchParams.get('agent');
+  const requestedAgent = searchParams.get('agent')?.trim();
   let agentName: string;
   if (role === 'agent') {
     agentName = tlAgentNames[0];
+  } else if (requestedAgent) {
+    // 1. Case-insensitive match against existing tlAgentNames
+    const match = tlAgentNames.find(n => n.toLowerCase().trim() === requestedAgent.toLowerCase());
+    if (match) {
+      agentName = match;
+    } else {
+      // 2. Query database for agent across all active agents
+      const dbMatch = await query<{ name: string }>(`
+        SELECT name FROM agents WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND status = 'active' LIMIT 1
+      `, [requestedAgent]).catch(() => []);
+      if (dbMatch.length > 0) {
+        agentName = dbMatch[0].name;
+        if (!tlAgentNames.some(n => n.toLowerCase().trim() === agentName.toLowerCase().trim())) {
+          tlAgentNames = [agentName, ...tlAgentNames];
+        }
+      } else {
+        agentName = tlAgentNames[0];
+      }
+    }
   } else {
-    agentName = (requestedAgent && tlAgentNames.includes(requestedAgent))
-      ? requestedAgent
-      : tlAgentNames[0];
+    agentName = tlAgentNames[0];
   }
 
   // ── E-mail stats for the member + CX-wide averages (all active agents, same period) ──────

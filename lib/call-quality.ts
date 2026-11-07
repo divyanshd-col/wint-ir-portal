@@ -221,6 +221,7 @@ If a name is unclear, write it phonetically as best you can, or write [unclear].
 TRANSCRIPTION RULES
 ══════════════════════════════════════════
 - Process the ENTIRE audio recording from 0:00 to the very last second. DO NOT stop midway or skip later parts of the conversation. Keep transcribing until the final closing or disconnection.
+- CRITICAL COMPLETENESS (NO CUTTING OFF): Capture all final instances of the call, including closing pleasantries, final clarifications, next steps, 'thank you', 'take care', 'bye', and disconnection sign-offs.
 - Each segment = one complete speaker turn.
 - Transcribe EVERY single word spoken — do not skip, summarize, or paraphrase anything.
 - During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff point; the interrupting speaker's words appear in their own new segment.

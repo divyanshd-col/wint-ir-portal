@@ -64,6 +64,17 @@ const MailIcon = () => (
   </svg>
 );
 
+const TrophyIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+    <path d="M4 22h16" />
+    <path d="M10 14.66V17c0 .55-.45 1-1 1H7" />
+    <path d="M14 14.66V17c0 .55.45 1 1 1h2" />
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+  </svg>
+);
+
 export const NAV_ALL: NavItem[] = [
   { label: 'Analytics',        href: '/quality',                icon: StarIcon,       roles: ['admin', 'quality', 'tl', 'agent'], skill: 'quality:analytics:access' },
   { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'],                skill: 'quality:chat_eval:access', section: 'QA' },
@@ -75,6 +86,7 @@ export const NAV_ALL: NavItem[] = [
   { label: 'Quality Calls',    href: '/tl/quality-calls',       icon: PhoneIcon,      roles: ['admin', 'tl'],                     skill: 'tl:quality_calls:access', section: 'TL' },
   { label: 'Quality Emails',   href: '/tl/quality-emails',      icon: MailIcon,       roles: ['admin', 'tl'],                     section: 'TL' },
   { label: 'IR Reports',       href: '/tl/reports',             icon: DocumentIcon,   roles: ['admin', 'tl'],                     skill: 'tl:reports:access', section: 'TL' },
+  { label: 'IR Performance',   href: '/tl/ir-performance',      icon: TrophyIcon,     roles: ['admin'],                           skill: 'tl:team_analytics:access', section: 'TL' },
   { label: 'My Analytics',     href: '/tl/member-analytics',    icon: UserIcon,       roles: ['agent'],                           skill: 'agent:my_analytics:access', section: 'IR Agent' },
   { label: 'My Quality Chats', href: '/agent/quality-chats',    icon: ChatIcon,       roles: ['agent'],                           skill: 'agent:my_chats:access', section: 'IR Agent' },
   { label: 'My Quality Calls', href: '/agent/quality-calls',    icon: PhoneIcon,      roles: ['agent'],                           skill: 'agent:my_calls:access', section: 'IR Agent' },
