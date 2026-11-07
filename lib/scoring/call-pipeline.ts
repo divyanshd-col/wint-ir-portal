@@ -519,16 +519,20 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   const speechSegments = segments.filter((s: any) => s.type === 'turn' || s.type === 'speech');
   const isSystemOnly = speechSegments.every((s: any) => s.speaker === 'SYSTEM');
   const isPureSilence = speechSegments.length === 0;
+  const isJunkCall = Boolean(
+    (call.call_disposition && call.call_disposition.toLowerCase().includes('junk')) ||
+    (call.call_sub_disposition && call.call_sub_disposition.toLowerCase().includes('junk'))
+  );
 
-  if (isSystemOnly || isPureSilence) {
-    log.info('call-pipeline', `Call ${callId} marked as NOT_SCOREABLE (system only or pure silence)`);
+  if (isSystemOnly || isPureSilence || isJunkCall) {
+    log.info('call-pipeline', `Call ${callId} marked as NOT_SCOREABLE (${isJunkCall ? 'junk call' : 'system only or pure silence'})`);
     
     await query(`
       INSERT INTO call_evaluations (
         call_id, chat_id, agent_id, call_sequence_in_thread, scored_at, source,
         call_gate_result, gates, iqs_scores, iqs_percent, applicable_weight, verdict, status
       ) VALUES ($1, $2, $3, 1, NOW(), 'audio', 'PASS', '{}', '{}', null, 0, 'NOT_SCOREABLE', 'reviewed')
-      ON CONFLICT (call_id) DO UPDATE SET verdict = 'NOT_SCOREABLE', status = 'reviewed', scored_at = NOW()
+      ON CONFLICT (call_id) DO UPDATE SET verdict = 'NOT_SCOREABLE', status = 'reviewed', scored_at = NOW(), iqs_percent = null, applicable_weight = 0
       WHERE call_evaluations.status != 'reviewed'
     `, [callId, call.chat_id, call.agent_id]);
 

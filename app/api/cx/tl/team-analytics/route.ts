@@ -62,7 +62,7 @@ const CHAT_SUMMARY_SELECT = `
     COUNT(CASE WHEN c.csat_label = 'good' THEN 1 END)::numeric
     / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
   )::float AS csat_pct,
-  ROUND(AVG(s.iqs_score)::numeric, 1)::float AS iqs,
+  ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric, 1)::float AS iqs,
   COUNT(c.id)::int AS volume
 `;
 
@@ -236,7 +236,11 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN c.csat_label = 'good' THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS csat_pct,
-      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric, 1)::float AS iqs,
+      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+        WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+          AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+          AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+      )::numeric, 1)::float AS iqs,
       COUNT(cr.id)::int AS volume
     FROM call_recordings cr
     LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -252,7 +256,11 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN c.csat_label = 'good' THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS csat_pct,
-      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric, 1)::float AS iqs,
+      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+        WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+          AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+          AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+      )::numeric, 1)::float AS iqs,
       COUNT(cr.id)::int AS volume
     FROM call_recordings cr
     LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -291,7 +299,11 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN c.csat_label = 'good' THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS csat_pct,
-      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric, 1)::float AS iqs,
+      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+        WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+          AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+          AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+      )::numeric, 1)::float AS iqs,
       COUNT(cr.id)::int AS volume
     FROM call_recordings cr
     LEFT JOIN call_evaluations ce ON ce.call_id = cr.id

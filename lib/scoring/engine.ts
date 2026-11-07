@@ -158,7 +158,12 @@ export async function scoreLinkedCallsForChat(
         transcript: segments,
       });
 
-      await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: 'gemini-3.5-flash' });
+      const isJunkChat = Boolean(
+        (disposition && disposition.toLowerCase().includes('junk')) ||
+        (subDisposition && subDisposition.toLowerCase().includes('junk'))
+      );
+
+      await updateCallIQSScore({ chatId, callIqsScore: isJunkChat ? null : parsed.iqs, callParameters: parameters, callModelVersion: 'gemini-3.5-flash' });
       await updateCallRecordingStatus(call.id, 'scored');
       console.log(`[scoring-engine] Scored combined chat+call for ${chatId} → IQS ${parsed.iqs}`);
 
@@ -357,13 +362,18 @@ export async function executeScoring(
     Object.keys(parameters).length === 0 ||
     Object.values(parameters).every(p => p.score === null);
 
+  const isJunk = Boolean(
+    (disposition && disposition.toLowerCase().includes('junk')) ||
+    (subDisposition && subDisposition.toLowerCase().includes('junk'))
+  );
+
   await insertIQSScore({
     chatId,
-    iqsScore: (isBotOnly || noGradeableLeg) ? null : (humanPass?.iqs_score ?? primaryPass.iqs_score ?? 0),
+    iqsScore: (isBotOnly || noGradeableLeg || isJunk) ? null : (humanPass?.iqs_score ?? primaryPass.iqs_score ?? 0),
     parameters,
     modelVersion,
     uncertainParameters,
-    botIqsScore: botPass ? (botPass.iqs_score ?? 0) : undefined,
+    botIqsScore: botPass ? (isJunk ? undefined : (botPass.iqs_score ?? 0)) : undefined,
     botParameters,
     botModelVersion: botPass ? modelVersion : undefined,
     breaches: primaryPass.breaches?.map((b: any) => `${b.type}: ${b.quote}`),

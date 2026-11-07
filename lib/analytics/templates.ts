@@ -175,9 +175,9 @@ export function top_agents_by_metric(f: AnalyticsFilters, extras?: TemplateExtra
       sql: `
         SELECT
           a.name AS agent,
-          ROUND(AVG(s.iqs_score), 1)::float AS avg_iqs,
+          ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%'), 1)::float AS avg_iqs,
           COUNT(*)::int AS chats,
-          jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+          jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         JOIN iqs_scores s ON s.chat_id = c.id
@@ -339,9 +339,9 @@ export function team_breakdown(f: AnalyticsFilters, extras?: TemplateExtras): { 
         SELECT
           t.name AS team,
           t.type AS team_type,
-          ROUND(AVG(s.iqs_score), 1)::float AS avg_iqs,
+          ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%'), 1)::float AS avg_iqs,
           COUNT(*)::int AS chats,
-          jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+          jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN teams t ON t.id = c.team_id
         JOIN iqs_scores s ON s.chat_id = c.id
@@ -406,9 +406,9 @@ export function agent_breakdown_in_team(f: AnalyticsFilters, extras?: TemplateEx
         a.name AS agent,
         COUNT(*)::int AS chats,
         COUNT(*) FILTER (WHERE c.csat_label IN ('bad','could_be_better'))::int AS bad_csat,
-        ROUND(AVG(s.iqs_score), 1)::float AS avg_iqs,
+        ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%'), 1)::float AS avg_iqs,
         ROUND(AVG(c.frt_seconds))::int AS avg_frt_seconds,
-        jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+        jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
       FROM conversations c
       JOIN agents a ON a.id = c.agent_id
       LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -460,10 +460,10 @@ export function compare_two_windows(f: AnalyticsFilters, extras?: TemplateExtras
     localParams.push(...dimP.slice(2));
 
     const metricExpr = metric === 'avg_iqs'
-      ? `ROUND(AVG(s.iqs_score), 1)::float`
+      ? `ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%'), 1)::float`
       : `COUNT(*)::int`;
     const iqsJoin = metric === 'avg_iqs' ? `JOIN iqs_scores s ON s.chat_id = c.id` : '';
-    const iqsAgg = metric === 'avg_iqs' ? `, jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters` : '';
+    const iqsAgg = metric === 'avg_iqs' ? `, jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters` : '';
 
     return {
       sql: `SELECT '${label}' AS window_label, ${metricExpr} AS value, COUNT(*)::int AS count${iqsAgg}

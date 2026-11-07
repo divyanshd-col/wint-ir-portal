@@ -77,22 +77,26 @@ export function DisputeStatusPill({
   let label = '';
 
   if (status === 'pending' || status === 'ir_pending_tl') {
-    label = 'Dispute raised by IR';
+    label = 'Forwarded to TL (Pending Review)';
   } else if (status === 'tl_forwarded') {
     if (role === 'tl') {
       label = 'Dispute raised by TL';
     } else {
-      label = 'Forwarded by TL';
+      label = 'Forwarded to QA';
     }
   } else if (status === 'tl_resolved') {
-    label = 'Resolved by TL';
+    label = 'Reviewed by TL';
   } else if (status === 'reviewed') {
-    const hasAnswerChanges = Array.isArray(parameters?.__answerChanges) && parameters.__answerChanges.length > 0;
-    const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
-    if (isUpdated) {
-      label = 'Updated by QA';
+    if (note.includes('tl') || (reviewNote && reviewNote.toLowerCase().includes('tl'))) {
+      label = 'Reviewed by TL';
     } else {
-      label = 'Resolved by QA';
+      const hasAnswerChanges = Array.isArray(parameters?.__answerChanges) && parameters.__answerChanges.length > 0;
+      const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
+      if (isUpdated) {
+        label = 'Updated by QA';
+      } else {
+        label = 'Reviewed';
+      }
     }
   } else if (status === 'cancelled') {
     label = 'Cancelled';
@@ -140,6 +144,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   const [iqsMin,  setIqsMin]  = useState('');
   const [iqsMax,  setIqsMax]  = useState('');
   const [csat,    setCsat]    = useState<string[]>([]);
+  const [disputeFilter, setDisputeFilter] = useState('');
 
   // Auto-expand target chat
   const autoExpandedRef = React.useRef(false);
@@ -165,6 +170,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
       if (to)     params.set('to', to);
       if (iqsMin) params.set('iqs_min', iqsMin);
       if (iqsMax) params.set('iqs_max', iqsMax);
+      if (disputeFilter) params.set('dispute_status', disputeFilter);
       csat.forEach(v => params.append('csat', v));
       const res = await fetch(`/api/cx/tl/chats?${params}`);
       if (!res.ok) return;
@@ -177,11 +183,11 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
     } finally {
       setLoading(false);
     }
-  }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, limit, onTotalChange]);
+  }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, disputeFilter, limit, onTotalChange]);
 
   useEffect(() => { fetchChats(page); }, [fetchChats, page]);
 
-  useEffect(() => { setPage(1); }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, limit]);
+  useEffect(() => { setPage(1); }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, disputeFilter, limit]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -228,10 +234,16 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
           ))}
         </div>
         <DateRangeChip from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+        <UISelect value={disputeFilter} onChange={e => setDisputeFilter(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
+          <option value="">All Dispute Statuses</option>
+          <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+          <option value="reviewed">Reviewed Disputes</option>
+          <option value="none">No Dispute</option>
+        </UISelect>
         <button
           type="button" className="qf-chip"
-          disabled={!(chatIdSearch || agent || from || to || iqsMin || iqsMax || csat.length)}
-          onClick={() => { setChatIdSearch(''); setAgent(''); setFrom(''); setTo(''); setIqsMin(''); setIqsMax(''); setCsat([]); setPage(1); }}
+          disabled={!(chatIdSearch || agent || from || to || iqsMin || iqsMax || csat.length || disputeFilter)}
+          onClick={() => { setChatIdSearch(''); setAgent(''); setFrom(''); setTo(''); setIqsMin(''); setIqsMax(''); setCsat([]); setDisputeFilter(''); setPage(1); }}
         >
           Reset Filters
         </button>
@@ -329,7 +341,19 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                   onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                 >
-                  <td style={tdMono}><ChatIdCell chatId={chat.chatId} /></td>
+                  <td style={tdMono}>
+                    <ChatIdCell chatId={chat.chatId} />
+                    {chat.disputeStatus && (chat.disputeStatus === 'pending' || chat.disputeStatus === 'ir_pending_tl') && (
+                      <span style={{ display: 'block', fontSize: 10, color: '#b45309', fontWeight: 600, marginTop: 2 }}>
+                        Pending TL Review
+                      </span>
+                    )}
+                    {chat.disputeStatus && (chat.disputeStatus === 'reviewed' || chat.disputeStatus === 'tl_resolved') && (
+                      <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
+                        Reviewed
+                      </span>
+                    )}
+                  </td>
                   <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                   <td style={tdNum}>
                     {chat.iqsScore != null ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>}
@@ -413,12 +437,13 @@ export function getDisputeOutcomeKey(d: TLDisputeRow): string {
   const note = (d.reviewNote || '').toLowerCase();
 
   if (status === 'pending' || status === 'ir_pending_tl') {
-    return 'raised_ir';
+    return 'forwarded_to_tl';
   } else if (status === 'tl_forwarded') {
     return role === 'tl' ? 'raised_tl' : 'forwarded';
   } else if (status === 'tl_resolved') {
-    return 'resolved_tl';
+    return 'reviewed_tl';
   } else if (status === 'reviewed') {
+    if (note.includes('tl')) return 'reviewed_tl';
     const hasAnswerChanges = Array.isArray(d.parameters?.__answerChanges) && d.parameters.__answerChanges.length > 0;
     const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
     return isUpdated ? 'updated' : 'resolved_qa';
@@ -479,7 +504,21 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const filteredDisputes = disputes.filter(d => {
     if (chatSearch.trim() && !String(d.chatId).includes(chatSearch.trim())) return false;
     if (agentFilter && d.agentName !== agentFilter) return false;
-    if (outcomeFilter && getDisputeOutcomeKey(d) !== outcomeFilter) return false;
+    if (outcomeFilter) {
+      if (outcomeFilter === 'forwarded_to_tl') {
+        if (d.status !== 'pending' && d.status !== 'ir_pending_tl') return false;
+      } else if (outcomeFilter === 'reviewed_tl') {
+        if (d.status !== 'tl_resolved' && !(d.status === 'reviewed' && (d.reviewNote?.toLowerCase().includes('tl') || d.reviewedBy?.toLowerCase().includes('tl')))) return false;
+      } else if (outcomeFilter === 'reviewed') {
+        if (d.status !== 'reviewed' && d.status !== 'tl_resolved') return false;
+      } else if (outcomeFilter === 'raised_ir') {
+        if (d.raisedByRole !== 'ir' && d.raisedBy !== 'IR') return false;
+      } else if (outcomeFilter === 'raised_tl') {
+        if (d.raisedByRole !== 'tl' && d.raisedBy !== 'TL') return false;
+      } else if (getDisputeOutcomeKey(d) !== outcomeFilter) {
+        return false;
+      }
+    }
     if (fromFilter) {
       const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
       if (dDate < fromFilter) return false;
@@ -583,17 +622,18 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       )}
 
       <UISelect value={outcomeFilter} onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
-        <option value="">{status === 'pending' ? 'All Statuses' : 'All Outcomes'}</option>
+        <option value="">{status === 'pending' ? 'All Dispute Statuses' : 'All Outcomes'}</option>
         {status === 'resolved' ? (
           <>
-            <option value="updated">Updated by QA</option>
+            <option value="reviewed_tl">Reviewed by TL</option>
             <option value="resolved_qa">Resolved by QA</option>
-            <option value="resolved_tl">Resolved by TL</option>
-            <option value="forwarded">Forwarded by TL</option>
+            <option value="updated">Updated by QA</option>
+            <option value="forwarded">Forwarded to QA</option>
             <option value="cancelled">Cancelled</option>
           </>
         ) : (
           <>
+            <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
             <option value="raised_ir">Dispute raised by IR</option>
             <option value="raised_tl">Dispute raised by TL</option>
           </>

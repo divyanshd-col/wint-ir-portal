@@ -24,12 +24,12 @@ export async function GET(req: NextRequest) {
       COUNT(CASE WHEN c.csat_score IS NOT NULL THEN 1 END)::int          AS with_csat,
 
       -- IQS overall + tier distribution
-      ROUND(AVG(s.iqs_score)::numeric,1)::float                          AS avg_iqs,
-      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score >= 85 THEN 1 END)::int AS iqs_excellent,
-      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score >= 70 AND s.iqs_score < 85 THEN 1 END)::int AS iqs_warn,
-      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score < 70 THEN 1 END)::int AS iqs_risk,
-      COUNT(CASE WHEN s.iqs_score IS NOT NULL THEN 1 END)::int            AS with_iqs,
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL)     AS parameters,
+      ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric,1)::float AS avg_iqs,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score >= 85 THEN 1 END)::int AS iqs_excellent,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score >= 70 AND s.iqs_score < 85 THEN 1 END)::int AS iqs_warn,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score < 70 THEN 1 END)::int AS iqs_risk,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') THEN 1 END)::int AS with_iqs,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters,
 
       -- Timing
       ROUND(AVG(c.resolution_seconds)::numeric,0)::int                   AS avg_resolution,

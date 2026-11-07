@@ -265,15 +265,16 @@ export async function GET(req: NextRequest) {
   const safe = <T,>(p: Promise<T>) => p.catch(() => null as T | null);
   const extraP = Promise.all([
     safe(query<{ iqs: number|null; volume: number }>(`
-      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score))::numeric,1)::float AS iqs, COUNT(*)::int AS volume
+      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric,1)::float AS iqs, COUNT(*)::int AS volume
       FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
       WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
         AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
     `, [dateFrom, dateTo, agentName])),
     safe(query<{ csat_pct: number|null; iqs: number|null; volume: number; agents: number }>(`
       SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                    / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-             ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+             ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
              COUNT(c.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
       FROM conversations c
       JOIN agents a ON a.id = c.agent_id
@@ -283,7 +284,11 @@ export async function GET(req: NextRequest) {
     safe(query<{ csat_pct: number|null; iqs: number|null; volume: number; agents: number }>(`
       SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                    / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
              COUNT(cr.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
       FROM call_recordings cr
       LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -293,9 +298,10 @@ export async function GET(req: NextRequest) {
       WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name NOT IN ${BOTS}
     `, [dateFrom, dateTo])),
     safe(query<{ iqs: number|null; volume: number; agents: number }>(`
-      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score))::numeric,1)::float AS iqs,
+      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
              COUNT(*)::int AS volume, COUNT(DISTINCT LOWER(TRIM(e.agent_name)))::int AS agents
       FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
       WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
     `, [dateFrom, dateTo])),
   ]);
@@ -306,9 +312,9 @@ export async function GET(req: NextRequest) {
       query<{ csat_pct: number|null; iqs: number|null; volume: number; parameters?: any }>(`
         SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                      / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -317,10 +323,10 @@ export async function GET(req: NextRequest) {
 
       query<FlatCatRow & { parameters?: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
                ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -332,10 +338,10 @@ export async function GET(req: NextRequest) {
       query<FlatCatRow & { parameters?: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
                c.tags->>'sub_disposition' AS sub_disposition,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
                ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -349,9 +355,9 @@ export async function GET(req: NextRequest) {
         SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
                ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
                      NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -387,7 +393,11 @@ export async function GET(req: NextRequest) {
       query<{ csat_pct: number|null; iqs: number|null; volume: number }>(`
         SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                      / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
         LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -399,7 +409,11 @@ export async function GET(req: NextRequest) {
 
       query<FlatCatRow>(`
         SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
         LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -414,7 +428,11 @@ export async function GET(req: NextRequest) {
       query<FlatCatRow>(`
         SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
                COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') AS sub_disposition,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
         LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -431,7 +449,11 @@ export async function GET(req: NextRequest) {
         SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
                ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
                      NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
         LEFT JOIN call_evaluations ce ON ce.call_id = cr.id

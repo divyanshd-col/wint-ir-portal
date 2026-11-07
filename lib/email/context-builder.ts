@@ -168,8 +168,12 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
  */
 export function calculateEmailIQS(
   params: Record<string, string | number | null | undefined>,
-  customWeights?: Record<string, number>
-): number {
+  customWeights?: Record<string, number>,
+  intent?: string | null
+): number | null {
+  if (intent && intent.toLowerCase().trim().includes('junk')) {
+    return null;
+  }
   let activeWeight = 0;
   let earnedScore = 0;
 

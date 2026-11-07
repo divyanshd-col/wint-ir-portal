@@ -474,7 +474,6 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           background: 'var(--qa-card, #FFFFFF)',
           border: '1px solid var(--qa-border, var(--qa-border))',
           borderRadius: 8,
-          overflow: 'hidden',
         }}
       >
         {/* Single-line Filter Bar */}
@@ -504,8 +503,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             <PeriodRangeChip value={period} onChange={setPeriod} />
 
             <button type="button" className="qf-chip" disabled={!(hasFilters || period.period !== 'all')}
-                onClick={() => { clearFilters(); setPeriod(DEFAULT_PERIOD); }}
-              >
+              onClick={() => { clearFilters(); setPeriod(DEFAULT_PERIOD); }}
+            >
               Reset Filters
             </button>
           </div>
@@ -780,25 +779,25 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
 
                                   {/* Agent Reply */}
                                   <div>
-                                      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', marginBottom: 6 }}>
-                                        My Outbound Reply
-                                      </div>
-                                      <div
-                                        style={{
-                                          background: '#FFFFFF',
-                                          border: '1px solid var(--qa-border)',
-                                          borderRadius: 8,
-                                          padding: '14px 16px',
-                                          maxHeight: 420,
-                                          overflowY: 'auto',
-                                        }}
-                                      >
-                                        <EmailMessageView
-                                          content={item.agent_reply_text}
-                                          fallback="No text reply content recorded."
-                                        />
-                                      </div>
+                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', marginBottom: 6 }}>
+                                      My Outbound Reply
                                     </div>
+                                    <div
+                                      style={{
+                                        background: '#FFFFFF',
+                                        border: '1px solid var(--qa-border)',
+                                        borderRadius: 8,
+                                        padding: '14px 16px',
+                                        maxHeight: 420,
+                                        overflowY: 'auto',
+                                      }}
+                                    >
+                                      <EmailMessageView
+                                        content={item.agent_reply_text}
+                                        fallback="No text reply content recorded."
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
 
                                 {/* Dispute Section at bottom */}
@@ -813,275 +812,274 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                       overflowY: isDisputed ? 'auto' : undefined,
                                     }}
                                   >
-                                  {disputeSuccessMsg && (
-                                    <div
-                                      style={{
-                                        padding: '8px 12px',
-                                        fontSize: 12,
-                                        color: '#166534',
-                                        background: '#f0fdf4',
-                                        border: '1px solid #bbf7d0',
-                                        borderRadius: 6,
-                                        marginBottom: 10,
-                                      }}
-                                    >
-                                      ✓ {disputeSuccessMsg}
-                                    </div>
-                                  )}
-
-                                  {disputeError && (
-                                    <div
-                                      style={{
-                                        padding: '8px 12px',
-                                        fontSize: 12,
-                                        color: '#b91c1c',
-                                        background: '#fef2f2',
-                                        border: '1px solid #fecaca',
-                                        borderRadius: 6,
-                                        marginBottom: 10,
-                                      }}
-                                    >
-                                      ✕ {disputeError}
-                                    </div>
-                                  )}
-
-                                  {isDisputed ? (
-                                    activeTab !== 'evaluated' ? (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                        <div
-                                          style={{
-                                            background: isReviewedDispute
-                                              ? item.dispute_status !== 'Rejected' ? '#f0fdf4' : '#fef2f2'
-                                              : '#fefce8',
-                                            border: `1px solid ${
-                                              isReviewedDispute
-                                                ? item.dispute_status !== 'Rejected' ? '#bbf7d0' : '#fecaca'
-                                                : '#fef08a'
-                                            }`,
-                                            borderRadius: 8,
-                                            padding: '12px 14px',
-                                            fontSize: 12,
-                                            color: isReviewedDispute
-                                              ? item.dispute_status !== 'Rejected' ? '#166534' : '#991b1b'
-                                              : '#854d0e',
-                                          }}
-                                        >
-                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                                            <div style={{ fontWeight: 600, fontSize: 13 }}>
-                                              Dispute Status: {disputeLabel(item.dispute_status)}
-                                            </div>
-                                            {item.dispute_status === 'Raised' && (
-                                              <button
-                                                type="button"
-                                                onClick={() => handleCancelDispute(item.message_id)}
-                                                disabled={submittingDispute}
-                                                style={{
-                                                  fontSize: 11,
-                                                  fontWeight: 600,
-                                                  padding: '3px 8px',
-                                                  borderRadius: 4,
-                                                  background: '#FFFFFF',
-                                                  border: '1px solid var(--qa-border)',
-                                                  color: '#b91c1c',
-                                                  cursor: 'pointer',
-                                                }}
-                                              >
-                                                {submittingDispute ? 'Cancelling…' : 'Cancel Dispute'}
-                                              </button>
-                                            )}
-                                          </div>
-
-                                          {item.challenged_params && item.challenged_params.length > 0 && (
-                                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 6px' }}>
-                                              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--qa-text-2)' }}>
-                                                Challenged:
-                                              </span>
-                                              {item.challenged_params.map(cp => {
-                                                const paramDef = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
-                                                return (
-                                                  <span
-                                                    key={cp.param}
-                                                    title={cp.note}
-                                                    style={{
-                                                      fontSize: 11, fontWeight: 600,
-                                                      background: '#FFFFFF',
-                                                      border: '1px solid var(--qa-border)',
-                                                      borderRadius: 4,
-                                                      padding: '2px 8px',
-                                                      color: '#3F3F46',
-                                                    }}
-                                                  >
-                                                    {paramDef?.name || cp.param}
-                                                  </span>
-                                                );
-                                              })}
-                                            </div>
-                                          )}
-
-                                          <div style={{ marginTop: 4, lineHeight: 1.4 }}>&ldquo;{item.dispute_notes}&rdquo;</div>
-                                        </div>
-
-                                        {/* Integrated Dispute Discussion Thread */}
-                                        <DisputeThread
-                                          flagId={item.flag_id || item.message_id}
-                                          agentNote={item.dispute_notes}
-                                          agentName={item.agent_name || agentName}
-                                          raisedByRole="agent"
-                                          raisedByName={item.agent_name || agentName}
-                                          reviewedBy={item.reviewed_by}
-                                          qaName={(item as any).qa_name || item.reviewed_by}
-                                          reviewerRole={item.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
-                                          flaggedAt={item.sent_at}
-                                          reviewedAt={item.reviewed_at}
-                                          compact
-                                        />
-                                      </div>
-                                    ) : null
-                                  ) : disputingId === item.message_id ? (
-                                    <div>
-                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                                          Dispute this Score
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={cancelDisputeComposition}
-                                          style={{ fontSize: 12, color: 'var(--qa-text-2)', background: 'none', border: 'none', cursor: 'pointer' }}
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 8 }}>
-                                        Select the parameter(s) you wish to challenge:
-                                      </div>
-
-                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
-                                        {DEFAULT_EMAIL_PARAMETERS.map(param => {
-                                          const isSelected = selectedParams.has(param.key);
-                                          return (
-                                            <label
-                                              key={param.key}
-                                              style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 8,
-                                                padding: '6px 10px',
-                                                borderRadius: 6,
-                                                border: `1px solid ${isSelected ? '#111111' : 'var(--qa-border)'}`,
-                                                background: isSelected ? 'var(--qa-gray-50)' : '#FFFFFF',
-                                                cursor: 'pointer',
-                                                fontSize: 12,
-                                                fontWeight: 500,
-                                              }}
-                                            >
-                                              <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() => toggleParamPick(param.key)}
-                                                style={{ accentColor: '#111111', cursor: 'pointer' }}
-                                              />
-                                              {param.name}
-                                            </label>
-                                          );
-                                        })}
-                                      </div>
-
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 4 }}>
-                                        Reason for dispute (required):
-                                      </div>
-                                      <textarea
-                                        rows={3}
-                                        placeholder="Explain specifically why you think the score should be adjusted..."
-                                        value={disputeNotes}
-                                        onChange={(e) => setDisputeNotes(e.target.value)}
+                                    {disputeSuccessMsg && (
+                                      <div
                                         style={{
-                                          width: '100%',
                                           padding: '8px 12px',
-                                          border: '1px solid var(--qa-border)',
-                                          borderRadius: 6,
-                                          background: '#FFFFFF',
-                                          color: 'var(--qa-text)',
                                           fontSize: 12,
-                                          fontFamily: SANS,
-                                          outline: 'none',
-                                          resize: 'vertical',
-                                          boxSizing: 'border-box',
+                                          color: '#166534',
+                                          background: '#f0fdf4',
+                                          border: '1px solid #bbf7d0',
+                                          borderRadius: 6,
                                           marginBottom: 10,
                                         }}
-                                      />
-                                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                                        <button
-                                          type="button"
-                                          onClick={cancelDisputeComposition}
+                                      >
+                                        ✓ {disputeSuccessMsg}
+                                      </div>
+                                    )}
+
+                                    {disputeError && (
+                                      <div
+                                        style={{
+                                          padding: '8px 12px',
+                                          fontSize: 12,
+                                          color: '#b91c1c',
+                                          background: '#fef2f2',
+                                          border: '1px solid #fecaca',
+                                          borderRadius: 6,
+                                          marginBottom: 10,
+                                        }}
+                                      >
+                                        ✕ {disputeError}
+                                      </div>
+                                    )}
+
+                                    {isDisputed ? (
+                                      activeTab !== 'evaluated' ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                          <div
+                                            style={{
+                                              background: isReviewedDispute
+                                                ? item.dispute_status !== 'Rejected' ? '#f0fdf4' : '#fef2f2'
+                                                : '#fefce8',
+                                              border: `1px solid ${isReviewedDispute
+                                                  ? item.dispute_status !== 'Rejected' ? '#bbf7d0' : '#fecaca'
+                                                  : '#fef08a'
+                                                }`,
+                                              borderRadius: 8,
+                                              padding: '12px 14px',
+                                              fontSize: 12,
+                                              color: isReviewedDispute
+                                                ? item.dispute_status !== 'Rejected' ? '#166534' : '#991b1b'
+                                                : '#854d0e',
+                                            }}
+                                          >
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                              <div style={{ fontWeight: 600, fontSize: 13 }}>
+                                                Dispute Status: {disputeLabel(item.dispute_status)}
+                                              </div>
+                                              {item.dispute_status === 'Raised' && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleCancelDispute(item.message_id)}
+                                                  disabled={submittingDispute}
+                                                  style={{
+                                                    fontSize: 11,
+                                                    fontWeight: 600,
+                                                    padding: '3px 8px',
+                                                    borderRadius: 4,
+                                                    background: '#FFFFFF',
+                                                    border: '1px solid var(--qa-border)',
+                                                    color: '#b91c1c',
+                                                    cursor: 'pointer',
+                                                  }}
+                                                >
+                                                  {submittingDispute ? 'Cancelling…' : 'Cancel Dispute'}
+                                                </button>
+                                              )}
+                                            </div>
+
+                                            {item.challenged_params && item.challenged_params.length > 0 && (
+                                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 6px' }}>
+                                                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--qa-text-2)' }}>
+                                                  Challenged:
+                                                </span>
+                                                {item.challenged_params.map(cp => {
+                                                  const paramDef = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                                                  return (
+                                                    <span
+                                                      key={cp.param}
+                                                      title={cp.note}
+                                                      style={{
+                                                        fontSize: 11, fontWeight: 600,
+                                                        background: '#FFFFFF',
+                                                        border: '1px solid var(--qa-border)',
+                                                        borderRadius: 4,
+                                                        padding: '2px 8px',
+                                                        color: '#3F3F46',
+                                                      }}
+                                                    >
+                                                      {paramDef?.name || cp.param}
+                                                    </span>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+
+                                            <div style={{ marginTop: 4, lineHeight: 1.4 }}>&ldquo;{item.dispute_notes}&rdquo;</div>
+                                          </div>
+
+                                          {/* Integrated Dispute Discussion Thread */}
+                                          <DisputeThread
+                                            flagId={item.flag_id || item.message_id}
+                                            agentNote={item.dispute_notes}
+                                            agentName={item.agent_name || agentName}
+                                            raisedByRole="agent"
+                                            raisedByName={item.agent_name || agentName}
+                                            reviewedBy={item.reviewed_by}
+                                            qaName={(item as any).qa_name || item.reviewed_by}
+                                            reviewerRole={item.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
+                                            flaggedAt={item.sent_at}
+                                            reviewedAt={item.reviewed_at}
+                                            compact
+                                          />
+                                        </div>
+                                      ) : null
+                                    ) : disputingId === item.message_id ? (
+                                      <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                            Dispute this Score
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={cancelDisputeComposition}
+                                            style={{ fontSize: 12, color: 'var(--qa-text-2)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+
+                                        <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 8 }}>
+                                          Select the parameter(s) you wish to challenge:
+                                        </div>
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
+                                          {DEFAULT_EMAIL_PARAMETERS.map(param => {
+                                            const isSelected = selectedParams.has(param.key);
+                                            return (
+                                              <label
+                                                key={param.key}
+                                                style={{
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: 8,
+                                                  padding: '6px 10px',
+                                                  borderRadius: 6,
+                                                  border: `1px solid ${isSelected ? '#111111' : 'var(--qa-border)'}`,
+                                                  background: isSelected ? 'var(--qa-gray-50)' : '#FFFFFF',
+                                                  cursor: 'pointer',
+                                                  fontSize: 12,
+                                                  fontWeight: 500,
+                                                }}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isSelected}
+                                                  onChange={() => toggleParamPick(param.key)}
+                                                  style={{ accentColor: '#111111', cursor: 'pointer' }}
+                                                />
+                                                {param.name}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+
+                                        <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 4 }}>
+                                          Reason for dispute (required):
+                                        </div>
+                                        <textarea
+                                          rows={3}
+                                          placeholder="Explain specifically why you think the score should be adjusted..."
+                                          value={disputeNotes}
+                                          onChange={(e) => setDisputeNotes(e.target.value)}
                                           style={{
-                                            height: 32,
-                                            padding: '0 14px',
-                                            borderRadius: 6,
+                                            width: '100%',
+                                            padding: '8px 12px',
                                             border: '1px solid var(--qa-border)',
+                                            borderRadius: 6,
                                             background: '#FFFFFF',
                                             color: 'var(--qa-text)',
                                             fontSize: 12,
-                                            fontWeight: 500,
-                                            cursor: 'pointer',
+                                            fontFamily: SANS,
+                                            outline: 'none',
+                                            resize: 'vertical',
+                                            boxSizing: 'border-box',
+                                            marginBottom: 10,
                                           }}
-                                        >
-                                          Cancel
-                                        </button>
+                                        />
+                                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                          <button
+                                            type="button"
+                                            onClick={cancelDisputeComposition}
+                                            style={{
+                                              height: 32,
+                                              padding: '0 14px',
+                                              borderRadius: 6,
+                                              border: '1px solid var(--qa-border)',
+                                              background: '#FFFFFF',
+                                              color: 'var(--qa-text)',
+                                              fontSize: 12,
+                                              fontWeight: 500,
+                                              cursor: 'pointer',
+                                            }}
+                                          >
+                                            Cancel
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRaiseDispute(item.message_id)}
+                                            disabled={submittingDispute || !disputeNotes.trim() || selectedParams.size === 0}
+                                            style={{
+                                              height: 32,
+                                              padding: '0 16px',
+                                              border: 'none',
+                                              borderRadius: 6,
+                                              background: 'var(--qa-gray-700, #111111)',
+                                              color: '#fff',
+                                              fontSize: 12,
+                                              fontWeight: 600,
+                                              cursor: !disputeNotes.trim() || selectedParams.size === 0 ? 'not-allowed' : 'pointer',
+                                              opacity: !disputeNotes.trim() || selectedParams.size === 0 ? 0.5 : 1,
+                                              fontFamily: SANS,
+                                            }}
+                                          >
+                                            {submittingDispute ? 'Submitting…' : 'Submit Dispute'}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div>
+                                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                            Dispute this Score
+                                          </div>
+                                          <div style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
+                                            Challenge specific parameter grades and submit to Team Lead for review.
+                                          </div>
+                                        </div>
                                         <button
                                           type="button"
-                                          onClick={() => handleRaiseDispute(item.message_id)}
-                                          disabled={submittingDispute || !disputeNotes.trim() || selectedParams.size === 0}
+                                          onClick={() => startDispute(item)}
                                           style={{
-                                            height: 32,
+                                            height: 34,
                                             padding: '0 16px',
-                                            border: 'none',
+                                            border: '1px solid var(--qa-border)',
                                             borderRadius: 6,
-                                            background: 'var(--qa-gray-700, #111111)',
-                                            color: '#fff',
+                                            background: '#FFFFFF',
+                                            color: 'var(--qa-text)',
                                             fontSize: 12,
                                             fontWeight: 600,
-                                            cursor: !disputeNotes.trim() || selectedParams.size === 0 ? 'not-allowed' : 'pointer',
-                                            opacity: !disputeNotes.trim() || selectedParams.size === 0 ? 0.5 : 1,
+                                            cursor: 'pointer',
                                             fontFamily: SANS,
                                           }}
                                         >
-                                          {submittingDispute ? 'Submitting…' : 'Submit Dispute'}
+                                          Raise Dispute
                                         </button>
                                       </div>
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                      <div>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                                          Dispute this Score
-                                        </div>
-                                        <div style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
-                                          Challenge specific parameter grades and submit to Team Lead for review.
-                                        </div>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => startDispute(item)}
-                                        style={{
-                                          height: 34,
-                                          padding: '0 16px',
-                                          border: '1px solid var(--qa-border)',
-                                          borderRadius: 6,
-                                          background: '#FFFFFF',
-                                          color: 'var(--qa-text)',
-                                          fontSize: 12,
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          fontFamily: SANS,
-                                        }}
-                                      >
-                                        Raise Dispute
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                                    )}
+                                  </div>
+                                )}
                               </div>
                               {/* ── Left Pane: Score Ring, Parameters, & QA Notes ── */}
                               <div
