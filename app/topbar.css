@@ -17,6 +17,7 @@
 
 .topbar-right { justify-self: end; display: flex; align-items: center; gap: 6px; }
 .topbar-icon-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 0; background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+.topbar-icon-btn.active { background: var(--color-background-tertiary); color: var(--color-text-primary); }
 .topbar-icon-btn:hover, .topbar-account-btn:hover { background: var(--color-background-tertiary); color: var(--color-text-primary); }
 
 .topbar-account { position: relative; }

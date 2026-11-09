@@ -16,6 +16,7 @@ import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
 import SecuritySection from '@/components/settings/SecuritySection';
 import PcgQualityParametersView from './PcgQualityParametersView';
 import PcgTlCallsView from './PcgTlCallsView';
+import PcgPeriodFilter from './PcgPeriodFilter';
 
 // Type definitions
 interface CallParameter {
@@ -882,6 +883,13 @@ export default function PcgCallsClient() {
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+  const handlePeriodChange = (range: '7d' | '30d' | 'custom', from: string, to: string) => {
+    setDateRange(range);
+    setCustomStartDate(from);
+    setCustomEndDate(to);
+    setPage(1);
+  };
+
   const getDateRangeLabel = () => {
     const fmt = (d: Date) => {
       const day = d.getDate();
@@ -1328,7 +1336,9 @@ export default function PcgCallsClient() {
         {/* Global Date Selector, Workspace Switcher, User Profile */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Global Date Selector */}
-          {activeTab !== 'security' && activeTab !== 'parameter_definitions' && (
+          {/* Calls and TL Calls have the period filter in the page itself, Team / Member Analytics their own period controls;
+              Scorecard, RM Performance, Security and Parameters do not use a date range. Only Disputes still relies on this one. */}
+          {activeTab === 'disputes' && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-[#71717A] font-semibold">Date Range:</span>
               <select
@@ -1383,7 +1393,7 @@ export default function PcgCallsClient() {
       </header>
 
       {/* ── BODY: SIDEBAR + MAIN CONTENT (EXACT CX TL REPLICATION) ───────── */}
-      <div className="flex flex-1 min-h-[calc(100vh-65px)] bg-[#f5f3ee]">
+      <div className="flex flex-1 min-h-[calc(var(--vh100)_-_65px)] bg-[#f5f3ee]">
         {/* Left Sidebar Panel (Replicated from CX TL with Call Quality & RM Scorecard) */}
         <aside
           className="w-[220px] shrink-0 bg-[#f5f3ee] border-r border-[#e6e2d8] py-4 select-none"
@@ -1570,7 +1580,8 @@ export default function PcgCallsClient() {
 
           {/* Bottom section: Security & Settings */}
           <div className="mt-4 pt-3 border-t border-[#e6e2d8]">
-            {/* Security Navigation Link (For Agent, TL and Admin) */}
+            {/* Security Navigation Link (Agent and TL). Admins reach Security inside Settings, so it is not repeated for them. */}
+            {activePersona !== 'admin' && (
             <button
               type="button"
               onClick={() => handleTabChange('security')}
@@ -1590,6 +1601,7 @@ export default function PcgCallsClient() {
               </span>
               <span className="flex-1">Security</span>
             </button>
+            )}
 
             {/* Settings Link (Admin Only) */}
             {activePersona === 'admin' && (
@@ -1689,6 +1701,7 @@ export default function PcgCallsClient() {
                 globalDateRange={dateRange}
                 globalCustomStartDate={customStartDate}
                 globalCustomEndDate={customEndDate}
+                onPeriodChange={handlePeriodChange}
               />
             </div>
           ) : (
@@ -1822,16 +1835,7 @@ export default function PcgCallsClient() {
                             ? `Team ${activeTlName || 'Lead'} Performance Overview`
                             : 'Organization Performance Overview'}
                       </span>
-                      <div className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700 bg-white border border-[#E4E4E7] px-2.5 py-1 rounded-lg shadow-2xs">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                          <line x1="16" y1="2" x2="16" y2="6" />
-                          <line x1="8" y1="2" x2="8" y2="6" />
-                          <line x1="3" y1="10" x2="21" y2="10" />
-                        </svg>
-                        <span className="text-zinc-500 font-normal">Period:</span>
-                        <span className="font-semibold text-zinc-900">{activeDateInfo.full}</span>
-                      </div>
+                      <PcgPeriodFilter range={dateRange} start={customStartDate} end={customEndDate} onChange={handlePeriodChange} />
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

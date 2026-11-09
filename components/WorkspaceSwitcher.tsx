@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { uiZoom } from '@/lib/ui-zoom';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 
@@ -13,7 +14,7 @@ const GLYPHS: Record<Domain, string> = {
 };
 
 const WORKSPACES: { id: Domain; name: string; desc: string; home: string }[] = [
-  { id: 'cx',  name: 'Wint CX',  desc: 'Customer Experience',  home: '/quality' },
+  { id: 'cx',  name: 'Wint CX',  desc: 'Customer Excellence',  home: '/quality' },
   { id: 'pcg', name: 'Wint PCG', desc: 'Private Client Group', home: '/admin/pcg-calls' },
 ];
 
@@ -57,7 +58,7 @@ export default function WorkspaceSwitcher({ collapsed = false }: { collapsed?: b
 
   const toggle = () => {
     const r = btnRef.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 6, left: r.left });
+    if (r) { const z = uiZoom(); setPos({ top: r.bottom / z + 6, left: r.left / z }); }
     setOpen(o => !o);
   };
 

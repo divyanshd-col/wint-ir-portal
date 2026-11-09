@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import UsersManager, { type User } from './settings/UsersManager';
 import PcgUsersManager from './settings/PcgUsersManager';
 import SecuritySection from './settings/SecuritySection';
@@ -49,6 +48,8 @@ interface SettingsClientProps {
   hasPcgAccess?: boolean;
   platformDomain?: string;
   activeDomain?: 'cx' | 'pcg';
+  /** Shown as a popup (not a full page): the shell fills the popup and scrolls inside it. */
+  inModal?: boolean;
 }
 
 const ADMIN_SECTIONS = [
@@ -137,6 +138,7 @@ export default function SettingsClient({
   hasPcgAccess = false,
   platformDomain = 'cx',
   activeDomain = 'cx',
+  inModal = false,
 }: SettingsClientProps) {
   const isPcgAdminOnly = isAdmin && platformDomain === 'pcg' && !isSuperAdmin;
 
@@ -168,9 +170,9 @@ export default function SettingsClient({
     SECTIONS = [SECURITY_SECTION];
   }
 
-  // Workspaces stay separate: PCG settings never show in the CX workspace, and the CX-only Thresholds / Rubric never show in PCG.
+  // Workspaces stay separate: PCG settings never show in the CX workspace, and the CX-only Users / Thresholds / Rubric never show in PCG (super admins included).
   const inPcg = activeDomain === 'pcg';
-  if (!isPcgAdminOnly) SECTIONS = SECTIONS.filter(sec => (inPcg ? !['thresholds', 'rubric'].includes(sec.id) : sec.id !== 'pcg-users'));
+  if (!isPcgAdminOnly) SECTIONS = SECTIONS.filter(sec => (inPcg ? !['users', 'thresholds', 'rubric'].includes(sec.id) : sec.id !== 'pcg-users'));
 
   const initialSection = isPcgAdminOnly
     ? 'pcg-users'
@@ -601,14 +603,11 @@ export default function SettingsClient({
 
   return (
     // Same shell classes as RoleShell, so the settings nav looks and behaves like the main sidebar.
-    <div className="quality-shell-container font-sans antialiased">
+    <div className={`quality-shell-container font-sans antialiased${inModal ? ' settings-modal' : ''}`}>
      <div className="quality-shell-body">
-      <aside className="quality-shell-sidebar">
+      <aside className={`quality-shell-sidebar${inModal ? ' in-modal' : ''}`}>
         <div className="quality-shell-sidebar-head settings-nav-head">
           <h1>Settings</h1>
-          {(activeDomain === 'pcg' || platformDomain === 'pcg') && (
-            <Link href="/admin/pcg-calls" className="settings-nav-back" title="Back to PCG Calls">PCG Calls →</Link>
-          )}
         </div>
         <nav aria-label="Settings sections">
           {SECTIONS.map(s => (
