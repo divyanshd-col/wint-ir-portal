@@ -135,6 +135,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     try {
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       const params = new URLSearchParams({ disputeQueue: queue, from, to, limit: '500' });
+      if (outcomeFilter) params.set('disputeStatus', outcomeFilter);
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
       if (data.ok) setRows(data.items || []);
@@ -143,7 +144,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     } finally {
       setLoading(false);
     }
-  }, [queue, period]);
+  }, [queue, period, outcomeFilter]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -197,10 +198,12 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     (!ticketSearch.trim() || String(r.chat_id ?? r.ticket_id ?? '').toLowerCase().includes(ticketSearch.trim().toLowerCase())) &&
     (!agentFilter || r.agent_name === agentFilter) &&
     (!outcomeFilter ||
-      (outcomeFilter === 'Raised' ? (r.dispute_status === 'Raised' || !r.dispute_status) :
+      (outcomeFilter === 'Raised' || outcomeFilter === 'forwarded_to_tl' ? (r.dispute_status === 'Raised' || !r.dispute_status) :
        outcomeFilter === 'forwarded_to_qa' || outcomeFilter === 'Under_Review' ? (r.dispute_status === 'Under_Review') :
        outcomeFilter === 'updated_by_qa' ? (r.dispute_status === 'Resolved' || r.dispute_status === 'Rejected') :
-       outcomeFilter === 'Resolved' ? (r.dispute_status === 'Resolved' || r.dispute_status === 'TL_Resolved') :
+       outcomeFilter === 'TL_Resolved' ? (r.dispute_status === 'TL_Resolved') :
+       outcomeFilter === 'Resolved' ? (r.dispute_status === 'Resolved') :
+       outcomeFilter === 'Rejected' ? (r.dispute_status === 'Rejected') :
        r.dispute_status === outcomeFilter))
   );
   const [sort, toggleSort] = useSort();
@@ -315,7 +318,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
         {!pending && (
           <UISelect value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
             <option value="">All Outcomes</option>
-            <option value="Under_Review">Forwarded to QA</option>
+            <option value="forwarded_to_qa">Forwarded to QA</option>
             <option value="updated_by_qa">Updated by QA</option>
             <option value="TL_Resolved">Resolved by TL</option>
             <option value="Resolved">Resolved by QA</option>
@@ -538,6 +541,7 @@ export default function TLEmailQualityPage() {
   const [counts, setCounts] = useState<{ evaluated: number; raised: number; reviewed: number } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
+  const [disputeFilter, setDisputeFilter] = useState<string>('');
 
   // Raise Dispute state for TL
   const [disputingId, setDisputingId] = useState<string | null>(null);
@@ -631,6 +635,7 @@ export default function TLEmailQualityPage() {
     try {
       const params = new URLSearchParams();
       if (selectedAgent) params.set('agentName', selectedAgent);
+      if (disputeFilter) params.set('disputeStatus', disputeFilter);
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       params.set('from', from);
       params.set('to', to);
@@ -653,7 +658,7 @@ export default function TLEmailQualityPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAgent, period]);
+  }, [selectedAgent, period, disputeFilter]);
 
   useEffect(() => {
     fetchData();
@@ -666,7 +671,6 @@ export default function TLEmailQualityPage() {
     : 0;
 
   const [sortR, toggleSortR] = useSort();
-  const [disputeFilter, setDisputeFilter] = useState('');
   const filteredReplies = replies.filter(r => {
     if (disputeFilter) {
       if (disputeFilter === 'forwarded_to_tl') {
@@ -690,7 +694,7 @@ export default function TLEmailQualityPage() {
     iqs: r => r.effective_score ?? r.quality_score,
     dispute: r => r.dispute_status ?? '',
   });
-  const paging = usePaging(sortedReplies, `${selectedAgent}|${period.period}|${period.customFrom}|${period.customTo}`);
+  const paging = usePaging(sortedReplies, `${selectedAgent}|${disputeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
 
   return (
     <div>

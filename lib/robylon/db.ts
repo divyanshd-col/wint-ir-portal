@@ -1285,36 +1285,17 @@ export async function getAllScoredCalls(opts: {
     params.push(opts.dispositions);
     conditions.push(`r.call_disposition = ANY($${params.length})`);
   }
+  const callDisputeMatch = `(SELECT f.status FROM iqs_flags f WHERE (f.call_id = r.id OR (r.chat_id IS NOT NULL AND r.chat_id != '' AND f.chat_id = r.chat_id AND f.call_id IS NULL AND f.message_id IS NULL)) AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1)`;
   if (opts.disputeStatus === 'forwarded_to_tl' || opts.disputeStatus === 'pending_tl') {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM iqs_flags f
-      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
-        AND f.status IN ('pending', 'ir_pending_tl')
-    )`);
+    conditions.push(`${callDisputeMatch} IN ('pending', 'ir_pending_tl')`);
   } else if (opts.disputeStatus === 'forwarded_to_qa') {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM iqs_flags f
-      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
-        AND f.status = 'tl_forwarded'
-    )`);
+    conditions.push(`${callDisputeMatch} = 'tl_forwarded'`);
   } else if (opts.disputeStatus === 'updated_by_qa') {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM iqs_flags f
-      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
-        AND f.status = 'reviewed'
-    )`);
+    conditions.push(`${callDisputeMatch} = 'reviewed'`);
   } else if (opts.disputeStatus === 'reviewed') {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM iqs_flags f
-      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
-        AND f.status IN ('reviewed', 'tl_resolved')
-    )`);
+    conditions.push(`${callDisputeMatch} IN ('reviewed', 'tl_resolved')`);
   } else if (opts.disputeStatus === 'none') {
-    conditions.push(`NOT EXISTS (
-      SELECT 1 FROM iqs_flags f
-      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
-        AND f.status NOT IN ('cancelled')
-    )`);
+    conditions.push(`${callDisputeMatch} IS NULL`);
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
@@ -1358,7 +1339,7 @@ export async function getAllScoredCalls(opts: {
       COALESCE(ce.reviewed_at, s.reviewed_at) AS "reviewedAt",
       COALESCE(ce.review_note, s.review_note) AS "reviewNote",
       COALESCE(ct_cr.phone, ct_c.phone)       AS "mobileNumber",
-      (SELECT f.status FROM iqs_flags f WHERE (f.call_id = r.id OR f.chat_id = r.chat_id) AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1) AS "disputeStatus"
+      (SELECT f.status FROM iqs_flags f WHERE (f.call_id = r.id OR (r.chat_id IS NOT NULL AND r.chat_id != '' AND f.chat_id = r.chat_id AND f.call_id IS NULL AND f.message_id IS NULL)) AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1) AS "disputeStatus"
     FROM call_recordings r
     LEFT JOIN call_evaluations ce ON ce.call_id = r.id
     LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id

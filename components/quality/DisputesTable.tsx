@@ -139,6 +139,24 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
     });
   }
 
+  if (disputeStatusFilter) {
+    visibleDisputes = visibleDisputes.filter(d => {
+      if (disputeStatusFilter === 'forwarded_to_qa' || disputeStatusFilter === 'pending_review') {
+        return d.status === 'tl_forwarded';
+      }
+      if (disputeStatusFilter === 'updated_by_qa') {
+        return d.status === 'reviewed';
+      }
+      if (disputeStatusFilter === 'reviewed') {
+        return d.status === 'reviewed' || d.status === 'tl_resolved';
+      }
+      if (disputeStatusFilter === 'all') {
+        return d.status === 'tl_forwarded' || d.status === 'reviewed' || d.status === 'tl_resolved';
+      }
+      return d.status === disputeStatusFilter;
+    });
+  }
+
   const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
   const pagedDisputes = visibleDisputes.slice((page - 1) * pageSize, page * pageSize);
 

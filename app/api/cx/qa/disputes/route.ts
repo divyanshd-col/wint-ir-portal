@@ -322,9 +322,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const callDb = isCall ? (flag.callId ? callDbMap.get(flag.callId) : callDbMap.get(flag.chatId)) : null;
     if (!db && !callDb) continue;
 
-    const chatReviewer = isCall
+    const chatReviewer = (flag.reviewedBy || (isCall
       ? (callDb?.reviewed_by || '').trim()
-      : (db?.chat_reviewed_by || '').trim();
+      : (db?.chat_reviewed_by || '').trim())).trim();
     const effectiveDisposition = isCall
       ? (callDb?.disposition || '')
       : (db?.disposition || '');

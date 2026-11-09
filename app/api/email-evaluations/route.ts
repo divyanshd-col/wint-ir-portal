@@ -334,6 +334,12 @@ export async function GET(req: NextRequest) {
         whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
       } else if (disputeStatus === 'forwarded_to_qa' || disputeStatus === 'Under_Review') {
         whereClauses.push(`e.dispute_status = 'Under_Review'`);
+      } else if (disputeStatus === 'TL_Resolved') {
+        whereClauses.push(`e.dispute_status = 'TL_Resolved'`);
+      } else if (disputeStatus === 'Resolved') {
+        whereClauses.push(`e.dispute_status = 'Resolved'`);
+      } else if (disputeStatus === 'Rejected') {
+        whereClauses.push(`e.dispute_status = 'Rejected'`);
       } else {
         whereClauses.push(`e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
       }
@@ -346,6 +352,12 @@ export async function GET(req: NextRequest) {
         whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
       } else if (disputeStatus === 'reviewed') {
         whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
+      } else if (disputeStatus === 'TL_Resolved') {
+        whereClauses.push(`e.dispute_status = 'TL_Resolved'`);
+      } else if (disputeStatus === 'Resolved') {
+        whereClauses.push(`e.dispute_status = 'Resolved'`);
+      } else if (disputeStatus === 'Rejected') {
+        whereClauses.push(`e.dispute_status = 'Rejected'`);
       } else if (disputeStatus === 'all') {
         whereClauses.push(`e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected')`);
       } else {
@@ -357,6 +369,12 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`e.dispute_status = 'Under_Review'`);
     } else if (disputeStatus === 'updated_by_qa') {
       whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
+    } else if (disputeStatus === 'TL_Resolved') {
+      whereClauses.push(`e.dispute_status = 'TL_Resolved'`);
+    } else if (disputeStatus === 'Resolved') {
+      whereClauses.push(`e.dispute_status = 'Resolved'`);
+    } else if (disputeStatus === 'Rejected') {
+      whereClauses.push(`e.dispute_status = 'Rejected'`);
     } else if (disputeStatus === 'reviewed') {
       whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
     } else if (disputeStatus === 'none') {

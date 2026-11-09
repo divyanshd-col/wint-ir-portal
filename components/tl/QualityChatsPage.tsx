@@ -71,33 +71,16 @@ export function DisputeStatusPill({
   reviewNote?: string | null;
   parameters?: any;
 }) {
-  const role = (raisedByRole || '').toLowerCase();
-  const note = (reviewNote || '').toLowerCase();
-
   let label = '';
 
   if (status === 'pending' || status === 'ir_pending_tl') {
     label = 'Forwarded to TL (Pending Review)';
   } else if (status === 'tl_forwarded') {
-    if (role === 'tl') {
-      label = 'Dispute raised by TL';
-    } else {
-      label = 'Forwarded to QA';
-    }
+    label = 'Forwarded to QA';
   } else if (status === 'tl_resolved') {
     label = 'Reviewed by TL';
   } else if (status === 'reviewed') {
-    if (note.includes('tl') || (reviewNote && reviewNote.toLowerCase().includes('tl'))) {
-      label = 'Reviewed by TL';
-    } else {
-      const hasAnswerChanges = Array.isArray(parameters?.__answerChanges) && parameters.__answerChanges.length > 0;
-      const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
-      if (isUpdated) {
-        label = 'Updated by QA';
-      } else {
-        label = 'Reviewed';
-      }
-    }
+    label = 'Updated by QA';
   } else if (status === 'cancelled') {
     label = 'Cancelled';
   } else {
@@ -440,20 +423,15 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 // Helper to derive outcome key for a dispute row
 export function getDisputeOutcomeKey(d: TLDisputeRow): string {
   const status = d.status;
-  const role = (d.raisedByRole || '').toLowerCase();
-  const note = (d.reviewNote || '').toLowerCase();
 
   if (status === 'pending' || status === 'ir_pending_tl') {
     return 'forwarded_to_tl';
   } else if (status === 'tl_forwarded') {
-    return role === 'tl' ? 'raised_tl' : 'forwarded';
+    return 'forwarded_to_qa';
   } else if (status === 'tl_resolved') {
     return 'reviewed_tl';
   } else if (status === 'reviewed') {
-    if (note.includes('tl')) return 'reviewed_tl';
-    const hasAnswerChanges = Array.isArray(d.parameters?.__answerChanges) && d.parameters.__answerChanges.length > 0;
-    const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
-    return isUpdated ? 'updated' : 'resolved_qa';
+    return 'updated_by_qa';
   } else if (status === 'cancelled') {
     return 'cancelled';
   }
@@ -514,14 +492,20 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     if (outcomeFilter) {
       if (outcomeFilter === 'forwarded_to_tl') {
         if (d.status !== 'pending' && d.status !== 'ir_pending_tl') return false;
+      } else if (outcomeFilter === 'forwarded' || outcomeFilter === 'forwarded_to_qa') {
+        if (d.status !== 'tl_forwarded') return false;
+      } else if (outcomeFilter === 'updated' || outcomeFilter === 'updated_by_qa') {
+        if (d.status !== 'reviewed') return false;
       } else if (outcomeFilter === 'reviewed_tl') {
         if (d.status !== 'tl_resolved' && !(d.status === 'reviewed' && (d.reviewNote?.toLowerCase().includes('tl') || d.reviewedBy?.toLowerCase().includes('tl')))) return false;
-      } else if (outcomeFilter === 'reviewed') {
+      } else if (outcomeFilter === 'reviewed' || outcomeFilter === 'resolved_qa') {
         if (d.status !== 'reviewed' && d.status !== 'tl_resolved') return false;
       } else if (outcomeFilter === 'raised_ir') {
         if (d.raisedByRole !== 'ir' && d.raisedBy !== 'IR') return false;
       } else if (outcomeFilter === 'raised_tl') {
         if (d.raisedByRole !== 'tl' && d.raisedBy !== 'TL') return false;
+      } else if (outcomeFilter === 'cancelled') {
+        if (d.status !== 'cancelled') return false;
       } else if (getDisputeOutcomeKey(d) !== outcomeFilter) {
         return false;
       }
@@ -632,10 +616,10 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
         <option value="">{status === 'pending' ? 'All Dispute Statuses' : 'All Outcomes'}</option>
         {status === 'resolved' ? (
           <>
+            <option value="forwarded_to_qa">Forwarded to QA</option>
+            <option value="updated_by_qa">Updated by QA</option>
             <option value="reviewed_tl">Reviewed by TL</option>
             <option value="resolved_qa">Resolved by QA</option>
-            <option value="updated">Updated by QA</option>
-            <option value="forwarded">Forwarded to QA</option>
             <option value="cancelled">Cancelled</option>
           </>
         ) : (

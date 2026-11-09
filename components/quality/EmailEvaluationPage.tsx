@@ -634,6 +634,7 @@ export default function EmailEvaluationPage() {
       if (search) params.set('search', search);
       if (agentFilter) params.set('agentName', agentFilter);
       if (dispositionFilter) params.set('disposition', dispositionFilter);
+      if (disputeFilter) params.set('disputeStatus', disputeFilter);
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       if (from) params.set('from', from);
       if (to) params.set('to', to);
@@ -660,7 +661,7 @@ export default function EmailEvaluationPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab, search, agentFilter, dispositionFilter, period]);
+  }, [tab, search, agentFilter, dispositionFilter, disputeFilter, period]);
 
   useEffect(() => {
     fetchData();
@@ -670,6 +671,7 @@ export default function EmailEvaluationPage() {
   const handleTabChange = (nextTab: Tab) => {
     if (nextTab === 'unscored' && !isAdmin) return;
     setTab(nextTab);
+    setDisputeFilter('');
     setExpandedId(null);
   };
 
@@ -904,7 +906,7 @@ export default function EmailEvaluationPage() {
     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
-  const hasFilters = Boolean(search || agentFilter || dispositionFilter || period.period !== 'all');
+  const hasFilters = Boolean(search || agentFilter || dispositionFilter || disputeFilter || period.period !== 'all');
   const cols = TAB_COLS[tab];
   const iqsOf = (i: EvaluationItem) => Number(i.effective_score ?? i.quality_score ?? -1);
   const sortKey = (i: EvaluationItem, col: SortCol): string | number => {
@@ -918,13 +920,23 @@ export default function EmailEvaluationPage() {
       default: return i.reviewed_at ?? '';
     }
   };
-  const sortedItems = !sort ? items : [...items].sort((a, b) => {
+  const filteredItems = items.filter(i => {
+    if (!disputeFilter) return true;
+    if (disputeFilter === 'forwarded_to_tl') return i.dispute_status === 'Raised';
+    if (disputeFilter === 'forwarded_to_qa' || disputeFilter === 'pending_review') return i.dispute_status === 'Under_Review';
+    if (disputeFilter === 'updated_by_qa') return i.dispute_status === 'Resolved' || i.dispute_status === 'Rejected';
+    if (disputeFilter === 'reviewed') return i.dispute_status === 'Resolved' || i.dispute_status === 'Rejected' || i.dispute_status === 'TL_Resolved';
+    if (disputeFilter === 'none') return !i.dispute_status || i.dispute_status === 'None';
+    if (disputeFilter === 'all') return i.dispute_status && i.dispute_status !== 'None';
+    return i.dispute_status === disputeFilter;
+  });
+  const sortedItems = !sort ? filteredItems : [...filteredItems].sort((a, b) => {
     const x = sortKey(a, sort.col), y = sortKey(b, sort.col);
     const cmp = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: 'base' });
     return sort.dir === 'asc' ? cmp : -cmp;
   });
 
-  const paging = usePaging(sortedItems, `${tab}|${search}|${agentFilter}|${dispositionFilter}|${period.period}|${period.customFrom}|${period.customTo}|${sort?.col}|${sort?.dir}`);
+  const paging = usePaging(sortedItems, `${tab}|${search}|${agentFilter}|${dispositionFilter}|${disputeFilter}|${period.period}|${period.customFrom}|${period.customTo}|${sort?.col}|${sort?.dir}`);
 
   const agentOptions = Array.from(new Set([
     ...availableAgents,
@@ -1215,6 +1227,7 @@ export default function EmailEvaluationPage() {
               setSearch('');
               setAgentFilter('');
               setDispositionFilter('');
+              setDisputeFilter('');
               setPeriod({ period: 'all' });
             }}
             style={{
