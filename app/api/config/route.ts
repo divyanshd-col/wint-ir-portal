@@ -3,6 +3,11 @@ import { readConfig, writeConfig, PortalConfig } from '@/lib/config';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import bcrypt from 'bcryptjs';
+import { parseQualityThresholds } from '@/lib/quality-thresholds';
+import { parsePromptFields, workspaceAccess } from '@/lib/prompt-overrides';
+import { diffTrackedSettings } from '@/lib/settings-history-keys';
+import { recordSettingChanges } from '@/lib/settings-history';
+import { parseEmailRubric } from '@/lib/email/context-builder';
 
 async function getAdminSession() {
   const session = await getServerSession(authOptions);
@@ -39,10 +44,25 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!await getAdminSession()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const adminSession = await getAdminSession();
+  if (!adminSession) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const body = await req.json();
   const config = await readConfig();
+
+  // Workspaces stay separate on the server too: call / email prompts, thresholds and the rubric are CX settings;
+  // the PCG prompts are PCG settings. Anyone may be an admin, but only of the workspace(s) they belong to.
+  const prompts = parsePromptFields(body, adminSession.user);
+  if (!prompts.ok) return NextResponse.json({ error: prompts.error }, { status: prompts.status });
+  if ((body.qualityThresholds !== undefined || body.emailRubric !== undefined) && !workspaceAccess(adminSession.user).cx) {
+    return NextResponse.json({ error: 'Not allowed to edit CX settings' }, { status: 403 });
+  }
+
+  // Settings → Quality Thresholds / Scoring Rubric: validate before anything is saved.
+  const thresholds = body.qualityThresholds !== undefined ? parseQualityThresholds(body.qualityThresholds) : null;
+  if (thresholds && !thresholds.ok) return NextResponse.json({ error: thresholds.error }, { status: 400 });
+  const rubric = body.emailRubric !== undefined ? parseEmailRubric(body.emailRubric) : null;
+  if (rubric && !rubric.ok) return NextResponse.json({ error: rubric.error }, { status: 400 });
 
   const updated: PortalConfig = {
     ...config,
@@ -57,15 +77,28 @@ export async function PATCH(req: NextRequest) {
     ...(body.geminiApiKey5 !== undefined && !body.geminiApiKey5?.startsWith('••••') && { geminiApiKey5: body.geminiApiKey5 }),
     ...(body.systemPrompt !== undefined && { systemPrompt: body.systemPrompt }),
     ...(body.iqsScoringPrompt !== undefined && { iqsScoringPrompt: body.iqsScoringPrompt }),
-    ...(body.analyticsPlannerPrompt !== undefined && { analyticsPlannerPrompt: body.analyticsPlannerPrompt }),
-    ...(body.analyticsSynthesizerPrompt !== undefined && { analyticsSynthesizerPrompt: body.analyticsSynthesizerPrompt }),
     ...(body.conversationHistoryEnabled !== undefined && { conversationHistoryEnabled: body.conversationHistoryEnabled }),
     ...(body.callAnalysisEnabled !== undefined && { callAnalysisEnabled: body.callAnalysisEnabled }),
     ...(body.cxDashboardEnabled !== undefined && { cxDashboardEnabled: body.cxDashboardEnabled }),
     ...(body.slackUserToken !== undefined && !body.slackUserToken.startsWith('••••') && { slackUserToken: body.slackUserToken }),
     ...(body.qualityAlertSheetUrl !== undefined && { qualityAlertSheetUrl: body.qualityAlertSheetUrl }),
     ...(body.pyannoteApiKey !== undefined && !body.pyannoteApiKey.startsWith('••••') && { pyannoteApiKey: body.pyannoteApiKey }),
+    ...prompts.value,
+    ...(thresholds?.ok && { qualityThresholds: thresholds.value }),
+    ...(rubric?.ok && { emailRubric: rubric.value }),
   };
+
+  // Change history: record what changed (who, before, after) for prompts, the email rubric and thresholds. If it cannot be
+  // recorded nothing is saved, so a prompt can never be overwritten without a trace.
+  const changes = diffTrackedSettings(config, updated);
+  if (changes.length) {
+    try {
+      await recordSettingChanges(changes, adminSession.user?.email || adminSession.user?.name || 'unknown', 'save');
+    } catch (err) {
+      console.error('[config] could not record settings history:', err instanceof Error ? err.message : err);
+      return NextResponse.json({ error: 'Could not record the change history, so nothing was saved. Please try again.' }, { status: 500 });
+    }
+  }
 
   await writeConfig(updated);
   return NextResponse.json({ success: true, llmProvider: updated.llmProvider });

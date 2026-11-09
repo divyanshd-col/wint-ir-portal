@@ -390,7 +390,7 @@ export default function PcgMemberAnalyticsDashboard({
                 }}
               >
                 {/* Search Agent in Dropdown */}
-                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', background: '#FAFAFB', position: 'sticky', top: 0, zIndex: 10 }}>
+                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', background: 'var(--dk-bg-fafafb, #FAFAFB)', position: 'sticky', top: 0, zIndex: 10 }}>
                   <input
                     type="text"
                     value={agentSearch}
@@ -404,7 +404,7 @@ export default function PcgMemberAnalyticsDashboard({
                       border: '1px solid var(--qa-border, #E4E4E7)',
                       borderRadius: 6,
                       outline: 'none',
-                      background: '#ffffff',
+                      background: 'var(--dk-bg-ffffff, #ffffff)',
                       boxSizing: 'border-box',
                     }}
                     onClick={(e) => e.stopPropagation()}
@@ -447,8 +447,8 @@ export default function PcgMemberAnalyticsDashboard({
                             fontWeight: 700,
                             textTransform: 'uppercase',
                             letterSpacing: '0.06em',
-                            color: '#71717A',
-                            background: '#F4F4F5',
+                            color: 'var(--dk-fg-71717a, #71717A)',
+                            background: 'var(--dk-bg-f4f4f5, #F4F4F5)',
                             borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
                             display: 'flex',
                             alignItems: 'center',
@@ -456,7 +456,7 @@ export default function PcgMemberAnalyticsDashboard({
                           }}
                         >
                           <span>{g.teamName}</span>
-                          <span style={{ fontSize: 9, fontWeight: 600, color: '#A1A1AA' }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--dk-fg-a1a1aa, #A1A1AA)' }}>
                             {filteredAgents.length} Agents
                           </span>
                         </div>
@@ -511,8 +511,8 @@ export default function PcgMemberAnalyticsDashboard({
                                 fontSize: 10,
                                 padding: '2px 6px',
                                 borderRadius: 4,
-                                background: '#E4E4E7',
-                                color: '#52525B',
+                                background: 'var(--dk-bg-e4e4e7, #E4E4E7)',
+                                color: 'var(--dk-fg-52525b, #52525B)',
                                 fontWeight: 500,
                               }}
                             >

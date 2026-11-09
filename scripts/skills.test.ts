@@ -46,7 +46,7 @@ test('SBAC - listPersonasWithSkills returns all 4 standard personas with skills'
   assert.ok(tl);
   assert.ok(tl.skills.includes('analytics:access'));
   assert.ok(tl.skills.includes('tl:member_analytics:access'));
-  assert.ok(!tl.skills.includes('tl:team_analytics:access'), 'TL should not have tl:team_analytics:access');
+  assert.ok(tl.skills.includes('tl:team_analytics:access'), 'TL should have tl:team_analytics:access (migration 035)');
 
   const admin = personas.find(p => p.id === 'admin');
   assert.ok(admin);

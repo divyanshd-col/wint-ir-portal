@@ -9,7 +9,7 @@ import ScoreRing from '@/components/quality/ScoreRing';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
-import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
+import { useEmailParameters } from '@/components/quality/useEmailParameters';
 import EmailMessageView, {
   CustomerSummaryBlock,
   CustomerCoreQueryCard,
@@ -22,6 +22,7 @@ import { DisputeThread } from '@/components/quality/DisputeThread';
 import { rowClick } from '@/components/quality/rowClick';
 import UISelect from '@/components/quality/UISelect';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
+import * as T from '@/components/quality/tableStyles';
 
 interface EvaluationItem {
   id: number;
@@ -66,42 +67,13 @@ interface SummaryStats {
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
-const TH_BASE: CSSProperties = {
-  height: 40,
-  background: 'var(--qa-gray-50, var(--qa-gray-50))',
-  borderBottom: '1px solid var(--qa-border, var(--qa-border))',
-  fontSize: 12,
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  color: 'var(--qa-text-2, var(--qa-text-2))',
-  fontWeight: 500,
-  padding: '0 16px',
-  textAlign: 'left',
-  whiteSpace: 'nowrap',
-};
+const TH_BASE: CSSProperties = T.th;
 
-const TD_BASE: CSSProperties = {
-  height: 52,
-  padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub, var(--qa-border-sub))',
-  fontSize: 14,
-  color: 'var(--qa-text, #111111)',
-  verticalAlign: 'middle',
-};
+const TD_BASE: CSSProperties = T.td;
 
-const TD_MONO: CSSProperties = {
-  ...TD_BASE,
-  fontFamily: MONO,
-  fontSize: 13,
-  color: 'var(--qa-text-2, var(--qa-text-2))',
-};
+const TD_MONO: CSSProperties = T.tdMono;
 
-const TD_NUM: CSSProperties = {
-  ...TD_BASE,
-  textAlign: 'right',
-  fontFamily: MONO,
-  fontSize: 13,
-};
+const TD_NUM: CSSProperties = T.tdNum;
 
 // ─── Badges (Exact match with MyQualityChatsPage) ─────────────────────────────
 
@@ -129,6 +101,7 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
 }
 
 export default function MyQualityEmailsPage({ agentName }: { agentName: string }) {
+  const emailParams = useEmailParameters();
   const [items, setItems] = useState<EvaluationItem[]>([]);
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -601,7 +574,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                             style={{
                               background: 'none',
                               border: 0,
-                              fontSize: 13,
+                              fontSize: 12,
                               color: 'var(--qa-text)',
                               fontWeight: 500,
                               cursor: 'pointer',
@@ -895,7 +868,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                                   Challenged:
                                                 </span>
                                                 {item.challenged_params.map(cp => {
-                                                  const paramDef = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                                                  const paramDef = emailParams.find(d => d.key === cp.param);
                                                   return (
                                                     <span
                                                       key={cp.param}
@@ -955,7 +928,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                         </div>
 
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
-                                          {DEFAULT_EMAIL_PARAMETERS.map(param => {
+                                          {emailParams.map(param => {
                                             const isSelected = selectedParams.has(param.key);
                                             return (
                                               <label
@@ -1130,13 +1103,13 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                     alignItems: 'center',
                                   }}
                                 >
-                                  <span>Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})</span>
+                                  <span>Parameter Scores ({emailParams.length})</span>
                                   <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--qa-text-3)' }}>IQS Breakdown</span>
                                 </div>
 
                                 {/* Parameters List */}
                                 <div style={{ flex: 1, overflowY: 'auto' }}>
-                                  {DEFAULT_EMAIL_PARAMETERS.map((def, pIdx) => {
+                                  {emailParams.map((def, pIdx) => {
                                     const val = [def.key, ...(def.aliases ?? [])].map(k => item.parameter_scores?.[k]).find(v => v !== undefined);
                                     const isChallenged = item.challenged_params?.some(cp => cp.param === def.key);
                                     const isPicked = disputingId === item.message_id && selectedParams.has(def.key);
@@ -1180,7 +1153,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                           allowNA={def.allowNA}
                                           weight={def.defaultWeight}
                                           reason={(item.parameter_scores as any)?.__reasoning?.[def.key]}
-                                          last={pIdx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                          last={pIdx === emailParams.length - 1}
                                         />
                                       </div>
                                     );

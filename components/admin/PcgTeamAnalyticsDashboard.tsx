@@ -291,16 +291,16 @@ function ParamRow({ p }: { p: ParamData }) {
         display: 'flex',
         alignItems: 'center',
         gap: 16,
-        padding: '8px 0',
+        padding: '9px 0',
         borderBottom: '1px solid var(--qa-border-sub, #f4f4f5)',
       }}
     >
       <span
         style={{
-          width: 230,
+          width: 300,
           flexShrink: 0,
-          fontSize: 14,
-          fontWeight: 600,
+          fontSize: 13.5,
+          fontWeight: 500,
           color: 'var(--qa-text, #18181b)',
         }}
       >
@@ -321,7 +321,7 @@ function ParamRow({ p }: { p: ParamData }) {
       <span
         style={{
           flex: 1,
-          height: 10,
+          height: 6,
           background: 'var(--qa-fill-med, #e4e4e7)',
           borderRadius: 999,
           position: 'relative',
@@ -343,7 +343,7 @@ function ParamRow({ p }: { p: ParamData }) {
               top: -4,
               left: `${cx}%`,
               width: 0,
-              height: 18,
+              height: 14,
               borderLeft: '2px dashed var(--qa-text-2, #71717a)',
               transform: 'translateX(-1px)',
             }}
@@ -356,7 +356,7 @@ function ParamRow({ p }: { p: ParamData }) {
           width: 44,
           flexShrink: 0,
           textAlign: 'right',
-          fontSize: 14,
+          fontSize: 13,
           fontWeight: 600,
           fontFamily: 'ui-monospace, monospace',
           color: 'var(--qa-text, #18181b)',

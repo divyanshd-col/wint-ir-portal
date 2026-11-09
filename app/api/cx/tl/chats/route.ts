@@ -6,6 +6,7 @@ import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { log, withLogging } from '@/lib/log';
 import { readConfig } from '@/lib/config';
 import { computeIqsFromRawParams } from '@/lib/quality';
+import { reviewThreshold } from '@/lib/quality-thresholds';
 
 const ROUTE = 'cx/tl/chats';
 
@@ -148,7 +149,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     extraWhere += ` AND i.status = 'reviewed'`;
   } else if (['admin', 'quality'].includes(role)) {
     // Exclude chats that are in the pending review section of Chat Evaluation for QA and Admin views
-    extraWhere += ` AND NOT (i.status IN ('pending', 'reopened') AND (i.iqs_score <= 85 OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters')))`;
+    extraWhere += ` AND NOT (i.status IN ('pending', 'reopened') AND (i.iqs_score <= ${reviewThreshold(config, 'chat')} OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters')))`;
   }
 
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));

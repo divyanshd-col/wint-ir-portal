@@ -131,16 +131,18 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.role = token.role as UserRole | undefined;
-        session.user.isAdmin = token.isAdmin ?? false;
+        // A super admin is always an admin, whatever their stored role (also fixes sessions signed in before this rule).
         session.user.isSuperAdmin = token.isSuperAdmin ?? false;
+        session.user.isAdmin = Boolean(token.isAdmin || token.isSuperAdmin);
         session.user.platformDomain = token.platformDomain ?? 'cx';
         session.user.activeDomain = token.activeDomain ?? (token.platformDomain === 'pcg' ? 'pcg' : 'cx');
         if (token.name) session.user.name = token.name as string;
+        // Fresh persona skills on every session read, so Settings → Skills changes apply without re-login.
         try {
           const { getSkillsForPersona } = await import('./lib/skills');
-          token.skills = await getSkillsForPersona(token.role as string);
+          session.user.skills = await getSkillsForPersona(token.role as string);
         } catch {
-          session.user.skills = token.skills || [];
+          session.user.skills = (token.skills as string[] | undefined) || [];
         }
       }
       return session;

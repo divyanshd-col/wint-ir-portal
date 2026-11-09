@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { normalizeScore } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
@@ -120,6 +120,7 @@ export interface CallEvalPanelProps {
   standalone?: boolean;
   hideShowChat?: boolean;
   isPcg?: boolean;
+  sopTriggers?: any[];
   onOverrideSubmit?: (data: {
     callId: string;
     scores: Record<string, string>;
@@ -420,6 +421,7 @@ export default function CallEvalPanel({
   standalone = false,
   hideShowChat = false,
   isPcg = false,
+  sopTriggers,
   onOverrideSubmit,
   onReevaluate,
 }: CallEvalPanelProps) {
@@ -430,6 +432,15 @@ export default function CallEvalPanel({
   const [segments, setSegments] = useState<any[]>(initialSegments || []);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(initialRecordingUrl || null);
   const [durationSecs, setDurationSecs] = useState<number | null>(durationSeconds ?? null);
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handlePlaybackRateChange = (rate: number) => {
+    setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
   const [loading, setLoading] = useState(!initialSegments || initialSegments.length === 0);
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
@@ -1146,17 +1157,56 @@ export default function CallEvalPanel({
               gap: 4,
               flexShrink: 0,
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
-                {durationSecs != null && (
-                  <span style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)', fontWeight: 500 }}>
-                    {fmtDuration(durationSecs)}
-                  </span>
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
+                  {durationSecs != null && (
+                    <span style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)', fontWeight: 500 }}>
+                      {fmtDuration(durationSecs)}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 10, color: 'var(--qa-text-3)', fontWeight: 600, marginRight: 2 }}>SPEED:</span>
+                  {([1, 1.5, 2] as const).map(rate => {
+                    const active = playbackRate === rate;
+                    return (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => handlePlaybackRateChange(rate)}
+                        style={{
+                          height: 22,
+                          padding: '0 6px',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          borderRadius: 4,
+                          border: `1px solid ${active ? 'var(--marker, #111111)' : 'var(--qa-border)'}`,
+                          background: active ? 'var(--ink, #111111)' : 'var(--qa-card)',
+                          color: active ? 'var(--ink-fg, #ffffff)' : 'var(--qa-text-2)',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {rate}x
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <audio
+                ref={audioRef}
                 src={recordingUrl.startsWith('/') ? recordingUrl : `/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
                 controls
+                onPlay={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+                }}
+                onLoadedMetadata={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+                }}
                 style={{ width: '100%', height: 32 }}
               />
             </div>
@@ -1227,8 +1277,32 @@ export default function CallEvalPanel({
                   if (!textContent) return null;
 
                   const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.speaker || '').toLowerCase() === 'rm' || (seg.role || '').toLowerCase() === 'agent' || seg.sender === 'agent';
+                  const isSopTurn = Boolean(seg.isSopTrigger || (sopTriggers && sopTriggers.some((st: any) => st.timestamp === seg.ts || (st.quote && textContent && (textContent.includes(st.quote) || st.quote.includes(textContent))))));
+                  const matchedTrigger = seg.sopTrigger || (sopTriggers && sopTriggers.find((st: any) => st.timestamp === seg.ts || (st.quote && textContent && (textContent.includes(st.quote) || st.quote.includes(textContent)))));
+
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                      {isSopTurn && (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '3px 8px',
+                          marginBottom: 4,
+                          borderRadius: 6,
+                          background: '#FEF2F2',
+                          border: '1px solid #FECACA',
+                          color: '#DC2626',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          alignSelf: isIR ? 'flex-end' : 'flex-start',
+                        }}>
+                          <span>⚡ SOP Trigger: {matchedTrigger?.category || 'Monitoring Alert'}</span>
+                          <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#DC2626', color: '#fff', textTransform: 'uppercase' }}>
+                            {matchedTrigger?.severity || 'CRITICAL'}
+                          </span>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
                         <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>
                           {isIR ? (isPcg ? 'RM' : 'IR EXECUTIVE') : 'INVESTOR'} · {seg.ts || seg.timestamp || ''}
@@ -1255,8 +1329,10 @@ export default function CallEvalPanel({
                       <div style={{
                         padding: '10px 14px',
                         borderRadius: 12,
-                        background: isIR ? 'var(--ink)' : 'var(--qa-fill-light)',
-                        color: isIR ? 'var(--ink-fg)' : 'var(--qa-text)',
+                        background: isSopTurn ? '#FFF1F2' : (isIR ? 'var(--bubble-self-bg)' : 'var(--qa-fill-light)'),
+                        color: isSopTurn ? '#991B1B' : (isIR ? 'var(--bubble-self-fg)' : 'var(--qa-text)'),
+                        border: isSopTurn ? '2px solid #EF4444' : undefined,
+                        boxShadow: isSopTurn ? '0 0 0 2px rgba(239, 68, 68, 0.15)' : undefined,
                         fontSize: 13,
                         lineHeight: '18px'
                       }}>
@@ -1300,6 +1376,77 @@ export default function CallEvalPanel({
           </div>
 
           <div className="eval-scroll-s" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
+            {/* SOP Communication Alert Card */}
+            {sopTriggers && sopTriggers.length > 0 && (
+              <div style={{
+                marginBottom: 20,
+                padding: 14,
+                borderRadius: 10,
+                background: '#FEF2F2',
+                border: '1.5px solid #F87171',
+                boxShadow: '0 2px 6px rgba(220, 38, 38, 0.08)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626', display: 'inline-block' }}></span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#991B1B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      SOP Communication Alert
+                    </span>
+                  </div>
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: 9999,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    background: sopTriggers[0]?.severity === 'CRITICAL' ? '#DC2626' : sopTriggers[0]?.severity === 'MEDIUM' ? '#D97706' : '#6B7280',
+                    color: '#FFFFFF',
+                    letterSpacing: '0.05em'
+                  }}>
+                    {sopTriggers[0]?.severity || 'CRITICAL'}
+                  </span>
+                </div>
+
+                {sopTriggers.map((trig: any, tIdx: number) => (
+                  <div key={tIdx} style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{ fontWeight: 600, color: '#991B1B', minWidth: 90 }}>Category:</span>
+                      <span style={{ fontWeight: 700, color: '#111827' }}>{trig.category}</span>
+                    </div>
+                    {trig.signal && (
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontWeight: 600, color: '#991B1B', minWidth: 90 }}>Signal:</span>
+                        <span style={{ color: '#374151' }}>{trig.signal}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{ fontWeight: 600, color: '#991B1B', minWidth: 90 }}>Direction:</span>
+                      <span style={{ fontWeight: 700, color: '#1E40AF', background: '#DBEAFE', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>
+                        {trig.direction || (trig.speaker === 'Customer' ? 'Customer said this to RM' : 'RM said this to customer')}
+                      </span>
+                    </div>
+                    <div style={{
+                      marginTop: 6,
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: '#FFFFFF',
+                      border: '1px solid #FECACA',
+                      fontSize: 12,
+                      fontStyle: 'italic',
+                      color: '#1F2937',
+                      lineHeight: '18px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontWeight: 700, fontStyle: 'normal', color: '#DC2626', fontSize: 11 }}>
+                          Turn {trig.turn_index || ''} · {trig.timestamp || ''}
+                        </span>
+                      </div>
+                      "{trig.quote}"
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Compliance Gates */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

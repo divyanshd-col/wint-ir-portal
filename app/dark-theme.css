@@ -1100,3 +1100,92 @@
 [data-theme="dark"] .disabled\:bg-slate-200:disabled, [data-theme="dark"] .disabled\:bg-gray-200:disabled, [data-theme="dark"] .disabled\:bg-slate-100:disabled, [data-theme="dark"] .disabled\:bg-gray-100:disabled { background-color: var(--color-background-tertiary); }
 [data-theme="dark"] .disabled\:text-slate-400:disabled, [data-theme="dark"] .disabled\:text-gray-400:disabled, [data-theme="dark"] .disabled\:text-slate-500:disabled, [data-theme="dark"] .disabled\:text-gray-500:disabled { color: var(--color-text-tertiary); }
 [data-theme="dark"] .disabled\:bg-indigo-300:disabled { background-color: rgba(99,102,241,.35); }
+
+
+/* ---- PCG screens: inline style colours. Each inline hex X became var(--dk-<fg|bg|bd>-X, X), so light mode is untouched;
+   these values only exist in dark. Generated from each colour's hue/lightness (neutrals -> theme tokens, light tints -> translucent tints). ---- */
+[data-theme="dark"] {
+  --dk-bd-a7f3d0: rgba(38,217,135,.35);
+  --dk-bd-bfdbfe: rgba(38,118,217,.35);
+  --dk-bd-c7d2fe: rgba(38,74,217,.35);
+  --dk-bd-cbd5e1: var(--line);
+  --dk-bd-e2e8f0: var(--line);
+  --dk-bd-e4e4e7: var(--line);
+  --dk-bd-f4f4f5: var(--line);
+  --dk-bd-fde68a: rgba(217,181,38,.35);
+  --dk-bd-fecaca: rgba(217,38,38,.35);
+  --dk-bd-fed7aa: rgba(217,134,38,.35);
+  --dk-bg-d1fae5: rgba(38,217,125,.16);
+  --dk-bg-dbeafe: rgba(38,115,217,.16);
+  --dk-bg-e0e7ff: rgba(38,79,217,.16);
+  --dk-bg-e4e4e7: var(--qa-fill-med);
+  --dk-bg-ecfdf5: rgba(38,217,133,.16);
+  --dk-bg-eef2ff: rgba(38,80,217,.16);
+  --dk-bg-eff6ff: rgba(38,116,217,.16);
+  --dk-bg-f1f5f9: var(--qa-fill-light);
+  --dk-bg-f4f4f5: var(--qa-fill-light);
+  --dk-bg-f8fafc: var(--qa-fill-light);
+  --dk-bg-fafafa: var(--qa-fill-light);
+  --dk-bg-fafafb: var(--qa-fill-light);
+  --dk-bg-fee2e2: rgba(217,38,38,.16);
+  --dk-bg-fef2f2: rgba(217,38,38,.16);
+  --dk-bg-fef3c7: rgba(217,181,38,.16);
+  --dk-bg-ffedd5: rgba(217,140,38,.16);
+  --dk-bg-fffdf5: rgba(217,181,38,.16);
+  --dk-bg-ffffff: var(--qa-card);
+  --dk-fg-059669: #8beed0;
+  --dk-fg-065f46: #8beed2;
+  --dk-fg-0f172a: var(--color-text-primary);
+  --dk-fg-18181b: var(--color-text-primary);
+  --dk-fg-1d4ed8: #8ba5ee;
+  --dk-fg-2563eb: #8baaee;
+  --dk-fg-334155: var(--color-text-secondary);
+  --dk-fg-3730a3: #9d99e1;
+  --dk-fg-3f3f46: var(--color-text-secondary);
+  --dk-fg-4338ca: #9c96e3;
+  --dk-fg-475569: var(--color-text-secondary);
+  --dk-fg-52525b: var(--color-text-secondary);
+  --dk-fg-64748b: var(--color-text-secondary);
+  --dk-fg-71717a: var(--color-text-secondary);
+  --dk-fg-92400e: #eeb18b;
+  --dk-fg-94a3b8: var(--color-text-tertiary);
+  --dk-fg-991b1b: #eb8e8e;
+  --dk-fg-9a3412: #eea48b;
+  --dk-fg-a1a1aa: var(--color-text-tertiary);
+  --dk-fg-dc2626: #ed8d8d;
+}
+
+/* ---- Zinc / hex Tailwind classes used by the PCG screens that the rules above did not cover ---- */
+[data-theme="dark"] .text-zinc-800, [data-theme="dark"] .text-zinc-700, [data-theme="dark"] .text-\[\#3f3f46\],
+[data-theme="dark"] .hover\:text-\[\#111111\]:hover, [data-theme="dark"] .hover\:text-black:hover, [data-theme="dark"] .group:hover .group-hover\:text-black,
+[data-theme="dark"] .hover\:text-zinc-900:hover, [data-theme="dark"] .group:hover .group-hover\:text-zinc-700 { color: var(--color-text-primary); }
+[data-theme="dark"] .text-zinc-600, [data-theme="dark"] .text-zinc-500, [data-theme="dark"] .text-\[\#71717A\], [data-theme="dark"] .text-\[\#71717a\], [data-theme="dark"] .text-\[\#6B6B6B\] { color: var(--color-text-secondary); }
+[data-theme="dark"] .text-zinc-400 { color: var(--color-text-tertiary); }
+
+[data-theme="dark"] .bg-\[\#FAFAFB\], [data-theme="dark"] .bg-\[\#FAFAFB\]\/60, [data-theme="dark"] .bg-zinc-50\/50, [data-theme="dark"] .bg-zinc-50\/80, [data-theme="dark"] .bg-\[\#f8fafc\] { background-color: var(--color-background-secondary); }
+[data-theme="dark"] .bg-\[\#F4F4F5\], [data-theme="dark"] .bg-zinc-200 { background-color: var(--color-background-tertiary); }
+[data-theme="dark"] .hover\:bg-zinc-50:hover, [data-theme="dark"] .hover\:bg-zinc-100:hover, [data-theme="dark"] .hover\:bg-gray-50\/50:hover, [data-theme="dark"] .hover\:bg-gray-100\/50:hover { background-color: var(--color-background-tertiary); }
+[data-theme="dark"] .hover\:bg-zinc-200:hover { background-color: var(--qa-fill-med); }
+/* Near-black fills (primary buttons, selected chips, avatars) become the light "ink" fill, as elsewhere in dark mode. */
+[data-theme="dark"] .bg-zinc-900, [data-theme="dark"] .bg-zinc-800, [data-theme="dark"] .bg-zinc-700, [data-theme="dark"] .bg-\[\#111111\], [data-theme="dark"] .hover\:bg-zinc-800:hover { background-color: var(--ink); color: var(--ink-fg); }
+
+[data-theme="dark"] .border-zinc-200, [data-theme="dark"] .border-zinc-100, [data-theme="dark"] .border-\[\#F0F0F2\], [data-theme="dark"] .border-\[\#e6e2d8\] { border-color: var(--line); }
+[data-theme="dark"] .divide-\[\#F0F0F2\] > :not([hidden]) ~ :not([hidden]) { border-color: var(--line); }
+[data-theme="dark"] .border-zinc-300, [data-theme="dark"] .hover\:border-zinc-400:hover { border-color: var(--line-strong); }
+[data-theme="dark"] .border-\[\#111111\], [data-theme="dark"] .focus\:border-\[\#111111\]:focus, [data-theme="dark"] .focus\:border-zinc-900:focus { border-color: var(--color-text-primary); }
+[data-theme="dark"] .ring-\[\#111111\] { --tw-ring-color: var(--color-text-primary); }
+
+/* Own-side transcript / chat bubbles: a soft green surface in dark instead of the inverted near-white ink fill. */
+[data-theme="dark"] { --bubble-self-bg: var(--accent-weak); --bubble-self-fg: var(--color-text-primary); }
+
+
+/* ---- More screens: inline style colours (same scheme as the PCG block above). Each inline hex X became var(--dk-<fg|bg|bd>-X, X), so light mode is untouched;
+   these values only exist in dark. Generated from each colour's hue/lightness (neutrals -> theme tokens, light tints -> translucent tints). ---- */
+[data-theme="dark"] {
+  --dk-bd-d4d4d8: var(--line);
+  --dk-bd-ddd6fe: rgba(69,38,217,.35);
+  --dk-bg-18181b: var(--ink);
+  --dk-bg-f5f3ff: rgba(68,38,217,.16);
+  --dk-fg-6d28d9: #b28eeb;
+  --dk-fg-ffffff: var(--ink-fg);
+}

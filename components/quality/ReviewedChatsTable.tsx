@@ -8,6 +8,7 @@ import { rowClick } from './rowClick';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { CsatPill } from './csat';
 import { useSort, sortRows, SortTh } from './sort';
+import * as T from './tableStyles';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -91,18 +92,11 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
   const [sort, toggleSort] = useSort();
   const sortedRows = sortRows(chats, sort, { agent: c => c.agentName, iqs: c => c.iqsScore, bot: c => c.botIqsScore, callTx: c => c.callTranscriptStatus, csat: c => c.csatScore, disp: c => c.disposition, by: c => c.reviewedBy, at: c => c.reviewedAt });
 
-  const th: React.CSSProperties = {
-    height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--faint)',
-    fontWeight: 600, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
-  };
-  const td: React.CSSProperties = {
-    height: 52, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
-    fontSize: 14, color: 'var(--qa-text)', verticalAlign: 'middle',
-  };
-  const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text-2)' };
-  const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13 };
-  const tdAct: React.CSSProperties  = { ...td, textAlign: 'right' };
+  const th: React.CSSProperties = T.th;
+  const td: React.CSSProperties = T.td;
+  const tdMono: React.CSSProperties = T.tdMono;
+  const tdNum: React.CSSProperties  = T.tdNum;
+  const tdAct: React.CSSProperties  = T.tdAct;
   const inputStyle: React.CSSProperties = {
     height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
     background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
@@ -286,7 +280,7 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
                     <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                     <td style={tdNum}>
                       {chat.iqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                           {chat.iqsScore}
                         </span>
                       ) : (
@@ -295,7 +289,7 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
                     </td>
                     <td style={tdNum}>
                       {chat.botIqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 400, color: 'var(--faint)' }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 400, color: 'var(--faint)' }}>
                           {chat.botIqsScore}
                         </span>
                       ) : (
@@ -319,11 +313,11 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
                     <td style={td}>
                       <CsatPill value={chat.csatScore} />
                     </td>
-                    <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
+                    <td style={{ ...td, color: 'var(--qa-text-2)' }}>
                       {chat.disposition}
                       {chat.subDisposition && <span style={{ color: 'var(--qa-text-3)' }}> › {chat.subDisposition}</span>}
                     </td>
-                    <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>{chat.reviewedBy ?? '—'}</td>
+                    <td style={{ ...td, color: 'var(--qa-text-2)' }}>{chat.reviewedBy ?? '—'}</td>
                     <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
                       {chat.reviewedAt ? fmtDate(chat.reviewedAt) : '—'}
                     </td>
@@ -333,7 +327,7 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
                           onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
                           style={{
                             background: 'none', border: 0, padding: 0,
-                            fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                             color: 'var(--qa-text)', cursor: 'pointer',
                             display: 'inline-flex', alignItems: 'center', gap: 5,
                           }}
@@ -373,7 +367,7 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
                           }}
                           style={{
                             background: 'none', border: 0, padding: 0,
-                            fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                             color: reopeningId === chat.chatId ? 'var(--qa-text-3, var(--qa-text-3))' : 'var(--qa-active-blue, #2563eb)',
                             cursor: reopeningId === chat.chatId ? 'not-allowed' : 'pointer',
                           }}

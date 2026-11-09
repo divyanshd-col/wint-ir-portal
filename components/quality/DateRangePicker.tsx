@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { uiZoom } from '@/lib/ui-zoom';
 
 interface Props {
   onApply: (from: string, to: string) => void;
@@ -218,7 +219,8 @@ export default function DateRangePicker({ onApply, onCancel, align, initialFrom,
       if (rect.left + shift < padding) {
         shift = padding - rect.left;
       }
-      setShiftX(prev => (prev !== shift ? shift : prev));
+      const cssShift = shift / uiZoom();   // measured on screen, applied in CSS pixels
+      setShiftX(prev => (prev !== cssShift ? cssShift : prev));
     };
 
     clamp();

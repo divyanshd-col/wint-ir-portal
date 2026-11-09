@@ -81,7 +81,7 @@ export default function KBGapsPage() {
   const transferredCount = rows.filter((r) => r.chat_type === 'Transferred to Agent').length;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--qa-gray-50)', color: 'var(--qa-text)', padding: '24px 32px' }}>
+    <div style={{ minHeight: 'var(--vh100)', background: 'var(--qa-gray-50)', color: 'var(--qa-text)', padding: '24px 32px' }}>
       
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>

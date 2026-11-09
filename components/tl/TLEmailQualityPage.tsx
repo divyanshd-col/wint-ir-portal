@@ -9,7 +9,7 @@ import ScoreRing from '@/components/quality/ScoreRing';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
-import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
+import { useEmailParameters } from '@/components/quality/useEmailParameters';
 import EmailMessageView, {
   CustomerSummaryBlock,
   CustomerCoreQueryCard,
@@ -22,6 +22,7 @@ import { DisputeThread } from '@/components/quality/DisputeThread';
 import UISelect from '@/components/quality/UISelect';
 import EmailSplit from '@/components/quality/EmailSplit';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
+import * as T from '@/components/quality/tableStyles';
 
 
 interface AgentBreakdown {
@@ -70,42 +71,13 @@ interface EvaluationItem {
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
-const th: React.CSSProperties = {
-  height: 40,
-  background: 'var(--qa-gray-50)',
-  borderBottom: '1px solid var(--qa-border)',
-  fontSize: 12,
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  color: 'var(--qa-text-2)',
-  fontWeight: 500,
-  textAlign: 'left',
-  padding: '0 16px',
-  whiteSpace: 'nowrap',
-};
+const th: React.CSSProperties = T.th;
 
-const td: React.CSSProperties = {
-  height: 50,
-  padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub)',
-  fontSize: 14,
-  color: 'var(--qa-text)',
-  verticalAlign: 'middle',
-};
+const td: React.CSSProperties = T.td;
 
-const tdMono: React.CSSProperties = {
-  ...td,
-  fontFamily: MONO,
-  fontSize: 13,
-  color: 'var(--qa-text-2)',
-};
+const tdMono: React.CSSProperties = T.tdMono;
 
-const tdNum: React.CSSProperties = {
-  ...td,
-  textAlign: 'right',
-  fontFamily: MONO,
-  fontSize: 13,
-};
+const tdNum: React.CSSProperties = T.tdNum;
 
 
 // ─── Disputes (same flow as Quality Chats: raised -> TL resolves or forwards to QA -> history) ──
@@ -117,6 +89,7 @@ const actionBtn: React.CSSProperties = {
 };
 
 function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: 'tl_pending' | 'tl_history'; period: PeriodState; onPeriod: (v: PeriodState) => void; onChanged: () => void }) {
+  const emailParams = useEmailParameters();
   const { data: session } = useSession();
   const [rows, setRows] = useState<EvaluationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -236,7 +209,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-3)' }}>Challenged:</span>
                 {modalItem.challenged_params.map(cp => {
-                  const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                  const def = emailParams.find(d => d.key === cp.param);
                   return (
                     <span key={cp.param} style={{
                       fontSize: 11, fontWeight: 600, background: 'var(--qa-fill-light, var(--qa-fill-light))', border: '1px solid var(--qa-border)',
@@ -422,7 +395,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                           <div style={{ flex: '2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)' }}>Disputed Params</span>
                             {item.challenged_params.map(cp => {
-                              const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                              const def = emailParams.find(d => d.key === cp.param);
                               return (
                                 <span key={cp.param} title={cp.note} style={{
                                   fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
@@ -529,6 +502,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
 }
 
 export default function TLEmailQualityPage() {
+  const emailParams = useEmailParameters();
   const { data: session } = useSession();
   const [agents, setAgents] = useState<AgentBreakdown[]>([]);
   const [availableAgents, setAvailableAgents] = useState<string[]>([]);
@@ -851,7 +825,7 @@ export default function TLEmailQualityPage() {
                     key={agent.agent_name}
                     style={{ background: isSelected ? 'var(--qa-gray-50)' : undefined }}
                   >
-                    <td style={{ ...td, fontWeight: 600 }}>
+                    <td style={{ ...td, fontWeight: 500 }}>
                       {agent.agent_name}
                     </td>
                     <td style={tdNum}>
@@ -1018,7 +992,7 @@ export default function TLEmailQualityPage() {
                           )}
                         </td>
                         <td style={{ ...td, textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
                             {isExpanded ? 'Hide ▲' : 'View ▼'}
                           </span>
                         </td>
@@ -1199,7 +1173,7 @@ export default function TLEmailQualityPage() {
                                               Challenged:
                                             </span>
                                             {reply.challenged_params.map(cp => {
-                                              const paramDef = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                                              const paramDef = emailParams.find(d => d.key === cp.param);
                                               return (
                                                 <span
                                                   key={cp.param}
@@ -1262,7 +1236,7 @@ export default function TLEmailQualityPage() {
                                       </div>
 
                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6, marginBottom: 12 }}>
-                                        {DEFAULT_EMAIL_PARAMETERS.map(param => {
+                                        {emailParams.map(param => {
                                           const isSelected = selectedParams.has(param.key);
                                           return (
                                             <label
@@ -1401,7 +1375,7 @@ export default function TLEmailQualityPage() {
                               scoring={<>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                  Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
+                                  Evaluator Feedback &amp; Parameters ({emailParams.length})
                                 </div>
                                 <div style={{
                                   border: '1px solid var(--qa-border)',
@@ -1468,7 +1442,7 @@ export default function TLEmailQualityPage() {
                                       {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
                                     </div>
                                   )}
-                                  {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                  {emailParams.map((def, idx) => {
                                     const scores = reply.parameter_scores;
                                     const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
                                     const isDisputedParam = (reply.challenged_params?.some(cp => cp.param === def.key) ?? false) || (disputingId === reply.message_id && selectedParams.has(def.key));
@@ -1481,7 +1455,7 @@ export default function TLEmailQualityPage() {
                                         allowNA={def.allowNA}
                                         weight={def.defaultWeight}
                                         reason={scores?.__reasoning?.[def.key]}
-                                        last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                        last={idx === emailParams.length - 1}
                                         disputed={isDisputedParam}
                                       />
                                     );
