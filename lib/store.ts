@@ -278,14 +278,15 @@ export interface IQSFlagComment {
 /** Returns false if the insert failed — callers must not report success on false. */
 export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
   try {
+    const safeChatId = String(entry.chatId || '').slice(0, 100);
     // Ensure the conversation exists in Postgres before inserting
-    const convs = await query('SELECT id FROM conversations WHERE id = $1', [String(entry.chatId)]);
+    const convs = await query('SELECT id FROM conversations WHERE id = $1', [safeChatId]);
     if (convs.length === 0) {
       await query(`
         INSERT INTO conversations (id, conversation_type, started_at, closed_at)
         VALUES ($1, 'agent', NOW(), NOW())
         ON CONFLICT DO NOTHING
-      `, [String(entry.chatId)]);
+      `, [safeChatId]);
     }
 
     await query(`
@@ -303,7 +304,7 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
     `, [
       entry.id,
       entry.scoreId || null,
-      String(entry.chatId),
+      safeChatId,
       entry.callId || null,
       entry.messageId || null,
       entry.agentName || '',

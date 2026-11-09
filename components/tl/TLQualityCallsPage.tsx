@@ -312,10 +312,16 @@ export default function TLQualityCallsPage() {
   const filteredReviewedDisputes = reviewedDisputes.filter(d => {
     if (reviewedAgentFilter && d.agentName !== reviewedAgentFilter) return false;
     if (reviewedOutcomeFilter) {
-      if (reviewedOutcomeFilter === 'reviewed_tl') {
+      if (reviewedOutcomeFilter === 'forwarded' || reviewedOutcomeFilter === 'forwarded_to_qa') {
+        if (d.status !== 'tl_forwarded') return false;
+      } else if (reviewedOutcomeFilter === 'updated' || reviewedOutcomeFilter === 'updated_by_qa') {
+        if (d.status !== 'reviewed') return false;
+      } else if (reviewedOutcomeFilter === 'reviewed_tl') {
         if (d.status !== 'tl_resolved' && !(d.status === 'reviewed' && (d.reviewNote?.toLowerCase().includes('tl') || d.reviewedBy?.toLowerCase().includes('tl')))) return false;
-      } else if (reviewedOutcomeFilter === 'reviewed') {
+      } else if (reviewedOutcomeFilter === 'reviewed' || reviewedOutcomeFilter === 'resolved_qa') {
         if (d.status !== 'reviewed' && d.status !== 'tl_resolved') return false;
+      } else if (reviewedOutcomeFilter === 'cancelled') {
+        if (d.status !== 'cancelled') return false;
       } else if (getDisputeOutcomeKey(d) !== reviewedOutcomeFilter) {
         return false;
       }
@@ -438,6 +444,8 @@ export default function TLQualityCallsPage() {
               style={{ ...chipInputStyle, minWidth: 150 }}
             >
               <option value="">All Calls</option>
+              <option value="forwarded_to_qa">Forwarded to QA</option>
+              <option value="updated_by_qa">Updated by QA</option>
               <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
               <option value="reviewed">Reviewed Disputes</option>
               <option value="none">No Dispute</option>
@@ -540,12 +548,17 @@ export default function TLQualityCallsPage() {
                             {call.callId}
                             {call.disputeStatus && (call.disputeStatus === 'pending' || call.disputeStatus === 'ir_pending_tl') && (
                               <span style={{ display: 'block', fontSize: 10, color: '#b45309', fontWeight: 600, marginTop: 2 }}>
-                                Pending TL Review
+                                Forwarded to TL (Pending Review)
+                              </span>
+                            )}
+                            {call.disputeStatus && call.disputeStatus === 'tl_forwarded' && (
+                              <span style={{ display: 'block', fontSize: 10, color: '#2563eb', fontWeight: 600, marginTop: 2 }}>
+                                Forwarded to QA
                               </span>
                             )}
                             {call.disputeStatus && (call.disputeStatus === 'reviewed' || call.disputeStatus === 'tl_resolved') && (
                               <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
-                                Reviewed
+                                {call.disputeStatus === 'reviewed' ? 'Updated by QA' : 'Reviewed by TL'}
                               </span>
                             )}
                           </td>
@@ -882,10 +895,10 @@ export default function TLQualityCallsPage() {
               style={{ ...chipInputStyle, minWidth: 150 }}
             >
               <option value="">All Outcomes</option>
+              <option value="forwarded_to_qa">Forwarded to QA</option>
+              <option value="updated_by_qa">Updated by QA</option>
               <option value="reviewed_tl">Reviewed by TL</option>
               <option value="resolved_qa">Resolved by QA</option>
-              <option value="updated">Updated by QA</option>
-              <option value="forwarded">Forwarded to QA</option>
               <option value="cancelled">Cancelled</option>
             </UISelect>
 

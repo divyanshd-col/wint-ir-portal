@@ -413,7 +413,7 @@ const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', dateTime: 'Date & 
 const COL_WIDTH: Partial<Record<Col, number>> = {};
 // Column widths (%) put the ID, date and agent columns on the left of the panel split (57.4%), scores + action on the right.
 const TAB_WIDTHS: Record<Tab, number[]> = {
-  pending:  [12, 13, 16, 16.4, 14.2, 14.2, 14.2],
+  pending: [12, 13, 16, 16.4, 14.2, 14.2, 14.2],
   reviewed: [12, 12, 15, 18.4, 8, 8, 11, 8, 7.6],
   disputes: [11, 12, 15, 19.4, 10, 10, 12, 10.6],
   unscored: [14, 14, 22, 34, 16],
@@ -458,7 +458,7 @@ export default function EmailEvaluationPage() {
   const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' } | null>(null);
 
   // QA action state
-  const [overrideScores, setOverrideScores] = useState<Record<string, number | null>>({});
+  const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
   const [overrideParams, setOverrideParams] = useState<Record<string, Record<string, ParameterScoreValue>>>({});
   const [overrideReasoning, setOverrideReasoning] = useState<Record<string, Record<string, string>>>({});
   const [overrideGates, setOverrideGates] = useState<Record<string, Record<string, GateParamState>>>({});
@@ -466,12 +466,23 @@ export default function EmailEvaluationPage() {
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [submittingAction, setSubmittingAction] = useState(false);
 
+  const role = ((session?.user as any)?.role || '') as string;
+  const isTL = role === 'tl' || (session?.user as any)?.isAdmin;
+
+  // TL Dispute state
+  const [disputingId, setDisputingId] = useState<string | null>(null);
+  const [selectedDisputeParams, setSelectedDisputeParams] = useState<Set<string>>(new Set());
+  const [disputeNotes, setDisputeNotes] = useState('');
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
+  const [disputeSuccessMsg, setDisputeSuccessMsg] = useState<string | null>(null);
+
   const normalizeToggleValue = (val: any): ParameterScoreValue => {
     return normalizeParamScoreValue(val);
   };
 
-  const calculateIQS = (params: Record<string, ParameterScoreValue>, intent?: string | null): number | null => {
-    return calculateEmailIQS(params, undefined, intent);
+  const calculateIQS = (params: Record<string, ParameterScoreValue>): number => {
+    return calculateEmailIQS(params) ?? 0;
   };
 
   const getParamsForItem = (item: EvaluationItem): Record<string, ParameterScoreValue> => {
@@ -604,8 +615,7 @@ export default function EmailEvaluationPage() {
       ...existing,
       [paramKey]: val,
     };
-    const isJunk = Boolean(item?.intent_l1 && item.intent_l1.toLowerCase().includes('junk'));
-    const newIQS = isJunk ? null : calculateIQS(updated);
+    const newIQS = calculateIQS(updated);
 
     setOverrideParams(prev => ({
       ...prev,
@@ -624,10 +634,10 @@ export default function EmailEvaluationPage() {
       if (search) params.set('search', search);
       if (agentFilter) params.set('agentName', agentFilter);
       if (dispositionFilter) params.set('disposition', dispositionFilter);
+      if (disputeFilter) params.set('disputeStatus', disputeFilter);
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       if (from) params.set('from', from);
       if (to) params.set('to', to);
-      if (disputeFilter) params.set('disputeStatus', disputeFilter);
       params.set('tab', tab);
       params.set('limit', '500');
 
@@ -678,12 +688,9 @@ export default function EmailEvaluationPage() {
     const isGateFail = getGateFailForItem(item);
     const currentComplianceIssues = getComplianceIssuesForItem(item);
     const currentCompliancePassed = !isGateFail;
-    const isJunk = Boolean(item.intent_l1 && item.intent_l1.toLowerCase().includes('junk'));
-    const scoreVal = isJunk
-      ? null
-      : (overrideScores[item.message_id] !== undefined
-          ? (overrideScores[item.message_id] !== null ? Number(overrideScores[item.message_id]) : null)
-          : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams)));
+    const scoreVal = overrideScores[item.message_id] !== undefined
+      ? Number(overrideScores[item.message_id])
+      : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
     const notes = reviewNotes[item.message_id] ?? item.qa_notes ?? '';
 
     const gatesPayload: Record<string, any> = {
@@ -761,6 +768,59 @@ export default function EmailEvaluationPage() {
     }
   };
 
+  const handleRaiseDispute = async (item: EvaluationItem) => {
+    if (!disputeNotes.trim()) {
+      setDisputeError('Please enter a reason for the dispute.');
+      return;
+    }
+    if (selectedDisputeParams.size === 0) {
+      setDisputeError('Please select at least one parameter to challenge.');
+      return;
+    }
+    setSubmittingDispute(true);
+    setDisputeError(null);
+    try {
+      const challenged = Array.from(selectedDisputeParams).map(p => ({
+        param: p,
+        note: disputeNotes.trim(),
+      }));
+      const res = await fetch('/api/email-evaluations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'raise_dispute',
+          messageId: item.message_id,
+          notes: disputeNotes.trim(),
+          challengedParams: challenged,
+          raisedByRole: 'tl',
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setDisputeSuccessMsg('Dispute raised and forwarded to QA for review.');
+        setDisputingId(null);
+        setSelectedDisputeParams(new Set());
+        setDisputeNotes('');
+        setItems(prev => prev.map(r => r.message_id === item.message_id ? {
+          ...r,
+          dispute_status: 'Under_Review',
+          dispute_notes: disputeNotes.trim(),
+          flag_id: data.flagId,
+          challenged_params: challenged,
+          raised_by_role: 'tl',
+        } : r));
+        fetchData();
+        setTimeout(() => setDisputeSuccessMsg(null), 5000);
+      } else {
+        setDisputeError(data.error || 'Failed to raise dispute.');
+      }
+    } catch (e: any) {
+      setDisputeError(e?.message || 'Failed to raise dispute.');
+    } finally {
+      setSubmittingDispute(false);
+    }
+  };
+
   const handleResolveDispute = async (item: EvaluationItem, decision: 'Resolved' | 'Rejected') => {
     const currentParams = getParamsForItem(item);
     const currentReasoning = getReasoningForItem(item);
@@ -768,12 +828,9 @@ export default function EmailEvaluationPage() {
     const isGateFail = getGateFailForItem(item);
     const currentComplianceIssues = getComplianceIssuesForItem(item);
     const currentCompliancePassed = !isGateFail;
-    const isJunk = Boolean(item.intent_l1 && item.intent_l1.toLowerCase().includes('junk'));
-    const scoreVal = isJunk
-      ? null
-      : (overrideScores[item.message_id] !== undefined
-          ? (overrideScores[item.message_id] !== null ? Number(overrideScores[item.message_id]) : null)
-          : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams)));
+    const scoreVal = overrideScores[item.message_id] !== undefined
+      ? Number(overrideScores[item.message_id])
+      : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
     const qaNoteVal = reviewNotes[item.message_id] !== undefined
       ? reviewNotes[item.message_id]
       : (item.qa_notes || `Dispute marked as ${decision}`);
@@ -863,13 +920,23 @@ export default function EmailEvaluationPage() {
       default: return i.reviewed_at ?? '';
     }
   };
-  const sortedItems = !sort ? items : [...items].sort((a, b) => {
+  const filteredItems = items.filter(i => {
+    if (!disputeFilter) return true;
+    if (disputeFilter === 'forwarded_to_tl') return i.dispute_status === 'Raised';
+    if (disputeFilter === 'forwarded_to_qa' || disputeFilter === 'pending_review') return i.dispute_status === 'Under_Review';
+    if (disputeFilter === 'updated_by_qa') return i.dispute_status === 'Resolved' || i.dispute_status === 'Rejected';
+    if (disputeFilter === 'reviewed') return i.dispute_status === 'Resolved' || i.dispute_status === 'Rejected' || i.dispute_status === 'TL_Resolved';
+    if (disputeFilter === 'none') return !i.dispute_status || i.dispute_status === 'None';
+    if (disputeFilter === 'all') return i.dispute_status && i.dispute_status !== 'None';
+    return i.dispute_status === disputeFilter;
+  });
+  const sortedItems = !sort ? filteredItems : [...filteredItems].sort((a, b) => {
     const x = sortKey(a, sort.col), y = sortKey(b, sort.col);
     const cmp = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: 'base' });
     return sort.dir === 'asc' ? cmp : -cmp;
   });
 
-  const paging = usePaging(sortedItems, `${tab}|${search}|${agentFilter}|${dispositionFilter}|${period.period}|${period.customFrom}|${period.customTo}|${sort?.col}|${sort?.dir}`);
+  const paging = usePaging(sortedItems, `${tab}|${search}|${agentFilter}|${dispositionFilter}|${disputeFilter}|${period.period}|${period.customFrom}|${period.customTo}|${sort?.col}|${sort?.dir}`);
 
   const agentOptions = Array.from(new Set([
     ...availableAgents,
@@ -1063,10 +1130,10 @@ export default function EmailEvaluationPage() {
                 period.period === 'custom' && period.customFrom && period.customTo
                   ? `${fmtShort(period.customFrom)} to ${fmtShort(period.customTo)}`
                   : period.period === '7'
-                  ? 'Last 7 days'
-                  : period.period === '30'
-                  ? 'Last 30 days'
-                  : 'Filter by date range'
+                    ? 'Last 7 days'
+                    : period.period === '30'
+                      ? 'Last 30 days'
+                      : 'Filter by date range'
               }
             >
               <svg
@@ -1088,10 +1155,10 @@ export default function EmailEvaluationPage() {
               {period.period === 'custom' && period.customFrom && period.customTo
                 ? (period.customFrom === period.customTo ? fmtShort(period.customFrom) : `${fmtShort(period.customFrom)} – ${fmtShort(period.customTo)}`)
                 : period.period === '7'
-                ? 'Last 7 days'
-                : period.period === '30'
-                ? 'Last 30 days'
-                : 'Date range'}
+                  ? 'Last 7 days'
+                  : period.period === '30'
+                    ? 'Last 30 days'
+                    : 'Date range'}
               <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
             </button>
             {showFilterBarPicker && (
@@ -1125,11 +1192,32 @@ export default function EmailEvaluationPage() {
               cursor: 'pointer',
             }}
           >
-            <option value="">{tab === 'disputes' ? 'All Disputes' : 'All Dispute Statuses'}</option>
-            <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
-            <option value="forwarded_to_qa">Forwarded to QA</option>
-            <option value="reviewed">Reviewed Disputes</option>
-            {tab !== 'disputes' && <option value="none">No Dispute</option>}
+            {isTL ? (
+              <>
+                <option value="">{tab === 'disputes' ? 'All Disputes' : 'All Dispute Statuses'}</option>
+                <option value="forwarded_to_qa">Forwarded to QA</option>
+                <option value="updated_by_qa">Updated by QA</option>
+                <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+                <option value="reviewed">Reviewed Disputes</option>
+                {tab !== 'disputes' && <option value="none">No Dispute</option>}
+              </>
+            ) : tab === 'disputes' ? (
+              <>
+                <option value="">Pending dispute review</option>
+                <option value="forwarded_to_qa">Forwarded to QA</option>
+                <option value="updated_by_qa">Updated by QA</option>
+                <option value="reviewed">Reviewed Disputes</option>
+                <option value="all">All Disputes (Forwarded &amp; Reviewed)</option>
+              </>
+            ) : (
+              <>
+                <option value="">All Dispute Statuses</option>
+                <option value="forwarded_to_qa">Forwarded to QA</option>
+                <option value="updated_by_qa">Updated by QA</option>
+                <option value="reviewed">Reviewed Disputes</option>
+                <option value="none">No Dispute</option>
+              </>
+            )}
           </UISelect>
 
           {/* Reset Filters */}
@@ -1203,12 +1291,9 @@ export default function EmailEvaluationPage() {
                   const isExpanded = expandedId === item.message_id;
                   const itemParams = getParamsForItem(item);
                   const isSessionOverridden = overrideScores[item.message_id] !== undefined;
-                  const isJunk = Boolean(item.intent_l1 && item.intent_l1.toLowerCase().includes('junk'));
-                  const currentIQS = isJunk
-                    ? null
-                    : (isSessionOverridden
-                        ? (overrideScores[item.message_id] !== null ? Number(overrideScores[item.message_id]) : null)
-                        : (item.effective_score ?? item.quality_score ?? calculateIQS(itemParams)));
+                  const currentIQS = isSessionOverridden
+                    ? Number(overrideScores[item.message_id])
+                    : (item.effective_score ?? item.quality_score ?? calculateIQS(itemParams));
                   const hasOverride = item.qa_override_score !== null && item.qa_override_score !== undefined;
                   const cell: Record<Col, React.ReactNode> = {
                     ticket: (
@@ -1291,6 +1376,25 @@ export default function EmailEvaluationPage() {
                                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', flexShrink: 0 }}>Conversation</span>
                                   <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
                                   <div style={{ flex: 1 }} />
+                                  {isTL && (!item.dispute_status || item.dispute_status === 'None') && disputingId !== item.message_id && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDisputingId(item.message_id);
+                                        setSelectedDisputeParams(new Set());
+                                        setDisputeNotes('');
+                                        setDisputeError(null);
+                                      }}
+                                      style={{
+                                        height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
+                                        background: 'var(--qa-card)', color: 'var(--qa-text)', cursor: 'pointer', fontSize: 12,
+                                        fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 500,
+                                      }}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                                      Raise Dispute to QA
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
@@ -1306,44 +1410,142 @@ export default function EmailEvaluationPage() {
                                   </button>
                                 </div>
                                 <div className="eval-scroll-t" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                  {disputeSuccessMsg && (
+                                    <div style={{ padding: '10px 14px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: 13, fontWeight: 500 }}>
+                                      ✓ {disputeSuccessMsg}
+                                    </div>
+                                  )}
+
+                                  {disputingId === item.message_id && (
+                                    <div style={{ padding: 16, background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>Raise Dispute to QA</div>
+                                        <button
+                                          type="button"
+                                          onClick={() => { setDisputingId(null); setDisputeError(null); }}
+                                          style={{ fontSize: 12, color: 'var(--qa-text-2)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 8 }}>
+                                        Select the parameter(s) you wish to challenge:
+                                      </div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6, marginBottom: 12 }}>
+                                        {DEFAULT_EMAIL_PARAMETERS.map(param => {
+                                          const isSelected = selectedDisputeParams.has(param.key);
+                                          return (
+                                            <label
+                                              key={param.key}
+                                              style={{
+                                                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                                                borderRadius: 6, border: `1px solid ${isSelected ? 'var(--marker, #111)' : 'var(--qa-border)'}`,
+                                                background: isSelected ? 'var(--qa-card)' : 'transparent',
+                                                cursor: 'pointer', fontSize: 12, fontWeight: 500, color: 'var(--qa-text)'
+                                              }}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => {
+                                                  setSelectedDisputeParams(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(param.key)) next.delete(param.key);
+                                                    else next.add(param.key);
+                                                    return next;
+                                                  });
+                                                }}
+                                              />
+                                              {param.name}
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 4 }}>
+                                        Reason for dispute (required):
+                                      </div>
+                                      <AutoTextarea
+                                        rows={3}
+                                        placeholder="Explain specifically why you think the score should be adjusted for QA review…"
+                                        value={disputeNotes}
+                                        onChange={e => setDisputeNotes(e.target.value)}
+                                        style={{
+                                          width: '100%', padding: '8px 12px', border: '1px solid var(--qa-border)',
+                                          borderRadius: 6, background: 'var(--qa-card)', color: 'var(--qa-text)',
+                                          fontSize: 12, boxSizing: 'border-box', marginBottom: 10
+                                        }}
+                                      />
+                                      {disputeError && (
+                                        <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 8 }}>✕ {disputeError}</div>
+                                      )}
+                                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => { setDisputingId(null); setDisputeError(null); }}
+                                          style={{
+                                            height: 30, padding: '0 12px', border: '1px solid var(--qa-border)',
+                                            borderRadius: 6, background: 'var(--qa-card)', color: 'var(--qa-text)',
+                                            fontSize: 12, fontWeight: 500, cursor: 'pointer'
+                                          }}
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRaiseDispute(item)}
+                                          disabled={submittingDispute || !disputeNotes.trim() || selectedDisputeParams.size === 0}
+                                          style={{
+                                            height: 30, padding: '0 14px', border: 'none', borderRadius: 6,
+                                            background: 'var(--ink, #111)', color: 'var(--ink-fg, #fff)',
+                                            fontSize: 12, fontWeight: 600,
+                                            cursor: (!disputeNotes.trim() || selectedDisputeParams.size === 0 || submittingDispute) ? 'not-allowed' : 'pointer',
+                                            opacity: (!disputeNotes.trim() || selectedDisputeParams.size === 0 || submittingDispute) ? 0.5 : 1,
+                                          }}
+                                        >
+                                          {submittingDispute ? 'Submitting…' : 'Submit Dispute to QA'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
                                   {/* History Panel */}
-                                {historyOpen[item.message_id] && (
-                                  <EmailHistoryPanel
+                                  {historyOpen[item.message_id] && (
+                                    <EmailHistoryPanel
+                                      customerEmail={item.customer_email}
+                                      chatId={item.chat_id}
+                                      ticketId={item.ticket_id}
+                                      currentMessageId={item.message_id}
+                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
+                                    />
+                                  )}
+
+
+                                  {/* 1. Customer Core Query (Separate, prominent, well-spaced) */}
+                                  <CustomerCoreQueryCard
+                                    threadSummary={item.thread_summary}
+                                    customerMessage={item.customer_message}
+                                    subjectLine={item.subject_line}
                                     customerEmail={item.customer_email}
-                                    chatId={item.chat_id}
-                                    ticketId={item.ticket_id}
-                                    currentMessageId={item.message_id}
-                                    onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
+                                    parameterScores={item.parameter_scores}
                                   />
-                                )}
-
-
-                                {/* 1. Customer Core Query (Separate, prominent, well-spaced) */}
-                                <CustomerCoreQueryCard
-                                  threadSummary={item.thread_summary}
-                                  customerMessage={item.customer_message}
-                                  subjectLine={item.subject_line}
-                                  customerEmail={item.customer_email}
-                                  parameterScores={item.parameter_scores}
-                                />
 
 
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
                                       Customer Inbound Email Thread
                                     </div>
-                                  <CustomerEmailThreadCard
-                                    customerMessage={item.customer_message}
-                                    subjectLine={item.subject_line}
-                                    customerEmail={item.customer_email}
-                                  />
+                                    <CustomerEmailThreadCard
+                                      customerMessage={item.customer_message}
+                                      subjectLine={item.subject_line}
+                                      customerEmail={item.customer_email}
+                                    />
 
                                   </div>
 
-                                {/* Internal Working Notes (highlighted amber, matching chat style) */}
-                                {item.internal_notes && item.internal_notes.length > 0 && (
-                                  <InternalNotesBlock notes={item.internal_notes} />
-                                )}
+                                  {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                                  {item.internal_notes && item.internal_notes.length > 0 && (
+                                    <InternalNotesBlock notes={item.internal_notes} />
+                                  )}
 
                                 <div>
                                   <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
@@ -1367,7 +1569,7 @@ export default function EmailEvaluationPage() {
                                   </div>
                                 </div>
 
-                                {tab === 'disputes' && item.dispute_status && item.dispute_status !== 'None' && (
+                                {item.dispute_status && item.dispute_status !== 'None' && (
                                   <div>
                                     <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
                                       Dispute Discussion Thread
@@ -1423,95 +1625,95 @@ export default function EmailEvaluationPage() {
                                 </div>
 
                                 <div className="eval-scroll-r" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                                {/* Compliance Gates — identical to EvalPanel in chats */}
-                                {(() => {
-                                  const gates = getGatesForItem(item);
-                                  const gateFail = getGateFailForItem(item);
-                                  return (
-                                    <div className={`eval-gates${gateFail ? ' failed' : ''}`}>
-                                      <div className="eval-ghead">
-                                        <span className="eval-gtitle">Compliance Gates</span>
-                                        <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
-                                      </div>
-                                      {COMPLIANCE_GATES_LIST.map(g => {
-                                        const gItem = gates[g.key] || { status: 'pass', reasoning: '' };
-                                        return (
-                                          <div key={g.key} className="eval-gate">
-                                            <div style={{ minWidth: 0 }}>
-                                              <b>{g.shortLabel}</b>
-                                              <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
-                                            </div>
-                                            <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
-                                              {([
-                                                { label: 'Pass', val: 'pass' as const },
-                                                { label: 'Breach', val: 'fail' as const },
-                                                { label: 'NA', val: 'not_applicable' as const },
-                                              ]).map(opt => (
-                                                <button
-                                                  key={opt.val} type="button" data-v={opt.val}
-                                                  aria-pressed={gItem.status === opt.val}
-                                                  onClick={() => handleGateStatusChange(item.message_id, g.key, opt.val)}
-                                                >
-                                                  {opt.label}
-                                                </button>
-                                              ))}
-                                            </div>
-
-                                            {/* Reason for compliance gate (shown only in case of breach) */}
-                                            {gItem.status === 'fail' && (
-                                              <div className="eval-gate-extra">
-                                                <div className="eval-reason-label">Reason for Breach:</div>
-                                                <AutoTextarea
-                                                  className="eval-reason-input"
-                                                  value={gItem.reasoning || ''}
-                                                  onChange={e => handleGateReasoningChange(item.message_id, g.key, e.target.value)}
-                                                  placeholder="Specify reason / citation for this compliance breach…"
-                                                  rows={2}
-                                                />
+                                  {/* Compliance Gates — identical to EvalPanel in chats */}
+                                  {(() => {
+                                    const gates = getGatesForItem(item);
+                                    const gateFail = getGateFailForItem(item);
+                                    return (
+                                      <div className={`eval-gates${gateFail ? ' failed' : ''}`}>
+                                        <div className="eval-ghead">
+                                          <span className="eval-gtitle">Compliance Gates</span>
+                                          <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
+                                        </div>
+                                        {COMPLIANCE_GATES_LIST.map(g => {
+                                          const gItem = gates[g.key] || { status: 'pass', reasoning: '' };
+                                          return (
+                                            <div key={g.key} className="eval-gate">
+                                              <div style={{ minWidth: 0 }}>
+                                                <b>{g.shortLabel}</b>
+                                                <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
                                               </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  );
-                                })()}
-                                  <div style={{ padding: 16 }}>
-                                <div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})
-                                    </div>
-                                  </div>
+                                              <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
+                                                {([
+                                                  { label: 'Pass', val: 'pass' as const },
+                                                  { label: 'Breach', val: 'fail' as const },
+                                                  { label: 'NA', val: 'not_applicable' as const },
+                                                ]).map(opt => (
+                                                  <button
+                                                    key={opt.val} type="button" data-v={opt.val}
+                                                    aria-pressed={gItem.status === opt.val}
+                                                    onClick={() => handleGateStatusChange(item.message_id, g.key, opt.val)}
+                                                  >
+                                                    {opt.label}
+                                                  </button>
+                                                ))}
+                                              </div>
 
-                                  <div style={{
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    background: 'var(--qa-card)',
-                                    overflow: 'hidden',
-                                  }}>
-                                    {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
-                                      const currentParams = getParamsForItem(item);
-                                      const currentReasoning = getReasoningForItem(item);
-                                      const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
-                                      return (
-                                        <ParamScoreRow
-                                          key={def.key}
-                                          name={def.name}
-                                          description={def.description}
-                                          value={currentParams[def.key] ?? 'yes'}
-                                          allowNA={def.allowNA}
-                                          weight={def.defaultWeight}
-                                          disputed={isDisputed}
-                                          reason={currentReasoning[def.key] ?? ''}
-                                          onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
-                                          onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
-                                          last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                </div>
+                                              {/* Reason for compliance gate (shown only in case of breach) */}
+                                              {gItem.status === 'fail' && (
+                                                <div className="eval-gate-extra">
+                                                  <div className="eval-reason-label">Reason for Breach:</div>
+                                                  <AutoTextarea
+                                                    className="eval-reason-input"
+                                                    value={gItem.reasoning || ''}
+                                                    onChange={e => handleGateReasoningChange(item.message_id, g.key, e.target.value)}
+                                                    placeholder="Specify reason / citation for this compliance breach…"
+                                                    rows={2}
+                                                  />
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  })()}
+                                  <div style={{ padding: 16 }}>
+                                    <div>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                          Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})
+                                        </div>
+                                      </div>
+
+                                      <div style={{
+                                        border: '1px solid var(--qa-border)',
+                                        borderRadius: 8,
+                                        background: 'var(--qa-card)',
+                                        overflow: 'hidden',
+                                      }}>
+                                        {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                          const currentParams = getParamsForItem(item);
+                                          const currentReasoning = getReasoningForItem(item);
+                                          const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
+                                          return (
+                                            <ParamScoreRow
+                                              key={def.key}
+                                              name={def.name}
+                                              description={def.description}
+                                              value={currentParams[def.key] ?? 'yes'}
+                                              allowNA={def.allowNA}
+                                              weight={def.defaultWeight}
+                                              disputed={isDisputed}
+                                              reason={currentReasoning[def.key] ?? ''}
+                                              onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
+                                              onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
+                                              last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
 

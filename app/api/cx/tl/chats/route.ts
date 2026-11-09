@@ -135,12 +135,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   const disputeStatus = searchParams.get('dispute_status') || searchParams.get('disputeStatus');
+  const latestFlagStatusSql = `(SELECT f.status FROM iqs_flags f WHERE f.chat_id = c.id AND f.call_id IS NULL AND f.message_id IS NULL AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1)`;
   if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl') {
-    extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status IN ('pending', 'ir_pending_tl'))`;
+    extraWhere += ` AND ${latestFlagStatusSql} IN ('pending', 'ir_pending_tl')`;
+  } else if (disputeStatus === 'forwarded_to_qa') {
+    extraWhere += ` AND ${latestFlagStatusSql} = 'tl_forwarded'`;
+  } else if (disputeStatus === 'updated_by_qa') {
+    extraWhere += ` AND ${latestFlagStatusSql} = 'reviewed'`;
   } else if (disputeStatus === 'reviewed') {
-    extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status IN ('reviewed', 'tl_resolved'))`;
+    extraWhere += ` AND ${latestFlagStatusSql} IN ('reviewed', 'tl_resolved')`;
   } else if (disputeStatus === 'none') {
-    extraWhere += ` AND NOT EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status NOT IN ('cancelled'))`;
+    extraWhere += ` AND ${latestFlagStatusSql} IS NULL`;
   }
 
   const statusFilter = searchParams.get('status');
@@ -185,7 +190,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             c.csat_score, i.parameters,
             ct.phone AS mobile_number,
             i.reviewed_by, i.reviewed_at, c.conversation_type,
-            (SELECT f.status FROM iqs_flags f WHERE f.chat_id = c.id AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1) AS dispute_status
+            (SELECT f.status FROM iqs_flags f WHERE f.chat_id = c.id AND f.call_id IS NULL AND f.message_id IS NULL AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1) AS dispute_status
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id

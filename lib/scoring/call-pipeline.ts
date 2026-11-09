@@ -297,11 +297,11 @@ function robustJsonParse(raw: string): any {
   const block = s.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (block) s = block[1].trim();
 
-  try { return JSON.parse(s); } catch {}
+  try { return JSON.parse(s); } catch { }
 
   const oa = s.indexOf('{'), ob = s.lastIndexOf('}');
   if (oa >= 0 && ob > oa) {
-    try { return JSON.parse(s.slice(oa, ob + 1)); } catch {}
+    try { return JSON.parse(s.slice(oa, ob + 1)); } catch { }
   }
 
   const repaired = repairTruncatedJson(s);
@@ -326,8 +326,8 @@ function detectMimeType(buffer: Buffer, fallbackUrl: string): { mimeType: string
     return { mimeType: 'audio/mpeg', extension: '.mp3' };
   }
   if (buffer.length >= 12 &&
-      buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 && // RIFF
-      buffer[8] === 0x57 && buffer[9] === 0x41 && buffer[10] === 0x56 && buffer[11] === 0x45) { // WAVE
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 && // RIFF
+    buffer[8] === 0x57 && buffer[9] === 0x41 && buffer[10] === 0x56 && buffer[11] === 0x45) { // WAVE
     return { mimeType: 'audio/wav', extension: '.wav' };
   }
   if (buffer.length >= 4 && buffer[0] === 0x66 && buffer[1] === 0x4c && buffer[2] === 0x61 && buffer[3] === 0x43) { // fLaC
@@ -336,13 +336,13 @@ function detectMimeType(buffer: Buffer, fallbackUrl: string): { mimeType: string
   if (buffer.length >= 4 && buffer[0] === 0x4f && buffer[1] === 0x67 && buffer[2] === 0x67 && buffer[3] === 0x53) { // OggS
     return { mimeType: 'audio/ogg', extension: '.ogg' };
   }
-  
+
   const ext = fallbackUrl.split('.').pop()?.toLowerCase() ?? '';
   const MIME_MAP: Record<string, string> = {
-    mp3:  'audio/mpeg',
-    wav:  'audio/wav',
-    m4a:  'audio/mp4',
-    ogg:  'audio/ogg',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    m4a: 'audio/mp4',
+    ogg: 'audio/ogg',
     flac: 'audio/flac',
   };
   return { mimeType: MIME_MAP[ext] ?? 'audio/mpeg', extension: ext ? `.${ext}` : '.mp3' };
@@ -379,7 +379,7 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
     }
     return { fileUri: uploadResult.uri, mimeType, buffer };
   } finally {
-    try { await fs.unlink(tempFilePath); } catch {}
+    try { await fs.unlink(tempFilePath); } catch { }
   }
 }
 
@@ -441,11 +441,11 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     log.info('call-pipeline', `Running Pass 1 & 2 analysis on audio for call ${callId}`);
     let transcriptionSuccess = false;
     let transcriptionError: any;
-    
+
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(call.recording_url, apiKey);
-        
+
         let pyannoteUri: string | undefined = undefined;
         const pyKey = config.pyannoteApiKey || process.env.PYANNOTE_API_KEY || '';
         if (pyKey) {
@@ -478,7 +478,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
         duration = analysis.duration_seconds;
         language = analysis.detected_language;
         speakerIdConfidence = analysis.speaker_identification_confidence || 'low';
-        
+
         const intCount = segments.filter((s: any) => s.type === 'interruption').length;
         const daCount = segments.filter((s: any) => s.type === 'dead_air').length;
 
@@ -489,7 +489,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
               interruption_count = $4, dead_air_count = $5, status = 'transcribed', updated_at = NOW()
           WHERE id = $6
         `, [JSON.stringify(segments), Math.round(duration), language, intCount, daCount, callId]);
-        
+
         status = 'transcribed';
         transcriptionSuccess = true;
         transcriptionError = null;
@@ -526,7 +526,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
 
   if (isSystemOnly || isPureSilence || isJunkCall) {
     log.info('call-pipeline', `Call ${callId} marked as NOT_SCOREABLE (${isJunkCall ? 'junk call' : 'system only or pure silence'})`);
-    
+
     await query(`
       INSERT INTO call_evaluations (
         call_id, chat_id, agent_id, call_sequence_in_thread, scored_at, source,
@@ -563,7 +563,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
           from: m.sender_type || m.sender_name || 'rep',
           text: m.content || m.text || ''
         }));
-      
+
       if (chatBefore.length > 0) {
         chatContext = chatBefore;
       }
@@ -606,7 +606,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   const irTurns = speechSegments.filter((s: any) => s.speaker === 'IR_EXECUTIVE');
   const irTextCombined = irTurns.map((s: any) => s.text || '').join(' ');
   const irWordCount = irTextCombined.split(/\s+/).filter(Boolean).length;
-  
+
   // Fillers regex count (uh/um/umm/aaa/haan variants)
   const fillerRegex = /\b(uh|um|umm|aaa|haan|ah|eh|er)\b/ig;
   const fillerCount = (irTextCombined.match(fillerRegex) || []).length;
@@ -649,7 +649,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   const callDispo = call.call_disposition || (call.chat_tags as any)?.disposition || '';
   const callSubDispo = call.call_sub_disposition || (call.chat_tags as any)?.sub_disposition || '';
   const callTextCombined = speechSegments.map((s: any) => `[${s.speaker}]: ${s.text || ''}`).join('\n');
-  
+
   try {
     kbContext = await getKbContextForScoring(callDispo, callSubDispo, callTextCombined, config, false);
   } catch (err: any) {
@@ -744,7 +744,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
 
   // ── Stage 5: Compute + Persist ─────────────────────────────────────────────
   log.info('call-pipeline', `Persisting results for call ${callId}`);
-  
+
   const gateVerdict = gatesResult.call_gate_result || 'PASS';
   const { iqs_percent, applicable_weight } = computeCallIQS(scoresResult.scores || {});
   const finalVer = finalVerdict(gateVerdict, iqs_percent);

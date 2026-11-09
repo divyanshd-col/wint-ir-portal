@@ -135,6 +135,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     try {
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       const params = new URLSearchParams({ disputeQueue: queue, from, to, limit: '500' });
+      if (outcomeFilter) params.set('disputeStatus', outcomeFilter);
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
       if (data.ok) setRows(data.items || []);
@@ -143,11 +144,11 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     } finally {
       setLoading(false);
     }
-  }, [queue, period]);
+  }, [queue, period, outcomeFilter]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    fetch('/api/cx/tl/topics').then(r => r.json()).then(d => setTopics(d.topics || [])).catch(() => {});
+    fetch('/api/cx/tl/topics').then(r => r.json()).then(d => setTopics(d.topics || [])).catch(() => { });
   }, []);
   // Only needed when the email has no topic a QA owns; an existing matching intent routes it already.
   const needsTopic = (item: EvaluationItem) =>
@@ -197,8 +198,12 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     (!ticketSearch.trim() || String(r.chat_id ?? r.ticket_id ?? '').toLowerCase().includes(ticketSearch.trim().toLowerCase())) &&
     (!agentFilter || r.agent_name === agentFilter) &&
     (!outcomeFilter ||
-      (outcomeFilter === 'Raised' ? (r.dispute_status === 'Raised' || !r.dispute_status) :
-       outcomeFilter === 'Resolved' ? (r.dispute_status === 'Resolved' || r.dispute_status === 'TL_Resolved') :
+      (outcomeFilter === 'Raised' || outcomeFilter === 'forwarded_to_tl' ? (r.dispute_status === 'Raised' || !r.dispute_status) :
+       outcomeFilter === 'forwarded_to_qa' || outcomeFilter === 'Under_Review' ? (r.dispute_status === 'Under_Review') :
+       outcomeFilter === 'updated_by_qa' ? (r.dispute_status === 'Resolved' || r.dispute_status === 'Rejected') :
+       outcomeFilter === 'TL_Resolved' ? (r.dispute_status === 'TL_Resolved') :
+       outcomeFilter === 'Resolved' ? (r.dispute_status === 'Resolved') :
+       outcomeFilter === 'Rejected' ? (r.dispute_status === 'Rejected') :
        r.dispute_status === outcomeFilter))
   );
   const [sort, toggleSort] = useSort();
@@ -310,17 +315,13 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
             {agentsInRows.map(a => <option key={a} value={a}>{a}</option>)}
           </UISelect>
         )}
-        {pending ? (
-          <UISelect value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
-            <option value="">All Dispute Statuses</option>
-            <option value="Raised">Forwarded to TL (Pending Review)</option>
-          </UISelect>
-        ) : (
+        {!pending && (
           <UISelect value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
             <option value="">All Outcomes</option>
-            <option value="Resolved">Reviewed</option>
-            <option value="TL_Resolved">Reviewed by TL</option>
-            <option value="Under_Review">Forwarded to QA</option>
+            <option value="forwarded_to_qa">Forwarded to QA</option>
+            <option value="updated_by_qa">Updated by QA</option>
+            <option value="TL_Resolved">Resolved by TL</option>
+            <option value="Resolved">Resolved by QA</option>
             <option value="Rejected">Rejected by QA</option>
           </UISelect>
         )}
@@ -450,70 +451,70 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                         )}
                       </div>
                       <div style={{ margin: '16px 20px', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden', background: 'var(--qa-card)' }}>
-                      <EmailSplit
-                        conversation={<>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                          {/* 1. Customer Core Query (Separate & prominent) */}
-                          <CustomerCoreQueryCard
-                            threadSummary={item.thread_summary}
-                            customerMessage={item.customer_message}
-                            subjectLine={item.subject_line}
-                            customerEmail={item.customer_email}
-                            parameterScores={item.parameter_scores}
-                          />
-
-                          {/* 2. Customer Inbound Email Thread */}
-                          {item.customer_message && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                  Customer Inbound Email Thread
-                                </div>
-                                {item.customer_email && (
-                                  <span
-                                    style={{
-                                      fontSize: 11,
-                                      color: '#1d4ed8',
-                                      background: '#eff6ff',
-                                      border: '1px solid #bfdbfe',
-                                      padding: '1px 7px',
-                                      borderRadius: 4,
-                                      fontWeight: 500,
-                                      fontFamily: MONO,
-                                    }}
-                                    title={`User Email: ${item.customer_email}`}
-                                  >
-                                    {item.customer_email}
-                                  </span>
-                                )}
-                              </div>
-                              <CustomerEmailThreadCard
+                        <EmailSplit
+                          conversation={<>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                              {/* 1. Customer Core Query (Separate & prominent) */}
+                              <CustomerCoreQueryCard
+                                threadSummary={item.thread_summary}
                                 customerMessage={item.customer_message}
                                 subjectLine={item.subject_line}
                                 customerEmail={item.customer_email}
+                                parameterScores={item.parameter_scores}
                               />
-                            </div>
-                          )}
 
-                          {/* Internal Working Notes (highlighted amber, matching chat style) */}
-                          {item.internal_notes && item.internal_notes.length > 0 && (
-                            <InternalNotesBlock notes={item.internal_notes} />
-                          )}
-                        </div>
-                        </>}
-                        scoring={<>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                              Agent Outbound Response
+                              {/* 2. Customer Inbound Email Thread */}
+                              {item.customer_message && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                      Customer Inbound Email Thread
+                                    </div>
+                                    {item.customer_email && (
+                                      <span
+                                        style={{
+                                          fontSize: 11,
+                                          color: '#1d4ed8',
+                                          background: '#eff6ff',
+                                          border: '1px solid #bfdbfe',
+                                          padding: '1px 7px',
+                                          borderRadius: 4,
+                                          fontWeight: 500,
+                                          fontFamily: MONO,
+                                        }}
+                                        title={`User Email: ${item.customer_email}`}
+                                      >
+                                        {item.customer_email}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <CustomerEmailThreadCard
+                                    customerMessage={item.customer_message}
+                                    subjectLine={item.subject_line}
+                                    customerEmail={item.customer_email}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                              {item.internal_notes && item.internal_notes.length > 0 && (
+                                <InternalNotesBlock notes={item.internal_notes} />
+                              )}
                             </div>
-                            <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '12px 16px', maxHeight: 420, overflowY: 'auto' }}>
-                              <EmailMessageView content={item.agent_reply_text} fallback="No text content." />
+                          </>}
+                          scoring={<>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                                  Agent Outbound Response
+                                </div>
+                                <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '12px 16px', maxHeight: 420, overflowY: 'auto' }}>
+                                  <EmailMessageView content={item.agent_reply_text} fallback="No text content." />
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                        </>}
-                      />
+                          </>}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -540,6 +541,7 @@ export default function TLEmailQualityPage() {
   const [counts, setCounts] = useState<{ evaluated: number; raised: number; reviewed: number } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
+  const [disputeFilter, setDisputeFilter] = useState<string>('');
 
   // Raise Dispute state for TL
   const [disputingId, setDisputingId] = useState<string | null>(null);
@@ -633,6 +635,7 @@ export default function TLEmailQualityPage() {
     try {
       const params = new URLSearchParams();
       if (selectedAgent) params.set('agentName', selectedAgent);
+      if (disputeFilter) params.set('disputeStatus', disputeFilter);
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       params.set('from', from);
       params.set('to', to);
@@ -655,7 +658,7 @@ export default function TLEmailQualityPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAgent, period]);
+  }, [selectedAgent, period, disputeFilter]);
 
   useEffect(() => {
     fetchData();
@@ -668,13 +671,16 @@ export default function TLEmailQualityPage() {
     : 0;
 
   const [sortR, toggleSortR] = useSort();
-  const [disputeFilter, setDisputeFilter] = useState('');
   const filteredReplies = replies.filter(r => {
     if (disputeFilter) {
       if (disputeFilter === 'forwarded_to_tl') {
         if (r.dispute_status !== 'Raised') return false;
+      } else if (disputeFilter === 'forwarded_to_qa') {
+        if (r.dispute_status !== 'Under_Review') return false;
+      } else if (disputeFilter === 'updated_by_qa') {
+        if (r.dispute_status !== 'Resolved' && r.dispute_status !== 'Rejected') return false;
       } else if (disputeFilter === 'reviewed') {
-        if (r.dispute_status !== 'Resolved' && r.dispute_status !== 'TL_Resolved') return false;
+        if (r.dispute_status !== 'Resolved' && r.dispute_status !== 'TL_Resolved' && r.dispute_status !== 'Rejected') return false;
       } else if (disputeFilter === 'none') {
         if (r.dispute_status && r.dispute_status !== 'None') return false;
       }
@@ -701,809 +707,801 @@ export default function TLEmailQualityPage() {
 
       {/* ── Tabs (left) + period filter (right), same slot as the chat/call pages ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 16 }}>
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0 }}>
-        {([
-          ['evaluated', 'Evaluated Emails', counts?.evaluated],
-          ['raised', 'Disputes Raised', counts?.raised],
-          ['reviewed', 'Reviewed Disputes', counts?.reviewed],
-        ] as const).map(([key, label, n]) => {
-          const active = tab === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              style={{
-                height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
-                background: 'transparent',
-                color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
-                borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
-                fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 600 : 500,
-                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-              }}
-            >
-              {label}
-              {n != null && (key === 'evaluated' || n > 0 || key === 'reviewed') && (
-                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px', background: active ? 'var(--ink)' : 'var(--qa-fill-light)', color: active ? 'var(--ink-fg)' : 'var(--qa-text-2)' }}>{n}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0 }}>
+          {([
+            ['evaluated', 'Evaluated Emails', counts?.evaluated],
+            ['raised', 'Disputes Raised', counts?.raised],
+            ['reviewed', 'Reviewed Disputes', counts?.reviewed],
+          ] as const).map(([key, label, n]) => {
+            const active = tab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                style={{
+                  height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
+                  background: 'transparent',
+                  color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+                  borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
+                  fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 600 : 500,
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {label}
+                {n != null && (key === 'evaluated' || n > 0 || key === 'reviewed') && (
+                  <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px', background: active ? 'var(--ink)' : 'var(--qa-fill-light)', color: active ? 'var(--ink-fg)' : 'var(--qa-text-2)' }}>{n}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {tab === 'raised' && <EmailDisputesSection queue="tl_pending" period={period} onPeriod={setPeriod} onChanged={fetchData} />}
       {tab === 'reviewed' && <EmailDisputesSection queue="tl_history" period={period} onPeriod={setPeriod} onChanged={fetchData} />}
 
       {tab === 'evaluated' && (
-      <>
-      {/* ── KPI Cards (Consistent with QAAnalyticsDashboard / IQSRingCard) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
-        <div style={{
-          background: 'var(--qa-card)',
-          border: '1px solid var(--qa-border)',
-          borderRadius: 8,
-          padding: 20,
-        }}>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-            Team Avg Quality
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--qa-text)', marginTop: 6, fontFamily: MONO }}>
-            {teamAvgScore ? `${teamAvgScore}%` : 'N/A'}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 4 }}>
-            Overall team score
-          </div>
-        </div>
+        <>
+          {/* ── KPI Cards (Consistent with QAAnalyticsDashboard / IQSRingCard) ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+            <div style={{
+              background: 'var(--qa-card)',
+              border: '1px solid var(--qa-border)',
+              borderRadius: 8,
+              padding: 20,
+            }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                Team Avg Quality
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--qa-text)', marginTop: 6, fontFamily: MONO }}>
+                {teamAvgScore ? `${teamAvgScore}%` : 'N/A'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 4 }}>
+                Overall team score
+              </div>
+            </div>
 
-        <div style={{
-          background: 'var(--qa-card)',
-          border: '1px solid var(--qa-border)',
-          borderRadius: 8,
-          padding: 20,
-        }}>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-            Evaluated Replies
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--qa-text)', marginTop: 6, fontFamily: MONO }}>
-            {teamTotalReplies}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 4 }}>
-            Outbound email responses
-          </div>
-        </div>
+            <div style={{
+              background: 'var(--qa-card)',
+              border: '1px solid var(--qa-border)',
+              borderRadius: 8,
+              padding: 20,
+            }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                Evaluated Replies
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--qa-text)', marginTop: 6, fontFamily: MONO }}>
+                {teamTotalReplies}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 4 }}>
+                Outbound email responses
+              </div>
+            </div>
 
-        <div style={{
-          background: 'var(--qa-card)',
-          border: '1px solid var(--qa-border)',
-          borderRadius: 8,
-          padding: 20,
-        }}>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-            Compliance Breaches
+            <div style={{
+              background: 'var(--qa-card)',
+              border: '1px solid var(--qa-border)',
+              borderRadius: 8,
+              padding: 20,
+            }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                Compliance Breaches
+              </div>
+              <div style={{
+                fontSize: 26, fontWeight: 700, marginTop: 6, fontFamily: MONO,
+                color: teamTotalErrors > 0 ? '#b91c1c' : 'var(--qa-text)',
+              }}>
+                {teamTotalErrors}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 4 }}>
+                Policy or financial errors
+              </div>
+            </div>
+
+            <div style={{
+              background: 'var(--qa-card)',
+              border: '1px solid var(--qa-border)',
+              borderRadius: 8,
+              padding: 20,
+            }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                Active Agents
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--accent)', marginTop: 6, fontFamily: MONO }}>
+                {agents.length}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 4 }}>
+                Handling customer emails
+              </div>
+            </div>
           </div>
+
+          {/* ── Member-Level Quality Performance Table ── */}
           <div style={{
-            fontSize: 26, fontWeight: 700, marginTop: 6, fontFamily: MONO,
-            color: teamTotalErrors > 0 ? '#b91c1c' : 'var(--qa-text)',
+            background: 'var(--qa-card)',
+            border: '1px solid var(--qa-border)',
+            borderRadius: 8,
+            overflow: 'hidden',
+            marginBottom: 24,
           }}>
-            {teamTotalErrors}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 4 }}>
-            Policy or financial errors
-          </div>
-        </div>
-
-        <div style={{
-          background: 'var(--qa-card)',
-          border: '1px solid var(--qa-border)',
-          borderRadius: 8,
-          padding: 20,
-        }}>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-            Active Agents
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--accent)', marginTop: 6, fontFamily: MONO }}>
-            {agents.length}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 4 }}>
-            Handling customer emails
-          </div>
-        </div>
-      </div>
-
-      {/* ── Member-Level Quality Performance Table ── */}
-      <div style={{
-        background: 'var(--qa-card)',
-        border: '1px solid var(--qa-border)',
-        borderRadius: 8,
-        overflow: 'hidden',
-        marginBottom: 24,
-      }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--qa-border-sub)' }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
-            Member-Level Quality Performance
-          </div>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <colgroup>
-              <col style={{ width: 220 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 150 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 130 }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th style={th}>Agent Name</th>
-                <th style={{ ...th, textAlign: 'right' }}>Replies</th>
-                <th style={{ ...th, textAlign: 'right' }}>Avg Score</th>
-                <th style={{ ...th, textAlign: 'right' }}>Disputes</th>
-                <th style={{ ...th, textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {agents.map((agent) => {
-                const score = agent.avg_score || 0;
-                const isSelected = selectedAgent === agent.agent_name;
-
-                return (
-                  <tr
-                    key={agent.agent_name}
-                    style={{ background: isSelected ? 'var(--qa-gray-50)' : undefined }}
-                  >
-                    <td style={{ ...td, fontWeight: 600 }}>
-                      {agent.agent_name}
-                    </td>
-                    <td style={tdNum}>
-                      {agent.total_replies}
-                    </td>
-                    <td style={tdNum}>
-                      <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>{score}%</span>
-                    </td>
-                    <td style={tdNum}>
-                      {agent.disputes_raised}
-                    </td>
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      <button
-                        onClick={() => setSelectedAgent(isSelected ? '' : agent.agent_name)}
-                        style={{
-                          height: 28, padding: '0 10px', borderRadius: 6,
-                          border: '1px solid var(--qa-border)',
-                          background: isSelected ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                          color: isSelected ? '#fff' : 'var(--qa-text)',
-                          fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                        }}
-                      >
-                        {isSelected ? 'Clear' : 'Filter'}
-                      </button>
-                    </td>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--qa-border-sub)' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
+                Member-Level Quality Performance
+              </div>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: 220 }} />
+                  <col style={{ width: 140 }} />
+                  <col style={{ width: 150 }} />
+                  <col style={{ width: 140 }} />
+                  <col style={{ width: 130 }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={th}>Agent Name</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Replies</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Avg Score</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Disputes</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Action</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody>
+                  {agents.map((agent) => {
+                    const score = agent.avg_score || 0;
+                    const isSelected = selectedAgent === agent.agent_name;
 
-      {/* ── Evaluated Replies Feed (with Page 6 filters) ── */}
-      <div style={{
-        background: 'var(--qa-card)',
-        border: '1px solid var(--qa-border)',
-        borderRadius: 8,
-      }}>
-        {/* Filter bar, same slots as the chat tables: filters left, count + rows per page right */}
-        <div className="qfilters">
-          <UISelect
-            value={selectedAgent}
-            onChange={e => setSelectedAgent(e.target.value)}
-            style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: selectedAgent ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
-          >
-            <option value="">All Agents</option>
-            {(availableAgents.length > 0 ? availableAgents : agents.map(a => a.agent_name)).map(name => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </UISelect>
-          <PeriodRangeChip value={period} onChange={setPeriod} />
-          <UISelect
-            value={disputeFilter}
-            onChange={e => setDisputeFilter(e.target.value)}
-            style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: disputeFilter ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
-          >
-            <option value="">All Dispute Statuses</option>
-            <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
-            <option value="reviewed">Reviewed Disputes</option>
-            <option value="none">No Dispute</option>
-          </UISelect>
-          <button type="button" className="qf-chip" disabled={!(selectedAgent || disputeFilter || period.period !== 'all')} onClick={() => { setSelectedAgent(''); setDisputeFilter(''); setPeriod(DEFAULT_PERIOD); }}>
-              Reset Filters
-            </button>
-          <div style={{ flex: 1 }} />
-          <ShowingCount shown={paging.pageItems.length} total={paging.total} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
-        </div>
-
-        {/* Replies Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <colgroup>
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '13%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '11%' }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th style={th}>Ticket ID</th>
-                <SortTh k="date" sort={sortR} onSort={toggleSortR} style={th}>Date & Time</SortTh>
-                <SortTh k="agent" sort={sortR} onSort={toggleSortR} style={th}>Agent</SortTh>
-                <SortTh k="intent" sort={sortR} onSort={toggleSortR} style={th}>Intent</SortTh>
-                <SortTh k="iqs" sort={sortR} onSort={toggleSortR} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
-                <th style={th}>CSAT</th>
-                <SortTh k="dispute" sort={sortR} onSort={toggleSortR} style={th}>Dispute</SortTh>
-                <th style={{ ...th, textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
-                    Loading team email replies…
-                  </td>
-                </tr>
-              ) : paging.pageItems.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
-                    No replies matching selected filters
-                  </td>
-                </tr>
-              ) : (
-                paging.pageItems.map((reply) => {
-                  const isExpanded = expandedId === reply.message_id;
-                  const score = reply.effective_score ?? reply.quality_score;
-                  return (
-                    <React.Fragment key={reply.message_id}>
+                    return (
                       <tr
-                        onClick={() => setExpandedId(isExpanded ? null : reply.message_id)}
-                        style={{
-                          background: isExpanded ? 'var(--accent-weak)' : undefined,
-                          cursor: 'pointer',
-                        }}
-                        onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
-                        onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
+                        key={agent.agent_name}
+                        style={{ background: isSelected ? 'var(--qa-gray-50)' : undefined }}
                       >
-                        <td style={tdMono}>
-                          <TicketLinkButton id={reply.chat_id ?? reply.ticket_id} label={reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`} />
-                          {reply.dispute_status === 'Raised' && (
-                            <span style={{ display: 'block', fontSize: 10, color: '#b45309', fontWeight: 600, marginTop: 2 }}>
-                              Pending TL Review
-                            </span>
-                          )}
-                          {(reply.dispute_status === 'Resolved' || reply.dispute_status === 'TL_Resolved') && (
-                            <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
-                              Reviewed
-                            </span>
-                          )}
+                        <td style={{ ...td, fontWeight: 600 }}>
+                          {agent.agent_name}
                         </td>
-                        {(() => {
-                          const dt = formatEmailDateTime(reply.sent_at);
-                          return (
-                            <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                              <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
-                              {dt.time && (
-                                <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
-                                  {dt.time}
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })()}
-                        <td style={{ ...td, fontWeight: 500 }}>
-                          {reply.agent_name || 'Unassigned'}
+                        <td style={tdNum}>
+                          {agent.total_replies}
                         </td>
-                        <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {intentLabel(reply.intent_l1)}
+                        <td style={tdNum}>
+                          <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>{score}%</span>
                         </td>
-                        <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
-                          {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
-                        </td>
-                        <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
-                        <td style={{ ...td, fontSize: 13 }}>
-                          {reply.dispute_status && reply.dispute_status !== 'None' ? (
-                            disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)
-                          ) : (
-                            <span style={{ color: 'var(--qa-text-3)' }}>—</span>
-                          )}
+                        <td style={tdNum}>
+                          {agent.disputes_raised}
                         </td>
                         <td style={{ ...td, textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
-                            {isExpanded ? 'Hide ▲' : 'View ▼'}
-                          </span>
+                          <button
+                            onClick={() => setSelectedAgent(isSelected ? '' : agent.agent_name)}
+                            style={{
+                              height: 28, padding: '0 10px', borderRadius: 6,
+                              border: '1px solid var(--qa-border)',
+                              background: isSelected ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                              color: isSelected ? '#fff' : 'var(--qa-text)',
+                              fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                            }}
+                          >
+                            {isSelected ? 'Clear' : 'Filter'}
+                          </button>
                         </td>
                       </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-                      {isExpanded && (
-                        <tr className="eval-panel-row">
-                          <td colSpan={8} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
-                            <EmailSplit
-                              conversation={<>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                                <div>
-                                  {/* 1. Customer Core Query (Separate & prominent) */}
-                                  <CustomerCoreQueryCard
-                                    threadSummary={reply.thread_summary}
-                                    customerMessage={reply.customer_message}
-                                    subjectLine={reply.subject_line}
-                                    customerEmail={reply.customer_email}
-                                    parameterScores={reply.parameter_scores}
-                                  />
+          {/* ── Evaluated Replies Feed (with Page 6 filters) ── */}
+          <div style={{
+            background: 'var(--qa-card)',
+            border: '1px solid var(--qa-border)',
+            borderRadius: 8,
+          }}>
+            {/* Filter bar, same slots as the chat tables: filters left, count + rows per page right */}
+            <div className="qfilters">
+              <UISelect
+                value={selectedAgent}
+                onChange={e => setSelectedAgent(e.target.value)}
+                style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: selectedAgent ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="">All Agents</option>
+                {(availableAgents.length > 0 ? availableAgents : agents.map(a => a.agent_name)).map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </UISelect>
+              <PeriodRangeChip value={period} onChange={setPeriod} />
+              <UISelect
+                value={disputeFilter}
+                onChange={e => setDisputeFilter(e.target.value)}
+                style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: disputeFilter ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="">All Dispute Statuses</option>
+                <option value="forwarded_to_qa">Forwarded to QA</option>
+                <option value="updated_by_qa">Updated by QA</option>
+                <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+                <option value="reviewed">Reviewed Disputes</option>
+                <option value="none">No Dispute</option>
+              </UISelect>
+              <button type="button" className="qf-chip" disabled={!(selectedAgent || disputeFilter || period.period !== 'all')} onClick={() => { setSelectedAgent(''); setDisputeFilter(''); setPeriod(DEFAULT_PERIOD); }}>
+                Reset Filters
+              </button>
+              <div style={{ flex: 1 }} />
+              <ShowingCount shown={paging.pageItems.length} total={paging.total} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
+            </div>
 
-                                  {/* 2. Customer Inbound Email Thread */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                          Customer Inbound Email Thread
-                                        </div>
-                                        {reply.customer_email && (
-                                          <span
-                                            style={{
-                                              fontSize: 11,
-                                              color: '#1d4ed8',
-                                              background: '#eff6ff',
-                                              border: '1px solid #bfdbfe',
-                                              padding: '1px 7px',
-                                              borderRadius: 4,
-                                              fontWeight: 500,
-                                              fontFamily: MONO,
-                                            }}
-                                            title={`User Email: ${reply.customer_email}`}
-                                          >
-                                            {reply.customer_email}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: !prev[reply.message_id] }))}
-                                        style={{
-                                          height: 26,
-                                          padding: '0 10px',
-                                          borderRadius: 6,
-                                          fontSize: 11,
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          border: '1px solid var(--qa-border)',
-                                          background: historyOpen[reply.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                          color: historyOpen[reply.message_id] ? '#fff' : 'var(--qa-text-2)',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 5,
-                                          transition: 'all 0.15s',
-                                        }}
-                                      >
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <circle cx="12" cy="12" r="10" />
-                                          <polyline points="12 6 12 12 16 14" />
-                                        </svg>
-                                        {historyOpen[reply.message_id] ? 'Hide History' : 'History'}
-                                      </button>
-                                    </div>
-
-                                    {historyOpen[reply.message_id] && (
-                                      <EmailHistoryPanel
-                                        customerEmail={reply.customer_email}
-                                        chatId={reply.chat_id}
-                                        ticketId={reply.ticket_id}
-                                        currentMessageId={reply.message_id}
-                                        onClose={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: false }))}
-                                      />
-                                    )}
-
-                                    <CustomerEmailThreadCard
-                                      customerMessage={reply.customer_message}
-                                      subjectLine={reply.subject_line}
-                                      customerEmail={reply.customer_email}
-                                    />
-                                  </div>
-
-                                  {/* Internal Working Notes (highlighted amber, matching chat style) */}
-                                  {reply.internal_notes && reply.internal_notes.length > 0 && (
-                                    <InternalNotesBlock notes={reply.internal_notes} />
-                                  )}
-                                </div>
-
-                                <div>
-                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                                    Agent Outbound Response
-                                  </div>
-                                  <div style={{
-                                    background: 'var(--qa-card)',
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    padding: '12px 16px',
-                                    maxHeight: 420,
-                                    overflowY: 'auto',
-                                  }}>
-                                    <EmailMessageView
-                                      content={reply.agent_reply_text}
-                                      fallback="No text content."
-                                    />
-                                  </div>
-                                </div>
-
-                                {/* ── Dispute Section (TL) ── */}
-                                <div style={{
-                                  border: '1px solid var(--qa-border)',
-                                  borderRadius: 8,
-                                  background: 'var(--qa-card)',
-                                  overflow: 'hidden',
-                                }}>
-                                  {disputeSuccessMsg && disputingId === null && expandedId === reply.message_id && (
-                                    <div
-                                      style={{
-                                        padding: '10px 14px',
-                                        fontSize: 12,
-                                        color: '#166534',
-                                        background: '#f0fdf4',
-                                        borderBottom: '1px solid #bbf7d0',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 6,
-                                      }}
-                                    >
-                                      ✓ {disputeSuccessMsg}
+            {/* Replies Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '11%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={th}>Ticket ID</th>
+                    <SortTh k="date" sort={sortR} onSort={toggleSortR} style={th}>Date & Time</SortTh>
+                    <SortTh k="agent" sort={sortR} onSort={toggleSortR} style={th}>Agent</SortTh>
+                    <SortTh k="intent" sort={sortR} onSort={toggleSortR} style={th}>Intent</SortTh>
+                    <SortTh k="iqs" sort={sortR} onSort={toggleSortR} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
+                    <th style={th}>CSAT</th>
+                    <SortTh k="dispute" sort={sortR} onSort={toggleSortR} style={th}>Dispute</SortTh>
+                    <th style={{ ...th, textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                        Loading team email replies…
+                      </td>
+                    </tr>
+                  ) : paging.pageItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                        No replies matching selected filters
+                      </td>
+                    </tr>
+                  ) : (
+                    paging.pageItems.map((reply) => {
+                      const isExpanded = expandedId === reply.message_id;
+                      const score = reply.effective_score ?? reply.quality_score;
+                      return (
+                        <React.Fragment key={reply.message_id}>
+                          <tr
+                            onClick={() => setExpandedId(isExpanded ? null : reply.message_id)}
+                            style={{
+                              background: isExpanded ? 'var(--accent-weak)' : undefined,
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
+                            onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
+                          >
+                            <td style={tdMono}>
+                              <TicketLinkButton id={reply.chat_id ?? reply.ticket_id} label={reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`} />
+                            </td>
+                            {(() => {
+                              const dt = formatEmailDateTime(reply.sent_at);
+                              return (
+                                <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                                  <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
+                                  {dt.time && (
+                                    <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
+                                      {dt.time}
                                     </div>
                                   )}
+                                </td>
+                              );
+                            })()}
+                            <td style={{ ...td, fontWeight: 500 }}>
+                              {reply.agent_name || 'Unassigned'}
+                            </td>
+                            <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {intentLabel(reply.intent_l1)}
+                            </td>
+                            <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
+                              {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                            </td>
+                            <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
+                            <td style={{ ...td, fontSize: 13 }}>
+                              {reply.dispute_status && reply.dispute_status !== 'None' ? (
+                                disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)
+                              ) : (
+                                <span style={{ color: 'var(--qa-text-3)' }}>—</span>
+                              )}
+                            </td>
+                            <td style={{ ...td, textAlign: 'right' }}>
+                              <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
+                                {isExpanded ? 'Hide ▲' : 'View ▼'}
+                              </span>
+                            </td>
+                          </tr>
 
-                                  {disputeError && disputingId === reply.message_id && (
-                                    <div
-                                      style={{
-                                        padding: '10px 14px',
-                                        fontSize: 12,
-                                        color: '#b91c1c',
-                                        background: '#fef2f2',
-                                        borderBottom: '1px solid #fecaca',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 6,
-                                      }}
-                                    >
-                                      ✕ {disputeError}
-                                    </div>
-                                  )}
+                          {isExpanded && (
+                            <tr className="eval-panel-row">
+                              <td colSpan={8} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
+                                <EmailSplit
+                                  conversation={<>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                      <div>
+                                        {/* 1. Customer Core Query (Separate & prominent) */}
+                                        <CustomerCoreQueryCard
+                                          threadSummary={reply.thread_summary}
+                                          customerMessage={reply.customer_message}
+                                          subjectLine={reply.subject_line}
+                                          customerEmail={reply.customer_email}
+                                          parameterScores={reply.parameter_scores}
+                                        />
 
-                                  {reply.dispute_status && reply.dispute_status !== 'None' ? (
-                                    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                                      <div
-                                        style={{
-                                          background: reply.dispute_status === 'Resolved' ? '#f0fdf4' : (reply.dispute_status === 'Rejected' ? '#fef2f2' : 'var(--qa-fill-light)'),
-                                          border: `1px solid ${reply.dispute_status === 'Resolved' ? '#bbf7d0' : (reply.dispute_status === 'Rejected' ? '#fecaca' : 'var(--qa-border)')}`,
-                                          borderRadius: 8,
-                                          padding: '12px 14px',
-                                          fontSize: 12,
-                                          color: reply.dispute_status === 'Resolved' ? '#166534' : (reply.dispute_status === 'Rejected' ? '#991b1b' : 'var(--qa-text)'),
-                                        }}
-                                      >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                                          <div style={{ fontWeight: 600, fontSize: 13 }}>
-                                            Dispute Status: {disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)}
-                                          </div>
-                                        </div>
-
-                                        {reply.challenged_params && reply.challenged_params.length > 0 && (
-                                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 6px' }}>
-                                            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--qa-text-2)' }}>
-                                              Challenged:
-                                            </span>
-                                            {reply.challenged_params.map(cp => {
-                                              const paramDef = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
-                                              return (
+                                        {/* 2. Customer Inbound Email Thread */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                                Customer Inbound Email Thread
+                                              </div>
+                                              {reply.customer_email && (
                                                 <span
-                                                  key={cp.param}
-                                                  title={cp.note}
                                                   style={{
-                                                    fontSize: 11, fontWeight: 600,
-                                                    background: 'var(--qa-card)',
-                                                    border: '1px solid var(--qa-border)',
+                                                    fontSize: 11,
+                                                    color: '#1d4ed8',
+                                                    background: '#eff6ff',
+                                                    border: '1px solid #bfdbfe',
+                                                    padding: '1px 7px',
                                                     borderRadius: 4,
-                                                    padding: '2px 8px',
-                                                    color: 'var(--qa-text)',
+                                                    fontWeight: 500,
+                                                    fontFamily: MONO,
                                                   }}
+                                                  title={`User Email: ${reply.customer_email}`}
                                                 >
-                                                  {paramDef?.name || cp.param}
+                                                  {reply.customer_email}
                                                 </span>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-
-                                        {reply.dispute_notes && (
-                                          <div style={{ marginTop: 4, lineHeight: 1.4, color: 'var(--qa-text-2)' }}>
-                                            &ldquo;{reply.dispute_notes}&rdquo;
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {/* Integrated Dispute Discussion Thread */}
-                                      <DisputeThread
-                                        flagId={reply.flag_id || reply.message_id}
-                                        agentNote={reply.dispute_notes}
-                                        agentName={reply.agent_name}
-                                        raisedByRole={reply.raised_by_role || (reply.dispute_status === 'Under_Review' ? 'tl' : 'agent')}
-                                        raisedByName={reply.flag_author_name || (reply.raised_by_role === 'tl' ? (session?.user?.name || 'Team Lead') : reply.agent_name)}
-                                        reviewedBy={reply.reviewed_by}
-                                        qaName={(reply as any).qa_name || reply.reviewed_by}
-                                        reviewerRole={reply.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
-                                        flaggedAt={reply.sent_at}
-                                        reviewedAt={reply.reviewed_at}
-                                        compact
-                                      />
-                                    </div>
-                                  ) : disputingId === reply.message_id ? (
-                                    <div style={{ padding: 16 }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                                          Raise Dispute to QA
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={cancelDisputeComposition}
-                                          style={{ fontSize: 12, color: 'var(--qa-text-2)', background: 'none', border: 'none', cursor: 'pointer' }}
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 8 }}>
-                                        Select the parameter(s) you wish to challenge:
-                                      </div>
-
-                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6, marginBottom: 12 }}>
-                                        {DEFAULT_EMAIL_PARAMETERS.map(param => {
-                                          const isSelected = selectedParams.has(param.key);
-                                          return (
-                                            <label
-                                              key={param.key}
+                                              )}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: !prev[reply.message_id] }))}
                                               style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 8,
-                                                padding: '6px 10px',
+                                                height: 26,
+                                                padding: '0 10px',
                                                 borderRadius: 6,
-                                                border: `1px solid ${isSelected ? 'var(--marker, #111111)' : 'var(--qa-border)'}`,
-                                                background: isSelected ? 'var(--qa-fill-light)' : 'var(--qa-card)',
+                                                fontSize: 11,
+                                                fontWeight: 600,
                                                 cursor: 'pointer',
-                                                fontSize: 12,
-                                                fontWeight: 500,
-                                                color: 'var(--qa-text)',
+                                                border: '1px solid var(--qa-border)',
+                                                background: historyOpen[reply.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                                                color: historyOpen[reply.message_id] ? '#fff' : 'var(--qa-text-2)',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: 5,
+                                                transition: 'all 0.15s',
                                               }}
                                             >
-                                              <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() => toggleParamPick(param.key)}
-                                                style={{ cursor: 'pointer' }}
-                                              />
-                                              {param.name}
-                                            </label>
+                                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <circle cx="12" cy="12" r="10" />
+                                                <polyline points="12 6 12 12 16 14" />
+                                              </svg>
+                                              {historyOpen[reply.message_id] ? 'Hide History' : 'History'}
+                                            </button>
+                                          </div>
+
+                                          {historyOpen[reply.message_id] && (
+                                            <EmailHistoryPanel
+                                              customerEmail={reply.customer_email}
+                                              chatId={reply.chat_id}
+                                              ticketId={reply.ticket_id}
+                                              currentMessageId={reply.message_id}
+                                              onClose={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: false }))}
+                                            />
+                                          )}
+
+                                          <CustomerEmailThreadCard
+                                            customerMessage={reply.customer_message}
+                                            subjectLine={reply.subject_line}
+                                            customerEmail={reply.customer_email}
+                                          />
+                                        </div>
+
+                                        {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                                        {reply.internal_notes && reply.internal_notes.length > 0 && (
+                                          <InternalNotesBlock notes={reply.internal_notes} />
+                                        )}
+                                      </div>
+
+                                      <div>
+                                        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                                          Agent Outbound Response
+                                        </div>
+                                        <div style={{
+                                          background: 'var(--qa-card)',
+                                          border: '1px solid var(--qa-border)',
+                                          borderRadius: 8,
+                                          padding: '12px 16px',
+                                          maxHeight: 420,
+                                          overflowY: 'auto',
+                                        }}>
+                                          <EmailMessageView
+                                            content={reply.agent_reply_text}
+                                            fallback="No text content."
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {/* ── Dispute Section (TL) ── */}
+                                      <div style={{
+                                        border: '1px solid var(--qa-border)',
+                                        borderRadius: 8,
+                                        background: 'var(--qa-card)',
+                                        overflow: 'hidden',
+                                      }}>
+                                        {disputeSuccessMsg && disputingId === null && expandedId === reply.message_id && (
+                                          <div
+                                            style={{
+                                              padding: '10px 14px',
+                                              fontSize: 12,
+                                              color: '#166534',
+                                              background: '#f0fdf4',
+                                              borderBottom: '1px solid #bbf7d0',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: 6,
+                                            }}
+                                          >
+                                            ✓ {disputeSuccessMsg}
+                                          </div>
+                                        )}
+
+                                        {disputeError && disputingId === reply.message_id && (
+                                          <div
+                                            style={{
+                                              padding: '10px 14px',
+                                              fontSize: 12,
+                                              color: '#b91c1c',
+                                              background: '#fef2f2',
+                                              borderBottom: '1px solid #fecaca',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: 6,
+                                            }}
+                                          >
+                                            ✕ {disputeError}
+                                          </div>
+                                        )}
+
+                                        {reply.dispute_status && reply.dispute_status !== 'None' ? (
+                                          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                            <div
+                                              style={{
+                                                background: reply.dispute_status === 'Resolved' ? '#f0fdf4' : (reply.dispute_status === 'Rejected' ? '#fef2f2' : 'var(--qa-fill-light)'),
+                                                border: `1px solid ${reply.dispute_status === 'Resolved' ? '#bbf7d0' : (reply.dispute_status === 'Rejected' ? '#fecaca' : 'var(--qa-border)')}`,
+                                                borderRadius: 8,
+                                                padding: '12px 14px',
+                                                fontSize: 12,
+                                                color: reply.dispute_status === 'Resolved' ? '#166534' : (reply.dispute_status === 'Rejected' ? '#991b1b' : 'var(--qa-text)'),
+                                              }}
+                                            >
+                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                <div style={{ fontWeight: 600, fontSize: 13 }}>
+                                                  Dispute Status: {disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)}
+                                                </div>
+                                              </div>
+
+                                              {reply.challenged_params && reply.challenged_params.length > 0 && (
+                                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 6px' }}>
+                                                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--qa-text-2)' }}>
+                                                    Challenged:
+                                                  </span>
+                                                  {reply.challenged_params.map(cp => {
+                                                    const paramDef = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                                                    return (
+                                                      <span
+                                                        key={cp.param}
+                                                        title={cp.note}
+                                                        style={{
+                                                          fontSize: 11, fontWeight: 600,
+                                                          background: 'var(--qa-card)',
+                                                          border: '1px solid var(--qa-border)',
+                                                          borderRadius: 4,
+                                                          padding: '2px 8px',
+                                                          color: 'var(--qa-text)',
+                                                        }}
+                                                      >
+                                                        {paramDef?.name || cp.param}
+                                                      </span>
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
+
+                                              {reply.dispute_notes && (
+                                                <div style={{ marginTop: 4, lineHeight: 1.4, color: 'var(--qa-text-2)' }}>
+                                                  &ldquo;{reply.dispute_notes}&rdquo;
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Integrated Dispute Discussion Thread */}
+                                            <DisputeThread
+                                              flagId={reply.flag_id || reply.message_id}
+                                              agentNote={reply.dispute_notes}
+                                              agentName={reply.agent_name}
+                                              raisedByRole={reply.raised_by_role || (reply.dispute_status === 'Under_Review' ? 'tl' : 'agent')}
+                                              raisedByName={reply.flag_author_name || (reply.raised_by_role === 'tl' ? (session?.user?.name || 'Team Lead') : reply.agent_name)}
+                                              reviewedBy={reply.reviewed_by}
+                                              qaName={(reply as any).qa_name || reply.reviewed_by}
+                                              reviewerRole={reply.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
+                                              flaggedAt={reply.sent_at}
+                                              reviewedAt={reply.reviewed_at}
+                                              compact
+                                            />
+                                          </div>
+                                        ) : disputingId === reply.message_id ? (
+                                          <div style={{ padding: 16 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                                Raise Dispute to QA
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={cancelDisputeComposition}
+                                                style={{ fontSize: 12, color: 'var(--qa-text-2)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                              >
+                                                Cancel
+                                              </button>
+                                            </div>
+
+                                            <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 8 }}>
+                                              Select the parameter(s) you wish to challenge:
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6, marginBottom: 12 }}>
+                                              {DEFAULT_EMAIL_PARAMETERS.map(param => {
+                                                const isSelected = selectedParams.has(param.key);
+                                                return (
+                                                  <label
+                                                    key={param.key}
+                                                    style={{
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      gap: 8,
+                                                      padding: '6px 10px',
+                                                      borderRadius: 6,
+                                                      border: `1px solid ${isSelected ? 'var(--marker, #111111)' : 'var(--qa-border)'}`,
+                                                      background: isSelected ? 'var(--qa-fill-light)' : 'var(--qa-card)',
+                                                      cursor: 'pointer',
+                                                      fontSize: 12,
+                                                      fontWeight: 500,
+                                                      color: 'var(--qa-text)',
+                                                    }}
+                                                  >
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={isSelected}
+                                                      onChange={() => toggleParamPick(param.key)}
+                                                      style={{ cursor: 'pointer' }}
+                                                    />
+                                                    {param.name}
+                                                  </label>
+                                                );
+                                              })}
+                                            </div>
+
+                                            <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 4 }}>
+                                              Reason for dispute (required):
+                                            </div>
+                                            <textarea
+                                              rows={3}
+                                              placeholder="Explain specifically why you think the score should be adjusted for QA review..."
+                                              value={disputeNotes}
+                                              onChange={(e) => setDisputeNotes(e.target.value)}
+                                              style={{
+                                                width: '100%',
+                                                padding: '8px 12px',
+                                                border: '1px solid var(--qa-border)',
+                                                borderRadius: 6,
+                                                background: 'var(--qa-card)',
+                                                color: 'var(--qa-text)',
+                                                fontSize: 12,
+                                                fontFamily: SANS,
+                                                outline: 'none',
+                                                resize: 'vertical',
+                                                boxSizing: 'border-box',
+                                                marginBottom: 10,
+                                              }}
+                                            />
+                                            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                                              <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginRight: 'auto' }}>
+                                                {selectedParams.size} parameter{selectedParams.size === 1 ? '' : 's'} selected
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={cancelDisputeComposition}
+                                                style={{
+                                                  height: 32,
+                                                  padding: '0 14px',
+                                                  borderRadius: 6,
+                                                  border: '1px solid var(--qa-border)',
+                                                  background: 'var(--qa-card)',
+                                                  color: 'var(--qa-text)',
+                                                  fontSize: 12,
+                                                  fontWeight: 500,
+                                                  cursor: 'pointer',
+                                                }}
+                                              >
+                                                Cancel
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRaiseDispute(reply.message_id)}
+                                                disabled={submittingDispute || !disputeNotes.trim() || selectedParams.size === 0}
+                                                style={{
+                                                  height: 32,
+                                                  padding: '0 16px',
+                                                  border: 'none',
+                                                  borderRadius: 6,
+                                                  background: 'var(--ink, #111111)',
+                                                  color: 'var(--ink-fg, #FFFFFF)',
+                                                  fontSize: 12,
+                                                  fontWeight: 600,
+                                                  cursor: !disputeNotes.trim() || selectedParams.size === 0 || submittingDispute ? 'not-allowed' : 'pointer',
+                                                  opacity: !disputeNotes.trim() || selectedParams.size === 0 || submittingDispute ? 0.5 : 1,
+                                                  fontFamily: SANS,
+                                                }}
+                                              >
+                                                {submittingDispute ? 'Submitting…' : 'Submit Dispute to QA'}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                                            <div>
+                                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                                Dispute this Score
+                                              </div>
+                                              <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>
+                                                Challenge specific parameter grades and submit directly to QA for review.
+                                              </div>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => startDispute(reply)}
+                                              style={{
+                                                height: 34,
+                                                padding: '0 16px',
+                                                border: '1px solid var(--qa-border)',
+                                                borderRadius: 6,
+                                                background: 'var(--qa-card)',
+                                                color: 'var(--qa-text)',
+                                                fontSize: 12,
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                fontFamily: SANS,
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: 6,
+                                              }}
+                                            >
+                                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" />
+                                              </svg>
+                                              Raise Dispute
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </>}
+                                  scoring={<>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                        Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
+                                      </div>
+                                      <div style={{
+                                        border: '1px solid var(--qa-border)',
+                                        borderRadius: 8,
+                                        background: 'var(--qa-card)',
+                                        overflow: 'hidden',
+                                      }}>
+                                        <div style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                            <ScoreRing score={reply.effective_score ?? reply.quality_score} />
+                                            <div>
+                                              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
+                                              <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
+                                                <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
+                                                {' · '}
+                                                {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          {(!reply.dispute_status || reply.dispute_status === 'None') && disputingId !== reply.message_id && (
+                                            <button
+                                              type="button"
+                                              onClick={() => startDispute(reply)}
+                                              style={{
+                                                height: 32,
+                                                padding: '0 12px',
+                                                borderRadius: 6,
+                                                border: '1px solid var(--qa-border)',
+                                                background: 'var(--qa-card)',
+                                                color: 'var(--qa-text)',
+                                                fontSize: 12,
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: 6,
+                                              }}
+                                            >
+                                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" />
+                                              </svg>
+                                              Raise Dispute
+                                            </button>
+                                          )}
+                                          {reply.dispute_status && reply.dispute_status !== 'None' && (
+                                            <span style={{
+                                              fontSize: 12,
+                                              fontWeight: 600,
+                                              color: reply.dispute_status === 'Resolved' ? '#166534' : (reply.dispute_status === 'Rejected' ? '#991b1b' : 'var(--qa-text)'),
+                                              padding: '4px 8px',
+                                              borderRadius: 6,
+                                              background: 'var(--qa-fill-light)',
+                                              border: '1px solid var(--qa-border)',
+                                            }}>
+                                              {disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
+                                          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            {reply.compliance_issues && reply.compliance_issues.length > 0 && (
+                                              <div style={{ color: '#b91c1c', fontWeight: 600 }}>Breaches: {reply.compliance_issues.join(', ')}</div>
+                                            )}
+                                            {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
+                                          </div>
+                                        )}
+                                        {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                          const scores = reply.parameter_scores;
+                                          const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
+                                          const isDisputedParam = (reply.challenged_params?.some(cp => cp.param === def.key) ?? false) || (disputingId === reply.message_id && selectedParams.has(def.key));
+                                          return (
+                                            <ParamScoreRow
+                                              key={def.key}
+                                              name={def.name}
+                                              description={def.description}
+                                              value={val}
+                                              allowNA={def.allowNA}
+                                              weight={def.defaultWeight}
+                                              reason={scores?.__reasoning?.[def.key]}
+                                              last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                              disputed={isDisputedParam}
+                                            />
                                           );
                                         })}
                                       </div>
+                                    </div>
 
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 4 }}>
-                                        Reason for dispute (required):
-                                      </div>
-                                      <textarea
-                                        rows={3}
-                                        placeholder="Explain specifically why you think the score should be adjusted for QA review..."
-                                        value={disputeNotes}
-                                        onChange={(e) => setDisputeNotes(e.target.value)}
-                                        style={{
-                                          width: '100%',
-                                          padding: '8px 12px',
-                                          border: '1px solid var(--qa-border)',
-                                          borderRadius: 6,
-                                          background: 'var(--qa-card)',
-                                          color: 'var(--qa-text)',
-                                          fontSize: 12,
-                                          fontFamily: SANS,
-                                          outline: 'none',
-                                          resize: 'vertical',
-                                          boxSizing: 'border-box',
-                                          marginBottom: 10,
-                                        }}
-                                      />
-                                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-                                        <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginRight: 'auto' }}>
-                                          {selectedParams.size} parameter{selectedParams.size === 1 ? '' : 's'} selected
-                                        </span>
-                                        <button
-                                          type="button"
-                                          onClick={cancelDisputeComposition}
-                                          style={{
-                                            height: 32,
-                                            padding: '0 14px',
-                                            borderRadius: 6,
-                                            border: '1px solid var(--qa-border)',
-                                            background: 'var(--qa-card)',
-                                            color: 'var(--qa-text)',
-                                            fontSize: 12,
-                                            fontWeight: 500,
-                                            cursor: 'pointer',
-                                          }}
-                                        >
-                                          Cancel
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRaiseDispute(reply.message_id)}
-                                          disabled={submittingDispute || !disputeNotes.trim() || selectedParams.size === 0}
-                                          style={{
-                                            height: 32,
-                                            padding: '0 16px',
-                                            border: 'none',
-                                            borderRadius: 6,
-                                            background: 'var(--ink, #111111)',
-                                            color: 'var(--ink-fg, #FFFFFF)',
-                                            fontSize: 12,
-                                            fontWeight: 600,
-                                            cursor: !disputeNotes.trim() || selectedParams.size === 0 || submittingDispute ? 'not-allowed' : 'pointer',
-                                            opacity: !disputeNotes.trim() || selectedParams.size === 0 || submittingDispute ? 0.5 : 1,
-                                            fontFamily: SANS,
-                                          }}
-                                        >
-                                          {submittingDispute ? 'Submitting…' : 'Submit Dispute to QA'}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                                      <div>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                                          Dispute this Score
-                                        </div>
-                                        <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>
-                                          Challenge specific parameter grades and submit directly to QA for review.
-                                        </div>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => startDispute(reply)}
-                                        style={{
-                                          height: 34,
-                                          padding: '0 16px',
-                                          border: '1px solid var(--qa-border)',
-                                          borderRadius: 6,
-                                          background: 'var(--qa-card)',
-                                          color: 'var(--qa-text)',
-                                          fontSize: 12,
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          fontFamily: SANS,
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 6,
-                                        }}
-                                      >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
-                                        </svg>
-                                        Raise Dispute
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              </>}
-                              scoring={<>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                  Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
-                                </div>
-                                <div style={{
-                                  border: '1px solid var(--qa-border)',
-                                  borderRadius: 8,
-                                  background: 'var(--qa-card)',
-                                  overflow: 'hidden',
-                                }}>
-                                  <div style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                                      <ScoreRing score={reply.effective_score ?? reply.quality_score} />
-                                      <div>
-                                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
-                                        <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
-                                          <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
-                                          {' · '}
-                                          {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {(!reply.dispute_status || reply.dispute_status === 'None') && disputingId !== reply.message_id && (
-                                      <button
-                                        type="button"
-                                        onClick={() => startDispute(reply)}
-                                        style={{
-                                          height: 32,
-                                          padding: '0 12px',
-                                          borderRadius: 6,
-                                          border: '1px solid var(--qa-border)',
-                                          background: 'var(--qa-card)',
-                                          color: 'var(--qa-text)',
-                                          fontSize: 12,
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 6,
-                                        }}
-                                      >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
-                                        </svg>
-                                        Raise Dispute
-                                      </button>
-                                    )}
-                                    {reply.dispute_status && reply.dispute_status !== 'None' && (
-                                      <span style={{
-                                        fontSize: 12,
-                                        fontWeight: 600,
-                                        color: reply.dispute_status === 'Resolved' ? '#166534' : (reply.dispute_status === 'Rejected' ? '#991b1b' : 'var(--qa-text)'),
-                                        padding: '4px 8px',
-                                        borderRadius: 6,
-                                        background: 'var(--qa-fill-light)',
-                                        border: '1px solid var(--qa-border)',
-                                      }}>
-                                        {disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
-                                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                      {reply.compliance_issues && reply.compliance_issues.length > 0 && (
-                                        <div style={{ color: '#b91c1c', fontWeight: 600 }}>Breaches: {reply.compliance_issues.join(', ')}</div>
-                                      )}
-                                      {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
-                                    </div>
-                                  )}
-                                  {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
-                                    const scores = reply.parameter_scores;
-                                    const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
-                                    const isDisputedParam = (reply.challenged_params?.some(cp => cp.param === def.key) ?? false) || (disputingId === reply.message_id && selectedParams.has(def.key));
-                                    return (
-                                      <ParamScoreRow
-                                        key={def.key}
-                                        name={def.name}
-                                        description={def.description}
-                                        value={val}
-                                        allowNA={def.allowNA}
-                                        weight={def.defaultWeight}
-                                        reason={scores?.__reasoning?.[def.key]}
-                                        last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
-                                        disputed={isDisputedParam}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                              </div>
-
-                              </>}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-        <Pager page={paging.page} pages={paging.pages} onPage={paging.setPage} />
-      </div>
-      </>
+                                  </>}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={paging.page} pages={paging.pages} onPage={paging.setPage} />
+          </div>
+        </>
       )}
     </div>
   );
