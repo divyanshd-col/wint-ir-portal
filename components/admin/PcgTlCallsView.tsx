@@ -51,6 +51,15 @@ export interface PCGCall {
   aiCoachingTip: string | null;
   transcriptTurns: TranscriptTurn[];
   disputeStatus: 'none' | 'pending' | 'resolved' | 'overridden';
+  sopTriggers?: Array<{
+    category: string;
+    severity: string;
+    direction: string;
+    signal: string;
+    timestamp: string;
+    turn_index?: number;
+    quote: string;
+  }>;
 }
 
 export interface PcgTlCallsViewProps {
@@ -150,10 +159,15 @@ export const formatCallSegments = (call: PCGCall) => {
   if (!call.transcriptTurns || call.transcriptTurns.length === 0) return [];
   const segments: any[] = [];
   call.transcriptTurns.forEach((turn, idx) => {
+    const matchingTrigger = (call.sopTriggers || []).find(
+      (st) => st.turn_index === (idx + 1) || (turn.time && st.timestamp === turn.time) || (st.quote && turn.text && (turn.text.includes(st.quote) || st.quote.includes(turn.text)))
+    );
     segments.push({
       speaker: turn.speaker === 'RM' ? 'IR_EXECUTIVE' : 'INVESTOR',
       text: turn.text,
       ts: turn.time || `0:${(idx * 3 + 3).toString().padStart(2, '0')}`,
+      isSopTrigger: Boolean(matchingTrigger),
+      sopTrigger: matchingTrigger,
     });
     if (idx < call.transcriptTurns.length - 1) {
       segments.push({
@@ -512,6 +526,29 @@ export default function PcgTlCallsView({
             >
               General / Support {summary?.categoryCounts?.support ? `(${summary.categoryCounts.support})` : ''}
             </button>
+            <button
+              onClick={() => {
+                setSelectedCategory('sop_breached');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                selectedCategory === 'sop_breached'
+                  ? 'bg-red-700 text-white shadow-sm font-bold'
+                  : 'bg-red-50 text-red-800 hover:bg-red-100 border border-red-200'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedCategory === 'sop_breached' ? 'bg-white' : 'bg-red-600'}`}></span>
+              <span>SOP Breached</span>
+              {summary?.categoryCounts?.sopBreached != null && summary.categoryCounts.sopBreached > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    selectedCategory === 'sop_breached' ? 'bg-red-900 text-white' : 'bg-red-200 text-red-900'
+                  }`}
+                >
+                  {summary.categoryCounts.sopBreached}
+                </span>
+              )}
+            </button>
 
             <div className="h-4 w-px bg-zinc-200 mx-1 hidden sm:block" />
 
@@ -775,6 +812,15 @@ export default function PcgTlCallsView({
                               {call.isEvaluable === false && <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
                               {call.category}
                             </span>
+                            {call.sopTriggers && call.sopTriggers.length > 0 && (
+                              <span
+                                title={`SOP Flag: ${call.sopTriggers[0].category} — "${call.sopTriggers[0].quote}"`}
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse"></span>
+                                <span>{call.sopTriggers[0].category}</span>
+                              </span>
+                            )}
                             {call.secondaryCategories && call.secondaryCategories.length > 0 && (
                               <span
                                 title={call.aiCategoryReasoning || `Also discussed: ${call.secondaryCategories.join(', ')}`}
@@ -900,6 +946,7 @@ export default function PcgTlCallsView({
                             callId={call.callId || call.id.toString()}
                             hideShowChat={true}
                             isPcg={true}
+                            sopTriggers={call.sopTriggers}
                             mobileNumber={call.phoneNumber}
                             agentName={call.rmName}
                             iqsScore={call.iqsScore ?? 0}
