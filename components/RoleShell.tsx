@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 
 export interface NavItem {
   label: string;
@@ -33,7 +34,7 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
     'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access',
   ],
   tl: [
-    'quality:analytics:access', 'tl:member_analytics:access',
+    'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
     'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
   ],
   quality: [
@@ -89,6 +90,7 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
   };
 
   const filteredNav = navItems.filter(hasAccess);
+  const canSwitch = Boolean(session?.user?.isSuperAdmin) || session?.user?.platformDomain === 'both';
   const displayRoleLabel = roleLabel || role.charAt(0).toUpperCase() + role.slice(1);
 
   return (
@@ -97,7 +99,7 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
         {/* Sidebar */}
         <aside className={`quality-shell-sidebar${collapsed ? ' collapsed' : ''}`}>
           <div className="quality-shell-sidebar-head">
-            <div className="quality-shell-sidebar-title">{displayRoleLabel}</div>
+            {canSwitch ? (!collapsed && <WorkspaceSwitcher />) : <div className="quality-shell-sidebar-title">{displayRoleLabel}</div>}
             <button
               type="button" className="quality-shell-sidebar-toggle" onClick={toggleSidebar}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}
@@ -107,6 +109,7 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" /></svg>
             </button>
           </div>
+          {canSwitch && collapsed && <div className="quality-shell-ws-collapsed"><WorkspaceSwitcher collapsed /></div>}
 
           {filteredNav.map((item, i) => {
             const Icon = item.icon;

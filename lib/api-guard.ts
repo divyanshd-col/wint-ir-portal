@@ -7,7 +7,7 @@ import { hasSkill, getSkillsForPersona } from '@/lib/skills';
 const ROLE_TO_SKILLS: Record<string, string[]> = {
   admin: ['settings:manage:access', 'skills:manage:access', 'users:manage:access'],
   quality: ['quality:chat_eval:access', 'quality:call_eval:access', 'quality:analytics:access'],
-  tl: ['tl:member_analytics:access', 'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access'],
+  tl: ['tl:team_analytics:access', 'tl:member_analytics:access', 'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access'],
   agent: ['agent:my_analytics:access', 'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access', 'chat:access'],
 };
 

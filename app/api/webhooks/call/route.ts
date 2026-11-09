@@ -21,6 +21,7 @@ import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import {
   CALL_TRANSCRIPTION_PROMPT,
   parseTranscriptionResponse,
+  extractDurationFromTranscript,
 } from '@/lib/call-quality';
 import {
   storeHasProcessedEvent,
@@ -151,7 +152,7 @@ async function processCallWebhook(body: any): Promise<void> {
     agentId,
     contactId,
     recordingUrl,
-    durationSeconds,
+    durationSeconds: durationSeconds ?? extractDurationFromTranscript(segments),
     calledAt,
     language,
     transcript: segments,

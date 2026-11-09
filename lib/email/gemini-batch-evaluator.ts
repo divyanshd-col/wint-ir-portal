@@ -14,10 +14,16 @@
 import { GoogleGenAI } from '@google/genai';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
-import { buildEmailEvaluationPrompt, calculateEmailIQS, ThreadSummary } from './context-builder';
+import { buildEmailEvaluationPrompt, calculateEmailIQS, emailWeightMap, resolveEmailParameters, ThreadSummary } from './context-builder';
 import { sendEmailComplianceSlackAlert } from './compliance-alert';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
+
+/** What an admin edited in Settings (Scoring Rubric + Prompts): the seven parameters and the two instruction blocks. */
+async function loadEmailParameters() {
+  const config = await readConfig().catch(() => null);
+  return { parameters: resolveEmailParameters(config?.emailRubric), promptText: { intro: config?.emailPromptIntro, compliance: config?.emailPromptCompliance } };
+}
 
 async function getGeminiClient(): Promise<{ ai: GoogleGenAI; model: string }> {
   const config = await readConfig().catch(() => ({} as any));
@@ -49,6 +55,7 @@ export async function submitPendingEmailBatchJob(options?: {
   message?: string;
 }> {
   const { ai, model } = await getGeminiClient();
+  const email = await loadEmailParameters();
 
   // Fetch pending replies
   let sql = `
@@ -126,6 +133,8 @@ export async function submitPendingEmailBatchJob(options?: {
     }
 
     const promptText = buildEmailEvaluationPrompt({
+      parameters: email.parameters,
+      promptText: email.promptText,
       ticketId: row.ticket_id,
       messageId: row.message_id,
       agentName: row.agent_name || 'Agent',
@@ -193,6 +202,7 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
   details: any[];
 }> {
   const { ai } = await getGeminiClient();
+  const emailWeights = emailWeightMap((await loadEmailParameters()).parameters);
 
   // Find all distinct batch jobs currently In_Batch
   let jobsToPoll: string[] = [];
@@ -292,7 +302,7 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
                 isJunkEmail = true;
               }
             }
-            const calculatedScore = calculateEmailIQS(rawParamScores, undefined, emailIntent);
+            const calculatedScore = calculateEmailIQS(rawParamScores, emailWeights, emailIntent);
             const qualityScore = isJunkEmail || calculatedScore === null
               ? null
               : (calculatedScore !== null && !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
@@ -411,6 +421,7 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
  */
 export async function evaluateSingleReplySync(messageId: string): Promise<any> {
   const { ai, model } = await getGeminiClient();
+  const email = await loadEmailParameters();
 
   const rows = await query(
     `SELECT e.*, c.subject_line, c.thread_summary, c.merged_into_ticket_id, c.intent_l1
@@ -445,6 +456,8 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
   }
 
   const promptText = buildEmailEvaluationPrompt({
+    parameters: email.parameters,
+    promptText: email.promptText,
     ticketId: row.ticket_id,
     messageId: row.message_id,
     agentName: row.agent_name || 'Agent',
@@ -484,7 +497,7 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
   };
   const ticketId = row.ticket_id;
   const isJunkEmail = Boolean(row.intent_l1 && row.intent_l1.toLowerCase().includes('junk'));
-  const calculatedScore = calculateEmailIQS(rawParamScores, undefined, row.intent_l1);
+  const calculatedScore = calculateEmailIQS(rawParamScores, emailWeightMap(email.parameters), row.intent_l1);
   const qualityScore = isJunkEmail || calculatedScore === null
     ? null
     : (calculatedScore !== null && !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0

@@ -72,8 +72,6 @@ export function AccountMenu({ name, email, role, roleLabel }: { name: string; em
   );
 }
 
-import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
-
 export default function TopBar() {
   const pathname = usePathname() || '/';
   const { data: session, status } = useSession();
@@ -83,7 +81,6 @@ export default function TopBar() {
 
   if (isAuthPath(pathname) || status === 'unauthenticated' || activeDomain === 'pcg' || pathname.startsWith('/admin/pcg-calls')) return null;
   const role = user?.role ?? 'agent';
-  const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const tabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
   const current = activeTab(pathname);
 
@@ -94,10 +91,7 @@ export default function TopBar() {
       {/* Pages size themselves with h-screen / min-h-screen: take the bar's height off, only while it is shown. */}
       <style>{'.h-screen{height:calc(100vh - var(--topbar-h))}.min-h-screen{min-height:calc(100vh - var(--topbar-h))}'}</style>
       <header className="topbar">
-        <Link href="/" className="topbar-logo" aria-label="Wint Wealth home">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/wint-logo.png" alt="Wint Wealth" width={22} height={22} />
-        </Link>
+        <span aria-hidden />
         <nav className="topbar-tabs" aria-label="Main">
           {tabs.map((t) => {
             const active = isTabActive(t);
@@ -109,12 +103,6 @@ export default function TopBar() {
           })}
         </nav>
         <div className="topbar-right">
-          {/* Netflix-style Workspace Switcher for Super Admins */}
-          {(isSuperAdmin || platformDomain === 'both') && (
-            <div className="mr-2">
-              <WorkspaceSwitcher compact={true} />
-            </div>
-          )}
           <ThemeToggle />
           {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} />}
         </div>

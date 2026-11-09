@@ -4,6 +4,7 @@ import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
 import { extractDurationFromTranscript } from '@/lib/call-quality';
+import { reviewThreshold } from '@/lib/quality-thresholds';
 
 const ROUTE = 'cx/qa/calls-to-review';
 
@@ -95,7 +96,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       const dispParam = paramIdx++;
       baseWhere = reviewedMode
         ? `ce.status = 'reviewed' AND (EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) OR ce.reviewed_by IS NOT NULL)`
-        : `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL') AND (a.status IS NULL OR a.status != 'inactive')`;
+        : `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= ${reviewThreshold(config, 'call')} OR ce.verdict = 'FAILED_CRITICAL') AND (a.status IS NULL OR a.status != 'inactive')`;
     } else {
       sqlParams.push(effectiveDispositions);
       const dispParam = paramIdx++;
@@ -104,7 +105,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         sqlParams.push(email.toLowerCase());
         baseWhere = `ce.status = 'reviewed' AND (EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) OR LOWER(COALESCE(ce.reviewed_by, '')) = $${emailIdx})`;
       } else {
-        baseWhere = `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL') AND (a.status IS NULL OR a.status != 'inactive')`;
+        baseWhere = `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= ${reviewThreshold(config, 'call')} OR ce.verdict = 'FAILED_CRITICAL') AND (a.status IS NULL OR a.status != 'inactive')`;
       }
     }
   } else {

@@ -10,46 +10,18 @@ import { DateRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import UISelect from '@/components/quality/UISelect';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
+import * as T from '@/components/quality/tableStyles';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
-const TH_BASE: CSSProperties = {
-  height: 40,
-  background: 'var(--qa-gray-50, var(--qa-gray-50))',
-  borderBottom: '1px solid var(--qa-border, var(--qa-border))',
-  fontSize: 12,
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  color: 'var(--qa-text-2, var(--qa-text-2))',
-  fontWeight: 500,
-  padding: '0 16px',
-  textAlign: 'left',
-  whiteSpace: 'nowrap',
-};
+const TH_BASE: CSSProperties = T.th;
 
-const TD_BASE: CSSProperties = {
-  height: 52,
-  padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub, var(--qa-border-sub))',
-  fontSize: 14,
-  color: 'var(--qa-text, #111111)',
-  verticalAlign: 'middle',
-};
+const TD_BASE: CSSProperties = T.td;
 
-const TD_MONO: CSSProperties = {
-  ...TD_BASE,
-  fontFamily: MONO,
-  fontSize: 13,
-  color: 'var(--qa-text-2, var(--qa-text-2))',
-};
+const TD_MONO: CSSProperties = T.tdMono;
 
-const TD_NUM: CSSProperties = {
-  ...TD_BASE,
-  textAlign: 'right',
-  fontFamily: MONO,
-  fontSize: 13,
-};
+const TD_NUM: CSSProperties = T.tdNum;
 
 function IQSBadge({ score }: { score: number | null }) {
   if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>;
@@ -551,8 +523,8 @@ export default function TLQualityCallsPage() {
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{call.agentName}</td>
                           <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
-                          <td style={TD_BASE}>
-                            {call.calledAt ? new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : call.date}
+                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
+                            {call.calledAt ? <T.DateTime value={call.calledAt} /> : call.date}
                           </td>
                           <td style={TD_BASE}>{call.disposition || '—'}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
@@ -573,7 +545,7 @@ export default function TLQualityCallsPage() {
                               }}
                               style={{
                                 background: 'none', border: 0, padding: 0,
-                                fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', whiteSpace: 'nowrap',
+                                fontSize: 12, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', whiteSpace: 'nowrap',
                               }}
                             >
                               {isExpanded ? 'Hide' : 'View Details'}
@@ -997,7 +969,7 @@ export default function TLQualityCallsPage() {
                               parameters={dispute.parameters}
                             />
                           </td>
-                          <td style={TD_BASE}>{new Date(dispute.raisedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}><T.DateTime value={dispute.raisedAt} /></td>
                         </tr>
 
                         {isOpen && (

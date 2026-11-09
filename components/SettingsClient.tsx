@@ -1,10 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import UsersManager, { type User } from './settings/UsersManager';
 import PcgUsersManager from './settings/PcgUsersManager';
 import SecuritySection from './settings/SecuritySection';
+import QualityThresholdsSection from './settings/QualityThresholdsSection';
+import ScoringRubricSection from './settings/ScoringRubricSection';
+import PromptEditor from './settings/PromptEditor';
+import ChangeHistorySection from './settings/ChangeHistorySection';
+import { DEFAULT_QUALITY_THRESHOLDS, type QualityThresholds } from '@/lib/quality-thresholds';
+import type { EvaluationParameterConfig } from '@/lib/email/context-builder';
 
 interface SafeConfig {
   llmProvider?: string;
@@ -22,18 +28,18 @@ interface SafeConfig {
   knowledgeBaseDocNames?: Record<string, string>;
   systemPrompt?: string;
   iqsScoringPrompt?: string;
-  analyticsPlannerPrompt?: string;
-  analyticsSynthesizerPrompt?: string;
   defaultChatPrompt?: string;
   defaultIqsScoringPrompt?: string;
-  defaultAnalyticsPlannerPrompt?: string;
-  defaultAnalyticsSynthesizerPrompt?: string;
   conversationHistoryEnabled?: boolean;
   callAnalysisEnabled?: boolean;
   cxDashboardEnabled?: boolean;
   hasSlackToken?: boolean;
   qualityAlertSheetUrl?: string;
   hasPyannoteKey?: boolean;
+  qualityThresholds?: QualityThresholds;
+  emailParameters?: EvaluationParameterConfig[];
+  /** Only the prompts for the workspace the admin is in: field name → saved text and built-in default. */
+  prompts?: Record<string, { value: string; defaultValue: string }>;
 }
 
 interface SettingsClientProps {
@@ -49,11 +55,34 @@ const ADMIN_SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'kb', label: 'Knowledge Base' },
   { id: 'prompt', label: 'Prompts' },
+  { id: 'thresholds', label: 'Quality Thresholds' },
+  { id: 'rubric', label: 'Scoring Rubric' },
+  { id: 'history', label: 'Change History' },
   { id: 'users', label: 'Users & Permissions' },
   { id: 'tokens', label: 'Token Usage' },
   { id: 'integrations', label: 'Integrations' },
 ];
 const SECURITY_SECTION = { id: 'security', label: 'Security' };
+
+// Outline icons for the settings nav, same stroke style as the main sidebar (sized to 16px by .quality-shell-sidebar-link svg).
+const SECTION_ICON_PATHS: Record<string, React.ReactNode> = {
+  general:      <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>,
+  kb:           <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></>,
+  prompt:       <><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></>,
+  users:        <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.9" /><path d="M16 3.1a4 4 0 0 1 0 7.8" /></>,
+  'pcg-users':  <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.9" /><path d="M16 3.1a4 4 0 0 1 0 7.8" /></>,
+  tokens:       <><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></>,
+  integrations: <><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" /><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></>,
+  thresholds:   <><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></>,
+  rubric:       <><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 14l2 2 4-4" /></>,
+  history:      <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
+  security:     <><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
+};
+const SectionIcon = ({ id }: { id: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    {SECTION_ICON_PATHS[id]}
+  </svg>
+);
 
 const PROMPT_TABS = [
   {
@@ -66,15 +95,38 @@ const PROMPT_TABS = [
     label: 'IQS Scoring',
     description: 'System prompt used when scoring agent conversations. Defines the scoring rubric, parameters, and output format.',
   },
+];
+
+const KEEP_FORMAT = 'Keep the JSON output format described in the prompt: scoring fails if the reply cannot be read. If scoring starts failing after an edit, use Reset to default.';
+
+// Call, email and PCG prompts. A tab only appears if the server sent its prompt, i.e. the admin manages that workspace.
+const EXTRA_PROMPT_TABS: { id: string; label: string; title: string; description: string; note: string; fields: { field: string; label?: string }[] }[] = [
   {
-    id: 'planner',
-    label: 'Analytics Planner',
-    description: 'First-pass prompt for the analytics agent. Converts natural-language questions into SQL query plans.',
+    id: 'call_gates', label: 'Call: Compliance Gates', title: 'Call Compliance Gates',
+    description: 'First pass when scoring a call: decides whether the call breaches a compliance gate (investment or tax advice, fabricated facts, identity verification).',
+    note: KEEP_FORMAT, fields: [{ field: 'callGatesPrompt' }],
   },
   {
-    id: 'synthesizer',
-    label: 'Analytics Synthesizer',
-    description: 'Second-pass prompt for the analytics agent. Turns SQL results into analytical narratives and charts.',
+    id: 'call_iqs', label: 'Call: IQS Scoring', title: 'Call IQS Scoring',
+    description: 'Second pass when scoring a call: scores it on the quality parameters and gives the reasoning shown to QA.',
+    note: `${KEEP_FORMAT} The weights behind the final IQS are set in code, so percentages written in this text do not change the score arithmetic.`,
+    fields: [{ field: 'callIqsPrompt' }],
+  },
+  {
+    id: 'email_eval', label: 'Email: Evaluation', title: 'Email Evaluation',
+    description: "What the AI evaluator is told when it scores an agent's email reply: its role and tasks, and the compliance rules.",
+    note: 'The seven parameters are edited under Scoring Rubric. The email itself and the JSON output format are fixed in code, so an edit here cannot break scoring.',
+    fields: [{ field: 'emailPromptIntro', label: 'Role and tasks' }, { field: 'emailPromptCompliance', label: 'Compliance rules' }],
+  },
+  {
+    id: 'pcg_quality', label: 'PCG: Quality', title: 'PCG Call Quality',
+    description: 'System prompt for scoring Private Client Group relationship-manager calls: the quality and compliance audit.',
+    note: KEEP_FORMAT, fields: [{ field: 'pcgQualityPrompt' }],
+  },
+  {
+    id: 'pcg_classification', label: 'PCG: Classification', title: 'PCG Call Classification',
+    description: 'System prompt that classifies the purpose of a PCG call from its opening seconds (pitching, support, wrong number and so on).',
+    note: KEEP_FORMAT, fields: [{ field: 'pcgClassificationPrompt' }],
   },
 ];
 
@@ -92,6 +144,8 @@ export default function SettingsClient({
   if (isPcgAdminOnly) {
     SECTIONS = [
       { id: 'pcg-users', label: 'Users & Permissions' },
+      { id: 'prompt', label: 'Prompts' },
+      { id: 'history', label: 'Change History' },
       SECURITY_SECTION,
     ];
   } else if (isSuperAdmin) {
@@ -99,6 +153,9 @@ export default function SettingsClient({
       { id: 'general', label: 'General' },
       { id: 'kb', label: 'Knowledge Base' },
       { id: 'prompt', label: 'Prompts' },
+      { id: 'thresholds', label: 'Quality Thresholds' },
+      { id: 'rubric', label: 'Scoring Rubric' },
+      { id: 'history', label: 'Change History' },
       { id: 'users', label: 'CX Users & Permissions' },
       { id: 'pcg-users', label: 'PCG Users & Permissions' },
       { id: 'tokens', label: 'Token Usage' },
@@ -110,6 +167,10 @@ export default function SettingsClient({
   } else {
     SECTIONS = [SECURITY_SECTION];
   }
+
+  // Workspaces stay separate: PCG settings never show in the CX workspace, and the CX-only Thresholds / Rubric never show in PCG.
+  const inPcg = activeDomain === 'pcg';
+  if (!isPcgAdminOnly) SECTIONS = SECTIONS.filter(sec => (inPcg ? !['thresholds', 'rubric'].includes(sec.id) : sec.id !== 'pcg-users'));
 
   const initialSection = isPcgAdminOnly
     ? 'pcg-users'
@@ -127,11 +188,11 @@ export default function SettingsClient({
       const s = p.get('section');
       if (s && SECTIONS.some((sec) => sec.id === s)) {
         setActiveSection(s);
-      } else if (p.get('tab') === 'pcg' && hasPcgAccess) {
+      } else if (p.get('tab') === 'pcg' && hasPcgAccess && activeDomain === 'pcg') {
         setActiveSection('pcg-users');
       }
     }
-  }, [hasPcgAccess]);
+  }, [hasPcgAccess, activeDomain]);
 
   // ── General state ──────────────────────────────────────────────────────────
   const [llmProvider, setLlmProvider] = useState<'gemini' | 'claude'>((config.llmProvider as any) || 'gemini');
@@ -187,17 +248,9 @@ export default function SettingsClient({
   const [savingIqsPrompt, setSavingIqsPrompt] = useState(false);
   const [iqsPromptSaved, setIqsPromptSaved] = useState(false);
 
-  const [analyticsPlannerPrompt, setAnalyticsPlannerPrompt] = useState(config.analyticsPlannerPrompt || config.defaultAnalyticsPlannerPrompt || '');
-  const [plannerPromptIsCustom, setPlannerPromptIsCustom] = useState(!!config.analyticsPlannerPrompt);
-  const [savingPlannerPrompt, setSavingPlannerPrompt] = useState(false);
-  const [plannerPromptSaved, setPlannerPromptSaved] = useState(false);
-
-  const [analyticsSynthesizerPrompt, setAnalyticsSynthesizerPrompt] = useState(config.analyticsSynthesizerPrompt || config.defaultAnalyticsSynthesizerPrompt || '');
-  const [synthesizerPromptIsCustom, setSynthesizerPromptIsCustom] = useState(!!config.analyticsSynthesizerPrompt);
-  const [savingSynthesizerPrompt, setSavingSynthesizerPrompt] = useState(false);
-  const [synthesizerPromptSaved, setSynthesizerPromptSaved] = useState(false);
-
-  const [activePromptTab, setActivePromptTab] = useState('chat');
+  const [activePromptTab, setActivePromptTab] = useState(activeDomain === 'pcg' ? 'pcg_quality' : 'chat');
+  const extraPromptTabs = EXTRA_PROMPT_TABS.filter(t => t.fields.every(f => config.prompts?.[f.field]));
+  const promptTabs = [...(activeDomain === 'pcg' ? [] : PROMPT_TABS), ...extraPromptTabs];
 
   // ── Users state (Users / Teams / QA Dispositions UI lives in UsersManager) ──
   const [users, setUsers] = useState<User[]>([]);
@@ -269,11 +322,17 @@ export default function SettingsClient({
 
   // ── API helpers ────────────────────────────────────────────────────────────
   const patchConfig = async (payload: Record<string, unknown>) => {
-    await fetch('/api/config', {
+    const res = await fetch('/api/config', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      // A refused save (for example when the change history could not be written) must not look like a success.
+      const body = await res.json().catch(() => ({}));
+      showToast(body.error || 'Could not save');
+      throw new Error(body.error || 'Could not save');
+    }
   };
 
   const switchProvider = async (provider: 'gemini' | 'claude') => {
@@ -458,44 +517,6 @@ export default function SettingsClient({
     showToast('IQS prompt reset to default');
   };
 
-  const saveAnalyticsPlannerPrompt = async () => {
-    setSavingPlannerPrompt(true);
-    setPlannerPromptSaved(false);
-    try {
-      await patchConfig({ analyticsPlannerPrompt });
-      setPlannerPromptIsCustom(true);
-      setPlannerPromptSaved(true);
-      showToast('Analytics planner prompt saved');
-      setTimeout(() => setPlannerPromptSaved(false), 2000);
-    } finally { setSavingPlannerPrompt(false); }
-  };
-
-  const resetAnalyticsPlannerPrompt = async () => {
-    await patchConfig({ analyticsPlannerPrompt: '' });
-    setAnalyticsPlannerPrompt(config.defaultAnalyticsPlannerPrompt || '');
-    setPlannerPromptIsCustom(false);
-    showToast('Planner prompt reset to default');
-  };
-
-  const saveAnalyticsSynthesizerPrompt = async () => {
-    setSavingSynthesizerPrompt(true);
-    setSynthesizerPromptSaved(false);
-    try {
-      await patchConfig({ analyticsSynthesizerPrompt });
-      setSynthesizerPromptIsCustom(true);
-      setSynthesizerPromptSaved(true);
-      showToast('Analytics synthesizer prompt saved');
-      setTimeout(() => setSynthesizerPromptSaved(false), 2000);
-    } finally { setSavingSynthesizerPrompt(false); }
-  };
-
-  const resetAnalyticsSynthesizerPrompt = async () => {
-    await patchConfig({ analyticsSynthesizerPrompt: '' });
-    setAnalyticsSynthesizerPrompt(config.defaultAnalyticsSynthesizerPrompt || '');
-    setSynthesizerPromptIsCustom(false);
-    showToast('Synthesizer prompt reset to default');
-  };
-
   const saveSlackToken = async () => {
     if (!slackToken.trim()) return;
     setSavingSlack(true);
@@ -579,45 +600,39 @@ export default function SettingsClient({
 
 
   return (
-    <div className="min-h-screen bg-[#f5f3ee] flex font-sans antialiased">
-      {/* Left nav */}
-      <aside className="w-56 shrink-0 bg-[var(--sb-bg)] border-r border-[var(--sb-border)] flex flex-col sticky top-0 h-screen">
-        <div className="px-5 py-5 border-b border-[var(--sb-border)] flex items-center justify-between">
-          <h1 className="text-base font-bold text-gray-900">Settings</h1>
+    // Same shell classes as RoleShell, so the settings nav looks and behaves like the main sidebar.
+    <div className="quality-shell-container font-sans antialiased">
+     <div className="quality-shell-body">
+      <aside className="quality-shell-sidebar">
+        <div className="quality-shell-sidebar-head settings-nav-head">
+          <h1>Settings</h1>
           {(activeDomain === 'pcg' || platformDomain === 'pcg') && (
-            <Link
-              href="/admin/pcg-calls"
-              className="text-xs text-[#1f7a4d] hover:underline font-semibold"
-              title="Back to PCG Calls"
-            >
-              PCG Calls →
-            </Link>
+            <Link href="/admin/pcg-calls" className="settings-nav-back" title="Back to PCG Calls">PCG Calls →</Link>
           )}
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
+        <nav aria-label="Settings sections">
           {SECTIONS.map(s => (
             <button
               key={s.id}
+              type="button"
               onClick={() => setActiveSection(s.id)}
-              className={`w-full text-left px-3 h-10 rounded-[10px] text-sm font-medium transition-all ${
-                activeSection === s.id
-                  ? 'bg-[var(--sb-active-bg)] text-[var(--sb-active-text)] shadow-[var(--sb-active-shadow)]'
-                  : 'text-[var(--sb-text)] hover:bg-[var(--sb-hover)] hover:text-[var(--sb-active-text)]'
-              }`}
+              aria-current={activeSection === s.id ? 'page' : undefined}
+              className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeSection === s.id ? ' active' : ''}`}
             >
-              {s.label}
+              <span><SectionIcon id={s.id} /></span>
+              <span className="quality-shell-sidebar-label">{s.label}</span>
             </button>
           ))}
         </nav>
       </aside>
 
       {/* Main content */}
-      <main className={`flex-1 w-full mx-auto px-8 py-10 space-y-10 ${activeSection === 'users' || activeSection === 'pcg-users' ? 'max-w-6xl' : 'max-w-3xl'}`}>
+      <main className={`flex-1 w-full mx-auto px-10 py-7 space-y-10 ${activeSection === 'users' || activeSection === 'pcg-users' ? 'max-w-6xl' : 'max-w-3xl'}`}>
 
         {/* ── GENERAL ── */}
         {activeSection === 'general' && (
           <div className="space-y-8">
-            <h2 className="text-xl font-bold text-gray-900">General</h2>
+            <h2 className="text-2xl font-semibold text-gray-900">General</h2>
 
             {/* LLM Provider */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
@@ -802,7 +817,7 @@ export default function SettingsClient({
         {/* ── KNOWLEDGE BASE ── */}
         {activeSection === 'kb' && (
           <div className="space-y-8">
-            <h2 className="text-xl font-bold text-gray-900">Knowledge Base</h2>
+            <h2 className="text-2xl font-semibold text-gray-900">Knowledge Base</h2>
 
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
               <div className="flex items-center justify-between">
@@ -895,16 +910,16 @@ export default function SettingsClient({
         )}
 
         {/* ── PROMPTS ── */}
-        {activeSection === 'prompt' && (
-          <div className="space-y-6">
+        {isAdmin && (
+          <div className={activeSection === 'prompt' ? 'space-y-6' : 'hidden'}>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Prompts</h2>
+              <h2 className="text-2xl font-semibold text-gray-900">Prompts</h2>
               <p className="text-sm text-gray-500 mt-1">Customize any prompt used in the system. Leave blank to use the built-in default.</p>
             </div>
 
             {/* Tab bar */}
             <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-              {PROMPT_TABS.map(tab => (
+              {promptTabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActivePromptTab(tab.id)}
@@ -983,70 +998,37 @@ export default function SettingsClient({
               </div>
             )}
 
-            {/* Analytics Planner */}
-            {activePromptTab === 'planner' && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-900">Analytics Planner</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">{PROMPT_TABS[2].description}</p>
-                  </div>
-                  {plannerPromptIsCustom
-                    ? <span className="shrink-0 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">Custom</span>
-                    : <span className="shrink-0 text-xs font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg">Default</span>}
-                </div>
-                <textarea
-                  value={analyticsPlannerPrompt}
-                  onChange={e => setAnalyticsPlannerPrompt(e.target.value)}
-                  rows={22}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 resize-y font-mono leading-relaxed"
+            {/* Call / email / PCG prompts: always mounted, shown when their tab is active, so unsaved and saved edits are kept */}
+            {extraPromptTabs.map(t => (
+              <div key={t.id} className={activePromptTab === t.id ? '' : 'hidden'}>
+                <PromptEditor
+                  title={t.title} description={t.description} note={t.note} onSaved={showToast}
+                  fields={t.fields.map(f => ({ field: f.field, label: f.label, value: config.prompts![f.field].value, defaultValue: config.prompts![f.field].defaultValue }))}
                 />
-                <div className="flex items-center gap-3">
-                  <button onClick={saveAnalyticsPlannerPrompt} disabled={savingPlannerPrompt}
-                    className="px-6 py-2.5 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
-                    {savingPlannerPrompt ? 'Saving…' : plannerPromptSaved ? '✓ Saved' : 'Save Changes'}
-                  </button>
-                  {plannerPromptIsCustom && (
-                    <button onClick={resetAnalyticsPlannerPrompt} className="text-xs text-gray-400 hover:text-gray-600 underline transition">
-                      Reset to default
-                    </button>
-                  )}
-                </div>
               </div>
-            )}
+            ))}
 
-            {/* Analytics Synthesizer */}
-            {activePromptTab === 'synthesizer' && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-900">Analytics Synthesizer</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">{PROMPT_TABS[3].description}</p>
-                  </div>
-                  {synthesizerPromptIsCustom
-                    ? <span className="shrink-0 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">Custom</span>
-                    : <span className="shrink-0 text-xs font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg">Default</span>}
-                </div>
-                <textarea
-                  value={analyticsSynthesizerPrompt}
-                  onChange={e => setAnalyticsSynthesizerPrompt(e.target.value)}
-                  rows={22}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 resize-y font-mono leading-relaxed"
-                />
-                <div className="flex items-center gap-3">
-                  <button onClick={saveAnalyticsSynthesizerPrompt} disabled={savingSynthesizerPrompt}
-                    className="px-6 py-2.5 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
-                    {savingSynthesizerPrompt ? 'Saving…' : synthesizerPromptSaved ? '✓ Saved' : 'Save Changes'}
-                  </button>
-                  {synthesizerPromptIsCustom && (
-                    <button onClick={resetAnalyticsSynthesizerPrompt} className="text-xs text-gray-400 hover:text-gray-600 underline transition">
-                      Reset to default
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
+          </div>
+        )}
 
+        {/* ── QUALITY THRESHOLDS ── */}
+        {isAdmin && !inPcg && (
+          <div className={activeSection === 'thresholds' ? '' : 'hidden'}>
+            <QualityThresholdsSection initial={config.qualityThresholds ?? DEFAULT_QUALITY_THRESHOLDS} onSaved={showToast} />
+          </div>
+        )}
+
+        {/* ── SCORING RUBRIC ── */}
+        {isAdmin && !inPcg && config.emailParameters && (
+          <div className={activeSection === 'rubric' ? '' : 'hidden'}>
+            <ScoringRubricSection initial={config.emailParameters} onSaved={showToast} />
+          </div>
+        )}
+
+        {/* ── CHANGE HISTORY (per workspace; the API enforces the same rule) ── */}
+        {isAdmin && (
+          <div className={activeSection === 'history' ? '' : 'hidden'}>
+            <ChangeHistorySection workspace={inPcg ? 'pcg' : 'cx'} active={activeSection === 'history'} />
           </div>
         )}
 
@@ -1076,7 +1058,7 @@ export default function SettingsClient({
           <div className="space-y-8">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Token Usage &amp; Cost Intelligence</h2>
+                <h2 className="text-2xl font-semibold text-gray-900">Token Usage &amp; Cost Intelligence</h2>
                 <p className="text-xs text-gray-500 mt-1">
                   Track input/output tokens, identify top-consuming models, and monitor LLM expenses.
                 </p>
@@ -1112,7 +1094,7 @@ export default function SettingsClient({
         {/* ── INTEGRATIONS ── */}
         {activeSection === 'integrations' && (
           <div className="space-y-8">
-            <h2 className="text-xl font-bold text-gray-900">Integrations</h2>
+            <h2 className="text-2xl font-semibold text-gray-900">Integrations</h2>
 
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
               <div>
@@ -1216,6 +1198,7 @@ export default function SettingsClient({
         )}
 
       </main>
+     </div>
 
       {/* Toast */}
       {toast && (

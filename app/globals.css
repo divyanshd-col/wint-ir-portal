@@ -30,6 +30,8 @@
   --qa-gray-50:      #F7F8F6;
   --qa-gray-100:     #EEF0EC;
   --qa-on-text:      #FFFFFF;  /* text on a filled --qa-text surface (active pills, primary buttons) */
+  --bubble-self-bg:  var(--ink);    /* agent / RM side of transcripts; dark mode softens it (dark-theme.css) */
+  --bubble-self-fg:  var(--ink-fg);
 
   /* ── Design system tokens ─────────────────────────────────────────── */
   --color-background-primary:   #ffffff;
@@ -175,25 +177,26 @@ body {
   display: flex;
 }
 
+/* Sidebar rows match the PCG sidebar (40px rows, 12px margins); 14px labels, 16px icons, sentence-case section labels,
+   and a tinted accent fill (not a lifted pill) for the active page. */
 .quality-shell-sidebar {
-  width: 220px;
+  width: 240px;
   flex-shrink: 0;
   background: var(--sb-bg);
   border-right: 1px solid var(--sb-border);
-  padding: 16px 0;
+  padding: 0 0 16px;
   min-height: calc(100vh - var(--topbar-h, 0px));
 }
 
 .quality-shell-sidebar-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--qa-text-3);
-  padding: 12px 16px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--qa-text-2);
+  padding: 16px 16px 4px;
 }
 
 .quality-shell-sidebar-link {
-  height: 40px;
+  height: 40px;            /* same geometry as the PCG sidebar items (h-10 mx-3 mb-0.5 px-3 rounded-[10px]) */
   margin: 0 12px 2px;
   padding: 0 12px;
   border-radius: 10px;
@@ -211,9 +214,8 @@ body {
 .quality-shell-sidebar-link:hover { background: var(--sb-hover); }
 
 .quality-shell-sidebar-link.active {
-  background: var(--sb-active-bg);
-  box-shadow: var(--sb-active-shadow);
-  color: var(--sb-active-text);
+  background: var(--accent-weak);
+  color: var(--accent-active);
   font-weight: 500;
 }
 
@@ -222,17 +224,19 @@ body {
   display: inline-flex;
   align-items: center;
 }
+.quality-shell-sidebar-link svg { width: 16px; height: 16px; }
 
 .quality-shell-sidebar-link.active span {
-  color: var(--qa-text);
+  color: var(--accent-active);
 }
 
 .quality-shell-main {
   flex: 1;
-  padding: 32px 48px;
+  padding: 28px 40px;
   min-width: 0;
-  max-width: none; /* use the whole screen, especially with the sidebar collapsed */
 }
+/* Content stays centred and readable on wide monitors instead of stretching edge to edge. */
+.quality-shell-main > * { max-width: 1280px; margin-inline: auto; }
 
 /* The label keeps the link's own colour; only the icon span is tinted. */
 .quality-shell-sidebar-link .quality-shell-sidebar-label,
@@ -241,14 +245,21 @@ body {
 /* Sidebar: pinned under the top bar (it does not scroll with the page), scrolls on its own if the nav is long, and collapses to
    icons on request (the choice is remembered; first visit starts collapsed on screens <= 1100px). Labels stay in the DOM for
    assistive tech and as tooltips. */
-.quality-shell-sidebar { position: sticky; top: var(--topbar-h, 0px); align-self: flex-start; height: calc(100vh - var(--topbar-h, 0px)); overflow-x: hidden; overflow-y: auto; transition: width .16s ease; }
-.quality-shell-sidebar-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px 2px 16px; min-height: 36px; }
+/* Todoist layout: the sidebar runs the full height and owns the top-left corner; the top bar starts at its right edge.
+   It is pulled up over the top bar (same z-index, later in the DOM, so it paints above it but under page modals). */
+.quality-shell-sidebar { position: sticky; top: 0; z-index: 50; align-self: flex-start; height: 100vh; overflow-x: hidden; overflow-y: auto; transition: width .16s ease; }
+body:has(.topbar) .quality-shell-sidebar { margin-top: calc(-1 * var(--topbar-h)); }
+body:has(.quality-shell-sidebar) .topbar { padding-left: calc(16px + 240px); transition: padding-left .16s ease; }
+body:has(.quality-shell-sidebar.collapsed) .topbar { padding-left: calc(16px + 56px); }
+.quality-shell-sidebar-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; min-height: var(--topbar-h, 48px); }
 .quality-shell-sidebar-head .quality-shell-sidebar-title { padding: 0; }
+.quality-shell-sidebar-head:has(.ws-root) { padding-left: 16px; margin-bottom: 4px; } /* tile centre lines up with the nav icons */
+.quality-shell-ws-collapsed { display: flex; justify-content: center; padding: 2px 0 6px; }
 .quality-shell-sidebar-toggle { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--qa-text-3); cursor: pointer; }
 .quality-shell-sidebar-toggle:hover { background: var(--sb-hover); color: var(--qa-text); }
 .quality-shell-sidebar-toggle svg { transition: transform .16s ease; }
-.quality-shell-sidebar.collapsed { width: 64px; }
-.quality-shell-sidebar.collapsed .quality-shell-sidebar-head { justify-content: center; padding: 6px 0 2px; }
+.quality-shell-sidebar.collapsed { width: 56px; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-head { justify-content: center; padding: 0; }
 .quality-shell-sidebar.collapsed .quality-shell-sidebar-head .quality-shell-sidebar-title { display: none; }
 .quality-shell-sidebar.collapsed .quality-shell-sidebar-toggle svg { transform: rotate(180deg); }
 .quality-shell-sidebar.collapsed .quality-shell-sidebar-title { height: 1px; margin: 12px 16px; padding: 0; background: var(--sb-border); font-size: 0; overflow: hidden; }
@@ -262,6 +273,11 @@ body {
   .quality-shell-body { flex-direction: column; }
   .quality-shell-sidebar, .quality-shell-sidebar.collapsed { position: static; width: 100%; height: auto; min-height: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--sb-border); }
   .quality-shell-sidebar-head { display: none; }
+  body:has(.topbar) .quality-shell-sidebar { margin-top: 0; }
+  body:has(.quality-shell-sidebar) .topbar, body:has(.quality-shell-sidebar.collapsed) .topbar { padding-left: 12px; }
+  .quality-shell-sidebar-head:has(.ws-root) { display: flex; flex-shrink: 0; margin: 0 4px 0 0; padding: 0; }
+  .quality-shell-sidebar-head:has(.ws-root) .quality-shell-sidebar-toggle { display: none; }
+  .quality-shell-ws-collapsed { padding: 0; flex-shrink: 0; }
   .quality-shell-sidebar-title, .quality-shell-sidebar.collapsed .quality-shell-sidebar-title { width: 1px; height: 20px; margin: 0 6px; padding: 0; flex-shrink: 0; background: var(--sb-border); font-size: 0; overflow: hidden; }
   .quality-shell-sidebar-link, .quality-shell-sidebar.collapsed .quality-shell-sidebar-link { width: 44px; height: 44px; margin: 0; padding: 0; justify-content: center; flex-shrink: 0; }
   .quality-shell-sidebar-label, .quality-shell-sidebar.collapsed .quality-shell-sidebar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -300,7 +316,7 @@ body {
 .eval-chip.pass { background: var(--pass-soft); color: var(--pass); }
 .eval-chip.fail { background: var(--fail); color: var(--qa-card); }
 
-.eval-gates { margin: 12px 16px; border: 2px solid var(--line-strong); border-radius: 10px; padding: 14px; background: var(--qa-card); }
+.eval-gates { margin: 12px 16px; border: 1px solid var(--qa-border); border-radius: 10px; padding: 14px; background: var(--qa-card); }
 .eval-gates.failed { border-color: var(--fail); background: var(--fail-soft); }
 .eval-ghead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .eval-gtitle { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--qa-text); white-space: nowrap; }
@@ -434,3 +450,54 @@ tr[style*="--accent-weak"] > td:first-child { box-shadow: inset 3px 0 0 var(--ac
 
 /* Sidebar tooltip: shown immediately (native title tooltips wait about a second). */
 .sb-tip { position: fixed; z-index: 300; transform: translateY(-50%); padding: 6px 10px; border-radius: 8px; background: var(--ink); color: var(--ink-fg); font-size: 12.5px; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+
+/* ── Workspace switcher (sidebar top, Todoist profile-button style) ── */
+.ws-root { min-width: 0; }
+.ws-tile { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 6px; }
+.ws-cx  { background: #e4ebfa; color: #2f56c4; }
+.ws-pcg { background: var(--accent-weak); color: var(--accent); }
+[data-theme="dark"] .ws-cx { background: #1d2744; color: #9db2f6; }
+.ws-trigger { display: flex; align-items: center; gap: 8px; max-width: 100%; height: 32px; padding: 0 8px 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--qa-text); font-size: 14px; font-weight: 600; cursor: pointer; }
+.ws-trigger:hover, .ws-trigger[aria-expanded="true"] { background: var(--sb-hover); }
+.ws-trigger:focus-visible, .ws-menu-item:focus-visible { outline: 2px solid var(--marker); outline-offset: 1px; }
+.ws-trigger.collapsed { padding: 0 4px; }
+.ws-trigger-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-chevron { flex-shrink: 0; color: var(--qa-text-3); transition: transform .15s ease; }
+.ws-chevron.open { transform: rotate(180deg); }
+
+.ws-menu { position: fixed; z-index: 200; width: 300px; padding: 4px 0; border-radius: 10px; background: var(--color-background-primary); border: 1px solid var(--color-border-tertiary); box-shadow: 0 10px 30px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.08); }
+.ws-menu-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.ws-menu-head-text { min-width: 0; flex: 1; }
+.ws-menu-title { font-size: 14px; font-weight: 700; color: var(--color-text-primary); }
+.ws-menu-sub { font-size: 12.5px; color: var(--color-text-secondary); margin-top: 1px; }
+.ws-menu-hint { font-size: 12px; color: var(--color-text-tertiary); white-space: nowrap; }
+.ws-menu-sep { height: 1px; margin: 4px 0; background: var(--color-border-tertiary); }
+.ws-menu-label { padding: 6px 14px 4px; font-size: 12px; font-weight: 600; color: var(--color-text-tertiary); }
+.ws-menu-item { width: calc(100% - 8px); margin: 0 4px; display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-primary); font-size: 14px; text-align: left; cursor: pointer; }
+.ws-menu-item:hover { background: var(--color-background-tertiary); }
+.ws-menu-item.active { font-weight: 600; }
+.ws-menu-item-name { white-space: nowrap; }
+.ws-menu-item-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 400; color: var(--color-text-tertiary); }
+.ws-check { flex-shrink: 0; color: var(--accent); }
+.ws-menu-note { padding: 6px 14px 8px; font-size: 12px; line-height: 1.45; color: var(--color-text-tertiary); }
+
+/* Settings nav reuses the sidebar classes; these cover the bits RoleShell does not have (a page title). <button> rows use .quality-shell-sidebar-btn. */
+.settings-nav-head { padding: 0 8px 0 16px; }
+.settings-nav-head h1 { font-size: 15px; font-weight: 700; color: var(--qa-text); }
+.settings-nav-back { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.settings-nav-back:hover { text-decoration: underline; }
+.quality-shell-sidebar-btn { width: calc(100% - 24px); border: 0; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.quality-shell-sidebar-btn:focus-visible { outline: 2px solid var(--marker); outline-offset: -2px; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-btn { width: calc(100% - 20px); }
+
+/* Chat sidebar: recent conversations as single 32px rows, title left and age right (Todoist count style). */
+.chat-sidebar-recents { margin-top: 8px; }
+.quality-shell-sidebar-link .chat-recent-title { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.quality-shell-sidebar-link .chat-recent-time { flex-shrink: 0; font-size: 12px; color: var(--qa-text-3); }
+@media (max-width: 560px) { .chat-sidebar-recents { display: none; } }
+
+/* Search box pinned to the top of long dropdowns (components/shell/DropdownSearch.tsx). */
+.dd-search { position: sticky; top: 0; z-index: 2; padding: 8px; background: var(--qa-card); border-bottom: 1px solid var(--qa-border-sub); }
+.dd-search input { width: 100%; height: 30px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--qa-text); background: var(--qa-fill-light); border: 1px solid var(--qa-border); border-radius: 6px; outline: none; box-sizing: border-box; }
+.dd-search input::placeholder { color: var(--qa-text-3); }
+.dd-search input:focus { border-color: var(--accent); background: var(--qa-card); }

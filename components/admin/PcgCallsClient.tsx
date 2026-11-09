@@ -1370,13 +1370,6 @@ export default function PcgCallsClient() {
             </div>
           )}
 
-          {/* Workspace Switcher for Super Admins */}
-          {(isSuperAdmin || platformDomain === 'both') && (
-            <div className="mr-1">
-              <WorkspaceSwitcher compact={true} />
-            </div>
-          )}
-
           <div className="flex items-center gap-1.5 ml-2">
             <ThemeToggle />
             <AccountMenu
@@ -1395,6 +1388,13 @@ export default function PcgCallsClient() {
         <aside
           className="w-[220px] shrink-0 bg-[#f5f3ee] border-r border-[#e6e2d8] py-4 select-none"
         >
+          {/* Workspace switcher at the top of the sidebar (same spot as the CX sidebar) */}
+          {(isSuperAdmin || platformDomain === 'both') && (
+            <div className="pl-4 pr-3 pb-1">
+              <WorkspaceSwitcher />
+            </div>
+          )}
+
           {/* Section Title */}
           <div
             className="text-[11px] uppercase tracking-[0.08em] text-[#71717a] px-4 pt-3 pb-2 font-semibold"
