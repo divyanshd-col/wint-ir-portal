@@ -402,6 +402,7 @@ function mapRowToCall(r: any, customTeamMap?: Record<string, string>) {
     disputeStatus: r.dispute_status || 'none',
     disputeReason: r.dispute_reason || undefined,
     tlOverrideNote: r.tl_override_note || undefined,
+    sopTriggers: r.sop_triggers ? (typeof r.sop_triggers === 'string' ? JSON.parse(r.sop_triggers) : r.sop_triggers) : [],
   };
 }
 
@@ -466,7 +467,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         e.transcript_turns,
         e.dispute_status,
         e.dispute_reason,
-        e.tl_override_note
+        e.tl_override_note,
+        e.sop_triggers
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE r.call_id = $1 
@@ -781,6 +783,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       tableWhereClauses.push(`(e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%')`);
     } else if (categoryFilter === 'support') {
       tableWhereClauses.push(`(e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%')`);
+    } else if (categoryFilter === 'sop_breached') {
+      tableWhereClauses.push(`(e.sop_triggers IS NOT NULL AND jsonb_array_length(e.sop_triggers) > 0)`);
     } else if (categoryFilter === 'excluded') {
       tableWhereClauses.push(`(e.is_evaluable = false OR r.call_nature = 'non_client' OR e.verdict = 'EXCLUDED_NON_CLIENT')`);
     } else if (categoryFilter === 'hiring') {
@@ -927,7 +931,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'telemarketing' OR r.exclusion_reason ILIKE '%telemarket%' OR r.exclusion_reason ILIKE '%spam%' OR r.call_category ILIKE '%telemarket%'))::int AS telemarketing_count,
         COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'delivery_logistics' OR r.exclusion_reason ILIKE '%delivery%' OR r.exclusion_reason ILIKE '%courier%' OR r.call_category ILIKE '%delivery%'))::int AS delivery_count,
         COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'wrong_number' OR r.exclusion_reason ILIKE '%wrong%' OR r.call_category ILIKE '%wrong%'))::int AS wrong_number_count,
-        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'internal_personal' OR r.exclusion_reason ILIKE '%internal%' OR r.exclusion_reason ILIKE '%personal%' OR r.call_category ILIKE '%internal%'))::int AS internal_personal_count
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'internal_personal' OR r.exclusion_reason ILIKE '%internal%' OR r.exclusion_reason ILIKE '%personal%' OR r.call_category ILIKE '%internal%'))::int AS internal_personal_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.sop_triggers IS NOT NULL AND jsonb_array_length(e.sop_triggers) > 0))::int AS sop_breached_count
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE ${summaryWhereSql}
@@ -972,7 +977,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         e.transcript_turns,
         e.dispute_status,
         e.dispute_reason,
-        e.tl_override_note
+        e.tl_override_note,
+        e.sop_triggers
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE ${tableWhereSql}
@@ -1240,7 +1246,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         e.transcript_turns,
         e.dispute_status,
         e.dispute_reason,
-        e.tl_override_note
+        e.tl_override_note,
+        e.sop_triggers
       FROM pcg_call_recordings r
       JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE ${disputeWhereClauses.join(' AND ')}
@@ -1659,6 +1666,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           delivery: personaParam === 'agent' ? 0 : (sRow.delivery_count || 0),
           wrongNumber: personaParam === 'agent' ? 0 : (sRow.wrong_number_count || 0),
           internalPersonal: personaParam === 'agent' ? 0 : (sRow.internal_personal_count || 0),
+          sopBreached: sRow.sop_breached_count || 0,
         },
         unansweredBreakdown: {
           customerRangOut: sRow.customer_rang_out || 0,
