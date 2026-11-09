@@ -59,3 +59,29 @@ test('email prompt: edits to the instruction blocks reach the prompt, the output
   const blank = buildEmailEvaluationPrompt({ ...base, promptText: { intro: '  ', compliance: '' } });
   assert.equal(blank, dflt);
 });
+
+test('email prompt: knowledge base is included when found, and the evaluator is told what it does not have', () => {
+  const base = { ticketId: 't', messageId: 'm', agentName: 'A', sentAt: '2026-11-01T10:00:00Z', customerMessage: 'hi', agentReplyText: 'hello', historyCount: 0 };
+  const withKb = buildEmailEvaluationPrompt({ ...base, knowledgeBase: '[TDS guide]\nTDS is 10% on interest.' });
+  assert.ok(withKb.includes('KNOWLEDGE BASE (verify') && withKb.includes('TDS is 10% on interest.'));
+  // the excerpt sits before the rubric so the parameters can refer to it
+  assert.ok(withKb.indexOf('TDS is 10%') < withKb.indexOf('EVALUATION PARAMETERS'));
+
+  for (const none of [undefined, '', '   ']) {
+    const p = buildEmailEvaluationPrompt({ ...base, knowledgeBase: none });
+    assert.ok(p.includes('no relevant excerpt was found') && !p.includes('KNOWLEDGE BASE (verify'));
+  }
+  for (const p of [withKb, buildEmailEvaluationPrompt(base)]) {
+    assert.ok(p.includes('NOT PROVIDED: the client\'s account data') && p.includes('unverified'));
+  }
+});
+
+test('email prompt: JSON example has placeholders, not copyable values, and one key per parameter', () => {
+  const p = buildEmailEvaluationPrompt({ ticketId: 't', messageId: 'm', agentName: 'A', sentAt: 'x', customerMessage: 'hi', agentReplyText: 'hello', historyCount: 0 });
+  const format = p.slice(p.indexOf('OUTPUT FORMAT:'));
+  assert.ok(!format.includes('88') && !format.includes('USA') && !format.includes('Form 16A'));
+  assert.ok(format.includes('"quality_score": <integer 0-100>'));
+  for (const key of ['issue_resolution', 'accuracy', 'expectation_setting', 'personalisation', 'empathy', 'sentences_simple_to_understand', 'opening_and_closing']) {
+    assert.equal(format.split(`"${key}": "<`).length - 1, 2, key);   // once in parameter_scores, once in parameter_reasoning
+  }
+});

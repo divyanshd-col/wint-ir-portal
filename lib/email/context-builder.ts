@@ -38,6 +38,8 @@ export interface ReplyEvaluationContextInput {
   parameters?: EvaluationParameterConfig[];
   /** Admin edits to the instruction text (Settings → Prompts). The per-email data and the JSON output format are not editable. */
   promptText?: { intro?: string; compliance?: string };
+  /** Knowledge-base excerpts relevant to this email (same retrieval as chat and call scoring). Empty or missing = none found. */
+  knowledgeBase?: string;
 }
 
 export type ParameterScoreValue = 'yes' | 'half' | 'partial' | 'no' | 'na';
@@ -439,6 +441,7 @@ export function buildEmailEvaluationPrompt(input: ReplyEvaluationContextInput): 
   const parameters = input.parameters ?? DEFAULT_EMAIL_PARAMETERS;
   const intro = input.promptText?.intro?.trim() ? input.promptText.intro : DEFAULT_EMAIL_PROMPT_INTRO;
   const compliance = input.promptText?.compliance?.trim() ? input.promptText.compliance : DEFAULT_EMAIL_PROMPT_COMPLIANCE;
+  const paramKeys = parameters.map(p => p.key);
   const rubricBlock = parameters.map((p, i) => `${i + 1}. ${p.name}\n${p.instructions}`).join('\n\n');
   let contextBlock = '';
 
@@ -463,6 +466,15 @@ export function buildEmailEvaluationPrompt(input: ReplyEvaluationContextInput): 
 - Commitments / Expectations Set: ${s?.commitments_set || 'Standard SLA'}`;
   }
 
+  // What the evaluator may check facts against. Client account data and attachment contents are not supplied, and it is told so,
+  // so it notes those claims as unverified instead of guessing from its own knowledge.
+  const kb = input.knowledgeBase?.trim();
+  const referenceBlock = `${kb
+    ? `KNOWLEDGE BASE (verify general rules, charges, timelines and steps stated in the reply against this; it may not cover every topic):\n${kb}`
+    : 'KNOWLEDGE BASE: no relevant excerpt was found for this email.'}
+
+NOT PROVIDED: the client's account data and the contents of any attachment. Check client-specific facts only against the thread above. If a claim cannot be checked against the thread or the knowledge base, do not mark it wrong from your own knowledge; say in the reasoning that it is unverified.`;
+
   const cleanCustomerMsg = cleanEmailText(input.customerMessage || 'See context above.');
   const cleanAgentReply = cleanEmailText(input.agentReplyText || '');
 
@@ -483,6 +495,9 @@ Reply Content:
 ${cleanAgentReply}
 
 ---
+${referenceBlock}
+
+---
 EVALUATION PARAMETERS & SCORING RUBRIC (${parameters.length} Parameters):
 
 ${rubricBlock}
@@ -492,32 +507,20 @@ ${compliance}
 
 ---
 OUTPUT FORMAT:
-Return ONLY a valid JSON object matching this schema (no markdown formatting, no commentary outside the JSON):
+Return ONLY a valid JSON object in this shape (no markdown formatting, no commentary outside the JSON). Replace every <placeholder> with your own assessment of THIS email:
 {
-  "core_query": "Investor is requesting account verification OTPs to be sent via email instead of SMS because they are currently traveling in the USA.",
-  "quality_score": 88,
-  "compliance_passed": true,
-  "compliance_issues": [],
+  "core_query": "<1-2 sentence plain English summary of what the customer asked>",
+  "quality_score": <integer 0-100>,
+  "compliance_passed": <true or false>,
+  "compliance_issues": ["<each specific violation; leave the list empty if none>"],
   "parameter_scores": {
-    "issue_resolution": "yes",
-    "accuracy": "yes",
-    "expectation_setting": "yes",
-    "personalisation": "half",
-    "empathy": "na",
-    "sentences_simple_to_understand": "yes",
-    "opening_and_closing": "yes"
+${paramKeys.map(k => `    "${k}": "<yes | half | no | na>"`).join(',\n')}
   },
   "parameter_reasoning": {
-    "issue_resolution": "Addressed both the interest credit date and the Form 16A download path.",
-    "accuracy": "All facts match Wint Wealth KB; disclaimer included; client details verified.",
-    "expectation_setting": "Clear TAT of 24 hours provided for interest reflection.",
-    "personalisation": "Used client's bond name, but included a standard closing boilerplate.",
-    "empathy": "NA - Customer had a calm, standard transactional question.",
-    "sentences_simple_to_understand": "Clean bullet points, important dates bolded, zero typos.",
-    "opening_and_closing": "Natural opening greeting and polite closing aligned with issue."
+${paramKeys.map(k => `    "${k}": "<one or two sentences citing what the agent wrote>"`).join(',\n')}
   },
-  "summary": "Clear, accurate and compliant response addressing customer query with prompt turnaround.",
-  "strengths": ["Bolded key dates for readability", "Directly provided download path for tax document"],
-  "areas_for_improvement": ["Avoid repetitive template sign-off"]
+  "summary": "<one or two sentence overall assessment>",
+  "strengths": ["<specific strength>"],
+  "areas_for_improvement": ["<specific improvement>"]
 }`;
 }

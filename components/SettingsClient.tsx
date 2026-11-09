@@ -10,7 +10,7 @@ import ScoringRubricSection from './settings/ScoringRubricSection';
 import PromptEditor from './settings/PromptEditor';
 import ChangeHistorySection from './settings/ChangeHistorySection';
 import { DEFAULT_QUALITY_THRESHOLDS, type QualityThresholds } from '@/lib/quality-thresholds';
-import type { EvaluationParameterConfig } from '@/lib/email/context-builder';
+import { buildEmailEvaluationPrompt, type EvaluationParameterConfig } from '@/lib/email/context-builder';
 
 interface SafeConfig {
   llmProvider?: string;
@@ -1003,6 +1003,15 @@ export default function SettingsClient({
               <div key={t.id} className={activePromptTab === t.id ? '' : 'hidden'}>
                 <PromptEditor
                   title={t.title} description={t.description} note={t.note} onSaved={showToast}
+                  preview={t.id === 'email_eval' ? {
+                    label: 'Preview the full prompt the AI receives (sample email; uses the saved Scoring Rubric)',
+                    build: texts => buildEmailEvaluationPrompt({
+                      parameters: config.emailParameters, promptText: { intro: texts.emailPromptIntro, compliance: texts.emailPromptCompliance },
+                      ticketId: 'SAMPLE', messageId: 'SAMPLE', agentName: 'Sample Agent', sentAt: '2026-01-01T10:00:00Z',
+                      customerMessage: '[the investor\'s latest email appears here]', agentReplyText: '[the agent\'s reply being scored appears here]',
+                      historyCount: 0, knowledgeBase: '[knowledge-base excerpts matched to the email appear here]',
+                    }),
+                  } : undefined}
                   fields={t.fields.map(f => ({ field: f.field, label: f.label, value: config.prompts![f.field].value, defaultValue: config.prompts![f.field].defaultValue }))}
                 />
               </div>

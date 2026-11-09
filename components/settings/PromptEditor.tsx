@@ -7,8 +7,10 @@ export interface PromptEditorField { field: string; label?: string; value: strin
 /** One editable prompt (or a few related blocks) in Settings → Prompts. Shows the saved text or the built-in default,
  *  a "Custom" badge when an override is saved, and Reset to default. Saving text identical to the default clears the override,
  *  so later improvements to the default still reach it. */
-export default function PromptEditor({ title, description, note, fields, rows = 22, onSaved }: {
+export default function PromptEditor({ title, description, note, fields, rows = 22, onSaved, preview }: {
   title: string; description: string; note?: string; fields: PromptEditorField[]; rows?: number; onSaved: (msg: string) => void;
+  /** Builds the full text the AI receives from the current (even unsaved) edits; shown read-only under the editor. */
+  preview?: { label: string; build: (texts: Record<string, string>) => string };
 }) {
   const [texts, setTexts] = useState<Record<string, string>>(() => Object.fromEntries(fields.map(f => [f.field, f.value || f.defaultValue])));
   const [saved, setSaved] = useState<Record<string, string>>(() => Object.fromEntries(fields.map(f => [f.field, f.value])));
@@ -59,6 +61,14 @@ export default function PromptEditor({ title, description, note, fields, rows = 
           />
         </div>
       ))}
+
+      {preview && (
+        <details className="group border border-gray-100 rounded-xl">
+          <summary className="cursor-pointer select-none px-4 py-2.5 text-xs font-semibold text-gray-600 hover:text-gray-900">{preview.label}</summary>
+          <textarea readOnly value={preview.build(texts)} rows={24} aria-label={preview.label}
+            className="w-full border-t border-gray-100 rounded-b-xl px-4 py-3 text-xs text-gray-600 bg-gray-50 font-mono leading-relaxed resize-y focus:outline-none" />
+        </details>
+      )}
 
       {note && <p className="text-xs text-gray-400">{note}</p>}
       {error && <p role="alert" className="text-xs text-red-600">{error}</p>}

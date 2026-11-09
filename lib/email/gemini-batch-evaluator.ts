@@ -14,6 +14,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
+import { getKbContextForScoring } from '../scoring/engine';
 import { buildEmailEvaluationPrompt, calculateEmailIQS, emailWeightMap, resolveEmailParameters, ThreadSummary } from './context-builder';
 import { sendEmailComplianceSlackAlert } from './compliance-alert';
 
@@ -22,7 +23,22 @@ const DEFAULT_MODEL = 'gemini-2.5-flash';
 /** What an admin edited in Settings (Scoring Rubric + Prompts): the seven parameters and the two instruction blocks. */
 async function loadEmailParameters() {
   const config = await readConfig().catch(() => null);
-  return { parameters: resolveEmailParameters(config?.emailRubric), promptText: { intro: config?.emailPromptIntro, compliance: config?.emailPromptCompliance } };
+  return { config, parameters: resolveEmailParameters(config?.emailRubric), promptText: { intro: config?.emailPromptIntro, compliance: config?.emailPromptCompliance } };
+}
+
+/** Low temperature: the same email should get (nearly) the same score every time it is evaluated. */
+const EVAL_GENERATION = { responseMimeType: 'application/json', temperature: 0.1 };
+
+const KB_MAX_CHARS = 15_000;
+
+/** Knowledge-base excerpts for this email, found the same way as for chats and calls (subject + start of the customer's message).
+ *  Never throws: no excerpt just means the prompt says none was found. */
+async function emailKnowledgeBase(config: any, subject: string | null | undefined, customerMessage: string | null | undefined): Promise<string> {
+  const query = `${subject || ''} ${(customerMessage || '').replace(/\s+/g, ' ').slice(0, 400)}`.trim();
+  if (!query) return '';
+  const kb = await getKbContextForScoring(query, '', '', config, true);
+  // The shared retriever can return ~70k characters for one query; keep the prompt (and the Gemini cost per email) bounded.
+  return kb.length > KB_MAX_CHARS ? `${kb.slice(0, KB_MAX_CHARS)}\n[…excerpt shortened]` : kb;
 }
 
 async function getGeminiClient(): Promise<{ ai: GoogleGenAI; model: string }> {
@@ -135,6 +151,7 @@ export async function submitPendingEmailBatchJob(options?: {
     const promptText = buildEmailEvaluationPrompt({
       parameters: email.parameters,
       promptText: email.promptText,
+      knowledgeBase: await emailKnowledgeBase(email.config, row.subject_line, row.customer_message),
       ticketId: row.ticket_id,
       messageId: row.message_id,
       agentName: row.agent_name || 'Agent',
@@ -156,9 +173,7 @@ export async function submitPendingEmailBatchJob(options?: {
         agent_id: row.agent_id ? String(row.agent_id) : '',
         sent_at: new Date(row.sent_at).toISOString(),
       },
-      config: {
-        responseMimeType: 'application/json',
-      },
+      config: EVAL_GENERATION,
     });
 
     processedMessageIds.push(row.message_id);
@@ -458,6 +473,7 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
   const promptText = buildEmailEvaluationPrompt({
     parameters: email.parameters,
     promptText: email.promptText,
+    knowledgeBase: await emailKnowledgeBase(email.config, row.subject_line, row.customer_message),
     ticketId: row.ticket_id,
     messageId: row.message_id,
     agentName: row.agent_name || 'Agent',
@@ -473,9 +489,7 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
   const response = await ai.models.generateContent({
     model,
     contents: [{ role: 'user', parts: [{ text: promptText }] }],
-    config: {
-      responseMimeType: 'application/json',
-    },
+    config: EVAL_GENERATION,
   });
 
   const text = response.text || '{}';
