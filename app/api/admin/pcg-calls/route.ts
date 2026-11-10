@@ -431,23 +431,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const config = await readConfig().catch(() => null);
   const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
 
-  // If requesting a specific single call by call_id or id
-  const requestedCallId = searchParams.get('call_id')?.trim();
+  // If requesting a specific single call by call_id or id (support both call_id and callId)
+  const requestedCallId = (searchParams.get('call_id') || searchParams.get('callId'))?.trim();
   if (requestedCallId) {
     const cleanId = requestedCallId.replace(/^#/, '').replace(/^call-/, '').replace(/^runo-/, '').trim();
     const singleSql = `
       SELECT
-        r.id,
-        r.call_id,
+        COALESCE(r.id, 0) AS id,
+        COALESCE(r.call_id, e.call_id) AS call_id,
         r.called_by,
         r.agent_name,
-        r.phone_number,
+        COALESCE(r.phone_number, e.customer_phone) AS phone_number,
         r.call_type,
         r.tag,
-        r.duration_seconds,
+        COALESCE(r.duration_seconds, e.duration_seconds, 0) AS duration_seconds,
         r.start_time,
         r.recording_url,
-        r.call_category,
+        COALESCE(r.call_category, e.call_category) AS call_category,
         r.call_nature,
         r.exclusion_reason AS rec_exclusion_reason,
         r.category_source,
@@ -470,7 +470,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         e.tl_override_note,
         e.sop_triggers
       FROM pcg_call_recordings r
-      LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
+      FULL OUTER JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE r.call_id = $1 
          OR r.call_id = $2
          OR r.call_id = $3
