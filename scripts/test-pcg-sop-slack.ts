@@ -32,11 +32,11 @@ console.log('✓ Duration formatting passed.\n');
 console.log('Test 3: RM and TL Slack Member ID resolution');
 const shreySlackId = resolvePcgRmSlackId('Shrey Jain');
 assert.strictEqual(shreySlackId, 'U0B5ZNXK6SV');
-assert.strictEqual(formatRmSlackTag('Shrey Jain'), '<@U0B5ZNXK6SV> (Shrey Jain)');
+assert.strictEqual(formatRmSlackTag('Shrey Jain'), '<@U0B5ZNXK6SV>');
 
 const dheerajSlackId = resolvePcgTlSlackId('Dheeraj Bhojwani');
 assert.strictEqual(dheerajSlackId, 'U0A3PEUCFPW');
-assert.strictEqual(formatTlSlackTag('Team Dheeraj Bhojwani'), '<@U0A3PEUCFPW> (Dheeraj Bhojwani)');
+assert.strictEqual(formatTlSlackTag('Team Dheeraj Bhojwani'), '<@U0A3PEUCFPW>');
 console.log('✓ RM and TL Slack tagging passed.\n');
 
 // 4. Exact Slack Alert message construction (Matching PDF Sample)
@@ -69,10 +69,11 @@ console.log('\n');
 
 assert(msg.includes('🚨 PCG CALL MONITORING ALERT — Customer Behaviour & Hostility'));
 assert(msg.includes('• Call ID: 68fb1d8ec9faf992f3132454'));
-assert(msg.includes('• RM: <@U0B5ZNXK6SV> (Shrey Jain)'));
-assert(msg.includes('• TL: <@U0A3PEUCFPW> (Dheeraj Bhojwani)'));
-assert(msg.includes('• Customer Phone: +91 98•••• ••210'));
-assert(msg.includes('• Call Duration: 04:12'));
+assert(msg.includes('• RM: <@U0B5ZNXK6SV>'));
+assert(msg.includes('• TL: <@U0A3PEUCFPW>'));
+assert(!msg.includes('Customer Phone'));
+assert(!msg.includes('Call Duration'));
+assert(!msg.includes('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
 assert(msg.includes('Trigger Category: Customer Behaviour & Hostility'));
 assert(msg.includes('Severity Level: CRITICAL'));
 assert(msg.includes('Direction: Customer said this to RM'));

@@ -337,7 +337,7 @@ export function formatRmSlackTag(rmName: string, customMap?: Record<string, stri
   const clean = (rmName || 'RM').trim();
   const slackId = resolvePcgRmSlackId(clean, customMap);
   if (slackId) {
-    return `<@${slackId}> (${clean})`;
+    return `<@${slackId}>`;
   }
   return clean;
 }
@@ -346,7 +346,7 @@ export function formatTlSlackTag(tlName: string, customMap?: Record<string, stri
   const clean = (tlName || 'TL').replace(/^Team\s+/i, '').trim();
   const slackId = resolvePcgTlSlackId(clean, customMap);
   if (slackId) {
-    return `<@${slackId}> (${clean})`;
+    return `<@${slackId}>`;
   }
   return clean;
 }
@@ -415,8 +415,6 @@ export function buildPcgSopSlackMessage(
 ): string {
   const rmTag = formatRmSlackTag(trigger.rm_name || callMetadata.rmName, customMap);
   const tlTag = formatTlSlackTag(trigger.tl_name || callMetadata.tlName, customMap);
-  const maskedPhone = maskCustomerPhone(trigger.customer_phone || callMetadata.customerPhone);
-  const duration = formatCallDuration(callMetadata.durationSeconds);
   const portalUrl = getPortalCallUrl(trigger.call_id || callMetadata.callId);
 
   const cleanCallId = (trigger.call_id || callMetadata.callId).replace(/^runo-/, '').replace(/^call-/, '');
@@ -424,16 +422,12 @@ export function buildPcgSopSlackMessage(
   const timestampDisplay = trigger.timestamp || '00:00';
   const turnDisplay = trigger.turn_index ? ` (Turn ${trigger.turn_index})` : '';
 
-  const divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
-
   return `🚨 PCG CALL MONITORING ALERT — ${trigger.category}
 
 • Call ID: ${cleanCallId}
 • RM: ${rmTag}
 • TL: ${tlTag}
-• Customer Phone: ${maskedPhone}
-• Call Duration: ${duration}
-${divider}
+
 Trigger Category: ${trigger.category}
 Severity Level: ${trigger.severity}
 Direction: ${trigger.direction}
@@ -441,7 +435,7 @@ Timestamp: ${timestampDisplay}${turnDisplay}
 
 Quoted Dialogue:
 "${trigger.quote.trim()}"
-${divider}
+
 Open Call in Wint IR Portal:
 ${portalUrl}`;
 }
