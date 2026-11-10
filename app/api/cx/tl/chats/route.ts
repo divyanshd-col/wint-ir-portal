@@ -86,8 +86,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  // For QA (or mapped admins), restrict by assigned dispositions
-  if (role === 'quality' || qaEntry) {
+  // For QA (or mapped admins), restrict by assigned dispositions. A TL is never restricted this way, even if their
+  // email is also in the QA map (an empty entry there used to hide a TL's whole team).
+  if (role === 'quality' || (qaEntry && role !== 'tl')) {
     const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     const strictDispositions = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
     if (strictDispositions.length > 0) {
