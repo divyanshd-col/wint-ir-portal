@@ -32,7 +32,7 @@ export const viewport = {
   themeColor: '#1f7a4d',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children, modal }: { children: React.ReactNode; modal: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -43,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <TopBar />
           {children}
+          {modal}
         </Providers>
       </body>
     </html>

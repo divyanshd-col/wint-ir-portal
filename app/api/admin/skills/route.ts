@@ -47,6 +47,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Cannot remove skill management permission from Administrator' }, { status: 400 });
   }
 
+
   try {
     const updatedSkills = await togglePersonaSkill(personaId, skillId, enabled, actorEmail);
     return NextResponse.json({

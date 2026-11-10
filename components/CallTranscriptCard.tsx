@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 function formatTs(ts?: string): string {
   if (!ts) return '';
@@ -32,6 +32,15 @@ export function CallTranscriptCard({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? index === 0);
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handlePlaybackRateChange = (rate: number) => {
+    setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
 
   const callDate = rec.calledAt
     ? new Date(rec.calledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
@@ -76,11 +85,40 @@ export function CallTranscriptCard({
       {open && (
         <div>
           {rec.recordingUrl && (
-            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100 flex flex-col gap-1.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audio Recording</span>
+            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audio Recording</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-slate-400 font-semibold mr-1">SPEED:</span>
+                  {([1, 1.5, 2] as const).map(rate => {
+                    const active = playbackRate === rate;
+                    return (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => handlePlaybackRateChange(rate)}
+                        className={`h-5 px-1.5 text-[11px] font-semibold rounded border transition-colors ${
+                          active
+                            ? 'bg-slate-900 border-slate-900 text-white'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {rate}x
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <audio
+                ref={audioRef}
                 src={rec.recordingUrl ? `/api/quality/audio-proxy?url=${encodeURIComponent(rec.recordingUrl)}` : undefined}
                 controls
+                onPlay={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+                }}
+                onLoadedMetadata={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+                }}
                 className="w-full h-9 rounded-lg"
               />
             </div>

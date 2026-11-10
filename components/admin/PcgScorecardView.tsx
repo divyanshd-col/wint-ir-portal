@@ -351,7 +351,7 @@ export default function PcgScorecardView({
   const numbers = activeReport?.numbers;
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-140px)] bg-[#F7F7F8] border border-[#E4E4E7] rounded-2xl overflow-hidden shadow-sm">
+    <div className="flex flex-col lg:flex-row min-h-[calc(var(--vh100)_-_140px)] bg-[#F7F7F8] border border-[#E4E4E7] rounded-2xl overflow-hidden shadow-sm">
       {/* ── LEFT SIDEBAR: SCORECARD HISTORY (MATCHING CX EXACTLY) ─────────────── */}
       <aside className="w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-[#E4E4E7] bg-white flex flex-col shrink-0 overflow-y-auto">
         <div className="p-4 border-b border-[#E4E4E7] bg-gray-50 flex items-center justify-between">

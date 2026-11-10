@@ -102,6 +102,7 @@ export default function SkillsManager({ showToast }: SkillsManagerProps) {
       return;
     }
 
+
     const nextEnabled = !currentEnabled;
 
     // Optimistic UI update

@@ -1,4 +1,6 @@
 import { storeGetConfig, storeSetConfig } from './store';
+import type { QualityThresholds } from './quality-thresholds';
+import type { EmailRubric } from './email/context-builder';
 
 export type UserRole = 'agent' | 'admin' | 'quality' | 'tl';
 
@@ -37,14 +39,23 @@ export interface PortalConfig {
   iqsAnthropicApiKey?: string; // dedicated Anthropic key for IQS scoring (if provider = claude)
   // ── Editable prompts (empty = use hardcoded default) ────────────────────────
   iqsScoringPrompt?: string;
-  analyticsPlannerPrompt?: string;
-  analyticsSynthesizerPrompt?: string;
+  // Settings → Prompts: call / email / PCG scoring prompts (absent or empty = built-in default)
+  callGatesPrompt?: string;
+  callIqsPrompt?: string;
+  emailPromptIntro?: string;
+  emailPromptCompliance?: string;
+  pcgQualityPrompt?: string;
+  pcgClassificationPrompt?: string;
   pcgTeamAssignments?: Record<string, string>;
   // ── QA disposition mapping ───────────────────────────────────────────────
   qaDispositionMap?: QADispositionEntry[];
   // ── KB document display names (Drive ID → human-readable name) ──────────────
   knowledgeBaseDocNames?: Record<string, string>;
   pyannoteApiKey?: string;
+  // ── QA review thresholds (absent = 85 for every channel) ────────────────────
+  qualityThresholds?: QualityThresholds;
+  // ── Email scoring rubric edits (only what differs from DEFAULT_EMAIL_PARAMETERS) ─
+  emailRubric?: EmailRubric;
 }
 
 export interface QADispositionEntry {

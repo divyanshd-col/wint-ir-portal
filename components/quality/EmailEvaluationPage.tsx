@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import DateRangePicker from './DateRangePicker';
@@ -8,12 +8,14 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
+import { getDisputeClassification } from '@/lib/quality';
 import {
-  DEFAULT_EMAIL_PARAMETERS,
+  emailWeightMap,
   ParameterScoreValue,
   calculateEmailIQS,
   normalizeParamScoreValue,
 } from '@/lib/email/context-builder';
+import { useEmailParameters } from '@/components/quality/useEmailParameters';
 import EmailMessageView, {
   CustomerSummaryBlock,
   CustomerCoreQueryCard,
@@ -35,6 +37,10 @@ interface EvaluationItem {
   chat_id?: string;
   intent_l1?: string | null;
   customer_email?: string;
+  customer_phone?: string | null;
+  raised_by_role?: 'ir' | 'tl' | null;
+  flag_author_name?: string | null;
+  flag_raiser_name?: string | null;
   agent_id?: string;
   agent_name?: string;
   sent_at: string;
@@ -423,6 +429,7 @@ type SortCol = 'dateTime' | 'agent' | 'intent' | 'iqs' | 'dispute' | 'reviewedBy
 const SORTABLE: Col[] = ['dateTime', 'agent', 'intent', 'iqs', 'dispute', 'reviewedBy', 'reviewedAt']; // IDs and Action are not sortable; e-mail has no CSAT
 
 export default function EmailEvaluationPage() {
+  const emailParams = useEmailParameters();
   const { data: session } = useSession();
   const isAdmin = (session?.user as any)?.role === 'admin' || Boolean((session?.user as any)?.isAdmin);
   const [tab, setTab] = useState<Tab>('pending');
@@ -471,7 +478,7 @@ export default function EmailEvaluationPage() {
   };
 
   const calculateIQS = (params: Record<string, ParameterScoreValue>, intent?: string | null): number | null => {
-    return calculateEmailIQS(params, undefined, intent);
+    return calculateEmailIQS(params, emailWeightMap(emailParams), intent);
   };
 
   const getParamsForItem = (item: EvaluationItem): Record<string, ParameterScoreValue> => {
@@ -480,7 +487,7 @@ export default function EmailEvaluationPage() {
     }
     const current = item.parameter_scores || {};
     const initial: Record<string, ParameterScoreValue> = {};
-    DEFAULT_EMAIL_PARAMETERS.forEach(def => {
+    emailParams.forEach(def => {
       let raw = current[def.key];
       if (raw === undefined && def.aliases) {
         for (const alias of def.aliases) {
@@ -502,7 +509,7 @@ export default function EmailEvaluationPage() {
     const current = (item.parameter_scores as any) || {};
     const existingReasoning = (current.__reasoning && typeof current.__reasoning === 'object') ? current.__reasoning : {};
     const initial: Record<string, string> = { ...existingReasoning };
-    DEFAULT_EMAIL_PARAMETERS.forEach(def => {
+    emailParams.forEach(def => {
       if (!initial[def.key] && def.aliases) {
         for (const alias of def.aliases) {
           if (existingReasoning[alias]) {
@@ -617,7 +624,11 @@ export default function EmailEvaluationPage() {
     }));
   };
 
+  // Only the latest request may update the list: the 500-row Pending fetch is slower than Disputes (6 rows), and without
+  // this guard switching tabs let the stale Pending response land last and show Pending rows under the Disputes tab.
+  const fetchSeq = useRef(0);
   const fetchData = useCallback(async () => {
+    const seq = ++fetchSeq.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -633,6 +644,7 @@ export default function EmailEvaluationPage() {
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
+      if (seq !== fetchSeq.current) return;
       if (data.ok) {
         if (data.summary) {
           setSummary(data.summary);
@@ -649,7 +661,7 @@ export default function EmailEvaluationPage() {
     } catch (err) {
       console.error('[email-eval] Failed to load data:', err);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeq.current) setLoading(false);
     }
   }, [tab, search, agentFilter, dispositionFilter, disputeFilter, period]);
 
@@ -1377,7 +1389,7 @@ export default function EmailEvaluationPage() {
                                       agentNote={item.dispute_notes}
                                       agentName={item.agent_name}
                                       raisedByRole={(item as any).raised_by_role || (item.dispute_status === 'Under_Review' ? 'tl' : 'agent')}
-                                      raisedByName={(item as any).flag_author_name || ((item as any).raised_by_role === 'tl' ? 'Team Lead' : item.agent_name)}
+                                      raisedByName={item.flag_raiser_name || item.flag_author_name || (item.raised_by_role === 'tl' ? 'Team Lead' : item.agent_name)}
                                       reviewedBy={item.reviewed_by}
                                       qaName={item.qa_name || item.reviewed_by}
                                       reviewerRole="quality"
@@ -1401,6 +1413,25 @@ export default function EmailEvaluationPage() {
                                         <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`}</span>
                                         {item.sent_at && (<><span>·</span><span>{new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></>)}
                                         {intentLabel(item.intent_l1) !== '—' && (<><span>·</span><span>{intentLabel(item.intent_l1)}</span></>)}
+                                        {item.customer_phone && (<><span>·</span><span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{item.customer_phone}</span></>)}
+                                        {/* Same "Disputed by IR/TL (name) · AGENT" line as the chat evaluation card; e-mail disputes are always agent-side. */}
+                                        {tab === 'disputes' && item.dispute_status && item.dispute_status !== 'None' && (() => {
+                                          const isTL = item.raised_by_role === 'tl' || (!item.raised_by_role && item.dispute_status === 'Under_Review');
+                                          const badge = getDisputeClassification(null, 'email');
+                                          return (
+                                            <>
+                                              <span>·</span>
+                                              <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
+                                                Disputed by {isTL ? 'TL' : 'IR'} ({item.flag_raiser_name || item.flag_author_name || (isTL ? 'Team Lead' : item.agent_name)})
+                                              </span>
+                                              <span style={{
+                                                fontSize: 10, fontWeight: 700, background: badge.badgeBg, color: badge.badgeText,
+                                                border: `1px solid ${badge.badgeBorder}`, borderRadius: 4, padding: '1px 6px', marginLeft: 4,
+                                                display: 'inline-block', verticalAlign: 'middle',
+                                              }}>{badge.label}</span>
+                                            </>
+                                          );
+                                        })()}
                                       </div>
                                       {isSessionOverridden && item.quality_score != null ? (
                                         <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 2 }}>Adjusted from {Math.round(Number(item.quality_score))}%</div>
@@ -1480,7 +1511,7 @@ export default function EmailEvaluationPage() {
                                 <div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                     <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})
+                                      Parameter Scores ({emailParams.length})
                                     </div>
                                   </div>
 
@@ -1490,7 +1521,7 @@ export default function EmailEvaluationPage() {
                                     background: 'var(--qa-card)',
                                     overflow: 'hidden',
                                   }}>
-                                    {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                    {emailParams.map((def, idx) => {
                                       const currentParams = getParamsForItem(item);
                                       const currentReasoning = getReasoningForItem(item);
                                       const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
@@ -1506,7 +1537,7 @@ export default function EmailEvaluationPage() {
                                           reason={currentReasoning[def.key] ?? ''}
                                           onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
                                           onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
-                                          last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                          last={idx === emailParams.length - 1}
                                         />
                                       );
                                     })}

@@ -5,6 +5,7 @@ import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
 import { computeIqsFromRawParams } from '@/lib/quality';
+import { reviewThreshold } from '@/lib/quality-thresholds';
 
 const ROUTE = 'cx/qa/chats-to-review';
 
@@ -129,7 +130,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const dispIdx = paramIdx++;
     sqlParams.push(safeDispositions);
     baseWhere = `c.tags->>'disposition' = ANY($${dispIdx}::text[]) AND i.status IN ('pending', 'reopened') AND (
-      (i.iqs_score IS NOT NULL AND i.iqs_score <= 85)
+      (i.iqs_score IS NOT NULL AND i.iqs_score <= ${reviewThreshold(config, 'chat')})
       OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
     ) AND (a.status IS NULL OR a.status != 'inactive')`;
   }

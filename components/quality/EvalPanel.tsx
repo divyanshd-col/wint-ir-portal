@@ -1043,7 +1043,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                         <div style={{
                           padding: '10px 14px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
                           wordBreak: 'break-word', overflowWrap: 'anywhere',
-                          ...(type === 'agent' ? { background: 'var(--ink)', color: 'var(--ink-fg)' }
+                          ...(type === 'agent' ? { background: 'var(--bubble-self-bg)', color: 'var(--bubble-self-fg)' }
                             : type === 'bot'   ? { background: 'var(--qa-gray-100)', color: 'var(--qa-text)' }
                             : { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', color: 'var(--qa-text)' }),
                         }}>

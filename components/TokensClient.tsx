@@ -281,7 +281,7 @@ export default function TokensClient() {
   const currentLogs = recentLogsList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--qa-bg, var(--qa-gray-50))', color: 'var(--qa-text, var(--qa-text))', padding: '24px 32px' }}>
+    <div style={{ minHeight: 'var(--vh100)', background: 'var(--qa-bg, var(--qa-gray-50))', color: 'var(--qa-text, var(--qa-text))', padding: '24px 32px' }}>
       
       {/* ── Top Navigation & Header ────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>

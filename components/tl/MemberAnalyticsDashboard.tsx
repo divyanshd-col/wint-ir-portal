@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import DateRangePicker from '@/components/quality/DateRangePicker';
+import DropdownSearch, { matchesSearch } from '@/components/shell/DropdownSearch';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Period = '7' | '30' | 'custom';
@@ -125,6 +126,7 @@ export default function MemberAnalyticsDashboard() {
   const [wowChannel, setWowChannel]   = useState<'chats' | 'calls'>(() => (urlChannel === 'calls' ? 'calls' : 'chats'));
   const [wowTab, setWowTab]           = useState<'metrics' | 'params'>('metrics');
   const [showAgentDrop, setShowAgentDrop] = useState(false);
+  const [agentSearch, setAgentSearch] = useState('');
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [aiStates, setAiStates]       = useState<Record<string, 'empty'|'loading'|'insights'>>({ chats: 'empty', calls: 'empty' });
   const [aiResults, setAiResults]     = useState<Record<string, AiResult|null>>({ chats: null, calls: null });
@@ -220,6 +222,7 @@ export default function MemberAnalyticsDashboard() {
   const handleAgentSelect = (name: string) => {
     setSelectedAgent(name);
     setShowAgentDrop(false);
+    setAgentSearch('');
     setExpandedCats(new Set());
   };
 
@@ -313,7 +316,11 @@ export default function MemberAnalyticsDashboard() {
                 // long agent lists scroll inside the panel instead of running off the page
                 maxHeight: 'min(360px, calc(100vh - 220px))', overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain',
               }}>
-                {agents.map(a => (
+                <DropdownSearch value={agentSearch} onChange={setAgentSearch} count={agents.length} placeholder="Search agent…" />
+                {agents.filter(a => matchesSearch(agentSearch, a)).length === 0 && (
+                  <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--qa-text-3)' }}>No agents match “{agentSearch}”</div>
+                )}
+                {agents.filter(a => matchesSearch(agentSearch, a)).map(a => (
                   <button
                     key={a}
                     onClick={() => handleAgentSelect(a)}
