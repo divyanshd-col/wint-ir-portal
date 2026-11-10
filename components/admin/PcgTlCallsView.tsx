@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import PcgPeriodFilter from './PcgPeriodFilter';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
 
 interface CallParameter {
@@ -51,6 +52,15 @@ export interface PCGCall {
   aiCoachingTip: string | null;
   transcriptTurns: TranscriptTurn[];
   disputeStatus: 'none' | 'pending' | 'resolved' | 'overridden';
+  sopTriggers?: Array<{
+    category: string;
+    severity: string;
+    direction: string;
+    signal: string;
+    timestamp: string;
+    turn_index?: number;
+    quote: string;
+  }>;
 }
 
 export interface PcgTlCallsViewProps {
@@ -58,6 +68,8 @@ export interface PcgTlCallsViewProps {
   globalDateRange?: '7d' | '30d' | 'custom';
   globalCustomStartDate?: string;
   globalCustomEndDate?: string;
+  /** Called when the period filter on this page changes (the date range lives in the parent). */
+  onPeriodChange?: (range: '7d' | '30d' | 'custom', start: string, end: string) => void;
 }
 
 // Helpers for CallEvalPanel formatting
@@ -150,10 +162,15 @@ export const formatCallSegments = (call: PCGCall) => {
   if (!call.transcriptTurns || call.transcriptTurns.length === 0) return [];
   const segments: any[] = [];
   call.transcriptTurns.forEach((turn, idx) => {
+    const matchingTrigger = (call.sopTriggers || []).find(
+      (st) => st.turn_index === (idx + 1) || (turn.time && st.timestamp === turn.time) || (st.quote && turn.text && (turn.text.includes(st.quote) || st.quote.includes(turn.text)))
+    );
     segments.push({
       speaker: turn.speaker === 'RM' ? 'IR_EXECUTIVE' : 'INVESTOR',
       text: turn.text,
       ts: turn.time || `0:${(idx * 3 + 3).toString().padStart(2, '0')}`,
+      isSopTrigger: Boolean(matchingTrigger),
+      sopTrigger: matchingTrigger,
     });
     if (idx < call.transcriptTurns.length - 1) {
       segments.push({
@@ -170,6 +187,7 @@ export default function PcgTlCallsView({
   globalDateRange = '7d',
   globalCustomStartDate,
   globalCustomEndDate,
+  onPeriodChange = () => {},
 }: PcgTlCallsViewProps) {
   // TL selection: 'all' or specific Team Lead
   const [selectedTl, setSelectedTl] = useState<string>('all');
@@ -358,16 +376,7 @@ export default function PcgTlCallsView({
               ? 'Team Leads Performance Overview'
               : `${selectedTl} Performance Overview`}
           </span>
-          <div className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700 bg-white border border-[#E4E4E7] px-2.5 py-1 rounded-lg shadow-2xs">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            <span className="text-zinc-500 font-normal">Period:</span>
-            <span className="font-semibold text-zinc-900">{activeDateInfo.full}</span>
-          </div>
+          <PcgPeriodFilter range={dateRange} start={customStartDate} end={customEndDate} onChange={onPeriodChange} />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -511,6 +520,29 @@ export default function PcgTlCallsView({
               }`}
             >
               General / Support {summary?.categoryCounts?.support ? `(${summary.categoryCounts.support})` : ''}
+            </button>
+            <button
+              onClick={() => {
+                setSelectedCategory('sop_breached');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                selectedCategory === 'sop_breached'
+                  ? 'bg-red-700 text-white shadow-sm font-bold'
+                  : 'bg-red-50 text-red-800 hover:bg-red-100 border border-red-200'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedCategory === 'sop_breached' ? 'bg-white' : 'bg-red-600'}`}></span>
+              <span>SOP Breached</span>
+              {summary?.categoryCounts?.sopBreached != null && summary.categoryCounts.sopBreached > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    selectedCategory === 'sop_breached' ? 'bg-red-900 text-white' : 'bg-red-200 text-red-900'
+                  }`}
+                >
+                  {summary.categoryCounts.sopBreached}
+                </span>
+              )}
             </button>
 
             <div className="h-4 w-px bg-zinc-200 mx-1 hidden sm:block" />
@@ -775,6 +807,15 @@ export default function PcgTlCallsView({
                               {call.isEvaluable === false && <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
                               {call.category}
                             </span>
+                            {call.sopTriggers && call.sopTriggers.length > 0 && (
+                              <span
+                                title={`SOP Flag: ${call.sopTriggers[0].category} — "${call.sopTriggers[0].quote}"`}
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse"></span>
+                                <span>{call.sopTriggers[0].category}</span>
+                              </span>
+                            )}
                             {call.secondaryCategories && call.secondaryCategories.length > 0 && (
                               <span
                                 title={call.aiCategoryReasoning || `Also discussed: ${call.secondaryCategories.join(', ')}`}
@@ -900,6 +941,7 @@ export default function PcgTlCallsView({
                             callId={call.callId || call.id.toString()}
                             hideShowChat={true}
                             isPcg={true}
+                            sopTriggers={call.sopTriggers}
                             mobileNumber={call.phoneNumber}
                             agentName={call.rmName}
                             iqsScore={call.iqsScore ?? 0}

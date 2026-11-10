@@ -72,8 +72,6 @@ export function AccountMenu({ name, email, role, roleLabel }: { name: string; em
   );
 }
 
-import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
-
 export default function TopBar() {
   const pathname = usePathname() || '/';
   const { data: session, status } = useSession();
@@ -83,21 +81,23 @@ export default function TopBar() {
 
   if (isAuthPath(pathname) || status === 'unauthenticated' || activeDomain === 'pcg' || pathname.startsWith('/admin/pcg-calls')) return null;
   const role = user?.role ?? 'agent';
-  const isSuperAdmin = Boolean(user?.isSuperAdmin);
-  const tabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
+  const allTabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
+  // Settings and MCP are not tabs: they are icons next to the theme toggle and open as popups.
+  const canOpenSettings = allTabs.some((t) => t.key === 'settings');
+  const canOpenMcp = allTabs.some((t) => t.key === 'analytics');
+  const tabs = allTabs.filter((t) => t.key !== 'settings' && t.key !== 'analytics');
   const current = activeTab(pathname);
+  const settingsOpen = current === 'settings';
+  const mcpOpen = pathname === '/analytics';
 
   const isTabActive = (t: { key: string }) => current === t.key;
 
   return (
     <>
       {/* Pages size themselves with h-screen / min-h-screen: take the bar's height off, only while it is shown. */}
-      <style>{'.h-screen{height:calc(100vh - var(--topbar-h))}.min-h-screen{min-height:calc(100vh - var(--topbar-h))}'}</style>
+      <style>{'.h-screen{height:calc(var(--vh100) - var(--topbar-h))}.min-h-screen{min-height:calc(var(--vh100) - var(--topbar-h))}'}</style>
       <header className="topbar">
-        <Link href="/" className="topbar-logo" aria-label="Wint Wealth home">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/wint-logo.png" alt="Wint Wealth" width={22} height={22} />
-        </Link>
+        <span aria-hidden />
         <nav className="topbar-tabs" aria-label="Main">
           {tabs.map((t) => {
             const active = isTabActive(t);
@@ -109,11 +109,15 @@ export default function TopBar() {
           })}
         </nav>
         <div className="topbar-right">
-          {/* Netflix-style Workspace Switcher for Super Admins */}
-          {(isSuperAdmin || platformDomain === 'both') && (
-            <div className="mr-2">
-              <WorkspaceSwitcher compact={true} />
-            </div>
+          {canOpenMcp && (
+            <Link href="/analytics" scroll={false} className={`topbar-icon-btn${mcpOpen ? ' active' : ''}`} aria-label="MCP: ask questions about the data in Claude" aria-current={mcpOpen ? 'page' : undefined} title="MCP">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2v6M15 2v6" /><path d="M6 8h12v4a6 6 0 0 1-12 0z" /><path d="M12 18v4" /></svg>
+            </Link>
+          )}
+          {canOpenSettings && (
+            <Link href="/settings" scroll={false} className={`topbar-icon-btn${settingsOpen ? ' active' : ''}`} aria-label="Settings" aria-current={settingsOpen ? 'page' : undefined} title="Settings">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+            </Link>
           )}
           <ThemeToggle />
           {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} />}

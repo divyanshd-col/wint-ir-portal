@@ -173,22 +173,22 @@ export default function PcgRmPerformanceDashboard({
     : 0;
 
   return (
-    <div style={{ fontFamily: 'Inter, sans-serif', maxWidth: 1280, margin: '0 auto', color: '#18181b' }}>
+    <div style={{ fontFamily: 'Inter, sans-serif', maxWidth: 1280, margin: '0 auto', color: 'var(--dk-fg-18181b, #18181b)' }}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 24, borderBottom: '1px solid #e4e4e7', paddingBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 24, borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', paddingBottom: 16 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: '#18181b', letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', letterSpacing: '-0.02em' }}>
               RM Performance
             </h1>
-            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-065f46, #065f46)', border: '1px solid var(--dk-bd-a7f3d0, #a7f3d0)', padding: '2px 8px', borderRadius: 6 }}>
               Calls Channel
             </span>
-            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7', padding: '2px 8px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', background: 'var(--dk-bg-f4f4f5, #f4f4f5)', color: 'var(--dk-fg-52525b, #52525b)', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', padding: '2px 8px', borderRadius: 6 }}>
               Whole PCG Department · {rmsList.length} RMs
             </span>
           </div>
-          <p style={{ fontSize: 13, color: '#71717a', margin: '4px 0 0 0' }}>
+          <p style={{ fontSize: 13, color: 'var(--dk-fg-71717a, #71717a)', margin: '4px 0 0 0' }}>
             Top performers (Top 5 by IQS), bottom performers (IQS ≤ 70%), most improved performers, and top contributors during off-hours & weekends for the whole PCG department.
           </p>
         </div>
@@ -196,24 +196,24 @@ export default function PcgRmPerformanceDashboard({
 
       {/* ── 3 CATEGORIES GRID ────────────────────────────────────────────── */}
       {rmsList.length === 0 ? (
-        <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, padding: 48, textAlign: 'center' }}>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#71717a' }}>No RM evaluations recorded yet for the PCG department.</p>
-          <p style={{ margin: '6px 0 0 0', fontSize: 12, color: '#a1a1aa' }}>Rankings and trends will populate automatically once weekly call quality evaluations are scored.</p>
+        <div style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, padding: 48, textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--dk-fg-71717a, #71717a)' }}>No RM evaluations recorded yet for the PCG department.</p>
+          <p style={{ margin: '6px 0 0 0', fontSize: 12, color: 'var(--dk-fg-a1a1aa, #a1a1aa)' }}>Rankings and trends will populate automatically once weekly call quality evaluations are scored.</p>
         </div>
       ) : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
         {/* =================================================================== */}
         {/* 1. TOP PERFORMERS                                                   */}
         {/* =================================================================== */}
-        <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
+        <div style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--dk-bg-fafafa, #fafafa)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
-              <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Top Performers
               </h2>
             </div>
-            <span style={{ fontSize: 11, fontWeight: 600, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-065f46, #065f46)', border: '1px solid var(--dk-bd-a7f3d0, #a7f3d0)', padding: '2px 7px', borderRadius: 6 }}>
               Top 5 by IQS
             </span>
           </div>
@@ -227,7 +227,7 @@ export default function PcgRmPerformanceDashboard({
                   onClick={() => onSelectRm && onSelectRm(rm.name)}
                   style={{
                     padding: '14px 18px',
-                    borderBottom: idx < topPerformers.length - 1 ? '1px solid #f4f4f5' : 'none',
+                    borderBottom: idx < topPerformers.length - 1 ? '1px solid var(--dk-bd-f4f4f5, #f4f4f5)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -238,10 +238,10 @@ export default function PcgRmPerformanceDashboard({
                   className="hover:bg-zinc-50"
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                    <span style={{ fontSize: idx < 3 ? 15 : 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                    <span style={{ fontSize: idx < 3 ? 15 : 12, fontWeight: 700, color: 'var(--dk-fg-71717a, #71717a)', width: 22, textAlign: 'center', flexShrink: 0 }}>
                       {rankIcons[idx]}
                     </span>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#3f3f46', flexShrink: 0 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--dk-bg-e4e4e7, #e4e4e7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--dk-fg-3f3f46, #3f3f46)', flexShrink: 0 }}>
                       {rm.ini}
                     </div>
                     <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
@@ -249,7 +249,7 @@ export default function PcgRmPerformanceDashboard({
                         style={{
                           fontSize: 13,
                           fontWeight: 600,
-                          color: '#18181b',
+                          color: 'var(--dk-fg-18181b, #18181b)',
                           lineHeight: '18px',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
@@ -259,9 +259,9 @@ export default function PcgRmPerformanceDashboard({
                       >
                         {rm.name}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dk-fg-71717a, #71717a)', marginTop: 2, flexWrap: 'wrap' }}>
                         {rm.tl ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dk-fg-52525b, #52525b)', background: 'var(--dk-bg-f4f4f5, #f4f4f5)', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                             {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
                           </span>
                         ) : null}
@@ -271,7 +271,7 @@ export default function PcgRmPerformanceDashboard({
                   </div>
 
                   <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: 'var(--dk-fg-059669, #059669)' }}>
                       {rm.currentIqs}%
                     </div>
                     <button
@@ -283,9 +283,9 @@ export default function PcgRmPerformanceDashboard({
                       style={{
                         fontSize: 10,
                         fontWeight: 600,
-                        color: '#2563eb',
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
+                        color: 'var(--dk-fg-2563eb, #2563eb)',
+                        background: 'var(--dk-bg-eff6ff, #eff6ff)',
+                        border: '1px solid var(--dk-bd-bfdbfe, #bfdbfe)',
                         borderRadius: 5,
                         padding: '2px 7px',
                         display: 'inline-flex',
@@ -296,12 +296,12 @@ export default function PcgRmPerformanceDashboard({
                         whiteSpace: 'nowrap',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#dbeafe';
-                        e.currentTarget.style.color = '#1d4ed8';
+                        e.currentTarget.style.background = 'var(--dk-bg-dbeafe, #dbeafe)';
+                        e.currentTarget.style.color = 'var(--dk-fg-1d4ed8, #1d4ed8)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#eff6ff';
-                        e.currentTarget.style.color = '#2563eb';
+                        e.currentTarget.style.background = 'var(--dk-bg-eff6ff, #eff6ff)';
+                        e.currentTarget.style.color = 'var(--dk-fg-2563eb, #2563eb)';
                       }}
                     >
                       Show Scorecard →
@@ -316,29 +316,29 @@ export default function PcgRmPerformanceDashboard({
         {/* =================================================================== */}
         {/* 2. BOTTOM PERFORMERS                                                */}
         {/* =================================================================== */}
-        <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
+        <div style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--dk-bg-fafafa, #fafafa)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626' }}></span>
-              <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Bottom Performers
               </h2>
             </div>
-            <span style={{ fontSize: 11, fontWeight: 600, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: '2px 7px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--dk-bg-fef2f2, #fef2f2)', color: 'var(--dk-fg-991b1b, #991b1b)', border: '1px solid var(--dk-bd-fecaca, #fecaca)', padding: '2px 7px', borderRadius: 6 }}>
               IQS ≤ 70%
             </span>
           </div>
 
           <div>
             {bottomPerformers.length === 0 ? (
-              <div style={{ padding: '36px 18px', textAlign: 'center', color: '#71717a' }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ecfdf5', color: '#059669', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+              <div style={{ padding: '36px 18px', textAlign: 'center', color: 'var(--dk-fg-71717a, #71717a)' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-059669, #059669)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
                   ✓
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#18181b', marginBottom: 2 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dk-fg-18181b, #18181b)', marginBottom: 2 }}>
                   No RMs Scoring ≤ 70%
                 </div>
-                <div style={{ fontSize: 11, color: '#71717a' }}>
+                <div style={{ fontSize: 11, color: 'var(--dk-fg-71717a, #71717a)' }}>
                   All active team members meet or exceed the 70% quality benchmark.
                 </div>
               </div>
@@ -350,7 +350,7 @@ export default function PcgRmPerformanceDashboard({
                     onClick={() => onSelectRm && onSelectRm(rm.name)}
                     style={{
                       padding: '14px 18px',
-                      borderBottom: idx < bottomPerformers.length - 1 ? '1px solid #f4f4f5' : 'none',
+                      borderBottom: idx < bottomPerformers.length - 1 ? '1px solid var(--dk-bd-f4f4f5, #f4f4f5)' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -361,10 +361,10 @@ export default function PcgRmPerformanceDashboard({
                     className="hover:bg-zinc-50"
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--dk-fg-71717a, #71717a)', width: 22, textAlign: 'center', flexShrink: 0 }}>
                         #{idx + 1}
                       </span>
-                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#991b1b', flexShrink: 0 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--dk-bg-fee2e2, #fee2e2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--dk-fg-991b1b, #991b1b)', flexShrink: 0 }}>
                         {rm.ini}
                       </div>
                       <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
@@ -372,7 +372,7 @@ export default function PcgRmPerformanceDashboard({
                           style={{
                             fontSize: 13,
                             fontWeight: 600,
-                            color: '#18181b',
+                            color: 'var(--dk-fg-18181b, #18181b)',
                             lineHeight: '18px',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
@@ -382,9 +382,9 @@ export default function PcgRmPerformanceDashboard({
                         >
                           {rm.name}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dk-fg-71717a, #71717a)', marginTop: 2, flexWrap: 'wrap' }}>
                           {rm.tl ? (
-                            <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dk-fg-52525b, #52525b)', background: 'var(--dk-bg-f4f4f5, #f4f4f5)', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                               {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
                             </span>
                           ) : null}
@@ -396,7 +396,7 @@ export default function PcgRmPerformanceDashboard({
                     </div>
 
                     <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#dc2626' }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: 'var(--dk-fg-dc2626, #dc2626)' }}>
                         {rm.currentIqs}%
                       </div>
                       <button
@@ -408,9 +408,9 @@ export default function PcgRmPerformanceDashboard({
                         style={{
                           fontSize: 10,
                           fontWeight: 600,
-                          color: '#2563eb',
-                          background: '#eff6ff',
-                          border: '1px solid #bfdbfe',
+                          color: 'var(--dk-fg-2563eb, #2563eb)',
+                          background: 'var(--dk-bg-eff6ff, #eff6ff)',
+                          border: '1px solid var(--dk-bd-bfdbfe, #bfdbfe)',
                           borderRadius: 5,
                           padding: '2px 7px',
                           display: 'inline-flex',
@@ -421,12 +421,12 @@ export default function PcgRmPerformanceDashboard({
                           whiteSpace: 'nowrap',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#dbeafe';
-                          e.currentTarget.style.color = '#1d4ed8';
+                          e.currentTarget.style.background = 'var(--dk-bg-dbeafe, #dbeafe)';
+                          e.currentTarget.style.color = 'var(--dk-fg-1d4ed8, #1d4ed8)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = '#eff6ff';
-                          e.currentTarget.style.color = '#2563eb';
+                          e.currentTarget.style.background = 'var(--dk-bg-eff6ff, #eff6ff)';
+                          e.currentTarget.style.color = 'var(--dk-fg-2563eb, #2563eb)';
                         }}
                       >
                         Show Scorecard →
@@ -442,15 +442,15 @@ export default function PcgRmPerformanceDashboard({
         {/* =================================================================== */}
         {/* 3. MOST IMPROVED (2 WEEKS ROLLING NUMBER DIFFERENCE)                */}
         {/* =================================================================== */}
-        <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
+        <div style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--dk-bg-fafafa, #fafafa)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
-              <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Most Improved
               </h2>
             </div>
-            <span style={{ fontSize: 11, fontWeight: 600, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-065f46, #065f46)', border: '1px solid var(--dk-bd-a7f3d0, #a7f3d0)', padding: '2px 7px', borderRadius: 6 }}>
               2-Wk Rolling Diff
             </span>
           </div>
@@ -464,7 +464,7 @@ export default function PcgRmPerformanceDashboard({
                   onClick={() => onSelectRm && onSelectRm(rm.name)}
                   style={{
                     padding: '14px 18px',
-                    borderBottom: idx < mostImproved.length - 1 ? '1px solid #f4f4f5' : 'none',
+                    borderBottom: idx < mostImproved.length - 1 ? '1px solid var(--dk-bd-f4f4f5, #f4f4f5)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -475,10 +475,10 @@ export default function PcgRmPerformanceDashboard({
                   className="hover:bg-zinc-50"
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--dk-fg-71717a, #71717a)', width: 22, textAlign: 'center', flexShrink: 0 }}>
                       #{idx + 1}
                     </span>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#065f46', flexShrink: 0 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--dk-bg-d1fae5, #d1fae5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--dk-fg-065f46, #065f46)', flexShrink: 0 }}>
                       {rm.ini}
                     </div>
                     <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
@@ -486,7 +486,7 @@ export default function PcgRmPerformanceDashboard({
                         style={{
                           fontSize: 13,
                           fontWeight: 600,
-                          color: '#18181b',
+                          color: 'var(--dk-fg-18181b, #18181b)',
                           lineHeight: '18px',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
@@ -496,9 +496,9 @@ export default function PcgRmPerformanceDashboard({
                       >
                         {rm.name}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dk-fg-71717a, #71717a)', marginTop: 2, flexWrap: 'wrap' }}>
                         {rm.tl ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dk-fg-52525b, #52525b)', background: 'var(--dk-bg-f4f4f5, #f4f4f5)', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                             {rm.tl.startsWith('Team ') ? rm.tl : `Team ${rm.tl}`}
                           </span>
                         ) : null}
@@ -510,7 +510,7 @@ export default function PcgRmPerformanceDashboard({
                   </div>
 
                   <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: 'var(--dk-fg-059669, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
                       <span>{isPositive ? '↑' : '↓'}</span>
                       <span>{isPositive ? `+${rm.delta2Wk.toFixed(1)}%` : `${rm.delta2Wk.toFixed(1)}%`}</span>
                     </div>
@@ -523,9 +523,9 @@ export default function PcgRmPerformanceDashboard({
                       style={{
                         fontSize: 10,
                         fontWeight: 600,
-                        color: '#2563eb',
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
+                        color: 'var(--dk-fg-2563eb, #2563eb)',
+                        background: 'var(--dk-bg-eff6ff, #eff6ff)',
+                        border: '1px solid var(--dk-bd-bfdbfe, #bfdbfe)',
                         borderRadius: 5,
                         padding: '2px 7px',
                         display: 'inline-flex',
@@ -536,12 +536,12 @@ export default function PcgRmPerformanceDashboard({
                         whiteSpace: 'nowrap',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#dbeafe';
-                        e.currentTarget.style.color = '#1d4ed8';
+                        e.currentTarget.style.background = 'var(--dk-bg-dbeafe, #dbeafe)';
+                        e.currentTarget.style.color = 'var(--dk-fg-1d4ed8, #1d4ed8)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#eff6ff';
-                        e.currentTarget.style.color = '#2563eb';
+                        e.currentTarget.style.background = 'var(--dk-bg-eff6ff, #eff6ff)';
+                        e.currentTarget.style.color = 'var(--dk-fg-2563eb, #2563eb)';
                       }}
                     >
                       Show Scorecard →
@@ -562,7 +562,7 @@ export default function PcgRmPerformanceDashboard({
             marginTop: 24,
             marginBottom: 24,
             background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-            border: '1px solid #cbd5e1',
+            border: '1px solid var(--dk-bd-cbd5e1, #cbd5e1)',
             borderRadius: 14,
             boxShadow: '0 1px 3px rgba(0,0,0,0.03), 0 10px 15px -3px rgba(15, 23, 42, 0.04)',
             overflow: 'hidden',
@@ -573,7 +573,7 @@ export default function PcgRmPerformanceDashboard({
             style={{
               padding: '16px 20px',
               background: 'linear-gradient(90deg, #f1f5f9 0%, #ffffff 100%)',
-              borderBottom: '1px solid #e2e8f0',
+              borderBottom: '1px solid var(--dk-bd-e2e8f0, #e2e8f0)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -588,14 +588,14 @@ export default function PcgRmPerformanceDashboard({
                     fontSize: 15,
                     fontWeight: 700,
                     margin: 0,
-                    color: '#0f172a',
+                    color: 'var(--dk-fg-0f172a, #0f172a)',
                     letterSpacing: '-0.01em',
                   }}
                 >
                   Top 5 Contributors: Non-Working Hours & Weekends
                 </h2>
               </div>
-              <p style={{ margin: '3px 0 0 0', fontSize: 12, color: '#64748b' }}>
+              <p style={{ margin: '3px 0 0 0', fontSize: 12, color: 'var(--dk-fg-64748b, #64748b)' }}>
                 Highest contributors in answering valid client calls received during non-working hours (&lt;10:00 AM, &ge;7:00 PM Mon–Fri) and weekends (Saturday &amp; Sunday).
               </p>
             </div>
@@ -605,9 +605,9 @@ export default function PcgRmPerformanceDashboard({
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
-                  color: '#334155',
-                  background: '#ffffff',
-                  border: '1px solid #cbd5e1',
+                  color: 'var(--dk-fg-334155, #334155)',
+                  background: 'var(--dk-bg-ffffff, #ffffff)',
+                  border: '1px solid var(--dk-bd-cbd5e1, #cbd5e1)',
                   padding: '5px 12px',
                   borderRadius: 8,
                   display: 'flex',
@@ -630,11 +630,11 @@ export default function PcgRmPerformanceDashboard({
           {/* Banner Content: Top 5 RMs Cards */}
           <div style={{ padding: '16px 20px' }}>
             {offHoursTopContributors.length === 0 ? (
-              <div style={{ padding: '28px 16px', textAlign: 'center', color: '#64748b' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>
+              <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--dk-fg-64748b, #64748b)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dk-fg-334155, #334155)', marginBottom: 2 }}>
                   No Off-Hours or Weekend Client Calls Answered Yet
                 </div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                <div style={{ fontSize: 11, color: 'var(--dk-fg-94a3b8, #94a3b8)' }}>
                   Rankings will automatically appear here as Relationship Managers answer incoming client calls outside regular business hours.
                 </div>
               </div>
@@ -648,11 +648,11 @@ export default function PcgRmPerformanceDashboard({
               >
                 {offHoursTopContributors.map((rm, idx) => {
                   const rankBadges = [
-                    { label: '🥇 1st', bg: '#fef3c7', text: '#92400e', border: '#fde68a', cardBg: '#fffdf5', cardBorder: '#fde68a', avatarBg: '#fef3c7', avatarText: '#92400e', avatarBorder: '#fde68a' },
-                    { label: '🥈 2nd', bg: '#f1f5f9', text: '#334155', border: '#cbd5e1', cardBg: '#ffffff', cardBorder: '#e2e8f0', avatarBg: '#f1f5f9', avatarText: '#334155', avatarBorder: '#cbd5e1' },
-                    { label: '🥉 3rd', bg: '#ffedd5', text: '#9a3412', border: '#fed7aa', cardBg: '#ffffff', cardBorder: '#e2e8f0', avatarBg: '#ffedd5', avatarText: '#9a3412', avatarBorder: '#fed7aa' },
-                    { label: '#4', bg: '#f8fafc', text: '#475569', border: '#e2e8f0', cardBg: '#ffffff', cardBorder: '#e2e8f0', avatarBg: '#e0e7ff', avatarText: '#4338ca', avatarBorder: '#c7d2fe' },
-                    { label: '#5', bg: '#f8fafc', text: '#475569', border: '#e2e8f0', cardBg: '#ffffff', cardBorder: '#e2e8f0', avatarBg: '#e0e7ff', avatarText: '#4338ca', avatarBorder: '#c7d2fe' },
+                    { label: '🥇 1st', bg: 'var(--dk-bg-fef3c7, #fef3c7)', text: 'var(--dk-fg-92400e, #92400e)', border: 'var(--dk-bd-fde68a, #fde68a)', cardBg: 'var(--dk-bg-fffdf5, #fffdf5)', cardBorder: 'var(--dk-bd-fde68a, #fde68a)', avatarBg: 'var(--dk-bg-fef3c7, #fef3c7)', avatarText: 'var(--dk-fg-92400e, #92400e)', avatarBorder: '#fde68a' },
+                    { label: '🥈 2nd', bg: 'var(--dk-bg-f1f5f9, #f1f5f9)', text: 'var(--dk-fg-334155, #334155)', border: 'var(--dk-bd-cbd5e1, #cbd5e1)', cardBg: 'var(--dk-bg-ffffff, #ffffff)', cardBorder: 'var(--dk-bd-e2e8f0, #e2e8f0)', avatarBg: 'var(--dk-bg-f1f5f9, #f1f5f9)', avatarText: 'var(--dk-fg-334155, #334155)', avatarBorder: '#cbd5e1' },
+                    { label: '🥉 3rd', bg: 'var(--dk-bg-ffedd5, #ffedd5)', text: 'var(--dk-fg-9a3412, #9a3412)', border: 'var(--dk-bd-fed7aa, #fed7aa)', cardBg: 'var(--dk-bg-ffffff, #ffffff)', cardBorder: 'var(--dk-bd-e2e8f0, #e2e8f0)', avatarBg: 'var(--dk-bg-ffedd5, #ffedd5)', avatarText: 'var(--dk-fg-9a3412, #9a3412)', avatarBorder: '#fed7aa' },
+                    { label: '#4', bg: 'var(--dk-bg-f8fafc, #f8fafc)', text: 'var(--dk-fg-475569, #475569)', border: 'var(--dk-bd-e2e8f0, #e2e8f0)', cardBg: 'var(--dk-bg-ffffff, #ffffff)', cardBorder: 'var(--dk-bd-e2e8f0, #e2e8f0)', avatarBg: 'var(--dk-bg-e0e7ff, #e0e7ff)', avatarText: 'var(--dk-fg-4338ca, #4338ca)', avatarBorder: '#c7d2fe' },
+                    { label: '#5', bg: 'var(--dk-bg-f8fafc, #f8fafc)', text: 'var(--dk-fg-475569, #475569)', border: 'var(--dk-bd-e2e8f0, #e2e8f0)', cardBg: 'var(--dk-bg-ffffff, #ffffff)', cardBorder: 'var(--dk-bd-e2e8f0, #e2e8f0)', avatarBg: 'var(--dk-bg-e0e7ff, #e0e7ff)', avatarText: 'var(--dk-fg-4338ca, #4338ca)', avatarBorder: '#c7d2fe' },
                   ];
                   const badge = rankBadges[idx] || rankBadges[3];
 
@@ -695,9 +695,9 @@ export default function PcgRmPerformanceDashboard({
                           style={{
                             fontSize: 10,
                             fontWeight: 700,
-                            background: '#ecfdf5',
-                            color: '#065f46',
-                            border: '1px solid #a7f3d0',
+                            background: 'var(--dk-bg-ecfdf5, #ecfdf5)',
+                            color: 'var(--dk-fg-065f46, #065f46)',
+                            border: '1px solid var(--dk-bd-a7f3d0, #a7f3d0)',
                             padding: '2px 6px',
                             borderRadius: 6,
                             fontFamily: 'monospace',
@@ -733,7 +733,7 @@ export default function PcgRmPerformanceDashboard({
                             style={{
                               fontSize: 13,
                               fontWeight: 700,
-                              color: '#0f172a',
+                              color: 'var(--dk-fg-0f172a, #0f172a)',
                               lineHeight: '18px',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
@@ -749,8 +749,8 @@ export default function PcgRmPerformanceDashboard({
                                 style={{
                                   fontSize: 10,
                                   fontWeight: 600,
-                                  color: '#475569',
-                                  background: '#f1f5f9',
+                                  color: 'var(--dk-fg-475569, #475569)',
+                                  background: 'var(--dk-bg-f1f5f9, #f1f5f9)',
                                   padding: '1px 5px',
                                   borderRadius: 4,
                                   display: 'inline-block',
@@ -770,8 +770,8 @@ export default function PcgRmPerformanceDashboard({
                       {/* Metric Highlight: Calls Answered */}
                       <div
                         style={{
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
+                          background: 'var(--dk-bg-f8fafc, #f8fafc)',
+                          border: '1px solid var(--dk-bd-e2e8f0, #e2e8f0)',
                           borderRadius: 8,
                           padding: '8px 10px',
                         }}
@@ -783,16 +783,16 @@ export default function PcgRmPerformanceDashboard({
                                 fontSize: 18,
                                 fontWeight: 800,
                                 fontFamily: 'monospace',
-                                color: '#0f172a',
+                                color: 'var(--dk-fg-0f172a, #0f172a)',
                               }}
                             >
                               {rm.offHoursClientAnswered}
                             </span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--dk-fg-64748b, #64748b)' }}>
                               answered
                             </span>
                           </div>
-                          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>
+                          <span style={{ fontSize: 10, color: 'var(--dk-fg-94a3b8, #94a3b8)', fontWeight: 500 }}>
                             of {rm.offHoursClientTotal} calls
                           </span>
                         </div>
@@ -809,9 +809,9 @@ export default function PcgRmPerformanceDashboard({
                           style={{
                             fontSize: 10,
                             fontWeight: 600,
-                            color: '#4338ca',
-                            background: '#eef2ff',
-                            border: '1px solid #c7d2fe',
+                            color: 'var(--dk-fg-4338ca, #4338ca)',
+                            background: 'var(--dk-bg-eef2ff, #eef2ff)',
+                            border: '1px solid var(--dk-bd-c7d2fe, #c7d2fe)',
                             borderRadius: 5,
                             padding: '2px 8px',
                             display: 'inline-flex',
@@ -822,12 +822,12 @@ export default function PcgRmPerformanceDashboard({
                             whiteSpace: 'nowrap',
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#e0e7ff';
-                            e.currentTarget.style.color = '#3730a3';
+                            e.currentTarget.style.background = 'var(--dk-bg-e0e7ff, #e0e7ff)';
+                            e.currentTarget.style.color = 'var(--dk-fg-3730a3, #3730a3)';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#eef2ff';
-                            e.currentTarget.style.color = '#4338ca';
+                            e.currentTarget.style.background = 'var(--dk-bg-eef2ff, #eef2ff)';
+                            e.currentTarget.style.color = 'var(--dk-fg-4338ca, #4338ca)';
                           }}
                         >
                           Show Scorecard →
@@ -843,11 +843,11 @@ export default function PcgRmPerformanceDashboard({
       )}
 
       {/* ── Footer Explanatory Note ────────────────────────────────────── */}
-      <div style={{ marginTop: 28, padding: '14px 18px', background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <p style={{ margin: 0, fontSize: 12, color: '#71717a' }}>
+      <div style={{ marginTop: 28, padding: '14px 18px', background: 'var(--dk-bg-ffffff, #ffffff)', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--dk-fg-71717a, #71717a)' }}>
           <strong>Ranking Methodology:</strong> Off-Hours &amp; Weekend banner highlights the top 5 RMs who answered the highest volume of valid client calls outside regular business hours (Mon–Fri &lt;10:00 AM, &ge;7:00 PM IST) and on weekends. Top category ranks the top 5 RMs by average call IQS. Bottom category highlights RMs scoring 70% or below for active coaching. Most Improved tracks the top 5 net score gainers over a 14-day rolling window.
         </p>
-        <span style={{ fontSize: 11, color: '#a1a1aa' }}>
+        <span style={{ fontSize: 11, color: 'var(--dk-fg-a1a1aa, #a1a1aa)' }}>
           Updated for Calls only
         </span>
       </div>

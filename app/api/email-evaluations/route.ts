@@ -29,6 +29,15 @@ import {
 
 const submitterCache = new Map<string, string>();
 
+import { readConfig as readPortalConfig } from '@/lib/config';
+import { reviewThreshold } from '@/lib/quality-thresholds';
+
+/** SQL for the QA "Pending Review" queue: completed, not yet reviewed, and worth a QA look. Same rule as chats and calls:
+ *  IQS at or below the email threshold (Settings → Quality Thresholds), plus emails with no score or a compliance failure. */
+function pendingReviewSql(threshold: number): string {
+  return `e.evaluation_status = 'Completed' AND (e.review_status = 'pending' OR e.review_status IS NULL) AND (e.quality_score IS NULL OR e.quality_score <= ${threshold} OR e.compliance_passed = FALSE OR COALESCE(array_length(e.compliance_issues, 1), 0) > 0)`;
+}
+
 async function getSubmitterName(emailOrName: string): Promise<string> {
   if (!emailOrName) return 'Yashvi Chajjer';
   const clean = emailOrName.trim();
@@ -164,6 +173,7 @@ async function getScopedDispositionsForUser(
 }
 
 export async function GET(req: NextRequest) {
+  const pendingSql = pendingReviewSql(reviewThreshold(await readPortalConfig().catch(() => null), 'email'));
   try {
     const { searchParams } = new URL(req.url);
     const session = await getServerSession(authOptions).catch(() => null);
@@ -280,7 +290,7 @@ export async function GET(req: NextRequest) {
     // QA Review workflow filtering
     if (tab === 'pending' || reviewStatus === 'pending' || status === 'Pending_Review') {
       // Completed AI evaluation, pending QA review
-      whereClauses.push(`e.evaluation_status = 'Completed' AND (e.review_status = 'pending' OR e.review_status IS NULL)`);
+      whereClauses.push(pendingSql);
     } else if (tab === 'reviewed' || reviewStatus === 'reviewed' || status === 'Reviewed') {
       // Finalized & submitted by QA
       whereClauses.push(`e.review_status = 'reviewed'`);
@@ -406,7 +416,12 @@ export async function GET(req: NextRequest) {
         COALESCE(e.qa_override_score, e.quality_score) AS effective_score,
         COALESCE(e.reviewed_by, ag.qa_name) AS qa_name,
         fl.raised_by_role,
-        fl.agent_name AS flag_author_name
+        fl.agent_name AS flag_author_name,
+        -- who raised the dispute (agent_name is the agent it is about; for TL disputes the raiser is the TL)
+        COALESCE(
+          (SELECT u.name FROM users u WHERE LOWER(u.email) = LOWER(fl.agent_email) LIMIT 1),
+          NULLIF(split_part(fl.agent_email, '@', 1), '')
+        ) AS flag_raiser_name
       FROM email_reply_evaluations e
       JOIN email_conversations c ON e.ticket_id = c.id
       LEFT JOIN agents ag ON LOWER(ag.name) = LOWER(e.agent_name)
@@ -531,7 +546,7 @@ export async function GET(req: NextRequest) {
     const statsQuery = `
       SELECT 
         COUNT(*)::int AS total_count,
-        COUNT(CASE WHEN e.evaluation_status = 'Completed' AND (e.review_status = 'pending' OR e.review_status IS NULL) THEN 1 END)::int AS pending_review_count,
+        COUNT(CASE WHEN ${pendingSql} THEN 1 END)::int AS pending_review_count,
         COUNT(CASE WHEN e.review_status = 'reviewed' THEN 1 END)::int AS reviewed_count,
         COUNT(CASE WHEN e.evaluation_status IN ('Pending', 'In_Batch') THEN 1 END)::int AS unscored_count,
         COUNT(CASE WHEN e.evaluation_status = 'Completed' THEN 1 END)::int AS completed_count,
@@ -552,7 +567,7 @@ export async function GET(req: NextRequest) {
     // Calculate total all-time pending review count respecting agent and disposition scoping
     let totalPendingCount = Number(summary.pending_review_count || 0);
     if (rangeClauses.length > 0) {
-      const scopeClauses: string[] = ["e.evaluation_status = 'Completed'", "(e.review_status = 'pending' OR e.review_status IS NULL)"];
+      const scopeClauses: string[] = [pendingSql];
       const scopeParams: any[] = [];
       if (agentName) {
         const reqLower = agentName.trim().toLowerCase();

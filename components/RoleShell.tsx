@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { uiZoom } from '@/lib/ui-zoom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 
 export interface NavItem {
   label: string;
@@ -79,16 +81,17 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
 
   const hasAccess = (item: NavItem) => {
     if (role === 'admin') return true;
+    if (item.roles && !item.roles.includes(role)) {
+      return false;
+    }
     if (item.skill) {
       return effectiveSkills.includes(item.skill);
-    }
-    if (item.roles) {
-      return item.roles.includes(role);
     }
     return true;
   };
 
   const filteredNav = navItems.filter(hasAccess);
+  const canSwitch = Boolean(session?.user?.isSuperAdmin) || session?.user?.platformDomain === 'both';
   const displayRoleLabel = roleLabel || role.charAt(0).toUpperCase() + role.slice(1);
 
   return (
@@ -97,16 +100,17 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
         {/* Sidebar */}
         <aside className={`quality-shell-sidebar${collapsed ? ' collapsed' : ''}`}>
           <div className="quality-shell-sidebar-head">
-            <div className="quality-shell-sidebar-title">{displayRoleLabel}</div>
+            {canSwitch ? (!collapsed && <WorkspaceSwitcher />) : <div className="quality-shell-sidebar-title">{displayRoleLabel}</div>}
             <button
               type="button" className="quality-shell-sidebar-toggle" onClick={toggleSidebar}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}
-              onMouseEnter={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: 'Expand sidebar', top: r.top + r.height / 2, left: r.right + 10 }); } }}
+              onMouseEnter={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: 'Expand sidebar', top: (r.top + r.height / 2) / uiZoom(), left: r.right / uiZoom() + 10 }); } }}
               onMouseLeave={() => setTip(null)}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" /></svg>
             </button>
           </div>
+          {canSwitch && collapsed && <div className="quality-shell-ws-collapsed"><WorkspaceSwitcher collapsed /></div>}
 
           {filteredNav.map((item, i) => {
             const Icon = item.icon;
@@ -121,9 +125,9 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
                   className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
                   aria-label={item.label}
                   aria-current={active ? 'page' : undefined}
-                  onMouseEnter={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: item.label, top: r.top + r.height / 2, left: r.right + 10 }); } }}
+                  onMouseEnter={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: item.label, top: (r.top + r.height / 2) / uiZoom(), left: r.right / uiZoom() + 10 }); } }}
                   onMouseLeave={() => setTip(null)}
-                  onFocus={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: item.label, top: r.top + r.height / 2, left: r.right + 10 }); } }}
+                  onFocus={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: item.label, top: (r.top + r.height / 2) / uiZoom(), left: r.right / uiZoom() + 10 }); } }}
                   onBlur={() => setTip(null)}
                 >
                   <span>

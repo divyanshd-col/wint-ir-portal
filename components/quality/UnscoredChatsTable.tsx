@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import EvalPanel from './EvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
+import * as T from './tableStyles';
 
 interface UnscoredChatRow {
   id: string;
@@ -128,16 +129,9 @@ export default function UnscoredChatsTable({ leadingFilter, agentFilter = 'all',
     }
   };
 
-  const th: React.CSSProperties = {
-    height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-    fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
-  };
-  const td: React.CSSProperties = {
-    height: 52, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
-    fontSize: 14, color: 'var(--qa-text)', verticalAlign: 'middle',
-  };
-  const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text-2)' };
+  const th: React.CSSProperties = T.th;
+  const td: React.CSSProperties = T.td;
+  const tdMono: React.CSSProperties = T.tdMono;
   const inputStyle: React.CSSProperties = {
     height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
     background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
@@ -320,22 +314,22 @@ export default function UnscoredChatsTable({ leadingFilter, agentFilter = 'all',
                           </a>
                         </div>
                       </td>
-                      <td style={td}>{fmtDate(chat.startedAt)}</td>
+                      <td style={{ ...td, fontSize: 13, whiteSpace: 'nowrap' }}>{fmtDate(chat.startedAt)}</td>
                       <td style={td}>
                         <div style={{ fontWeight: 500 }}>{chat.agentName}</div>
                         <div style={{ fontSize: 11, color: 'var(--qa-text-3)', textTransform: 'capitalize' }}>{chat.conversationType}</div>
                       </td>
                       <td style={td}>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{chat.disposition}</div>
+                        <div>{chat.disposition}</div>
                         {chat.subDisposition && <div style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{chat.subDisposition}</div>}
                       </td>
                       <td style={tdMono}>{chat.msgCount}</td>
                       <td style={td}>
-                        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text-2)' }}>
+                        <span style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>
                           {chat.iqsStatus === 'skipped' ? 'Skipped' : 'Unscored'}
                         </span>
                       </td>
-                      <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)' }}>
+                      <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
                         {chat.skipReason || (chat.msgCount === 0 ? 'No transcript' : 'Pending automated evaluation')}
                       </td>
                       <td style={{ ...td, textAlign: 'right' }}>

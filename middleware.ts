@@ -175,6 +175,16 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // Team Analytics: needs the skill (admin and TL by default); others go to member analytics
+  if (pathname === '/tl' || pathname === '/tl/') {
+    if (!checkSkill('tl:team_analytics:access')) {
+      if (checkSkill('tl:member_analytics:access') || checkSkill('agent:my_analytics:access')) {
+        return NextResponse.redirect(new URL('/tl/member-analytics', req.url));
+      }
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
   return NextResponse.next();
 }
 

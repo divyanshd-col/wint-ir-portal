@@ -15,6 +15,7 @@ import {
   CALL_TRANSCRIPTION_PROMPT,
   CALL_DISPOSITION_CLASSIFY_PROMPT,
   parseTranscriptionResponse,
+  extractDurationFromTranscript,
   parseCallDispositionClassified,
   segmentsToText,
 } from '@/lib/call-quality';
@@ -104,7 +105,7 @@ export async function scoreLinkedCallsForChat(
           agentId: call.agent_id,
           contactId: call.contact_id,
           recordingUrl: call.recording_url,
-          durationSeconds: call.duration_seconds,
+          durationSeconds: call.duration_seconds ?? extractDurationFromTranscript(parsed.segments),
           calledAt: call.called_at,
           language: parsed.language,
           transcript: parsed.segments,

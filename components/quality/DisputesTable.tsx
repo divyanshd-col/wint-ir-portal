@@ -12,6 +12,7 @@ import { CsatPill } from './csat';
 import { useSort, sortRows, SortTh } from './sort';
 import UISelect from '@/components/quality/UISelect';
 import { DisputeStatusPill } from '@/components/tl/QualityChatsPage';
+import * as T from './tableStyles';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -145,18 +146,11 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
   const [sort, toggleSort] = useSort();
   const sortedRows = sortRows(pagedDisputes, sort, { mobile: d => d.mobileNumber, date: d => d.closedAt, disp: d => d.disposition, agent: d => d.agentName, iqs: d => d.iqsScore, csat: d => d.csatScore });
 
-  const th: React.CSSProperties = {
-    height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-    fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
-  };
-  const td: React.CSSProperties = {
-    height: 52, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
-    fontSize: 14, color: 'var(--qa-text)', verticalAlign: 'middle',
-  };
-  const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text-2)' };
-  const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13 };
-  const tdAct: React.CSSProperties  = { ...td, textAlign: 'right' };
+  const th: React.CSSProperties = T.th;
+  const td: React.CSSProperties = T.td;
+  const tdMono: React.CSSProperties = T.tdMono;
+  const tdNum: React.CSSProperties  = T.tdNum;
+  const tdAct: React.CSSProperties  = T.tdAct;
 
   const chip: React.CSSProperties = {
     height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
@@ -379,8 +373,13 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                   <td style={tdMono}>
                     {d.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                   </td>
-                  <td style={td}>
-                    {d.closedAt ? `${fmtDate(d.closedAt)} ${fmtTime(d.closedAt)}` : '—'}
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                    {d.closedAt ? (
+                      <>
+                        <div style={{ fontSize: 13 }}>{fmtDate(d.closedAt)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: T.MONO }}>{fmtTime(d.closedAt)}</div>
+                      </>
+                    ) : '—'}
                   </td>
                   <td style={{ ...td, color: 'var(--qa-text-2)' }}>{d.disposition || '—'}</td>
                   <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
@@ -412,7 +411,8 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                       parameters={d.parameters}
                     />
                   </td>
-                  <td style={{ ...tdAct, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, border: 'none', height: 52 }}>
+                  <td style={{ ...tdAct, whiteSpace: 'nowrap' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
                     <button
                       onClick={() => openThread(d.flagId)}
                       style={{
@@ -430,7 +430,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                       onClick={() => toggleExpand(rowKey)}
                       style={{
                         background: 'none', border: 0, padding: 0,
-                        fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                         color: 'var(--qa-text)', cursor: 'pointer',
                         display: 'inline-flex', alignItems: 'center', gap: 5,
                       }}
@@ -442,6 +442,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                         transition: 'transform 0.15s', display: 'inline-block',
                       }}>▾</span>
                     </button>
+                   </div>
                   </td>
                 </tr>
 
