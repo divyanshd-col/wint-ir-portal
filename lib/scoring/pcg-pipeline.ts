@@ -342,6 +342,119 @@ For EVERY parameter without exception, you MUST provide a detailed, context-spec
 
 ---
 
+## SOP COMMUNICATION & CONDUCT MONITORING (AUTOMATED BREACH DETECTION)
+In addition to the 11 quality parameters, you must audit the conversation for any breach of the 7 Standard Operating Procedure (SOP) Monitoring Categories defined below.
+Both parties (RM and Customer) must be evaluated according to the specified direction.
+
+### Category 1: RM Communication & Tone
+Direction: "RM said this to customer"
+Signals:
+- "Curt or one-word replies" [Severity: MEDIUM]: Short or impatient replies (e.g., "already told you", "read my earlier message").
+- "Dismissive or defensive replies" [Severity: MEDIUM]: Dismissing genuine customer concerns (e.g., "that's not my problem", "I can't do anything about it", "what do you want me to do?", "figure it out yourself").
+- "Arguing back" [Severity: MEDIUM]: Bickering or fighting with customer (e.g., "you are wrong", "I never said that", "why would I lie?", "you keep asking the same thing").
+- "Showing the customer isn't valued" [Severity: MEDIUM]: Belittling the customer or investment size (e.g., "I have many other clients", "you're not my only client", "this is a small amount", "I'm busy right now").
+- "Blaming the customer" [Severity: MEDIUM]: Shifting blame onto customer (e.g., "you didn't read it properly", "it's your mistake", "you should have checked", "you didn't tell me").
+- "Talking down to the customer" [Severity: MEDIUM]: Condescending language (e.g., "it's very simple, how don't you understand?", "I have explained so many times", "you wouldn't understand").
+- "Abusive or insulting language" [Severity: CRITICAL]: Swearing, cursing, name-calling, or mocking.
+- "Assuring safety or no loss" [Severity: CRITICAL]: Misleading safety guarantees (e.g., "no risk at all", "it is completely safe", "your money is totally secure", "you won't lose anything").
+- "Giving a definite outcome or date the RM can't control" [Severity: MEDIUM]: Promising dates or results dependent on external teams (e.g., "it will definitely come today", "I guarantee it will be fixed", "it will be done by tomorrow, no doubt"). Note: Sharing a timeline as what the backend team shared ("we should receive an update today as per the team") is NOT flagged.
+
+### Category 2: Professional Boundary Monitoring
+Direction:
+- Customer to RM ("Customer said this to RM"):
+  * "Asking for RM's personal number" [Severity: CRITICAL]: Requesting personal WhatsApp or direct mobile number.
+  * "Requesting off-platform discussion" [Severity: CRITICAL]: Proposing discussing unrelated or personal matters off official channels.
+  * "Romantic or inappropriate comments" [Severity: CRITICAL]: Any romantic, flirtatious, or inappropriate personal comments aimed at RM.
+  * "Asking RM's personal details" [Severity: MEDIUM]: Probing personal life, home address, city, family, or personal background.
+  * "Requesting management/HR contacts directly" [Severity: MEDIUM]: Asking for HR head, PCG head, or executive direct personal contact info.
+  * "Asking RM to connect on external social" [Severity: MEDIUM]: Asking to connect on LinkedIn, Instagram, Facebook, etc.
+  * "Gifting or personal favours asked" [Severity: MEDIUM]: Offering personal gifts, hospitality, invites for coffee/meals.
+- RM to Customer ("RM said this to customer"):
+  * "RM sharing personal phone number" [Severity: CRITICAL]: Giving out personal number or asking customer to call on personal number.
+  * "RM sharing personal email or social handle" [Severity: CRITICAL]: Sharing personal Gmail, LinkedIn, Instagram, etc.
+  * "RM engaging in non-product personal conversation" [Severity: MEDIUM]: Lengthy personal talk about hobbies, dating, personal travel, unprompted details beyond polite rapport.
+
+### Category 3: Returns & Benefits Negotiation
+Direction: "Customer said this to RM"
+Signals:
+- "Asking for extra because of the amount invested" [Severity: LOW]: Pushing for extra rate/yield/privileges citing large ticket size.
+- "Repeatedly negotiating the XIRR" [Severity: MEDIUM]: Continually bargaining on yield/XIRR after standard options explained.
+- "Insisting on special privileges" [Severity: MEDIUM]: Demanding perks beyond standard PCG offerings.
+- "Pushing for priority access beyond what is offered" [Severity: MEDIUM]: Demanding blocking of bonds or first access ahead of others.
+- "Using another platform or other clients as leverage" [Severity: MEDIUM]: "Platform X gives more, match it", "My friend got a better deal".
+- "Threatening to take the money elsewhere" [Severity: MEDIUM]: "Give me this or I'll stop investing / move funds".
+- "Asking the RM to confirm extra returns or benefits" [Severity: CRITICAL]: Pushing RM to commit to higher returns in writing or on call.
+- "Asking for a side arrangement or cashback" [Severity: CRITICAL]: Demanding cashbacks, under-the-table kickbacks, or off-platform adjustments.
+
+### Category 4: Out-of-Scope Queries
+Direction: "Customer said this to RM"
+Signals:
+- "Asking for share or stock tips" [Severity: MEDIUM]: Asking RM which stocks to buy, equity predictions, or market trading advice.
+- "Asking about real estate" [Severity: MEDIUM]: Asking whether property/real estate is a good investment.
+- "Asking about mutual funds, FDs, gold or insurance" [Severity: LOW]: Asking which external FD, mutual fund, gold, or insurance policy to pick.
+- "Comparing our products with ones we don't offer" [Severity: LOW]: Pushing RM to compare with real estate, crypto, or unoffered products.
+- "Asking where interest rates are headed" [Severity: LOW]: Demanding macro predictions on RBI policy or rate cycles.
+- "Asking RM to invest or hold money outside our products" [Severity: CRITICAL]: Offering to transfer money for RM to personally invest or handle.
+
+### Category 5: Internal Tools Probing
+Direction: "Customer said this to RM"
+Signals:
+- "Asking what apps or systems the team uses" [Severity: CRITICAL]: Probing into internal CRM, portfolio trackers, or proprietary software.
+- "Asking how the RM sees their details" [Severity: CRITICAL]: Asking how client data, screens, or account details are viewed internally.
+- "Asking what apps are used for information and coordination" [Severity: CRITICAL]: Asking which internal tools team uses to communicate or sync.
+- "Referring to an internal app by name" [Severity: CRITICAL]: Naming internal tools or inquiring if specific internal software is used.
+- "Asking what is used to message clients" [Severity: LOW]: Inquiring about dialer tools, automated messaging tools, or chatbots.
+
+### Category 6: Customer Behaviour & Hostility
+Direction: "Customer said this to RM"
+Signals:
+- "Repeated pings for a quick reply / impatience" [Severity: LOW]: Aggressive impatience, shouting in tone.
+- "Demanding an instant fix" [Severity: LOW]: Unreasonable demands for instant resolution on dependencies outside RM control.
+- "Sarcastic or rude remarks" [Severity: MEDIUM]: Sarcastic commentary, questioning RM competence ("do you even know your job?").
+- "Blaming the RM personally" [Severity: MEDIUM]: Directing hostility or blame at the RM ("you are useless", "this is all your fault").
+- "Threatening to complain to the manager" [Severity: MEDIUM]: Using manager escalation as a threat/pressure tactic.
+- "Abusive or insulting language" [Severity: CRITICAL]: Direct insults, derogatory remarks, foul language.
+- "Accusing the RM of cheating or fraud" [Severity: CRITICAL]: "You are scamming me", "You cheated me", "Fraudulent company".
+- "Threatening public posts or media" [Severity: CRITICAL]: Threatening to smear on Twitter/LinkedIn, go to newspapers, or blast online.
+- "Threatening legal action or a regulator complaint" [Severity: CRITICAL]: Threatening SEBI complaint, police FIR, or lawsuits as pressure.
+- "Threatening the RM personally" [Severity: CRITICAL]: Safety threats, career threats ("I'll make sure you lose your job", "You will regret this").
+
+### Category 7: Business Information Probing
+Direction: "Customer said this to RM"
+Signals:
+- "Asking how Wint earns or its margin" [Severity: LOW]: Probing Wint's spread, revenue cut, or margins.
+- "Asking about cost price, issuer charges or bargaining" [Severity: MEDIUM]: Asking what Wint bought the bond at or issuer fees.
+- "Asking for AUM, revenue or valuation" [Severity: MEDIUM]: Asking company financial metrics (valuation, revenue, GMV, profitability).
+- "Asking about RM commission / incentives" [Severity: LOW]: Asking RM's payout, commissions, or sales targets.
+- "Asking about inventory & sourcing" [Severity: MEDIUM]: How much inventory Wint holds, who sold it, sourcing partners.
+- "Asking about upcoming bonds" [Severity: LOW]: Probing unreleased pipeline or unannounced issues.
+- "Asking about client tiers / rates for others" [Severity: LOW]: Probing what rates other HNIs get.
+- "Seeking unpublished issuer information" [Severity: CRITICAL]: Insider info, rating changes before announcement, non-public leaks.
+- "Asking who else holds a bond / client lists" [Severity: CRITICAL]: Asking other client names, holding sizes, or introductions.
+- "Asking what other clients are buying" [Severity: CRITICAL]: Probing other client behavior or portfolio compositions.
+- "Asking about team size" [Severity: LOW]: Probing headcount, hierarchy, or team structure.
+- "Asking about internal process, tech & vendors" [Severity: CRITICAL]: Probing order routing, backend tech, or vendor partnerships.
+- "Asking about funding, roadmap & future plans" [Severity: MEDIUM]: Asking if Wint is raising funds, IPO plans, or M&A.
+- "Asking about audits, notices or complaints data" [Severity: MEDIUM]: Regulatory notices, audit records, or complaint statistics.
+- "Asking to speak to senior management" [Severity: LOW]: Asking for founder/CXO personal access outside channels.
+- "Requesting access, logins or data exports" [Severity: CRITICAL]: Asking for API keys, dashboard access, or raw internal data exports.
+- "Claiming a research / media / competitor role" [Severity: CRITICAL]: Claiming journalist/competitor status seeking information.
+
+IMPORTANT RULES FOR SOP BREACH DETECTION:
+1. ONLY flag genuine occurrences matching the above criteria. If NO breach occurred, return an empty array "sop_triggers": [].
+2. Do not flag normal, polite financial questions, standard polite follow-ups, or standard product discussions.
+3. Every flagged item MUST have:
+   - "category": Exact category name matching one of the 7:
+     "RM Communication & Tone" | "Professional Boundary Monitoring" | "Returns & Benefits Negotiation" | "Out-of-Scope Queries" | "Internal Tools Probing" | "Customer Behaviour & Hostility" | "Business Information Probing"
+   - "severity": "CRITICAL" | "MEDIUM" | "LOW"
+   - "direction": Exactly "Customer said this to RM" or "RM said this to customer"
+   - "signal": The specific signal description
+   - "timestamp": Spoken timestamp of the turn (e.g. "02:15") or null if unavailable
+   - "turn_index": Integer turn number (e.g. 8)
+   - "quote": The verbatim quote translated into fluent English.
+
+---
+
 ## OUTPUT FORMAT
 Return ONLY valid JSON matching this schema:
 {
@@ -406,7 +519,18 @@ Return ONLY valid JSON matching this schema:
     }
   },
   "compliance_tripwire": false,
-  "compliance_reason": null
+  "compliance_reason": null,
+  "sop_triggers": [
+    {
+      "category": "Customer Behaviour & Hostility",
+      "severity": "CRITICAL",
+      "direction": "Customer said this to RM",
+      "signal": "Threatening legal action or a regulator complaint",
+      "timestamp": "02:15",
+      "turn_index": 8,
+      "quote": "If you don't credit my money today, I will file a complaint with SEBI and take legal action against you."
+    }
+  ]
 }
 `;
 
@@ -420,6 +544,16 @@ export type PcgCallCategory =
   | 'delivery_logistics'
   | 'wrong_number'
   | 'internal_personal';
+
+export interface SopTrigger {
+  category: string;
+  severity: 'CRITICAL' | 'MEDIUM' | 'LOW';
+  direction: 'Customer said this to RM' | 'RM said this to customer';
+  signal: string;
+  timestamp?: string;
+  turn_index?: number;
+  quote: string;
+}
 
 export interface PcgCallTriageResult {
   detected_category: PcgCallCategory;
@@ -634,13 +768,13 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
       INSERT INTO pcg_call_evaluations (
         call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
         iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
-        verdict, is_evaluable, parameters, transcript_turns, compliance_tripwire, scored_at
-      ) VALUES ($1, $2, $3, $4, 'support', $5, null, null, null, null, 0, 'NOT_SCOREABLE', true, $6, '[]'::jsonb, false, NOW())
+        verdict, is_evaluable, parameters, transcript_turns, sop_triggers, compliance_tripwire, scored_at
+      ) VALUES ($1, $2, $3, $4, 'support', $5, null, null, null, null, 0, 'NOT_SCOREABLE', true, $6, '[]'::jsonb, '[]'::jsonb, false, NOW())
       ON CONFLICT (call_id) DO UPDATE SET
-        verdict = 'NOT_SCOREABLE', is_evaluable = true, scored_at = NOW()
+        verdict = 'NOT_SCOREABLE', is_evaluable = true, sop_triggers = '[]'::jsonb, scored_at = NOW()
     `, [call.call_id, resolvedRm, resolvedTl, call.phone_number, call.duration_seconds || 0, JSON.stringify(paramsMap)]);
 
-    return { callId: call.call_id, verdict: 'NOT_SCOREABLE', iqs: null };
+    return { callId: call.call_id, verdict: 'NOT_SCOREABLE', iqs: null, sopTriggers: [] };
   }
 
   // 2. Fetch Gemini API configuration
@@ -861,8 +995,8 @@ Return valid JSON:
       INSERT INTO pcg_call_evaluations (
         call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
         iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
-        verdict, is_evaluable, exclusion_reason, parameters, transcript_turns, compliance_tripwire, scored_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, null, null, null, null, 0, 'EXCLUDED_NON_CLIENT', false, $7, '[]'::jsonb, $8, false, NOW(), NOW())
+        verdict, is_evaluable, exclusion_reason, parameters, transcript_turns, sop_triggers, compliance_tripwire, scored_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, null, null, null, null, 0, 'EXCLUDED_NON_CLIENT', false, $7, '[]'::jsonb, $8, '[]'::jsonb, false, NOW(), NOW())
       ON CONFLICT (call_id) DO UPDATE SET
         rm_name = EXCLUDED.rm_name,
         tl_name = EXCLUDED.tl_name,
@@ -879,6 +1013,7 @@ Return valid JSON:
         exclusion_reason = EXCLUDED.exclusion_reason,
         parameters = '[]'::jsonb,
         transcript_turns = EXCLUDED.transcript_turns,
+        sop_triggers = '[]'::jsonb,
         compliance_tripwire = false,
         compliance_reason = null,
         scored_at = NOW(),
@@ -915,6 +1050,7 @@ Return valid JSON:
       iqs: null,
       parameters: [],
       transcriptTurns,
+      sopTriggers: [],
     };
   }
 
@@ -934,7 +1070,7 @@ AUDIO SIGNALS:
 VERIFIED PCG KNOWLEDGE BASE CONTEXT (Strict Source of Truth for AIF & MLDs):
 ${kbContext || 'No specific KB excerpts retrieved.'}
 
-Please evaluate this PCG call strictly against the 11 parameters and compliance gates. Output valid JSON only.`;
+Please evaluate this PCG call strictly against the 11 parameters, compliance gates, and the 7 SOP conduct/communication monitoring categories. Output valid JSON only.`;
 
   const responseText = await geminiGenerate(
     [apiKey],
@@ -1025,14 +1161,57 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
   // 6b. Mandatory English Translation Guard: Ensure all cited parameter quotes & explanations are 100% in English
   const cleanedParameters = await translateParametersToEnglish(formattedParameters, [apiKey, ...geminiKeys]);
 
+  // 6c. Parse & Sanitize SOP Triggers (7 Communication & Conduct Monitoring Categories)
+  const rawSopTriggers = Array.isArray(evalJson.sop_triggers) ? evalJson.sop_triggers : [];
+  const validCategories = new Set([
+    'RM Communication & Tone',
+    'Professional Boundary Monitoring',
+    'Returns & Benefits Negotiation',
+    'Out-of-Scope Queries',
+    'Internal Tools Probing',
+    'Customer Behaviour & Hostility',
+    'Business Information Probing',
+  ]);
+
+  const sanitizedSopTriggers: SopTrigger[] = rawSopTriggers
+    .filter((tr: any) => tr && typeof tr === 'object' && (tr.quote || tr.signal))
+    .map((tr: any) => {
+      const cat = String(tr.category || '').trim();
+      const category = validCategories.has(cat) ? cat : 'Customer Behaviour & Hostility';
+      const sev = String(tr.severity || '').toUpperCase().trim();
+      const severity: 'CRITICAL' | 'MEDIUM' | 'LOW' =
+        sev === 'CRITICAL' ? 'CRITICAL' : sev === 'LOW' ? 'LOW' : 'MEDIUM';
+      const dirStr = String(tr.direction || '').trim().toLowerCase();
+      const direction: 'Customer said this to RM' | 'RM said this to customer' =
+        dirStr.includes('rm said') || dirStr.includes('rm to customer')
+          ? 'RM said this to customer'
+          : 'Customer said this to RM';
+
+      const turnIdx = typeof tr.turn_index === 'number'
+        ? tr.turn_index
+        : typeof tr.turnIndex === 'number'
+        ? tr.turnIndex
+        : undefined;
+
+      return {
+        category,
+        severity,
+        direction,
+        signal: String(tr.signal || category).trim(),
+        timestamp: tr.timestamp ? String(tr.timestamp).trim() : undefined,
+        turn_index: turnIdx,
+        quote: String(tr.quote || '').trim(),
+      };
+    });
+
   // 7. Store Result in pcg_call_evaluations
   await query(`
     INSERT INTO pcg_call_evaluations (
       call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
       iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
       verdict, is_evaluable, exclusion_reason, parameters, compliance_tripwire, compliance_reason, ai_coaching_tip,
-      transcript_turns, scored_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, null, $13, $14, $15, null, $16, NOW(), NOW())
+      transcript_turns, sop_triggers, scored_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, null, $13, $14, $15, null, $16, $17, NOW(), NOW())
     ON CONFLICT (call_id) DO UPDATE SET
       rm_name = EXCLUDED.rm_name,
       tl_name = EXCLUDED.tl_name,
@@ -1052,6 +1231,7 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
       compliance_reason = EXCLUDED.compliance_reason,
       ai_coaching_tip = null,
       transcript_turns = EXCLUDED.transcript_turns,
+      sop_triggers = EXCLUDED.sop_triggers,
       scored_at = NOW(),
       updated_at = NOW()
   `, [
@@ -1071,6 +1251,7 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     complianceTripwire,
     complianceReason,
     JSON.stringify(transcriptTurns),
+    JSON.stringify(sanitizedSopTriggers),
   ]);
 
   await query(`
@@ -1082,7 +1263,7 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     WHERE call_id = $2
   `, [category, call.call_id]);
 
-  log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}`);
+  log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}, SOP Triggers: ${sanitizedSopTriggers.length}`);
 
   return {
     callId: call.call_id,
@@ -1094,6 +1275,7 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     verdict,
     parameters: cleanedParameters,
     transcriptTurns,
+    sopTriggers: sanitizedSopTriggers,
   };
 }
 
