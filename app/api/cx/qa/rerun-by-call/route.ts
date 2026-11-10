@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   log.info('cx/qa/rerun-by-call', `Manually triggering rerun for call ${callId}`);
 
   try {
-    const result = await runCallPipeline(callId, { forceTranscript: true });
+    const result = await runCallPipeline(callId, { forceTranscript: true, skipSlackAlert: true });
     const { query } = await import('@/lib/cx/db');
     const recRes = await query<any>('SELECT transcript FROM call_recordings WHERE id = $1', [callId]);
     const evalRes = await query<any>('SELECT * FROM call_evaluations WHERE call_id = $1', [callId]);

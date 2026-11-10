@@ -220,7 +220,22 @@ export async function fireQualityAlert(opts: {
   const isCallAlert = opts.channel === 'call' || !!opts.callId;
   const dedupeKey = opts.callId ? `call_${opts.callId}` : `chat_${opts.chatId}`;
 
-  // Deduplicate — one alert per interaction per 24 h
+  // Persistent deduplication for calls: check if call already fired an alert in DB
+  if (opts.callId) {
+    try {
+      const { query } = await import('./cx/db');
+      const prevCheck = await query<{ compliance_alerted_at: string | null }>(
+        `SELECT compliance_alerted_at FROM call_evaluations WHERE call_id = $1`,
+        [opts.callId]
+      );
+      if (prevCheck[0]?.compliance_alerted_at) {
+        console.log(`[quality-alert] Skipping duplicate alert for call ${opts.callId} — already alerted in DB at ${prevCheck[0].compliance_alerted_at}`);
+        return;
+      }
+    } catch {}
+  }
+
+  // Deduplicate — one alert per interaction per 24 h (via Redis)
   if (await storeHasQualityAlert(dedupeKey)) {
     console.log(`[quality-alert] Skipping duplicate alert for ${dedupeKey}`);
     return;
@@ -322,6 +337,16 @@ export async function fireQualityAlert(opts: {
     const targetToken = complianceToken || token;
     const sent = await sendSlackMessage(complianceChannel, lines.join('\n'), targetToken);
     console.log(`[quality-alert] Compliance failure Slack alert for ${isCallAlert ? `call ${opts.callId}` : `chat ${opts.chatId}`}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+
+    if (opts.callId && sent) {
+      try {
+        const { query } = await import('./cx/db');
+        await query(
+          `UPDATE call_evaluations SET compliance_alerted_at = NOW() WHERE call_id = $1 AND compliance_alerted_at IS NULL`,
+          [opts.callId]
+        );
+      } catch {}
+    }
 
     // Auto-append to Compliance Google Sheet (Sheet1)
     appendComplianceAlertToSheet({
