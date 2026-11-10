@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
@@ -12,6 +12,7 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { CsatPill, csatLabel } from '@/components/quality/csat';
 import UISelect from '@/components/quality/UISelect';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
+import * as T from '@/components/quality/tableStyles';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -21,17 +22,10 @@ function fmtTime(iso: string) {
 }
 
 // ─── Shared table styles ───────────────────────────────────────────────────────
-const th: React.CSSProperties = {
-  height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-  fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-  fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
-};
-const td: React.CSSProperties = {
-  height: 52, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
-  fontSize: 14, color: 'var(--qa-text)', verticalAlign: 'middle',
-};
-const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text-2)' };
-const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13 };
+const th: React.CSSProperties = T.th;
+const td: React.CSSProperties = T.td;
+const tdMono: React.CSSProperties = T.tdMono;
+const tdNum: React.CSSProperties  = T.tdNum;
 
 const chip: React.CSSProperties = {
   height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
@@ -48,7 +42,7 @@ function IQSBadge({ score, muted }: { score: number | null; muted?: boolean }) {
   return (
     <span style={{
       fontFamily: 'ui-monospace, monospace',
-      fontSize: muted ? 12 : 14, fontWeight: muted ? 400 : 700,
+      fontSize: 13, fontWeight: muted ? 400 : 600,
       color: muted ? 'var(--faint)' : 'var(--qa-text)',
     }}>{score}</span>
   );
@@ -105,7 +99,7 @@ export function DisputeStatusPill({
   }
 
   return (
-    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
+    <span style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>
       {label}
     </span>
   );
@@ -144,6 +138,15 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   const [iqsMin,  setIqsMin]  = useState('');
   const [iqsMax,  setIqsMax]  = useState('');
   const [csat,    setCsat]    = useState<string[]>([]);
+  const [csatOpen, setCsatOpen] = useState(false);
+  const csatRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!csatOpen) return;
+    const onDown = (e: MouseEvent) => { if (!csatRef.current?.contains(e.target as Node)) setCsatOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCsatOpen(false); };
+    document.addEventListener('mousedown', onDown); document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [csatOpen]);
   const [disputeFilter, setDisputeFilter] = useState('');
 
   // Auto-expand target chat
@@ -221,17 +224,37 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 <input type="number" value={iqsMin} onChange={e => setIqsMin(e.target.value)} placeholder="min" style={{ ...inputStyle, width: 70 }} />
 <input type="number" value={iqsMax} onChange={e => setIqsMax(e.target.value)} placeholder="max" style={{ ...inputStyle, width: 70 }} />
 </span>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>CSAT</span>
-          {['5','3','1'].map(v => (
-            <button
-              key={v}
-              style={csat.includes(v) ? chipActive : chip}
-              onClick={() => setCsat(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v])}
-            >
-              {csatLabel(v)}
-            </button>
-          ))}
+        {/* CSAT: multi-select dropdown (same pattern as the Chat Evaluation filter bar) */}
+        <div ref={csatRef} style={{ position: 'relative' }}>
+          <button type="button" style={csat.length ? chipActive : chip} onClick={() => setCsatOpen(o => !o)} aria-haspopup="listbox" aria-expanded={csatOpen}>
+            {csat.length ? `CSAT: ${['5', '3', '1'].filter(v => csat.includes(v)).map(v => csatLabel(v)).join(', ')}` : 'CSAT'}
+            <span style={{ fontSize: 9 }}>▾</span>
+          </button>
+          {csatOpen && (
+            <div role="listbox" aria-multiselectable="true" style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 40, marginTop: 4, minWidth: 180, padding: '6px 0',
+              background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}>
+              {['5', '3', '1'].map(v => {
+                const checked = csat.includes(v);
+                return (
+                  <label key={v} role="option" aria-selected={checked} style={{
+                    padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+                  }}>
+                    <input type="checkbox" checked={checked} onChange={() => setCsat(prev => checked ? prev.filter(x => x !== v) : [...prev, v])} style={{ accentColor: 'var(--accent)' }} />
+                    {csatLabel(v)}
+                  </label>
+                );
+              })}
+              {csat.length > 0 && (
+                <button type="button" onClick={() => setCsat([])} style={{
+                  width: '100%', textAlign: 'left', padding: '8px 14px', marginTop: 4, border: 0, borderTop: '1px solid var(--qa-border-sub)',
+                  background: 'none', fontFamily: 'inherit', fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer',
+                }}>Clear</button>
+              )}
+            </div>
+          )}
         </div>
         <DateRangeChip from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
         <UISelect value={disputeFilter} onChange={e => setDisputeFilter(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
@@ -362,9 +385,9 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                     {chat.callIqsScore != null ? (
                       <IQSBadge score={chat.callIqsScore} muted />
                     ) : chat.callTranscriptStatus === 'transcribed' ? (
-                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>Transcribed</span>
+                      <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 500 }}>Transcribed</span>
                     ) : chat.callTranscriptStatus === 'pending' ? (
-                      <span style={{ fontSize: 12, color: '#ca8a04', fontWeight: 500 }}>Pending</span>
+                      <span style={{ fontSize: 13, color: '#ca8a04', fontWeight: 500 }}>Pending</span>
                     ) : (
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                     )}
@@ -375,7 +398,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                       onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
                       style={{
                         background: 'none', border: 0, padding: 0,
-                        fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                         color: 'var(--qa-text)', cursor: 'pointer',
                         display: 'inline-flex', alignItems: 'center', gap: 5,
                       }}
@@ -753,7 +776,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                 <td style={tdMono}><ChatIdCell chatId={d.chatId} /></td>
                 <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.agentName}</td>
                 <td style={td}>
-                  <span style={{ fontSize: 13, color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
+                  <span style={{ color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
                 </td>
                 <td style={tdNum}>
                   {d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore ? (
@@ -772,7 +795,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   {d.callIqsScore != null ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                 </td>
                 <td style={td}><CSATBadge score={d.csatScore} /></td>
-                <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
+                <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
                   {fmtDate(d.raisedAt)}
                   <br />
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(d.raisedAt)}</span>

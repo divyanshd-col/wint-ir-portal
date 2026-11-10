@@ -33,56 +33,120 @@ test('getSlaWindow uses the IST date just before IST midnight', () => {
 });
 
 // ---- Step 2: filter logic (mirrors the production SQL) ----
-import { findBreachingTickets, type EmailTicketRow, type BreachingTicket } from '../lib/sla-breach';
+import { findBreachingTickets, isInScopeStatus, isAgentActionStatus, type EmailTicketRow, type BreachingTicket } from '../lib/sla-breach';
 
+const d = (iso: string) => new Date(iso);
 const row = (o: Partial<EmailTicketRow>): EmailTicketRow => ({
   id: 't', chat_id: 'c', customer_email: 'a@example.com', customer_phone: '',
-  status: 'OPEN', created_at: new Date('2026-09-30T05:00:00Z'), first_response_at: null,
-  updated_at: new Date('2026-09-30T05:00:00Z'), intent_l1: null, ...o,
+  created_at: d('2026-09-30T05:00:00Z'), first_response_at: null, intent_l1: null,
+  has_events: true, has_incoming_message: false, robylon_status: null,
+  last_customer_message_at: null, last_agent_message_at: null, last_agent_status_at: null, ...o,
 });
-// Trigger 1 window on 2026-10-01 IST: 04:30Z .. 13:30Z. Breach = anchor + 24h.
-const W1 = getSlaWindow(new Date('2026-10-01T04:15:00Z'), 1);
+// Cron trigger 1 runs 09:45 IST = 04:15Z on 2026-10-01; its window is 04:30Z .. 13:30Z. Breach = customer's last message + 24h.
+const CRON1 = d('2026-10-01T04:15:00Z');
+const W1 = getSlaWindow(CRON1, 1);
+const find = (rows: EmailTicketRow[]) => findBreachingTickets(rows, W1, CRON1);
+const ids = (rows: BreachingTicket[]) => rows.map((x) => x.chat_id);
 
-test('findBreachingTickets includes a ticket breaching inside the window', () => {
-  const r = findBreachingTickets([row({ chat_id: 'in', created_at: new Date('2026-09-30T08:00:00Z') })], W1);
-  assert.deepEqual(r.map((x) => x.chat_id), ['in']);
+test('findBreachingTickets includes a ticket breaching inside the window (upcoming, not overdue)', () => {
+  const r = find([row({ chat_id: 'in', created_at: d('2026-09-30T08:00:00Z') })]);
+  assert.deepEqual(ids(r), ['in']);
   assert.equal(r[0].sla_breach_time.toISOString(), '2026-10-01T08:00:00.000Z');
+  assert.equal(r[0].overdue, false);
 });
 
-test('findBreachingTickets excludes tickets just outside the window', () => {
-  const rows = [
-    row({ chat_id: 'before', created_at: new Date('2026-09-30T04:29:59Z') }), // breach 04:29:59Z
-    row({ chat_id: 'after', created_at: new Date('2026-09-30T13:30:01Z') }), // breach 13:30:01Z
-  ];
-  assert.deepEqual(findBreachingTickets(rows, W1), []);
+test('findBreachingTickets excludes upcoming tickets just outside the window', () => {
+  assert.deepEqual(find([
+    row({ chat_id: 'before', created_at: d('2026-09-30T04:29:59Z') }), // breach 04:29:59Z: after the cron ran, before the window
+    row({ chat_id: 'after', created_at: d('2026-09-30T13:30:01Z') }),  // breach 13:30:01Z
+  ]), []);
 });
 
-test('findBreachingTickets excludes CLOSED and RESOLVED tickets', () => {
-  const t = new Date('2026-09-30T08:00:00Z');
-  const rows = [
-    row({ chat_id: 'closed', status: 'CLOSED', created_at: t }),
-    row({ chat_id: 'resolved', status: 'RESOLVED', created_at: t }),
-  ];
-  assert.deepEqual(findBreachingTickets(rows, W1), []);
+test('findBreachingTickets lists tickets already past 24h as overdue, first, whatever the window', () => {
+  const r = find([
+    row({ chat_id: 'upcoming', created_at: d('2026-09-30T08:00:00Z') }),
+    row({ chat_id: 'overdue-2d', created_at: d('2026-09-28T08:00:00Z') }),
+    row({ chat_id: 'overdue-1h', created_at: d('2026-09-30T03:00:00Z') }),
+  ]);
+  assert.deepEqual(ids(r), ['overdue-2d', 'overdue-1h', 'upcoming']);
+  assert.deepEqual(r.map((x) => x.overdue), [true, true, false]);
 });
 
-test('findBreachingTickets anchors on updated_at once first_response_at is set', () => {
-  const r = findBreachingTickets([row({
-    chat_id: 'replied',
-    created_at: new Date('2026-09-20T00:00:00Z'), // would be far outside the window
-    first_response_at: new Date('2026-09-20T01:00:00Z'),
-    updated_at: new Date('2026-09-30T09:00:00Z'),
-  })], W1);
-  assert.deepEqual(r.map((x) => x.chat_id), ['replied']);
+test('findBreachingTickets - an agent reply after the customer message means no flag', () => {
+  assert.deepEqual(find([
+    row({ chat_id: 'replied', created_at: d('2026-09-30T08:00:00Z'), last_agent_message_at: d('2026-09-30T09:00:00Z') }),
+    row({ chat_id: 'replied-late', created_at: d('2026-09-27T08:00:00Z'), last_agent_message_at: d('2026-09-30T09:00:00Z') }), // reply was past 24h, still answered
+    row({ chat_id: 'first-response', created_at: d('2026-09-28T08:00:00Z'), first_response_at: d('2026-09-28T09:00:00Z') }),
+  ]), []);
+});
+
+test('findBreachingTickets - a customer message after the agent reply restarts the clock from that message', () => {
+  const r = find([row({
+    chat_id: 'again', created_at: d('2026-09-20T00:00:00Z'), last_agent_message_at: d('2026-09-20T01:00:00Z'),
+    last_customer_message_at: d('2026-09-30T09:00:00Z'),
+  })]);
+  assert.deepEqual(ids(r), ['again']);
   assert.equal(r[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
 });
 
+test('findBreachingTickets - Answered / Pending email sent: not flagged if the agent acted last, flagged if the customer wrote after (safeguard)', () => {
+  for (const status of ['Answered', 'Pending email sent']) {
+    assert.deepEqual(find([row({ chat_id: 'quiet', robylon_status: status, created_at: d('2026-09-29T08:00:00Z'), last_agent_status_at: d('2026-09-29T10:00:00Z') })]), [], status);
+    const r = find([row({
+      chat_id: 'stuck', robylon_status: status, created_at: d('2026-09-29T08:00:00Z'),
+      last_agent_status_at: d('2026-09-29T10:00:00Z'), last_customer_message_at: d('2026-09-30T09:00:00Z'), // customer replied, Robylon never moved it
+    })]);
+    assert.deepEqual(ids(r), ['stuck'], status);
+    assert.equal(r[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
+  }
+});
+
+test('isInScopeStatus - Open, PENDING, Customer responded (either spelling), Pending email sent, Answered and both dependencies', () => {
+  for (const s of ['OPEN', 'PENDING', 'Customer reponded', 'Customer responded', 'Pending email sent', 'Answered', 'Internal Dependency', 'External Dependency', '  answered '])
+    assert.equal(isInScopeStatus(s), true, s);
+  for (const s of ['WAITING_ON_AGENT', 'Hold', 'Entity Escalation', 'Repayment', 'Repayment External Dependency', 'CLOSED', 'RESOLVED', '', null, undefined])
+    assert.equal(isInScopeStatus(s as string | null | undefined), false, String(s));
+});
+
+test('isAgentActionStatus - only Answered and Pending email sent', () => {
+  assert.equal(isAgentActionStatus('Answered'), true);
+  assert.equal(isAgentActionStatus('pending email sent'), true);
+  for (const s of ['PENDING', 'OPEN', 'Customer reponded', null]) assert.equal(isAgentActionStatus(s as string | null), false, String(s));
+});
+
+test('findBreachingTickets - skips out-of-scope Robylon statuses, keeps in-scope ones', () => {
+  const t = d('2026-09-30T09:00:00Z');
+  const r = find([
+    ...['WAITING_ON_AGENT', 'Hold', 'Entity Escalation', 'Repayment', 'Repayment External Dependency', 'CLOSED'].map((s) => row({ chat_id: `out-${s}`, robylon_status: s, created_at: t })),
+    ...['PENDING', 'Customer reponded', 'Internal Dependency', 'External Dependency', 'OPEN', null].map((s) => row({ chat_id: `in-${s}`, robylon_status: s, created_at: t })),
+  ]);
+  assert.deepEqual(ids(r).sort(), ['in-Customer reponded', 'in-External Dependency', 'in-Internal Dependency', 'in-OPEN', 'in-PENDING', 'in-null']);
+});
+
+test('findBreachingTickets - a ticket started by a Wint sender has no customer waiting, even though created_at is a moment after the mail', () => {
+  assert.deepEqual(find([row({
+    chat_id: 'internal', created_at: d('2026-09-30T08:00:00.537Z'), has_incoming_message: true,
+    last_customer_message_at: null, last_agent_message_at: d('2026-09-30T08:00:00.000Z'),
+  })]), []);
+});
+
+test('findBreachingTickets - the customer clock is the newest customer message; created_at only when no incoming message is stored', () => {
+  const withMsg = find([row({ chat_id: 'm', created_at: d('2026-09-20T00:00:00Z'), has_incoming_message: true, last_customer_message_at: d('2026-09-30T09:00:00Z') })]);
+  assert.equal(withMsg[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
+  const noMsg = find([row({ chat_id: 'n', created_at: d('2026-09-30T09:00:00Z'), has_incoming_message: false })]);
+  assert.equal(noMsg[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
+});
+
+test('findBreachingTickets - skips tickets with no stored events at all (cannot tell who spoke last)', () => {
+  assert.deepEqual(find([row({ chat_id: 'old', has_events: false, created_at: d('2026-09-30T08:00:00Z') })]), []);
+});
+
 test('findBreachingTickets sorts by breach time ascending', () => {
-  const r = findBreachingTickets([
-    row({ chat_id: 'late', created_at: new Date('2026-09-30T12:00:00Z') }),
-    row({ chat_id: 'early', created_at: new Date('2026-09-30T05:00:00Z') }),
-  ], W1);
-  assert.deepEqual(r.map((x) => x.chat_id), ['early', 'late']);
+  const r = find([
+    row({ chat_id: 'late', created_at: d('2026-09-30T12:00:00Z') }),
+    row({ chat_id: 'early', created_at: d('2026-09-30T05:00:00Z') }),
+  ]);
+  assert.deepEqual(ids(r), ['early', 'late']);
 });
 
 // ---- Step 3: Slack payload (no network) ----
@@ -92,13 +156,15 @@ const NOW = new Date('2026-10-01T10:51:00Z'); // 16:21 IST
 const mk = () => findBreachingTickets([
   row({ chat_id: '111', customer_email: 'secret@example.com', intent_l1: 'KYC', created_at: new Date('2026-09-30T13:34:00Z') }), // breach 13:34Z = 19:04 IST, 2h43m away
   row({ chat_id: '222', created_at: new Date('2026-09-30T20:00:00Z') }), // breach next day 20:00Z - 1d9h09m away
-], { windowStart: new Date('2026-10-01T00:00:00Z'), windowEnd: new Date('2026-10-03T00:00:00Z') });
+], { windowStart: new Date('2026-10-01T00:00:00Z'), windowEnd: new Date('2026-10-03T00:00:00Z') }, NOW);
 
-test('formatBreachesIn - hours and minutes, days when long, "overdue" when past', () => {
+test('formatBreachesIn - hours and minutes, days when long, "overdue <how long>" when past', () => {
   assert.equal(formatBreachesIn(new Date('2026-10-01T13:34:00Z'), NOW), '2h 43m');
   assert.equal(formatBreachesIn(new Date('2026-10-01T10:59:00Z'), NOW), '8m');
   assert.equal(formatBreachesIn(new Date('2026-10-02T20:00:00Z'), NOW), '1d 9h');
-  assert.equal(formatBreachesIn(new Date('2026-10-01T10:00:00Z'), NOW), 'overdue');
+  assert.equal(formatBreachesIn(new Date('2026-10-01T10:00:00Z'), NOW), 'overdue 51m');
+  assert.equal(formatBreachesIn(new Date('2026-09-29T20:00:00Z'), NOW), 'overdue 1d 14h');
+  assert.equal(formatBreachesIn(new Date('2026-10-01T10:51:00Z'), NOW), 'overdue');
 });
 
 test('formatBreachesAt - IST, 12-hour, day and month', () => {
@@ -115,7 +181,7 @@ test('formatMentions - subteam, user ids, and plain-text fallback', () => {
 
 test('buildSlackPayload - zero rows: no-breach text, no mentions, no table', () => {
   const p = buildSlackPayload([], '10 AM to 7 PM today', NOW, '<!subteam^S1>');
-  assert.match(p.text, /No SLA breaches expected in the 10 AM to 7 PM today window/);
+  assert.match(p.text, /No overdue tickets and no SLA breaches expected in the 10 AM to 7 PM today window/);
   assert.ok(!p.text.includes('S1'));
   assert.ok(!(p.blocks ?? []).some((b: any) => b.type === 'table'));
 });
@@ -123,7 +189,8 @@ test('buildSlackPayload - zero rows: no-breach text, no mentions, no table', () 
 test('buildSlackPayload - mentions + ticket table with the 3 columns, no email, "Ticket" not "Chat"', () => {
   const p = buildSlackPayload(mk(), 'w', NOW, '<!subteam^S1> <!subteam^S2>');
   assert.ok(p.text.includes('<!subteam^S1> <!subteam^S2>'));
-  assert.match(p.text, /2 ticket\(s\)/);
+  assert.match(p.text, /2 breaching in the w window/);
+  assert.ok(!/overdue/.test(p.text));
   const json = JSON.stringify(p);
   assert.ok(!json.includes('secret@example.com') && !json.includes('@example.com'));
   assert.ok(!/Chat \d/.test(json));
@@ -237,7 +304,7 @@ test('buildSlackPayload - notes how many automated tickets were excluded', () =>
 
 test('buildSlackPayload - zero human rows but some excluded still says so, with no mentions', () => {
   const p = buildSlackPayload([], 'w', NOW, '<!subteam^S1>', 2);
-  assert.match(p.text, /No SLA breaches expected/);
+  assert.match(p.text, /No overdue tickets and no SLA breaches expected/);
   assert.match(p.text, /2 automated sender\(s\) excluded/);
   assert.ok(!p.text.includes('S1'));
 });
@@ -263,12 +330,12 @@ test('cleanIntent - keeps names, drops empty, "None" and raw ids', () => {
 });
 
 test('findBreachingTickets - carries the L1 intent through', () => {
-  const r = findBreachingTickets([row({ chat_id: 'x', intent_l1: 'Taxation', created_at: new Date('2026-09-30T08:00:00Z') })], W1);
+  const r = find([row({ chat_id: 'x', intent_l1: 'Taxation', created_at: new Date('2026-09-30T08:00:00Z') })]);
   assert.equal(r[0].intent_l1, 'Taxation');
 });
 
-// ---- Accuracy rules: last activity is the customer's, status exclusions, precise anchor ----
-import { isStaffEmail, isExcludedChatStatus } from '../lib/sla-breach';
+// ---- Slack: overdue wording ----
+import { isStaffEmail } from '../lib/sla-breach';
 
 test('isStaffEmail - only the @wintwealth.com domain, any case', () => {
   assert.equal(isStaffEmail('hello@wintwealth.com'), true);
@@ -277,43 +344,15 @@ test('isStaffEmail - only the @wintwealth.com domain, any case', () => {
     assert.equal(isStaffEmail(e as string | null | undefined), false, String(e));
 });
 
-test('isExcludedChatStatus - Repayment and Repayment External Dependency only', () => {
-  assert.equal(isExcludedChatStatus('Repayment'), true);
-  assert.equal(isExcludedChatStatus('Repayment External Dependency'), true);
-  assert.equal(isExcludedChatStatus('  repayment external dependency '), true);
-  for (const s of ['Customer reponded', 'External Dependency', 'Repayment Int/Ext Dependency', 'PENDING', '', null, undefined])
-    assert.equal(isExcludedChatStatus(s as string | null | undefined), false, String(s));
-});
-
-test('findBreachingTickets - anchors on the last customer message, not updated_at', () => {
-  const r = findBreachingTickets([row({
-    chat_id: 'm1', first_response_at: new Date('2026-09-20T01:00:00Z'),
-    created_at: new Date('2026-09-20T00:00:00Z'), updated_at: new Date('2026-09-25T00:00:00Z'), // both far outside the window
-    last_message_from: 'cust@gmail.com', last_message_at: new Date('2026-09-30T09:00:00Z'),
-  })], W1);
-  assert.deepEqual(r.map((x) => x.chat_id), ['m1']);
-  assert.equal(r[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
-});
-
-test('findBreachingTickets - skips tickets whose last message came from @wintwealth.com', () => {
-  const inWindow = new Date('2026-09-30T09:00:00Z');
-  const r = findBreachingTickets([
-    row({ chat_id: 'agent-last', last_message_from: 'hello@wintwealth.com', last_message_at: inWindow }),
-    row({ chat_id: 'sneha-last', last_message_from: 'Sneha@wintwealth.com', last_message_at: inWindow }),
-    row({ chat_id: 'customer-last', last_message_from: 'cust@gmail.com', last_message_at: inWindow }),
-    row({ chat_id: 'no-events', created_at: inWindow }), // no message events: unanswered, customer spoke last
-  ], W1);
-  assert.deepEqual(r.map((x) => x.chat_id).sort(), ['customer-last', 'no-events']);
-});
-
-test('findBreachingTickets - skips Repayment and Repayment External Dependency, keeps other statuses', () => {
-  const t = new Date('2026-09-30T09:00:00Z');
-  const r = findBreachingTickets([
-    row({ chat_id: 'rep', chat_status: 'Repayment', created_at: t }),
-    row({ chat_id: 'rep-ext', chat_status: 'Repayment External Dependency', created_at: t }),
-    row({ chat_id: 'pending', chat_status: 'PENDING', created_at: t }),
-    row({ chat_id: 'cust-resp', chat_status: 'Customer reponded', created_at: t }),
-    row({ chat_id: 'no-status', chat_status: null, created_at: t }),
-  ], W1);
-  assert.deepEqual(r.map((x) => x.chat_id).sort(), ['cust-resp', 'no-status', 'pending']);
+test('buildSlackPayload - header separates overdue from upcoming, and the table says how long overdue', () => {
+  const rows = findBreachingTickets([
+    row({ chat_id: 'late', created_at: new Date('2026-09-29T20:00:00Z') }),  // breach 09-30 20:00Z: overdue 14h51m at NOW
+    row({ chat_id: 'soon', created_at: new Date('2026-09-30T13:34:00Z') }),  // breach 13:34Z today
+  ], { windowStart: new Date('2026-10-01T00:00:00Z'), windowEnd: new Date('2026-10-03T00:00:00Z') }, NOW);
+  const p = buildSlackPayload(rows, 'w', NOW, '@x');
+  assert.match(p.text, /1 overdue \(customer still waiting\), 1 breaching in the w window/);
+  const table: any = p.blocks!.find((b: any) => b.type === 'table');
+  assert.equal(table.rows[1][0].text, 'late');
+  assert.equal(table.rows[1][2].text, 'overdue 14h 51m');
+  assert.equal(table.rows[2][2].text, '2h 43m');
 });

@@ -249,10 +249,10 @@ export default function CxIrPerformanceDashboard({
     : 'emails';
 
   const channelBadgeStyles = selectedChannel === 'calls'
-    ? { background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' }
+    ? { background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-065f46, #065f46)', border: '1px solid var(--dk-bd-a7f3d0, #a7f3d0)' }
     : selectedChannel === 'chats'
-    ? { background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }
-    : { background: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' };
+    ? { background: 'var(--dk-bg-eff6ff, #eff6ff)', color: 'var(--dk-fg-1d4ed8, #1d4ed8)', border: '1px solid var(--dk-bd-bfdbfe, #bfdbfe)' }
+    : { background: 'var(--dk-bg-f5f3ff, #f5f3ff)', color: 'var(--dk-fg-6d28d9, #6d28d9)', border: '1px solid var(--dk-bd-ddd6fe, #ddd6fe)' };
 
   const periodDisplayLabel = (() => {
     if (period === '7d') return 'Last 7 Days';
@@ -266,22 +266,22 @@ export default function CxIrPerformanceDashboard({
 
   if (loading) {
     return (
-      <div style={{ fontFamily: 'Inter, sans-serif', maxWidth: 1280, margin: '0 auto', padding: '16px 0', color: '#18181b' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #e4e4e7' }}>
+      <div style={{ fontFamily: 'Inter, sans-serif', maxWidth: 1280, margin: '0 auto', padding: '16px 0', color: 'var(--dk-fg-18181b, #18181b)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ height: 26, width: 160, background: '#e4e4e7', borderRadius: 6 }} className="animate-pulse" />
-            <div style={{ height: 20, width: 90, background: '#e4e4e7', borderRadius: 6 }} className="animate-pulse" />
-            <div style={{ height: 20, width: 180, background: '#e4e4e7', borderRadius: 6 }} className="animate-pulse" />
+            <div style={{ height: 26, width: 160, background: 'var(--dk-bg-e4e4e7, #e4e4e7)', borderRadius: 6 }} className="animate-pulse" />
+            <div style={{ height: 20, width: 90, background: 'var(--dk-bg-e4e4e7, #e4e4e7)', borderRadius: 6 }} className="animate-pulse" />
+            <div style={{ height: 20, width: 180, background: 'var(--dk-bg-e4e4e7, #e4e4e7)', borderRadius: 6 }} className="animate-pulse" />
           </div>
-          <div style={{ height: 34, width: 340, background: '#e4e4e7', borderRadius: 8 }} className="animate-pulse" />
+          <div style={{ height: 34, width: 340, background: 'var(--dk-bg-e4e4e7, #e4e4e7)', borderRadius: 8 }} className="animate-pulse" />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
           {[1, 2, 3].map((i) => (
-            <div key={i} style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, height: 320, padding: 18 }} className="animate-pulse">
-              <div style={{ height: 16, width: 120, background: '#f4f4f5', borderRadius: 4, marginBottom: 16 }} />
+            <div key={i} style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, height: 320, padding: 18 }} className="animate-pulse">
+              <div style={{ height: 16, width: 120, background: 'var(--dk-bg-f4f4f5, #f4f4f5)', borderRadius: 4, marginBottom: 16 }} />
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((j) => (
-                  <div key={j} style={{ height: 38, background: '#fafafa', borderRadius: 8, marginBottom: 8 }} />
+                  <div key={j} style={{ height: 38, background: 'var(--dk-bg-fafafa, #fafafa)', borderRadius: 8, marginBottom: 8 }} />
                 ))}
               </div>
             </div>
@@ -294,7 +294,7 @@ export default function CxIrPerformanceDashboard({
   if (error) {
     return (
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: 24 }}>
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: 16, color: '#991b1b', fontSize: 13 }}>
+        <div style={{ background: '#fef2f2', border: '1px solid var(--dk-bd-fecaca, #fecaca)', borderRadius: 10, padding: 16, color: 'var(--dk-fg-991b1b, #991b1b)', fontSize: 13 }}>
           <strong>Error loading IR Performance:</strong> {error}
         </div>
       </div>
@@ -302,25 +302,25 @@ export default function CxIrPerformanceDashboard({
   }
 
   return (
-    <div style={{ fontFamily: 'Inter, sans-serif', maxWidth: 1280, margin: '0 auto', color: '#18181b' }}>
+    <div style={{ fontFamily: 'Inter, sans-serif', maxWidth: 1280, margin: '0 auto', color: 'var(--dk-fg-18181b, #18181b)' }}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 24, borderBottom: '1px solid #e4e4e7', paddingBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 24, borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', paddingBottom: 16 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: '#18181b', letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', letterSpacing: '-0.02em' }}>
               IR Performance
             </h1>
             <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 6, ...channelBadgeStyles }}>
               {channelLabel} Channel
             </span>
-            <span style={{ fontSize: 11, fontWeight: 600, background: '#f4f4f5', color: '#3f3f46', border: '1px solid #e4e4e7', padding: '2px 8px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--dk-bg-f4f4f5, #f4f4f5)', color: 'var(--dk-fg-3f3f46, #3f3f46)', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', padding: '2px 8px', borderRadius: 6 }}>
               Top & Bottom: {periodDisplayLabel}
             </span>
-            <span style={{ fontSize: 11, fontWeight: 600, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-065f46, #065f46)', border: '1px solid var(--dk-bd-a7f3d0, #a7f3d0)', padding: '2px 8px', borderRadius: 6 }}>
               Most Improved: 14D Rolling Window
             </span>
           </div>
-          <p style={{ fontSize: 13, color: '#71717a', margin: '6px 0 0 0' }}>
+          <p style={{ fontSize: 13, color: 'var(--dk-fg-71717a, #71717a)', margin: '6px 0 0 0' }}>
             Top & bottom performers ranked for <strong>{periodDisplayLabel}</strong> · Most improved tracks continuous 14-day rolling gains.
           </p>
         </div>
@@ -329,16 +329,16 @@ export default function CxIrPerformanceDashboard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {/* DATE RANGE FILTER */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>Period:</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dk-fg-71717a, #71717a)' }}>Period:</span>
             <select
               value={period}
               onChange={(e) => handlePeriodChange(e.target.value)}
               style={{
                 fontSize: 12,
                 fontWeight: 600,
-                color: '#18181b',
-                background: '#ffffff',
-                border: '1px solid #e4e4e7',
+                color: 'var(--dk-fg-18181b, #18181b)',
+                background: 'var(--dk-bg-ffffff, #ffffff)',
+                border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)',
                 borderRadius: 8,
                 padding: '6px 12px',
                 cursor: 'pointer',
@@ -357,7 +357,7 @@ export default function CxIrPerformanceDashboard({
 
           {/* CUSTOM DATE INPUTS */}
           {period === 'custom' && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fafafa', padding: '4px 8px', borderRadius: 8, border: '1px solid #e4e4e7' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--dk-bg-fafafa, #fafafa)', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)' }}>
               <input
                 type="date"
                 value={customFrom}
@@ -365,14 +365,14 @@ export default function CxIrPerformanceDashboard({
                 style={{
                   fontSize: 12,
                   padding: '4px 6px',
-                  border: '1px solid #d4d4d8',
+                  border: '1px solid var(--dk-bd-d4d4d8, #d4d4d8)',
                   borderRadius: 6,
                   outline: 'none',
-                  background: '#ffffff',
-                  color: '#18181b',
+                  background: 'var(--dk-bg-ffffff, #ffffff)',
+                  color: 'var(--dk-fg-18181b, #18181b)',
                 }}
               />
-              <span style={{ fontSize: 12, color: '#71717a' }}>to</span>
+              <span style={{ fontSize: 12, color: 'var(--dk-fg-71717a, #71717a)' }}>to</span>
               <input
                 type="date"
                 value={customTo}
@@ -380,11 +380,11 @@ export default function CxIrPerformanceDashboard({
                 style={{
                   fontSize: 12,
                   padding: '4px 6px',
-                  border: '1px solid #d4d4d8',
+                  border: '1px solid var(--dk-bd-d4d4d8, #d4d4d8)',
                   borderRadius: 6,
                   outline: 'none',
-                  background: '#ffffff',
-                  color: '#18181b',
+                  background: 'var(--dk-bg-ffffff, #ffffff)',
+                  color: 'var(--dk-fg-18181b, #18181b)',
                 }}
               />
               <button
@@ -394,8 +394,8 @@ export default function CxIrPerformanceDashboard({
                   fontSize: 11,
                   fontWeight: 600,
                   padding: '5px 10px',
-                  background: '#18181b',
-                  color: '#ffffff',
+                  background: 'var(--dk-bg-18181b, #18181b)',
+                  color: 'var(--dk-fg-ffffff, #ffffff)',
                   borderRadius: 6,
                   border: 'none',
                   cursor: 'pointer',
@@ -408,7 +408,7 @@ export default function CxIrPerformanceDashboard({
           )}
 
           {/* CHANNEL TABS SELECTOR (Calls, Chats, Emails) */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', background: '#f4f4f5', padding: 3, borderRadius: 8, border: '1px solid #e4e4e7', gap: 2 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--dk-bg-f4f4f5, #f4f4f5)', padding: 3, borderRadius: 8, border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', gap: 2 }}>
             {/* CALLS TAB */}
             <button
               type="button"
@@ -423,8 +423,8 @@ export default function CxIrPerformanceDashboard({
                 borderRadius: 6,
                 border: 'none',
                 cursor: 'pointer',
-                background: selectedChannel === 'calls' ? '#ffffff' : 'transparent',
-                color: selectedChannel === 'calls' ? '#18181b' : '#71717a',
+                background: selectedChannel === 'calls' ? 'var(--dk-bg-ffffff, #ffffff)' : 'transparent',
+                color: selectedChannel === 'calls' ? 'var(--dk-fg-18181b, #18181b)' : 'var(--dk-fg-71717a, #71717a)',
                 boxShadow: selectedChannel === 'calls' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                 transition: 'all 0.15s ease',
               }}
@@ -437,8 +437,8 @@ export default function CxIrPerformanceDashboard({
                 <span style={{
                   fontSize: 10,
                   fontWeight: 600,
-                  background: selectedChannel === 'calls' ? '#ecfdf5' : '#e4e4e7',
-                  color: selectedChannel === 'calls' ? '#065f46' : '#71717a',
+                  background: selectedChannel === 'calls' ? 'var(--dk-bg-ecfdf5, #ecfdf5)' : 'var(--dk-bg-e4e4e7, #e4e4e7)',
+                  color: selectedChannel === 'calls' ? 'var(--dk-fg-065f46, #065f46)' : 'var(--dk-fg-71717a, #71717a)',
                   padding: '1px 5px',
                   borderRadius: 10,
                 }}>
@@ -461,8 +461,8 @@ export default function CxIrPerformanceDashboard({
                 borderRadius: 6,
                 border: 'none',
                 cursor: 'pointer',
-                background: selectedChannel === 'chats' ? '#ffffff' : 'transparent',
-                color: selectedChannel === 'chats' ? '#18181b' : '#71717a',
+                background: selectedChannel === 'chats' ? 'var(--dk-bg-ffffff, #ffffff)' : 'transparent',
+                color: selectedChannel === 'chats' ? 'var(--dk-fg-18181b, #18181b)' : 'var(--dk-fg-71717a, #71717a)',
                 boxShadow: selectedChannel === 'chats' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                 transition: 'all 0.15s ease',
               }}
@@ -475,8 +475,8 @@ export default function CxIrPerformanceDashboard({
                 <span style={{
                   fontSize: 10,
                   fontWeight: 600,
-                  background: selectedChannel === 'chats' ? '#eff6ff' : '#e4e4e7',
-                  color: selectedChannel === 'chats' ? '#1d4ed8' : '#71717a',
+                  background: selectedChannel === 'chats' ? 'var(--dk-bg-eff6ff, #eff6ff)' : 'var(--dk-bg-e4e4e7, #e4e4e7)',
+                  color: selectedChannel === 'chats' ? 'var(--dk-fg-1d4ed8, #1d4ed8)' : 'var(--dk-fg-71717a, #71717a)',
                   padding: '1px 5px',
                   borderRadius: 10,
                 }}>
@@ -499,8 +499,8 @@ export default function CxIrPerformanceDashboard({
                 borderRadius: 6,
                 border: 'none',
                 cursor: 'pointer',
-                background: selectedChannel === 'emails' ? '#ffffff' : 'transparent',
-                color: selectedChannel === 'emails' ? '#18181b' : '#71717a',
+                background: selectedChannel === 'emails' ? 'var(--dk-bg-ffffff, #ffffff)' : 'transparent',
+                color: selectedChannel === 'emails' ? 'var(--dk-fg-18181b, #18181b)' : 'var(--dk-fg-71717a, #71717a)',
                 boxShadow: selectedChannel === 'emails' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                 transition: 'all 0.15s ease',
               }}
@@ -513,8 +513,8 @@ export default function CxIrPerformanceDashboard({
                 <span style={{
                   fontSize: 10,
                   fontWeight: 600,
-                  background: selectedChannel === 'emails' ? '#f5f3ff' : '#e4e4e7',
-                  color: selectedChannel === 'emails' ? '#6d28d9' : '#71717a',
+                  background: selectedChannel === 'emails' ? 'var(--dk-bg-f5f3ff, #f5f3ff)' : 'var(--dk-bg-e4e4e7, #e4e4e7)',
+                  color: selectedChannel === 'emails' ? 'var(--dk-fg-6d28d9, #6d28d9)' : 'var(--dk-fg-71717a, #71717a)',
                   padding: '1px 5px',
                   borderRadius: 10,
                 }}>
@@ -528,31 +528,31 @@ export default function CxIrPerformanceDashboard({
 
       {/* ── 3 CATEGORIES GRID ────────────────────────────────────────────── */}
       {agentsList.length === 0 ? (
-        <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, padding: 48, textAlign: 'center' }}>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#71717a' }}>No {channelLabel.toLowerCase()} evaluations found for {periodDisplayLabel}.</p>
-          <p style={{ margin: '6px 0 0 0', fontSize: 12, color: '#a1a1aa' }}>Try selecting a wider date range like Last 30 Days or All Time.</p>
+        <div style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, padding: 48, textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--dk-fg-71717a, #71717a)' }}>No {channelLabel.toLowerCase()} evaluations found for {periodDisplayLabel}.</p>
+          <p style={{ margin: '6px 0 0 0', fontSize: 12, color: 'var(--dk-fg-a1a1aa, #a1a1aa)' }}>Try selecting a wider date range like Last 30 Days or All Time.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
           {/* =================================================================== */}
           {/* 1. TOP PERFORMERS (FILTERED BY SELECTED PERIOD)                     */}
           {/* =================================================================== */}
-          <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
+          <div style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--dk-bg-fafafa, #fafafa)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
-                <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Top Performers
                 </h2>
               </div>
-              <span style={{ fontSize: 11, fontWeight: 600, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-065f46, #065f46)', border: '1px solid var(--dk-bd-a7f3d0, #a7f3d0)', padding: '2px 7px', borderRadius: 6 }}>
                 Top 5 · {periodDisplayLabel}
               </span>
             </div>
 
             <div>
               {topPerformers.length === 0 ? (
-                <div style={{ padding: '36px 18px', textAlign: 'center', color: '#71717a' }}>
+                <div style={{ padding: '36px 18px', textAlign: 'center', color: 'var(--dk-fg-71717a, #71717a)' }}>
                   <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>No evaluations in {periodDisplayLabel}</p>
                 </div>
               ) : (
@@ -564,7 +564,7 @@ export default function CxIrPerformanceDashboard({
                       onClick={() => handleSelectAgent(agent.name)}
                       style={{
                         padding: '14px 18px',
-                        borderBottom: idx < topPerformers.length - 1 ? '1px solid #f4f4f5' : 'none',
+                        borderBottom: idx < topPerformers.length - 1 ? '1px solid var(--dk-bd-f4f4f5, #f4f4f5)' : 'none',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
@@ -575,10 +575,10 @@ export default function CxIrPerformanceDashboard({
                       className="hover:bg-zinc-50"
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                        <span style={{ fontSize: idx < 3 ? 15 : 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                        <span style={{ fontSize: idx < 3 ? 15 : 12, fontWeight: 700, color: 'var(--dk-fg-71717a, #71717a)', width: 22, textAlign: 'center', flexShrink: 0 }}>
                           {rankIcons[idx]}
                         </span>
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#3f3f46', flexShrink: 0 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--dk-bg-e4e4e7, #e4e4e7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--dk-fg-3f3f46, #3f3f46)', flexShrink: 0 }}>
                           {agent.ini}
                         </div>
                         <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
@@ -586,7 +586,7 @@ export default function CxIrPerformanceDashboard({
                             style={{
                               fontSize: 13,
                               fontWeight: 600,
-                              color: '#18181b',
+                              color: 'var(--dk-fg-18181b, #18181b)',
                               lineHeight: '18px',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
@@ -596,9 +596,9 @@ export default function CxIrPerformanceDashboard({
                           >
                             {agent.name}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dk-fg-71717a, #71717a)', marginTop: 2, flexWrap: 'wrap' }}>
                             {agent.tl ? (
-                              <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dk-fg-52525b, #52525b)', background: 'var(--dk-bg-f4f4f5, #f4f4f5)', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                                 {agent.tl.startsWith('Team ') ? agent.tl : `Team ${agent.tl}`}
                               </span>
                             ) : null}
@@ -608,7 +608,7 @@ export default function CxIrPerformanceDashboard({
                       </div>
 
                       <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: 'var(--dk-fg-059669, #059669)' }}>
                           {agent.currentIqs}%
                         </div>
                         <button
@@ -620,9 +620,9 @@ export default function CxIrPerformanceDashboard({
                           style={{
                             fontSize: 10,
                             fontWeight: 600,
-                            color: '#2563eb',
-                            background: '#eff6ff',
-                            border: '1px solid #bfdbfe',
+                            color: 'var(--dk-fg-2563eb, #2563eb)',
+                            background: 'var(--dk-bg-eff6ff, #eff6ff)',
+                            border: '1px solid var(--dk-bd-bfdbfe, #bfdbfe)',
                             borderRadius: 5,
                             padding: '2px 7px',
                             display: 'inline-flex',
@@ -633,12 +633,12 @@ export default function CxIrPerformanceDashboard({
                             whiteSpace: 'nowrap',
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#dbeafe';
-                            e.currentTarget.style.color = '#1d4ed8';
+                            e.currentTarget.style.background = 'var(--dk-bg-dbeafe, #dbeafe)';
+                            e.currentTarget.style.color = 'var(--dk-fg-1d4ed8, #1d4ed8)';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#eff6ff';
-                            e.currentTarget.style.color = '#2563eb';
+                            e.currentTarget.style.background = 'var(--dk-bg-eff6ff, #eff6ff)';
+                            e.currentTarget.style.color = 'var(--dk-fg-2563eb, #2563eb)';
                           }}
                         >
                           Show Scorecard →
@@ -654,29 +654,29 @@ export default function CxIrPerformanceDashboard({
           {/* =================================================================== */}
           {/* 2. BOTTOM PERFORMERS (FILTERED BY SELECTED PERIOD)                  */}
           {/* =================================================================== */}
-          <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
+          <div style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--dk-bg-fafafa, #fafafa)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626' }}></span>
-                <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Bottom Performers
                 </h2>
               </div>
-              <span style={{ fontSize: 11, fontWeight: 600, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: '2px 7px', borderRadius: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--dk-bg-fef2f2, #fef2f2)', color: 'var(--dk-fg-991b1b, #991b1b)', border: '1px solid var(--dk-bd-fecaca, #fecaca)', padding: '2px 7px', borderRadius: 6 }}>
                 IQS ≤ 70% · {periodDisplayLabel}
               </span>
             </div>
 
             <div>
               {bottomPerformers.length === 0 ? (
-                <div style={{ padding: '36px 18px', textAlign: 'center', color: '#71717a' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ecfdf5', color: '#059669', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+                <div style={{ padding: '36px 18px', textAlign: 'center', color: 'var(--dk-fg-71717a, #71717a)' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-059669, #059669)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
                     ✓
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#18181b', marginBottom: 2 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dk-fg-18181b, #18181b)', marginBottom: 2 }}>
                     No IR Executives Scoring ≤ 70%
                   </div>
-                  <div style={{ fontSize: 11, color: '#71717a' }}>
+                  <div style={{ fontSize: 11, color: 'var(--dk-fg-71717a, #71717a)' }}>
                     All active team members met or exceeded the 70% benchmark in {periodDisplayLabel}.
                   </div>
                 </div>
@@ -688,7 +688,7 @@ export default function CxIrPerformanceDashboard({
                       onClick={() => handleSelectAgent(agent.name)}
                       style={{
                         padding: '14px 18px',
-                        borderBottom: idx < bottomPerformers.length - 1 ? '1px solid #f4f4f5' : 'none',
+                        borderBottom: idx < bottomPerformers.length - 1 ? '1px solid var(--dk-bd-f4f4f5, #f4f4f5)' : 'none',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
@@ -699,10 +699,10 @@ export default function CxIrPerformanceDashboard({
                       className="hover:bg-zinc-50"
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--dk-fg-71717a, #71717a)', width: 22, textAlign: 'center', flexShrink: 0 }}>
                           #{idx + 1}
                         </span>
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#991b1b', flexShrink: 0 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--dk-bg-fee2e2, #fee2e2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--dk-fg-991b1b, #991b1b)', flexShrink: 0 }}>
                           {agent.ini}
                         </div>
                         <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
@@ -710,7 +710,7 @@ export default function CxIrPerformanceDashboard({
                             style={{
                               fontSize: 13,
                               fontWeight: 600,
-                              color: '#18181b',
+                              color: 'var(--dk-fg-18181b, #18181b)',
                               lineHeight: '18px',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
@@ -720,9 +720,9 @@ export default function CxIrPerformanceDashboard({
                           >
                             {agent.name}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dk-fg-71717a, #71717a)', marginTop: 2, flexWrap: 'wrap' }}>
                             {agent.tl ? (
-                              <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dk-fg-52525b, #52525b)', background: 'var(--dk-bg-f4f4f5, #f4f4f5)', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                                 {agent.tl.startsWith('Team ') ? agent.tl : `Team ${agent.tl}`}
                               </span>
                             ) : null}
@@ -734,7 +734,7 @@ export default function CxIrPerformanceDashboard({
                       </div>
 
                       <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#dc2626' }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: 'var(--dk-fg-dc2626, #dc2626)' }}>
                           {agent.currentIqs}%
                         </div>
                         <button
@@ -746,9 +746,9 @@ export default function CxIrPerformanceDashboard({
                           style={{
                             fontSize: 10,
                             fontWeight: 600,
-                            color: '#2563eb',
-                            background: '#eff6ff',
-                            border: '1px solid #bfdbfe',
+                            color: 'var(--dk-fg-2563eb, #2563eb)',
+                            background: 'var(--dk-bg-eff6ff, #eff6ff)',
+                            border: '1px solid var(--dk-bd-bfdbfe, #bfdbfe)',
                             borderRadius: 5,
                             padding: '2px 7px',
                             display: 'inline-flex',
@@ -759,12 +759,12 @@ export default function CxIrPerformanceDashboard({
                             whiteSpace: 'nowrap',
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#dbeafe';
-                            e.currentTarget.style.color = '#1d4ed8';
+                            e.currentTarget.style.background = 'var(--dk-bg-dbeafe, #dbeafe)';
+                            e.currentTarget.style.color = 'var(--dk-fg-1d4ed8, #1d4ed8)';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#eff6ff';
-                            e.currentTarget.style.color = '#2563eb';
+                            e.currentTarget.style.background = 'var(--dk-bg-eff6ff, #eff6ff)';
+                            e.currentTarget.style.color = 'var(--dk-fg-2563eb, #2563eb)';
                           }}
                         >
                           Show Scorecard →
@@ -780,15 +780,15 @@ export default function CxIrPerformanceDashboard({
           {/* =================================================================== */}
           {/* 3. MOST IMPROVED (CONTINUOUS 14-DAY ROLLING WINDOW BASIS)            */}
           {/* =================================================================== */}
-          <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
+          <div style={{ background: '#ffffff', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--dk-bg-fafafa, #fafafa)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
-                <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Most Improved
                 </h2>
               </div>
-              <span style={{ fontSize: 11, fontWeight: 600, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--dk-bg-ecfdf5, #ecfdf5)', color: 'var(--dk-fg-065f46, #065f46)', border: '1px solid var(--dk-bd-a7f3d0, #a7f3d0)', padding: '2px 7px', borderRadius: 6 }}>
                 2-Wk Rolling Diff
               </span>
             </div>
@@ -802,7 +802,7 @@ export default function CxIrPerformanceDashboard({
                     onClick={() => handleSelectAgent(agent.name)}
                     style={{
                       padding: '14px 18px',
-                      borderBottom: idx < mostImproved.length - 1 ? '1px solid #f4f4f5' : 'none',
+                      borderBottom: idx < mostImproved.length - 1 ? '1px solid var(--dk-bd-f4f4f5, #f4f4f5)' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -813,10 +813,10 @@ export default function CxIrPerformanceDashboard({
                     className="hover:bg-zinc-50"
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--dk-fg-71717a, #71717a)', width: 22, textAlign: 'center', flexShrink: 0 }}>
                         #{idx + 1}
                       </span>
-                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#065f46', flexShrink: 0 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--dk-bg-d1fae5, #d1fae5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--dk-fg-065f46, #065f46)', flexShrink: 0 }}>
                         {agent.ini}
                       </div>
                       <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
@@ -824,7 +824,7 @@ export default function CxIrPerformanceDashboard({
                           style={{
                             fontSize: 13,
                             fontWeight: 600,
-                            color: '#18181b',
+                            color: 'var(--dk-fg-18181b, #18181b)',
                             lineHeight: '18px',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
@@ -834,9 +834,9 @@ export default function CxIrPerformanceDashboard({
                         >
                           {agent.name}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#71717a', marginTop: 2, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dk-fg-71717a, #71717a)', marginTop: 2, flexWrap: 'wrap' }}>
                           {agent.tl ? (
-                            <span style={{ fontSize: 10, fontWeight: 600, color: '#52525b', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dk-fg-52525b, #52525b)', background: 'var(--dk-bg-f4f4f5, #f4f4f5)', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
                               {agent.tl.startsWith('Team ') ? agent.tl : `Team ${agent.tl}`}
                             </span>
                           ) : null}
@@ -848,7 +848,7 @@ export default function CxIrPerformanceDashboard({
                     </div>
 
                     <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: 'var(--dk-fg-059669, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
                         <span>{isPositive ? '↑' : '↓'}</span>
                         <span>{isPositive ? `+${agent.delta2Wk.toFixed(1)}%` : `${agent.delta2Wk.toFixed(1)}%`}</span>
                       </div>
@@ -861,9 +861,9 @@ export default function CxIrPerformanceDashboard({
                         style={{
                           fontSize: 10,
                           fontWeight: 600,
-                          color: '#2563eb',
-                          background: '#eff6ff',
-                          border: '1px solid #bfdbfe',
+                          color: 'var(--dk-fg-2563eb, #2563eb)',
+                          background: 'var(--dk-bg-eff6ff, #eff6ff)',
+                          border: '1px solid var(--dk-bd-bfdbfe, #bfdbfe)',
                           borderRadius: 5,
                           padding: '2px 7px',
                           display: 'inline-flex',
@@ -874,12 +874,12 @@ export default function CxIrPerformanceDashboard({
                           whiteSpace: 'nowrap',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#dbeafe';
-                          e.currentTarget.style.color = '#1d4ed8';
+                          e.currentTarget.style.background = 'var(--dk-bg-dbeafe, #dbeafe)';
+                          e.currentTarget.style.color = 'var(--dk-fg-1d4ed8, #1d4ed8)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = '#eff6ff';
-                          e.currentTarget.style.color = '#2563eb';
+                          e.currentTarget.style.background = 'var(--dk-bg-eff6ff, #eff6ff)';
+                          e.currentTarget.style.color = 'var(--dk-fg-2563eb, #2563eb)';
                         }}
                       >
                         Show Scorecard →
@@ -894,11 +894,11 @@ export default function CxIrPerformanceDashboard({
       )}
 
       {/* ── Footer Explanatory Note ────────────────────────────────────── */}
-      <div style={{ marginTop: 28, padding: '14px 18px', background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <p style={{ margin: 0, fontSize: 12, color: '#71717a' }}>
+      <div style={{ marginTop: 28, padding: '14px 18px', background: 'var(--dk-bg-ffffff, #ffffff)', border: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--dk-fg-71717a, #71717a)' }}>
           <strong>Ranking Methodology:</strong> Top and bottom performers are ranked according to average IQS within <strong>{periodDisplayLabel}</strong> on the {channelLabel} channel. Most Improved continuously tracks the top 5 net score gainers over a 14-day rolling window regardless of the selected period filter.
         </p>
-        <span style={{ fontSize: 11, color: '#a1a1aa' }}>
+        <span style={{ fontSize: 11, color: 'var(--dk-fg-a1a1aa, #a1a1aa)' }}>
           Channel: {channelLabel} · Period: {periodDisplayLabel}
         </span>
       </div>

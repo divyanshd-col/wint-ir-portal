@@ -627,46 +627,6 @@ Evaluates the IR Executive's energy, enthusiasm, and tone modulation from audio 
 
 ---
 
-### Analytics Planner & Synthesizer
-
-**Files:** `lib/analytics/agent.ts` → `PLANNER_PROMPT` + `SYNTHESIZER_PROMPT`
-**Model:** `gemini-3.5-flash`
-
-**Planner (Pass 1):** Translates a natural language question into a SQL plan.
-
-Example input: *"Show me CSAT trend by week for the last 2 months"*
-
-```json
-{
-  "action": "plan",
-  "intent": "Weekly CSAT trend for last 2 months",
-  "sqls": [
-    {
-      "sql": "SELECT DATE_TRUNC('week', created_at) AS week, AVG(csat_score) AS avg_csat FROM conversations WHERE created_at >= NOW() - INTERVAL '2 months' GROUP BY week ORDER BY week",
-      "intent": "Weekly average CSAT",
-      "output_shape": "line_chart"
-    }
-  ],
-  "needs_transcripts": false,
-  "output_shape": "line_chart"
-}
-```
-
-**Synthesizer (Pass 2):** Turns SQL results into an insight narrative.
-
-```json
-{
-  "action": "answer",
-  "title": "CSAT Trend – Last 2 Months",
-  "answer_text": "CSAT averaged 4.1 in May but dipped to 3.7 in the first week of June, recovering to 4.3 by end of June. The dip coincides with an increase in repayment-related queries.",
-  "finding": "Notable CSAT dip in early June",
-  "evidence": "Week of June 2: avg CSAT = 3.7 (n=142)",
-  "coverage": "2 months, 1,240 conversations"
-}
-```
-
----
-
 ### Agent Coaching Feedback
 
 **TL view:** `app/api/cx/tl/member-analytics/ai/route.ts` — `gemini-3.5-flash`

@@ -109,10 +109,6 @@ export async function GET(req: NextRequest) {
   const role  = userAny.role;
   const email = userAny.email ?? '';
 
-  if (role !== 'admin' && !userAny.isAdmin) {
-    return NextResponse.json({ error: 'Forbidden. Team analytics is restricted to admins only.' }, { status: 403 });
-  }
-
   const { searchParams } = new URL(req.url);
   const period = searchParams.get('period') ?? 'current';
   const { dateFrom, dateTo } = getDateRange(period, searchParams.get('from'), searchParams.get('to'));

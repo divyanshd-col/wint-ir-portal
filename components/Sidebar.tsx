@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import type { SavedConversation } from '@/lib/types';
 import TimeAgo from '@/components/TimeAgo';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 
 interface SidebarProps {
   username: string;
@@ -15,16 +17,18 @@ interface SidebarProps {
   onNewChat?: () => void;
 }
 
-const STORAGE_KEY = 'wint_sidebar_collapsed';
+// Same key and values as RoleShell, so collapsing the sidebar on one page collapses it everywhere.
+const STORAGE_KEY = 'wint_sidebar';
 
+/** Chat page sidebar. Built on the shared .quality-shell-sidebar classes so it matches the other pages:
+ *  full height in the top-left corner, workspace switcher row, 32px rows, icon rail when collapsed. */
 export default function Sidebar({ historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
-  const [open, setOpen] = useState(true); // mobile drawer
+  const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const [conversations, setConversations] = useState<SavedConversation[]>([]);
 
-  // Restore collapsed preference
   useEffect(() => {
-    try { setCollapsed(localStorage.getItem(STORAGE_KEY) === '1'); } catch { }
+    try { setCollapsed(localStorage.getItem(STORAGE_KEY) === 'collapsed'); } catch { /* storage blocked: stay expanded */ }
   }, []);
 
   useEffect(() => {
@@ -35,78 +39,45 @@ export default function Sidebar({ historyEnabled = false, onRestoreConversation,
       .catch(() => { });
   }, [historyEnabled]);
 
-  const setAndPersistCollapsed = (v: boolean) => {
-    setCollapsed(v);
-    try { localStorage.setItem(STORAGE_KEY, v ? '1' : '0'); } catch { }
-  };
+  const toggle = () => setCollapsed(prev => {
+    const next = !prev;
+    try { localStorage.setItem(STORAGE_KEY, next ? 'collapsed' : 'expanded'); } catch { /* ignore */ }
+    return next;
+  });
 
-  // Only the toggle button expands or collapses the sidebar (no hover-to-expand)
-  const isExpanded = !collapsed;
+  const canSwitch = Boolean(session?.user?.isSuperAdmin) || session?.user?.platformDomain === 'both';
 
   return (
-    <>
-      {/* Mobile toggle */}
-      <button
-        onClick={() => setOpen(!open)}
-        className="lg:hidden fixed top-[calc(var(--topbar-h)+12px)] left-3 z-30 bg-white border border-gray-200 rounded-lg p-2 shadow-sm"
-      >
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1a1a1a" strokeWidth="1.5">
-          <path d="M2 4h14M2 9h14M2 14h14" />
-        </svg>
+    <aside className={`quality-shell-sidebar chat-sidebar${collapsed ? ' collapsed' : ''}`}>
+      <div className="quality-shell-sidebar-head">
+        {canSwitch ? (!collapsed && <WorkspaceSwitcher />) : <div className="quality-shell-sidebar-title">Chat</div>}
+        <button
+          type="button" className="quality-shell-sidebar-toggle" onClick={toggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : undefined}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" /></svg>
+        </button>
+      </div>
+      {canSwitch && collapsed && <div className="quality-shell-ws-collapsed"><WorkspaceSwitcher collapsed /></div>}
+
+      <button type="button" onClick={onNewChat} className="quality-shell-sidebar-link quality-shell-sidebar-btn" aria-label="New chat" title={collapsed ? 'New chat' : undefined}>
+        <span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+        </span>
+        <span className="quality-shell-sidebar-label">New chat</span>
       </button>
 
-      <aside
-        className={`${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-all duration-200 fixed lg:static top-[var(--topbar-h)] bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 bg-[var(--sb-bg)] border-r border-[var(--sb-border)] flex flex-col overflow-hidden ${isExpanded ? 'w-60' : 'w-14'}`}
-      >
-        {/* Collapse toggle */}
-        <div className={`pt-4 pb-2 flex ${isExpanded ? 'justify-end px-4' : 'justify-center'}`}>
-          <button
-            onClick={() => setAndPersistCollapsed(!collapsed)}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="p-1.5 rounded-lg text-[var(--sb-text-muted)] hover:text-[var(--sb-active-text)] hover:bg-[var(--sb-hover)] transition"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="16" rx="3" />
-              <path d="M9 4v16" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Nav */}
-        <nav className={`py-2 flex-1 overflow-y-auto ${isExpanded ? 'px-3' : 'px-2'}`}>
-          <div className={isExpanded ? '' : 'flex flex-col items-center'}>
-            <button
-              onClick={onNewChat}
-              title={!isExpanded ? 'New Chat' : undefined}
-              className={`flex items-center gap-3 rounded-lg text-[15px] text-[var(--sb-active-text)] hover:bg-[var(--sb-hover)] transition ${isExpanded ? 'w-full px-3 h-10' : 'w-10 h-10 justify-center'}`}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="shrink-0">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              {isExpanded && 'New Chat'}
+      {!collapsed && historyEnabled && conversations.length > 0 && (
+        <div className="chat-sidebar-recents">
+          <div className="quality-shell-sidebar-title">Recent chats</div>
+          {conversations.map(conv => (
+            <button key={conv.id} type="button" onClick={() => onRestoreConversation?.(conv)} className="quality-shell-sidebar-link quality-shell-sidebar-btn chat-recent" title={conv.title}>
+              <span className="chat-recent-title">{conv.title}</span>
+              <span className="chat-recent-time"><TimeAgo ts={conv.timestamp} /></span>
             </button>
-
-            {isExpanded && historyEnabled && conversations.length > 0 && (
-              <div className="pt-6">
-                <p className="text-[var(--sb-text-muted)] text-[14px] px-3 mb-2">Recent chats</p>
-                <div className="space-y-0.5">
-                  {conversations.map(conv => (
-                    <button
-                      key={conv.id}
-                      onClick={() => onRestoreConversation?.(conv)}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--sb-hover)] transition group min-h-[44px]"
-                    >
-                      <p className="text-[var(--sb-active-text)] text-[14.5px] truncate">{conv.title}</p>
-                      <p className="text-[var(--sb-text-muted)] text-xs mt-0.5"><TimeAgo ts={conv.timestamp} /></p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </nav>
-      </aside>
-    </>
+          ))}
+        </div>
+      )}
+    </aside>
   );
 }

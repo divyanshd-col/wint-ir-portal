@@ -17,11 +17,8 @@ export default async function IrPerformancePage() {
   const dbUser = userAny?.email ? await getUserByEmail(userAny.email).catch(() => null) : null;
   const resolvedRole = dbUser?.role || role;
 
-  const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
-  const skills = (session.user as any)?.skills || (await getSkillsForPersona(resolvedRole));
-
-  // Only Admin or users with tl:team_analytics:access can view whole department IR Performance
-  if (resolvedRole !== 'admin' && !hasSkill({ ...userAny, role: resolvedRole, skills }, 'tl:team_analytics:access')) {
+  // Admin only: department-wide rankings, and the data API (/api/cx/admin/ir-performance) refuses everyone else.
+  if (resolvedRole !== 'admin') {
     redirect('/tl/member-analytics');
   }
 
