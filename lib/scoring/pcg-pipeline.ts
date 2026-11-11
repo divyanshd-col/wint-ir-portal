@@ -32,6 +32,14 @@ export const PCG_QUALITY_PARAMETERS = [
 ];
 
 import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
+import {
+  detectPcgSopTriggers,
+  savePcgSopTriggers,
+  sendPcgSopSlackAlert,
+  updatePcgSopSlackStatus,
+  getPcgSopSlackChannel,
+  PcgSopTrigger,
+} from '@/lib/pcg/sop-alert';
 
 // ── Known RM to Team Lead Mappings (Default fallbacks) ─────────────────────────
 const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
@@ -772,16 +780,22 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
   // 6c. Parse & Sanitize SOP Triggers (7 Communication & Conduct Monitoring Categories)
   const rawSopTriggers = Array.isArray(evalJson.sop_triggers) ? evalJson.sop_triggers : [];
   const validCategories = new Set([
+    'Customer Behaviour & Hostility',
+    'Guaranteed or Assured Returns',
+    'Unauthorized Advice & Mis-selling',
+    'Customer Churn & Capital Withdrawal Threat',
+    'Missed Commitment & Service Escalation',
+    'Confidentiality & Data Privacy Breach',
+    'Unprofessional Conduct & Communication Slips',
     'RM Communication & Tone',
     'Professional Boundary Monitoring',
     'Returns & Benefits Negotiation',
     'Out-of-Scope Queries',
     'Internal Tools Probing',
-    'Customer Behaviour & Hostility',
     'Business Information Probing',
   ]);
 
-  const sanitizedSopTriggers: SopTrigger[] = rawSopTriggers
+  const sanitizedSopTriggers: PcgSopTrigger[] = rawSopTriggers
     .filter((tr: any) => tr && typeof tr === 'object' && (tr.quote || tr.signal))
     .map((tr: any) => {
       const cat = String(tr.category || '').trim();
@@ -802,6 +816,10 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
         : undefined;
 
       return {
+        call_id: call.call_id,
+        rm_name: resolvedRm,
+        tl_name: resolvedTl,
+        customer_phone: call.phone_number,
         category,
         severity,
         direction,
@@ -811,6 +829,76 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
         quote: String(tr.quote || '').trim(),
       };
     });
+
+  // Also run deterministic and deep SOP behavioral tripwires
+  let detectedTriggers: PcgSopTrigger[] = [];
+  try {
+    detectedTriggers = await detectPcgSopTriggers(
+      transcriptTurns,
+      {
+        callId: call.call_id,
+        rmName: resolvedRm,
+        tlName: resolvedTl,
+        customerPhone: call.phone_number,
+        durationSeconds: call.duration_seconds,
+      },
+      geminiKeys
+    );
+  } catch (sopErr: any) {
+    log.error(ROUTE, `SOP detection error for call ${call.call_id}: ${sopErr.message}`);
+  }
+
+  // Deduplicate triggers by quote/signal
+  const combinedTriggers: PcgSopTrigger[] = [...sanitizedSopTriggers];
+  for (const dt of detectedTriggers) {
+    const exists = combinedTriggers.some(
+      (ct) => (ct.quote && dt.quote && (ct.quote.includes(dt.quote) || dt.quote.includes(ct.quote))) ||
+              (ct.category === dt.category && ct.timestamp === dt.timestamp)
+    );
+    if (!exists) {
+      combinedTriggers.push(dt);
+    }
+  }
+
+  // 6d. Persist SOP triggers to database
+  let savedTriggers: PcgSopTrigger[] = [];
+  if (combinedTriggers.length > 0) {
+    log.info(ROUTE, `Detected ${combinedTriggers.length} SOP trigger(s) for call ${call.call_id}. Persisting to DB...`);
+    savedTriggers = await savePcgSopTriggers(call.call_id, combinedTriggers, {
+      rmName: resolvedRm,
+      tlName: resolvedTl,
+      customerPhone: call.phone_number,
+    });
+
+    // 6e. Automatically fire Slack alerts to designated channel
+    const sopSlackChannel = getPcgSopSlackChannel();
+    for (const trig of savedTriggers) {
+      try {
+        const slackRes = await sendPcgSopSlackAlert(
+          trig,
+          {
+            callId: call.call_id,
+            rmName: resolvedRm,
+            tlName: resolvedTl,
+            customerPhone: call.phone_number,
+            durationSeconds: call.duration_seconds,
+          },
+          config?.pcgTeamAssignments
+        );
+        if (trig.id) {
+          await updatePcgSopSlackStatus(
+            trig.id,
+            slackRes.ok,
+            sopSlackChannel,
+            slackRes.ts,
+            slackRes.error
+          );
+        }
+      } catch (slackErr: any) {
+        log.error(ROUTE, `Failed to post Slack alert for SOP trigger: ${slackErr.message}`);
+      }
+    }
+  }
 
   // 7. Store Result in pcg_call_evaluations
   await query(`
@@ -859,7 +947,7 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
     complianceTripwire,
     complianceReason,
     JSON.stringify(transcriptTurns),
-    JSON.stringify(sanitizedSopTriggers),
+    JSON.stringify(savedTriggers),
   ]);
 
   await query(`
@@ -871,7 +959,7 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
     WHERE call_id = $2
   `, [category, call.call_id]);
 
-  log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}, SOP Triggers: ${sanitizedSopTriggers.length}`);
+  log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}, SOP Triggers: ${savedTriggers.length}`);
 
   return {
     callId: call.call_id,
@@ -883,7 +971,7 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
     verdict,
     parameters: cleanedParameters,
     transcriptTurns,
-    sopTriggers: sanitizedSopTriggers,
+    sopTriggers: savedTriggers,
   };
 }
 
