@@ -318,7 +318,7 @@ export default function PcgCallsClient() {
           setActiveTab(tabParam as PcgTab);
         }
       }
-      const callIdParam = urlParams.get('callId');
+      const callIdParam = urlParams.get('callId') || urlParams.get('call_id') || urlParams.get('cid');
       if (callIdParam) {
         handleOpenCallById(callIdParam);
       }
@@ -403,8 +403,15 @@ export default function PcgCallsClient() {
 
   // Active call view state
   const [activeCallAudit, setActiveCallAudit] = useState<PCGCall | null>(null);
+  const activeCallAuditRef = useRef<PCGCall | null>(null);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
+  const [loadingCallById, setLoadingCallById] = useState<boolean>(false);
+  const [callNotFoundNotice, setCallNotFoundNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    activeCallAuditRef.current = activeCallAudit;
+  }, [activeCallAudit]);
 
   // Dispute Section Tab: 'raised' | 'reviewed'
   const [disputeTab, setDisputeTab] = useState<'raised' | 'reviewed'>('raised');
@@ -476,8 +483,9 @@ export default function PcgCallsClient() {
       const data = await res.json();
       setCalls((prev) => {
         const loaded = data.calls || [];
-        if (activeCallAudit && !loaded.some((c: PCGCall) => c.id === activeCallAudit.id || c.callId === activeCallAudit.callId)) {
-          return [activeCallAudit, ...loaded];
+        const currentAudit = activeCallAuditRef.current || activeCallAudit;
+        if (currentAudit && !loaded.some((c: PCGCall) => c.id === currentAudit.id || c.callId === currentAudit.callId)) {
+          return [currentAudit, ...loaded];
         }
         return loaded;
       });
@@ -532,10 +540,13 @@ export default function PcgCallsClient() {
     }
   };
 
-  // Open Call View by ID (used by RM Scorecard evidence links)
+  // Open Call View by ID (used by RM Scorecard evidence links & Slack deep links)
   const handleOpenCallById = async (cid: string) => {
-    const cleanId = cid.replace('#', '').trim();
+    const cleanId = cid.replace(/^#/, '').replace(/^call-/, '').replace(/^runo-/, '').trim();
+    if (!cleanId) return;
+
     handleTabChange('calls');
+    setCallNotFoundNotice(null);
 
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -548,9 +559,9 @@ export default function PcgCallsClient() {
       (c) =>
         c.id === cleanId ||
         c.callId === cleanId ||
-        c.id.replace(/^call-/, '').replace(/^runo-/, '') === cleanId.replace(/^call-/, '').replace(/^runo-/, '') ||
-        c.callId?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId.replace(/^call-/, '').replace(/^runo-/, '') ||
-        c.id.includes(cleanId) ||
+        c.id?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId ||
+        c.callId?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId ||
+        c.id?.includes(cleanId) ||
         c.callId?.includes(cleanId)
     );
 
@@ -560,6 +571,7 @@ export default function PcgCallsClient() {
       return;
     }
 
+    setLoadingCallById(true);
     try {
       const res = await fetch(`/api/admin/pcg-calls?call_id=${encodeURIComponent(cleanId)}`);
       if (res.ok) {
@@ -571,11 +583,16 @@ export default function PcgCallsClient() {
           ]);
           setExpandedCallId(data.call.id);
           handleOpenCallView(data.call);
+          setCallNotFoundNotice(null);
           return;
         }
       }
+      setCallNotFoundNotice(`Call evaluation for ID "${cleanId}" could not be found.`);
     } catch (err) {
       console.error('[PcgCallsClient] Failed to fetch call by ID:', err);
+      setCallNotFoundNotice(`Failed to load call evaluation for ID "${cleanId}".`);
+    } finally {
+      setLoadingCallById(false);
     }
   };
 
@@ -1644,6 +1661,26 @@ export default function PcgCallsClient() {
 
         {/* Main Content Area */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto min-w-0 max-w-7xl">
+          {loadingCallById && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-sm flex items-center gap-2 animate-pulse">
+              <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin inline-block"></span>
+              <span>Loading requested call evaluation...</span>
+            </div>
+          )}
+          {callNotFoundNotice && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-sm flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{callNotFoundNotice}</span>
+              </div>
+              <button
+                onClick={() => setCallNotFoundNotice(null)}
+                className="text-amber-700 hover:text-amber-950 font-bold text-xs px-2 py-1 rounded hover:bg-amber-100"
+              >
+                ✕ Dismiss
+              </button>
+            </div>
+          )}
           {activeTab === 'security' ? (
             <div>
               <SecuritySection />
