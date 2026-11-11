@@ -124,8 +124,7 @@ export async function POST(req: NextRequest) {
             tlName: resolvedTl,
             customerPhone: call.phone_number,
             durationSeconds: call.duration_seconds,
-          },
-          config?.pcgTeamAssignments
+          }
         );
         if (trig.id) {
           await updatePcgSopSlackStatus(
