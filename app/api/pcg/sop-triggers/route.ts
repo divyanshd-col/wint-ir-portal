@@ -14,7 +14,7 @@ import {
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { getIQSGeminiKeys } from '@/lib/gemini';
-import { resolvePcgAgent } from '@/lib/scoring/pcg-pipeline';
+import { resolvePcgAgent, resolvePcgAgentAsync } from '@/lib/scoring/pcg-pipeline';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     const caller = (call.called_by && call.called_by.trim() && call.called_by.toLowerCase() !== 'unknown')
       ? call.called_by.trim()
       : (call.agent_name && call.agent_name.trim() ? call.agent_name.trim() : 'Unassigned RM');
-    const { rm: resolvedRm, tl: resolvedTl } = resolvePcgAgent(caller);
+    const { rm: resolvedRm, tl: resolvedTl } = await resolvePcgAgentAsync(caller);
 
     let rawTurns = call.transcript_turns;
     if (typeof rawTurns === 'string') {
