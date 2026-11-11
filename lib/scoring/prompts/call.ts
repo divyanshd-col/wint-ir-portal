@@ -42,6 +42,7 @@ RULES
 - Judge the rep's words, never the customer's.
 - Do not evaluate anything else about call quality. Gates only.
 - LANGUAGE & TRANSLATION REQUIREMENT: For any non-English, Hindi, or Hinglish speech cited as evidence, ALL "quote" and "why" fields MUST be translated into fluent English. Never quote raw Hindi or Romanized Hinglish.
+- EVIDENCE LENGTH: each "quote" is only the sentence or two that contains the violation (about 40 words at most), never a whole speaker turn or a paragraph; use "..." to skip words inside it. Each "why" is one sentence (about 25 words at most). List at most 3 evidence items per gate, the clearest first. The turn index lets a reviewer find the rest in the full transcript, so do not paste surrounding text.
 
 OUTPUT: return ONLY this JSON, no other text, no markdown fences:
 {
