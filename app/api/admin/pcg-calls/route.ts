@@ -5,6 +5,7 @@ import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { listUsers } from '@/lib/users';
 import { canonicalizePcgRmName, PCG_RM_TELEPHONY_TO_CANONICAL } from '@/lib/pcg/canonical-names';
+import { resolvePcgAgentSync } from '@/lib/pcg/rm-directory';
 
 const ROUTE = 'admin/pcg-calls';
 
@@ -119,7 +120,9 @@ export const TL_TEAMS: Record<string, string[]> = {
   Swetha: [
     'Ankita Agarwal',
     'Diya Sharma',
+    'Mishra Richa Santoshkumar',
     'Nishtha Veerwani',
+    'Shreya Premkumar Mundada',
     'Sujal Dadwani',
     'Suryansh Sharma',
     'Vaishnavi N J',
@@ -155,6 +158,16 @@ export const TL_TEAMS: Record<string, string[]> = {
     'Shrey Jain',
     'Yaashvi Arora',
   ],
+  Sravanthi: [
+    'Anurag Negi',
+    'Mahek Bihani',
+    'Vidyul Kapoor',
+  ],
+  Admin: [
+    'Aboli Jawkhedkar',
+    'Pranav Sharma',
+    'Sreeram',
+  ],
 };
 
 function resolveTlName(rmName: string, evalTl?: string | null, customTeamMap?: Record<string, string>): string {
@@ -173,14 +186,20 @@ function resolveTlName(rmName: string, evalTl?: string | null, customTeamMap?: R
     return `Team ${customTeamMap[canonicalClean] || customTeamMap[cleanRm]}`;
   }
 
-  // 3. Static TL_TEAMS membership
+  // 3. Dynamic pcg_rm_directory lookup
+  const dirRes = resolvePcgAgentSync(rmName, customTeamMap);
+  if (dirRes.tl && dirRes.tl !== 'PCG Team') {
+    return dirRes.tl.startsWith('Team ') ? dirRes.tl : `Team ${dirRes.tl}`;
+  }
+
+  // 4. Static TL_TEAMS membership
   for (const [tl, members] of Object.entries(TL_TEAMS)) {
     if (members.some(n => n.toLowerCase() === cleanRm || n.toLowerCase() === canonicalClean)) {
       return `Team ${tl}`;
     }
   }
 
-  // 4. Stored evaluation TL (only if valid and not a system placeholder)
+  // 5. Stored evaluation TL (only if valid and not a system placeholder)
   if (evalTl && evalTl.trim()) {
     const cleanEvalTl = evalTl.replace(/^Team\s+/i, '').trim().toLowerCase();
     if (cleanEvalTl !== 'gokul' && cleanEvalTl !== 'vaishnavi' && cleanEvalTl !== 'triage pool' && cleanEvalTl !== 'pcg' && cleanEvalTl !== 'unknown') {

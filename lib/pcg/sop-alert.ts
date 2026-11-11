@@ -13,6 +13,7 @@ import { TL_SLACK_MEMBER_MAP } from '@/lib/quality-alert';
 import { geminiGenerate } from '@/lib/gemini';
 import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { log } from '@/lib/log';
+import { resolvePcgAgentFromDirectory } from '@/lib/pcg/rm-directory';
 
 const ROUTE = 'pcg-sop-alert';
 
@@ -117,20 +118,46 @@ export const PCG_MONITORING_CATEGORIES: PcgMonitoringCategoryDef[] = [
 
 // ── Known RM and TL Slack Member ID Maps ──────────────────────────────────────
 export const PCG_TL_SLACK_MAP: Record<string, string> = {
+  // Dheeraj Bhojwani
   'dheeraj bhojwani': 'U0A3PEUCFPW',
   'dheeraj': 'U0A3PEUCFPW',
   'team dheeraj bhojwani': 'U0A3PEUCFPW',
+  'team dheeraj': 'U0A3PEUCFPW',
+  'dheeraj@wintwealth.com': 'U0A3PEUCFPW',
+
+  // Tanisha Mittal
   'tanisha mittal': 'U09E3MEPBFY',
   'tanisha': 'U09E3MEPBFY',
   'team tanisha mittal': 'U09E3MEPBFY',
+  'team tanisha': 'U09E3MEPBFY',
+  'tanisha@wintwealth.com': 'U09E3MEPBFY',
+
+  // Swetha
   'swetha': 'U09E3MGLXT8',
   'team swetha': 'U09E3MGLXT8',
+  'swetha@wintwealth.com': 'U09E3MGLXT8',
+
+  // Saiyam Rastogi
   'saiyam rastogi': 'U09EMDCRK3K',
   'saiyam': 'U09EMDCRK3K',
   'team saiyam rastogi': 'U09EMDCRK3K',
+  'team saiyam': 'U09EMDCRK3K',
+  'saiyam@wintwealth.com': 'U09EMDCRK3K',
+
+  // Sravanthi
+  'sravanthi': 'U09U65Z7LPR',
+  'sravanthi chekka': 'U09U65Z7LPR',
+  'team sravanthi': 'U09U65Z7LPR',
+  'sravanthi@wintwealth.com': 'U09U65Z7LPR',
+
+  // Leadership & Team Admin Fallbacks
   'harsh': 'U055PU2S4HE',
+  'harsh baid': 'U055PU2S4HE',
   'team admin': 'U09LS1TSY5T',
   'admin': 'U09LS1TSY5T',
+  'pcg team': 'U09LS1TSY5T',
+  'team pcg': 'U09LS1TSY5T',
+  'pcg': 'U09LS1TSY5T',
 };
 
 export const PCG_RM_SLACK_MAP: Record<string, string> = {
@@ -145,34 +172,41 @@ export const PCG_RM_SLACK_MAP: Record<string, string> = {
   'yaashvi': 'U0B9RUJ182U',
   'paritosh ashiya': 'U0BC956DJP6',
   'paritosh': 'U0BC956DJP6',
-  'shivam kumar baghel': 'U0123456784',
-  'shivam': 'U0123456784',
+  'shivam kumar baghel': 'U0C2JH52XDX',
+  'shivam baghel': 'U0C2JH52XDX',
+  'shivam': 'U0C2JH52XDX',
   'sargun singh': 'U0BTE0PLYMV',
   'sargun': 'U0BTE0PLYMV',
+  'dheeraj bhojwani': 'U0A3PEUCFPW',
+  'dheeraj': 'U0A3PEUCFPW',
 
   // Team Tanisha Mittal
-  'samskrithi rao n': 'U0123456786',
-  'samskrithi rao': 'U0123456786',
-  'samskrithi': 'U0123456786',
+  'samskrithi rao n': 'U0BCZQ72G64',
+  'samskrithi rao': 'U0BCZQ72G64',
+  'samskrithi': 'U0BCZQ72G64',
   'maniyar kriya jignesh': 'U0BFXNU2ZU1',
   'kriya maniyar': 'U0BFXNU2ZU1',
   'kriya': 'U0BFXNU2ZU1',
-  'antara chakraborty': 'U0123456788',
-  'antara': 'U0123456788',
+  'antara chakraborty': 'U0B5ZNXCH3K',
+  'antara': 'U0B5ZNXCH3K',
   'deshna dugar': 'U0B5VRULJKY',
   'deshna': 'U0B5VRULJKY',
   'harshita dhona': 'U0ATNTU9JEP',
   'harshita': 'U0ATNTU9JEP',
-  'keshvi suresh thacker': 'U0123456792',
-  'keshvi': 'U0123456792',
-  'nischay manish jain': 'U0123456793',
-  'nischay': 'U0123456793',
+  'keshvi suresh thacker': 'U0C6K1AUJLT',
+  'keshvi thacker': 'U0C6K1AUJLT',
+  'keshvi': 'U0C6K1AUJLT',
+  'nischay manish jain': 'U0BTP4CDYN7',
+  'nischay jain': 'U0BTP4CDYN7',
+  'nischay': 'U0BTP4CDYN7',
+  'tanisha mittal': 'U09E3MEPBFY',
+  'tanisha': 'U09E3MEPBFY',
 
   // Team Swetha
   'sujal dadwani': 'U0B78GZ1ACS',
   'sujal': 'U0B78GZ1ACS',
   'vaishnavi n j': 'U0BBQ1S1VK9',
-  'vaishnavi naghat': 'U0BBQ1S1VK9',
+  'vaishnavi naghat': 'U0C6NAFE2UW',
   'vaishnavi': 'U0BBQ1S1VK9',
   'diya sharma': 'U0B8ZF7QYQ1',
   'diya': 'U0B8ZF7QYQ1',
@@ -186,6 +220,13 @@ export const PCG_RM_SLACK_MAP: Record<string, string> = {
   'ankita': 'U0BU3UR4L30',
   'vishyata tulsani': 'U0C0TLNBBMW',
   'vishyata': 'U0C0TLNBBMW',
+  'shreya premkumar mundada': 'U0B78GW1M9Q',
+  'shreya mundada': 'U0B78GW1M9Q',
+  'shreya': 'U0B78GW1M9Q',
+  'mishra richa santoshkumar': 'U0BQ1E9UW3E',
+  'richa mishra': 'U0BQ1E9UW3E',
+  'richa': 'U0BQ1E9UW3E',
+  'swetha': 'U09E3MGLXT8',
 
   // Team Saiyam Rastogi
   'vishal kumar yadav': 'U0B6S6XTQ1W',
@@ -203,10 +244,27 @@ export const PCG_RM_SLACK_MAP: Record<string, string> = {
   'rukmini': 'U0C6Q4LV2MQ',
   'mahi agarwal': 'U0C5Q79D2TA',
   'mahi': 'U0C5Q79D2TA',
-  'nandini': 'U08UJUHHN9J',
-  'nandani': 'U08UJUHHN9J',
+  'nandini': 'U09LFDTQ7FV',
+  'nandini jain': 'U09LFDTQ7FV',
+  'nandani': 'U09LFDTQ7FV',
+  'saiyam rastogi': 'U09EMDCRK3K',
+  'saiyam': 'U09EMDCRK3K',
 
-  // Admin / General
+  // Team Sravanthi
+  'anurag negi': 'U0C4SUD9EAX',
+  'anurag': 'U0C4SUD9EAX',
+  'mahek bihani': 'U0BKVL6SNGG',
+  'mahek': 'U0BKVL6SNGG',
+  'vidyul kapoor': 'U0C4QPD9NF7',
+  'vidyul': 'U0C4QPD9NF7',
+  'sravanthi': 'U09U65Z7LPR',
+  'sravanthi chekka': 'U09U65Z7LPR',
+
+  // Team Admin / Leadership
+  'sreeram': 'U0B9RUHGWKA',
+  'sreeram v': 'U0B9RUHGWKA',
+  'pranav sharma': 'U0AF2HCF0QN',
+  'pranav': 'U0AF2HCF0QN',
   'aahan thaker': 'U0123456810',
   'aahan': 'U0123456810',
   'dhanush': 'U09UYUDU88L',
@@ -298,6 +356,13 @@ export function formatCallDuration(seconds?: number | null): string {
 // ── Slack Member Tagging ──────────────────────────────────────────────────────
 const isSlackUserId = (val?: string | null): val is string => Boolean(val && /^[UW][A-Z0-9]{8,}$/i.test(val.trim()));
 
+function matchesToken(text: string, key: string): boolean {
+  if (!text || !key) return false;
+  if (text === key) return true;
+  if (text.startsWith(key + ' ') || text.endsWith(' ' + key) || text.includes(' ' + key + ' ')) return true;
+  return false;
+}
+
 export function resolvePcgRmSlackId(rmName: string, customMap?: Record<string, string>): string | null {
   if (!rmName) return null;
   const clean = rmName.trim().toLowerCase();
@@ -307,13 +372,13 @@ export function resolvePcgRmSlackId(rmName: string, customMap?: Record<string, s
   if (isSlackUserId(PCG_TL_SLACK_MAP[clean])) return PCG_TL_SLACK_MAP[clean];
 
   for (const [key, val] of Object.entries(PCG_RM_SLACK_MAP)) {
-    if ((clean === key || clean.startsWith(key + ' ') || clean.includes(key)) && isSlackUserId(val)) {
+    if (matchesToken(clean, key) && isSlackUserId(val)) {
       return val;
     }
   }
 
   for (const [key, val] of Object.entries(PCG_TL_SLACK_MAP)) {
-    if ((clean === key || clean.startsWith(key + ' ') || clean.includes(key)) && isSlackUserId(val)) {
+    if (matchesToken(clean, key) && isSlackUserId(val)) {
       return val;
     }
   }
@@ -330,19 +395,19 @@ export function resolvePcgTlSlackId(tlName: string, customMap?: Record<string, s
   if (isSlackUserId(TL_SLACK_MEMBER_MAP[raw])) return TL_SLACK_MEMBER_MAP[raw];
 
   for (const [key, val] of Object.entries(PCG_TL_SLACK_MAP)) {
-    if ((raw === key || raw.startsWith(key + ' ') || raw.includes(key)) && isSlackUserId(val)) {
+    if (matchesToken(raw, key) && isSlackUserId(val)) {
       return val;
     }
   }
 
   for (const [key, val] of Object.entries(PCG_RM_SLACK_MAP)) {
-    if ((raw === key || raw.startsWith(key + ' ') || raw.includes(key)) && isSlackUserId(val)) {
+    if (matchesToken(raw, key) && isSlackUserId(val)) {
       return val;
     }
   }
 
   for (const [key, val] of Object.entries(TL_SLACK_MEMBER_MAP)) {
-    if ((raw === key || raw.startsWith(key + ' ') || raw.includes(key)) && isSlackUserId(val)) {
+    if (matchesToken(raw, key) && isSlackUserId(val)) {
       return val;
     }
   }
@@ -388,7 +453,7 @@ export async function getPcgSlackToken(): Promise<string> {
     try {
       const config = await readConfig();
       token = (config as any).pcgSopSlackBotToken || (config as any).complianceSlackBotToken || (config as any).slackBotToken || config.slackUserToken || '';
-    } catch {}
+    } catch { }
   }
   return token;
 }
@@ -469,6 +534,19 @@ export async function sendPcgSopSlackAlert(
       const err = 'Slack channel or token not configured for PCG SOP alerts';
       log.warn(ROUTE, err);
       return { ok: false, error: err };
+    }
+
+    // Dynamic resolution from pcg_rm_directory if TL is generic or unassigned
+    const curTl = (trigger.tl_name || callMetadata.tlName || '').trim();
+    if (!curTl || curTl === 'PCG Team' || curTl.toLowerCase() === 'unknown') {
+      const caller = (trigger.rm_name || callMetadata.rmName || '').trim();
+      if (caller && caller.toLowerCase() !== 'unknown rm' && caller.toLowerCase() !== 'unassigned rm') {
+        const resolved = await resolvePcgAgentFromDirectory(caller, customMap);
+        if (resolved.tl && resolved.tl !== 'PCG Team') {
+          trigger.tl_name = resolved.tl;
+          callMetadata.tlName = resolved.tl;
+        }
+      }
     }
 
     const messageText = buildPcgSopSlackMessage(trigger, callMetadata, customMap);
@@ -759,14 +837,31 @@ export async function savePcgSopTriggers(
         defaultTl = defaultTl || callRows[0].tl_name || 'PCG Team';
         defaultPhone = defaultPhone || callRows[0].phone_number;
       }
-    } catch {}
+    } catch { }
+  }
+
+  if (!defaultTl || defaultTl === 'PCG Team') {
+    try {
+      const resolved = await resolvePcgAgentFromDirectory(defaultRm || triggers[0]?.rm_name);
+      if (resolved.tl && resolved.tl !== 'PCG Team') {
+        defaultTl = resolved.tl;
+      }
+    } catch { }
   }
 
   const saved: PcgSopTrigger[] = [];
 
   for (const t of triggers) {
-    const rmName = t.rm_name || defaultRm || 'Unassigned RM';
-    const tlName = t.tl_name || defaultTl || 'PCG Team';
+    let rmName = t.rm_name || defaultRm || 'Unassigned RM';
+    let tlName = t.tl_name || defaultTl || 'PCG Team';
+    if (tlName === 'PCG Team' && rmName !== 'Unassigned RM') {
+      try {
+        const resolved = await resolvePcgAgentFromDirectory(rmName);
+        if (resolved.tl && resolved.tl !== 'PCG Team') {
+          tlName = resolved.tl;
+        }
+      } catch { }
+    }
     const customerPhone = t.customer_phone || defaultPhone || null;
 
     try {
