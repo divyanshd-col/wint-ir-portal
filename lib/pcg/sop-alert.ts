@@ -372,7 +372,7 @@ export function getPcgSopSlackChannel(): string {
   return (
     process.env.PCG_SOP_SLACK_CHANNEL ||
     process.env.PCG_SLACK_CHANNEL ||
-    'C0CG6G2ESQ6'
+    ''
   );
 }
 
