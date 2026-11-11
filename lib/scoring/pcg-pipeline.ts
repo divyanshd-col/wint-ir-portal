@@ -882,8 +882,7 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
             tlName: resolvedTl,
             customerPhone: call.phone_number,
             durationSeconds: call.duration_seconds,
-          },
-          config?.pcgTeamAssignments
+          }
         );
         if (trig.id) {
           await updatePcgSopSlackStatus(

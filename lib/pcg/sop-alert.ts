@@ -296,15 +296,24 @@ export function formatCallDuration(seconds?: number | null): string {
 }
 
 // ── Slack Member Tagging ──────────────────────────────────────────────────────
+const isSlackUserId = (val?: string | null): val is string => Boolean(val && /^[UW][A-Z0-9]{8,}$/i.test(val.trim()));
+
 export function resolvePcgRmSlackId(rmName: string, customMap?: Record<string, string>): string | null {
   if (!rmName) return null;
   const clean = rmName.trim().toLowerCase();
 
-  if (customMap && customMap[clean]) return customMap[clean];
-  if (PCG_RM_SLACK_MAP[clean]) return PCG_RM_SLACK_MAP[clean];
+  if (customMap && isSlackUserId(customMap[clean])) return customMap[clean].trim();
+  if (isSlackUserId(PCG_RM_SLACK_MAP[clean])) return PCG_RM_SLACK_MAP[clean];
+  if (isSlackUserId(PCG_TL_SLACK_MAP[clean])) return PCG_TL_SLACK_MAP[clean];
 
   for (const [key, val] of Object.entries(PCG_RM_SLACK_MAP)) {
-    if (clean === key || clean.startsWith(key + ' ') || clean.includes(key)) {
+    if ((clean === key || clean.startsWith(key + ' ') || clean.includes(key)) && isSlackUserId(val)) {
+      return val;
+    }
+  }
+
+  for (const [key, val] of Object.entries(PCG_TL_SLACK_MAP)) {
+    if ((clean === key || clean.startsWith(key + ' ') || clean.includes(key)) && isSlackUserId(val)) {
       return val;
     }
   }
@@ -315,18 +324,25 @@ export function resolvePcgTlSlackId(tlName: string, customMap?: Record<string, s
   if (!tlName) return null;
   const raw = tlName.replace(/^Team\s+/i, '').trim().toLowerCase();
 
-  if (customMap && customMap[raw]) return customMap[raw];
-  if (PCG_TL_SLACK_MAP[raw]) return PCG_TL_SLACK_MAP[raw];
-  if (TL_SLACK_MEMBER_MAP[raw]) return TL_SLACK_MEMBER_MAP[raw];
+  if (customMap && isSlackUserId(customMap[raw])) return customMap[raw].trim();
+  if (isSlackUserId(PCG_TL_SLACK_MAP[raw])) return PCG_TL_SLACK_MAP[raw];
+  if (isSlackUserId(PCG_RM_SLACK_MAP[raw])) return PCG_RM_SLACK_MAP[raw];
+  if (isSlackUserId(TL_SLACK_MEMBER_MAP[raw])) return TL_SLACK_MEMBER_MAP[raw];
 
   for (const [key, val] of Object.entries(PCG_TL_SLACK_MAP)) {
-    if (raw === key || raw.startsWith(key + ' ') || raw.includes(key)) {
+    if ((raw === key || raw.startsWith(key + ' ') || raw.includes(key)) && isSlackUserId(val)) {
+      return val;
+    }
+  }
+
+  for (const [key, val] of Object.entries(PCG_RM_SLACK_MAP)) {
+    if ((raw === key || raw.startsWith(key + ' ') || raw.includes(key)) && isSlackUserId(val)) {
       return val;
     }
   }
 
   for (const [key, val] of Object.entries(TL_SLACK_MEMBER_MAP)) {
-    if (raw === key || raw.startsWith(key + ' ') || raw.includes(key)) {
+    if ((raw === key || raw.startsWith(key + ' ') || raw.includes(key)) && isSlackUserId(val)) {
       return val;
     }
   }
@@ -336,7 +352,7 @@ export function resolvePcgTlSlackId(tlName: string, customMap?: Record<string, s
 export function formatRmSlackTag(rmName: string, customMap?: Record<string, string>): string {
   const clean = (rmName || 'RM').trim();
   const slackId = resolvePcgRmSlackId(clean, customMap);
-  if (slackId) {
+  if (slackId && isSlackUserId(slackId)) {
     return `<@${slackId}>`;
   }
   return clean;
@@ -345,7 +361,7 @@ export function formatRmSlackTag(rmName: string, customMap?: Record<string, stri
 export function formatTlSlackTag(tlName: string, customMap?: Record<string, string>): string {
   const clean = (tlName || 'TL').replace(/^Team\s+/i, '').trim();
   const slackId = resolvePcgTlSlackId(clean, customMap);
-  if (slackId) {
+  if (slackId && isSlackUserId(slackId)) {
     return `<@${slackId}>`;
   }
   return clean;
@@ -356,7 +372,6 @@ export function getPcgSopSlackChannel(): string {
   return (
     process.env.PCG_SOP_SLACK_CHANNEL ||
     process.env.PCG_SLACK_CHANNEL ||
-    process.env.COMPLIANCE_SLACK_CHANNEL ||
     'C0CG6G2ESQ6'
   );
 }
