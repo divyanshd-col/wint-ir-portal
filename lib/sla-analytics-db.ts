@@ -3,7 +3,8 @@ import type { SlaEmailRow } from '@/lib/sla-analytics';
 
 /**
  * One row per customer email received in [from, to), with the first agent reply after it. One set-based statement (a single pass
- * over the email events of the period, about half a second for a week), not a lookup per ticket.
+ * over the email events of the period, about half a second for a week), not a lookup per ticket. Everything comes from
+ * robylon_webhook_payloads: email_conversations is not read (it misses tickets and its status goes stale).
  *
  * A customer email is an incoming message from a sender that is not @wintwealth.com. A ticket's creation is NOT a customer email:
  * tickets an agent starts from the Robylon portal (ticket_source "Portal", e.g. an outbound "send us your bank details" mail) have
@@ -29,7 +30,8 @@ export async function fetchSlaEmails(from: Date, to: Date): Promise<SlaEmailRow[
        SELECT w.chat_id, w.event_type,
               COALESCE((w.payload->'data'->'message'->>'created_at')::timestamptz, w.received_at) AS t,
               COALESCE((w.payload->'data'->'message'->>'from_email') ILIKE '%@wintwealth.com', false) AS staff,
-              w.payload->'data'->'message'->>'message_type' AS mt
+              w.payload->'data'->'message'->>'message_type' AS mt,
+              w.payload->>'ticket_id' AS tid
        FROM robylon_webhook_payloads w
        WHERE w.source = 'email' AND w.received_at >= $1 AND w.event_type IN ('NEW_MESSAGE', 'REPLY_SENT', 'INTERNAL_NOTE_ADDED')
      ),
@@ -47,20 +49,20 @@ export async function fetchSlaEmails(from: Date, to: Date): Promise<SlaEmailRow[
        ) x
      ),
      ev AS (
-       SELECT m.chat_id, 'cust' AS kind, m.t FROM msg m WHERE m.event_type = 'NEW_MESSAGE' AND m.mt = 'incoming' AND NOT m.staff
+       SELECT m.chat_id, 'cust' AS kind, m.t, m.tid FROM msg m WHERE m.event_type = 'NEW_MESSAGE' AND m.mt = 'incoming' AND NOT m.staff
        UNION ALL
-       SELECT m.chat_id, 'reply', m.t FROM msg m WHERE m.event_type = 'REPLY_SENT' AND m.mt = 'reply'
+       SELECT m.chat_id, 'reply', m.t, NULL::text FROM msg m WHERE m.event_type = 'REPLY_SENT' AND m.mt = 'reply'
        UNION ALL
-       SELECT m.chat_id, 'reply', m.t FROM msg m WHERE m.event_type = 'NEW_MESSAGE' AND m.mt = 'incoming' AND m.staff
+       SELECT m.chat_id, 'reply', m.t, NULL::text FROM msg m WHERE m.event_type = 'NEW_MESSAGE' AND m.mt = 'incoming' AND m.staff
        UNION ALL
-       SELECT m.chat_id, 'note', m.t FROM msg m WHERE m.event_type = 'INTERNAL_NOTE_ADDED'
+       SELECT m.chat_id, 'note', m.t, NULL::text FROM msg m WHERE m.event_type = 'INTERNAL_NOTE_ADDED'
        UNION ALL
-       SELECT c.chat_id, 'reply', c.t FROM cnt c WHERE c.da > 0 AND c.event_type IN ('STATUS_CHANGED', 'TICKET_CLOSED', 'TICKET_CREATED')
+       SELECT c.chat_id, 'reply', c.t, NULL::text FROM cnt c WHERE c.da > 0 AND c.event_type IN ('STATUS_CHANGED', 'TICKET_CLOSED', 'TICKET_CREATED')
        UNION ALL
-       SELECT s.chat_id, 'status', s.t FROM st s WHERE s.t >= $1 AND lower(s.new_status) IN ('answered', 'pending email sent')
+       SELECT s.chat_id, 'status', s.t, NULL::text FROM st s WHERE s.t >= $1 AND lower(s.new_status) IN ('answered', 'pending email sent')
      ),
      paired AS (
-       SELECT chat_id, kind, t,
+       SELECT chat_id, kind, t, tid,
               min(t) FILTER (WHERE kind = 'reply')  OVER w AS next_reply,
               min(t) FILTER (WHERE kind = 'status') OVER w AS next_status,
               min(t) FILTER (WHERE kind = 'note')   OVER w AS next_note
@@ -72,11 +74,20 @@ export async function fetchSlaEmails(from: Date, to: Date): Promise<SlaEmailRow[
        SELECT DISTINCT ON (s.chat_id) s.chat_id, s.new_status AS st
        FROM st s JOIN (SELECT DISTINCT chat_id FROM cust) k ON k.chat_id = s.chat_id
        ORDER BY s.chat_id, s.t DESC
-     )
-     SELECT c.chat_id, e.id AS ticket_id, c.t AS customer_at, c.next_reply, c.next_status, c.next_note,
-            ls.st AS robylon_status, e.status AS ticket_status
+     ),
+     closed AS (
+       SELECT w.chat_id, max(w.received_at) AS closed_at
+       FROM robylon_webhook_payloads w
+       WHERE w.source = 'email' AND w.event_type = 'TICKET_CLOSED' AND w.received_at >= $1
+       GROUP BY w.chat_id
+     ),
+     last_cust AS (SELECT chat_id, max(t) AS last_customer_at FROM ev WHERE kind = 'cust' GROUP BY chat_id)
+     SELECT c.chat_id, COALESCE(c.tid, c.chat_id) AS ticket_id, c.t AS customer_at, c.next_reply, c.next_status, c.next_note,
+            ls.st AS robylon_status,
+            CASE WHEN cl.closed_at IS NOT NULL AND cl.closed_at >= lc.last_customer_at THEN 'CLOSED' END AS ticket_status
      FROM cust c
-     JOIN email_conversations e ON e.chat_id = c.chat_id
+     LEFT JOIN closed cl ON cl.chat_id = c.chat_id
+     LEFT JOIN last_cust lc ON lc.chat_id = c.chat_id
      LEFT JOIN last_status ls ON ls.chat_id = c.chat_id
      ORDER BY c.t`,
     [from.toISOString(), to.toISOString()],
