@@ -4,12 +4,14 @@ import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
 import SettingsClient from '@/components/SettingsClient';
 import { DEFAULT_CHAT_PROCESS_PROMPT } from '@/lib/prompts';
-import { IQS_SYSTEM_PROMPT } from '@/lib/quality';
+import { IQS_SYSTEM_PROMPT, BOT_IQS_SYSTEM_PROMPT } from '@/lib/quality';
+import { CALL_TRANSCRIPTION_PROMPT, ENERGY_TONE_PROMPT, CALL_DISPOSITION_PROMPT, CALL_DISPOSITION_CLASSIFY_PROMPT, CALL_CHUNK_PROMPT, CALL_IQS_SYSTEM_PROMPT } from '@/lib/call-quality';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DEFAULT_QUALITY_THRESHOLDS } from '@/lib/quality-thresholds';
-import { resolveEmailParameters, DEFAULT_EMAIL_PROMPT_INTRO, DEFAULT_EMAIL_PROMPT_COMPLIANCE } from '@/lib/email/context-builder';
-import { CALL_GATES_SYSTEM_PROMPT, CALL_IQS_PASS_SYSTEM_PROMPT } from '@/lib/scoring/prompts/call';
-import { PCG_QUALITY_SYSTEM_PROMPT, PCG_CLASSIFICATION_SYSTEM_PROMPT } from '@/lib/scoring/prompts/pcg';
-import { visiblePromptFields, type PromptField } from '@/lib/prompt-overrides';
+import { resolveEmailParameters } from '@/lib/email/context-builder';
+import { visiblePromptFields } from '@/lib/prompt-overrides';
+import { PROMPT_DEFAULTS } from '@/lib/prompt-defaults';
 
 /** The whole Settings screen, as a server component: used by the full page (/settings) and by the popup (@modal/(.)settings). */
 export default async function SettingsPageContent({ inModal = false }: { inModal?: boolean }) {
@@ -27,17 +29,17 @@ export default async function SettingsPageContent({ inModal = false }: { inModal
   const config = await readConfig();
 
   // Prompts are per workspace: send only the ones for the workspace this admin is in (and allowed to manage).
-  const PROMPT_DEFAULTS: Record<PromptField, string> = {
-    callGatesPrompt: CALL_GATES_SYSTEM_PROMPT,
-    callIqsPrompt: CALL_IQS_PASS_SYSTEM_PROMPT,
-    emailPromptIntro: DEFAULT_EMAIL_PROMPT_INTRO,
-    emailPromptCompliance: DEFAULT_EMAIL_PROMPT_COMPLIANCE,
-    pcgQualityPrompt: PCG_QUALITY_SYSTEM_PROMPT,
-    pcgClassificationPrompt: PCG_CLASSIFICATION_SYSTEM_PROMPT,
-  };
   const prompts = isAdmin
     ? Object.fromEntries(visiblePromptFields(activeDomain === 'pcg' ? 'pcg' : 'cx', user).map(f => [f, { value: config[f] || '', defaultValue: PROMPT_DEFAULTS[f] }]))
     : {};
+  // Hardcoded prompts, shown read-only in Settings → Prompts. The chat stage prompts live in files read at runtime.
+  const file = (name: string) => { try { return readFileSync(join(process.cwd(), name), 'utf8'); } catch { return '(file not found on this server)'; } };
+  const readOnlyPrompts: Record<string, string> = !isAdmin || activeDomain === 'pcg' ? {} : {
+    chat_iqs_bot: BOT_IQS_SYSTEM_PROMPT,
+    chat_router: file('PROMPT_router.txt'), chat_analyze: file('PROMPT_analyze.txt'), chat_extract_repayment: file('PROMPT_extract_repayment.txt'),
+    call_iqs_legacy: CALL_IQS_SYSTEM_PROMPT, call_transcription: CALL_TRANSCRIPTION_PROMPT, call_energy: ENERGY_TONE_PROMPT,
+    call_disposition: CALL_DISPOSITION_PROMPT, call_disposition_classify: CALL_DISPOSITION_CLASSIFY_PROMPT, call_chunk: CALL_CHUNK_PROMPT,
+  };
   // Strip actual key values — only pass presence flags to client
   const safeConfig = {
     llmProvider: config.llmProvider,
@@ -68,6 +70,7 @@ export default async function SettingsPageContent({ inModal = false }: { inModal
       emailParameters: resolveEmailParameters(config.emailRubric),
     }),
     prompts,
+    readOnlyPrompts,
   };
 
   return (
