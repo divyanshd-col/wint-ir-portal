@@ -103,7 +103,11 @@ export default function DateRangePicker({ onApply, onCancel, align, initialFrom,
   const [end, setEnd] = useState<Date | null>(initEnd);
   const ref = useRef<HTMLDivElement>(null);
   const [shiftX, setShiftX] = useState<number>(0);
-  const [effectiveAlign, setEffectiveAlign] = useState<'left' | 'right'>('left');
+  const [effectiveAlign, setEffectiveAlign] = useState<'left' | 'right'>(() => {
+    if (align === 'right') return 'right';
+    if (align === 'left') return 'left';
+    return 'right';
+  });
 
   const [viewMonth, setViewMonth] = useState<Date>(() => {
     const focus = initEnd || initStart;
@@ -157,6 +161,7 @@ export default function DateRangePicker({ onApply, onCancel, align, initialFrom,
     setStart(s);
     setEnd(e);
     setViewMonth(new Date(e.getFullYear(), e.getMonth() - 1, 1));
+    onApply(fmtISO(s), fmtISO(e));
   }
 
   const isPresetActive = (preset: 'today' | 'yesterday' | '7d' | '30d' | 'thisMonth') => {
@@ -194,13 +199,14 @@ export default function DateRangePicker({ onApply, onCancel, align, initialFrom,
     const parent = ref.current.parentElement;
     const parentRect = parent ? parent.getBoundingClientRect() : null;
 
-    let initAlign: 'left' | 'right' = 'left';
+    let initAlign: 'left' | 'right' = 'right';
     if (align === 'right') {
       initAlign = 'right';
     } else if (align === 'left') {
       initAlign = 'left';
     } else if (parentRect) {
-      initAlign = parentRect.left > window.innerWidth / 2 ? 'right' : 'left';
+      const spaceOnRight = window.innerWidth - parentRect.left;
+      initAlign = spaceOnRight < 580 ? 'right' : 'left';
     }
     setEffectiveAlign(initAlign);
   }, [align]);
