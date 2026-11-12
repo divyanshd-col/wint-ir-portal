@@ -22,6 +22,8 @@ export interface EmailTicketRow {
   created_at: Date;
   first_response_at: Date | null;
   intent_l1?: string | null;
+  /** Latest "ticket_source_rb_em" property: "Email" (customer wrote in) or "Portal" (an agent opened the ticket and sent the first email). */
+  ticket_source?: string | null;
   /** Any Robylon webhook event is stored for this ticket. Tickets without one (older than event capture) cannot be judged and are skipped. */
   has_events: boolean;
   /** Latest Robylon status (STATUS_CHANGED new_status), e.g. "Answered". null: no status event yet, treated as Open. */
@@ -70,10 +72,13 @@ export const isAgentActionStatus = (status: string | null | undefined) => AGENT_
 const latest = (...ds: (Date | null | undefined)[]): Date | null =>
   ds.reduce<Date | null>((m, d) => (d && (!m || d > m) ? d : m), null);
 
-/** When the customer last spoke: their newest message. A ticket with no stored incoming message at all uses its creation time (the first email).
- *  null when the only incoming mail came from a Wint address (an internal ticket): nobody outside is waiting. */
-export function customerClock(r: Pick<EmailTicketRow, 'created_at' | 'has_incoming_message' | 'last_customer_message_at'>): Date | null {
-  return r.last_customer_message_at ?? (r.has_incoming_message ? null : r.created_at);
+/** When the customer last spoke: their newest message. A ticket with no stored incoming message at all uses its creation time (the first email),
+ *  unless it was opened from the Portal (we wrote first). null when the only incoming mail came from a Wint address (an internal ticket): nobody outside is waiting. */
+export function customerClock(r: Pick<EmailTicketRow, 'created_at' | 'has_incoming_message' | 'last_customer_message_at' | 'ticket_source'>): Date | null {
+  if (r.last_customer_message_at) return r.last_customer_message_at;
+  if (r.has_incoming_message) return null;
+  // Portal tickets start with our own outbound email: the customer has not spoken, so there is no clock until they reply.
+  return norm(r.ticket_source) === 'portal' ? null : r.created_at;
 }
 
 /** When an agent last acted: newest reply, forwarded mail from a Wint address, first response, or an Answered / Pending email sent status. */
