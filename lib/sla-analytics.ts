@@ -39,7 +39,7 @@ export interface SlaEmailRow {
   last_event_at?: Date | null;
   /** Unanswered emails only: agent messages Robylon counts that we never received (a missed webhook). 0 when none. */
   missing_agent_messages?: number;
-  /** email_conversations.status (OPEN / CLOSED / RESOLVED); only trusted for closed, it is often stale-OPEN. */
+  /** 'CLOSED' when the webhook log has a TICKET_CLOSED event after the customer's last message (the ticket was not reopened), else null. Fallback for tickets with no status event. */
   ticket_status: string | null;
 }
 
@@ -76,7 +76,7 @@ export function isIgnoredStatus(status: string | null | undefined): boolean {
   return IGNORED_STATUSES.has(norm(status));
 }
 
-/** Closed or Resolved. The latest Robylon status wins; email_conversations.status is the fallback when there is none. */
+/** Closed or Resolved. The latest Robylon status wins; the TICKET_CLOSED event (ticket_status) is the fallback when there is none. */
 export function isClosedTicket(r: Pick<SlaEmailRow, 'robylon_status' | 'ticket_status'>): boolean {
   if (norm(r.robylon_status)) return norm(r.robylon_status) === 'closed';
   return ['closed', 'resolved'].includes(norm(r.ticket_status));
