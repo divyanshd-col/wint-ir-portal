@@ -4,7 +4,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import bcrypt from 'bcryptjs';
 import { parseQualityThresholds } from '@/lib/quality-thresholds';
-import { parsePromptFields, workspaceAccess } from '@/lib/prompt-overrides';
+import { parsePromptFields, workspaceAccess, outputFormatIntact } from '@/lib/prompt-overrides';
+import { LOCKED_OUTPUT_DEFAULTS } from '@/lib/prompt-defaults';
 import { diffTrackedSettings } from '@/lib/settings-history-keys';
 import { recordSettingChanges } from '@/lib/settings-history';
 import { parseEmailRubric } from '@/lib/email/context-builder';
@@ -54,6 +55,12 @@ export async function PATCH(req: NextRequest) {
   // the PCG prompts are PCG settings. Anyone may be an admin, but only of the workspace(s) they belong to.
   const prompts = parsePromptFields(body, adminSession.user);
   if (!prompts.ok) return NextResponse.json({ error: prompts.error }, { status: prompts.status });
+  // The JSON output format is locked: reject a prompt whose output-format block was changed or removed.
+  for (const [field, text] of Object.entries({ ...prompts.value, ...(typeof body.iqsScoringPrompt === 'string' && { iqsScoringPrompt: body.iqsScoringPrompt }) })) {
+    if (!outputFormatIntact(text, LOCKED_OUTPUT_DEFAULTS[field])) {
+      return NextResponse.json({ error: 'The output format section is locked and cannot be changed. Edit only the instructions above it.' }, { status: 400 });
+    }
+  }
   if ((body.qualityThresholds !== undefined || body.emailRubric !== undefined) && !workspaceAccess(adminSession.user).cx) {
     return NextResponse.json({ error: 'Not allowed to edit CX settings' }, { status: 403 });
   }

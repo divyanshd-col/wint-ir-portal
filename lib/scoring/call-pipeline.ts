@@ -648,7 +648,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
         // QA already reviewed this call, so the write above was skipped and this AI result was discarded: nothing to alert on.
         log.info('call-pipeline', `Skipping compliance alert for call ${callId} — evaluation already reviewed by QA`);
       } else {
-        const { fireQualityAlert } = await import('@/lib/quality-alert');
+        const { fireQualityAlert, summariseEvidence } = await import('@/lib/quality-alert');
         const { getAgentName } = await import('@/lib/robylon/db');
         const agentId = call.agent_id ?? call.conv_agent_id;
         const agentName = agentId ? await getAgentName(agentId) : '';
@@ -657,8 +657,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
         const gates = gatesResult.gates || {};
         for (const [gKey, gObj] of Object.entries<any>(gates)) {
           if (gObj?.status === 'fail') {
-            const evList = gObj.evidence || [];
-            const quote = evList.map((e: any) => e.quote || e.why).join('; ') || 'Call gate requirement failed';
+            const quote = summariseEvidence(gObj.evidence);
             breaches.push({
               type: gKey,
               quote,

@@ -54,3 +54,19 @@ export function parsePromptFields(body: unknown, user: PromptUser | null | undef
   }
   return { ok: true, value };
 }
+
+/** Where the locked JSON output format starts in a prompt. Everything before it is editable wording; this part is not. */
+const OUTPUT_START = /^(?:## OUTPUT FORMAT|OUTPUT:|=== OUTPUT SCHEMA).*$/m;
+
+export function splitPrompt(text: string): { editable: string; locked: string } {
+  const i = text.search(OUTPUT_START);
+  return i < 0 ? { editable: text, locked: '' } : { editable: text.slice(0, i).trimEnd(), locked: text.slice(i) };
+}
+
+export const joinPrompt = (editable: string, locked: string): string => (locked ? `${editable.trimEnd()}\n\n${locked}` : editable);
+
+/** True when a saved prompt still ends with the default's output-format block, unchanged. Blank (= use default) is fine. */
+export function outputFormatIntact(saved: string, defaultText: string): boolean {
+  const locked = splitPrompt(defaultText).locked.trim();
+  return !saved.trim() || !locked || splitPrompt(saved).locked.trim() === locked;
+}
