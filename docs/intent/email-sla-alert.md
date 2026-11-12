@@ -20,7 +20,8 @@ Answered tickets, where the agent's reply was the last entry, were still flagged
    A ticket with events but no status event counts as Open.
    **Ignored**: WAITING_ON_AGENT, Hold, Entity Escalation, Repayment, Repayment External Dependency, CLOSED (and Resolved).
 2. **Customer clock**: the newest customer message (incoming, sender not `@wintwealth.com`) + 24h wall-clock.
-   A ticket with no stored incoming message at all uses its creation time (the first email).
+   A ticket with no stored incoming message at all uses its creation time (the first email),
+   except a **Portal** ticket (`ticket_source_rb_em` = Portal: we sent the first email, e.g. a failed-repayment notice): no customer is waiting until they reply.
 3. **Agent acted** (not flagged) when the newest of these is later than the customer's message:
    a reply sent, an incoming mail from a `@wintwealth.com` address (internal), `first_response_at`,
    or the ticket moved to **Answered** / **Pending email sent**. Internal notes do not count.
