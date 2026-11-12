@@ -10,6 +10,7 @@ import { log } from '@/lib/log';
 import { getDefinedDispositions, findDefinedTopic } from '@/lib/qa-topics';
 import { getConversation, updateConversationTags } from '@/lib/robylon/db';
 import { randomUUID } from 'crypto';
+import { disputesOwnedByTL } from '@/lib/dispute-owner';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -33,6 +34,11 @@ export async function POST(req: NextRequest) {
     .map(r => { try { return JSON.parse(r); } catch { return null; } })
     .find((f: any) => f && f.id === flagId);
   if (!flag) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
+
+  // TLs own IR disputes now: they resolve them instead of forwarding to QA. (A TL-raised dispute still goes to QA.)
+  if (disputesOwnedByTL() && flag.raisedByRole !== 'tl') {
+    return NextResponse.json({ error: 'Disputes are resolved by the TL; use Resolve with the updated scores' }, { status: 409 });
+  }
 
   // A chat with no topic (or one no QA owns) cannot be routed to the responsible QA. The TL must pick a defined topic;
   // it is saved on the chat so the dispute reaches that topic's QA.

@@ -8,6 +8,7 @@ import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
 import { computeIqsFromRawParams } from '@/lib/quality';
+import { isTlActionable } from '@/lib/dispute-owner';
 import { extractDurationFromTranscript } from '@/lib/call-quality';
 
 const ROUTE = 'cx/qa/disputes';
@@ -111,6 +112,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .filter((f): f is IQSFlag => {
       if (!f || f.messageId) return false;
+      // Open IR disputes belong to the TL queue when TLs own disputes (TL-raised ones stay here).
+      if (isTlActionable(f)) return false;
       if (disputeStatusParam === 'forwarded_to_tl' || disputeStatusParam === 'pending_tl') {
         return f.status === 'ir_pending_tl' || f.status === 'pending';
       }

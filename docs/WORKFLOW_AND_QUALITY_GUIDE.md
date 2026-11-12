@@ -138,6 +138,24 @@ $$\text{IQS Score} = \left( \frac{\sum \text{Weights of "Yes" parameters}}{\sum 
   - **CAT1 (QA-Owned)**: Bots automatically evaluate these; Team Leads (TL) can dispute them but only QA admins can override.
   - **CAT2 (TL-Owned)**: Subjective communication parameters; TLs can directly override these scores.
 
+### Dispute ownership (CX chats, calls and emails; PCG is separate)
+
+Controlled by the `DISPUTES_OWNER` environment variable. Unset or `qa` is the old flow; `tl` is the flow below. Switching changes no data, so rolling back is setting it back.
+
+| | `qa` (old) | `tl` (new) |
+| :--- | :--- | :--- |
+| IR raises a dispute | goes to the agent's TL | same |
+| Who reviews and changes the scores | TL forwards to QA, QA edits | **the TL of the agent**, in the evaluation panel (emails: Resolve with an updated score) |
+| Forward to QA | yes | not for IR disputes (a dispute a TL raised still goes to QA) |
+| Already forwarded to QA at the switch | stays with QA | moves to the TL queue |
+
+Rules in `tl` mode:
+- A TL resolves only disputes for agents on their own team, and never one they raised themselves.
+- QA still audits every item at or below the review threshold (Settings → Quality Thresholds, default 85, "at or below"). A TL edit therefore does **not** mark such an item reviewed: it stays `pending` in QA's queue. Above the threshold the TL edit marks it reviewed. An item QA already reviewed stays reviewed. Calls that failed a critical gate are audited at any score.
+- The dispute itself is always closed when the TL resolves, with the TL's name, so IR sees it answered.
+- TL edits are recorded in `chat_review_comparisons` / `call_review_comparisons` with action `tl_resolve`, so TL changes are not mixed with QA overrides when comparing AI and human scores.
+- Code: `lib/dispute-owner.ts` (rules, tests in `scripts/dispute-owner.test.ts`).
+
 ### Key Evaluation Policies
 To align the LLM scorer with human QA evaluations, the following rules are coded directly into the prompt:
 1. **WhatsApp Rule**: Documents must **NEVER** be shared on WhatsApp. Agents redirecting customers to email is correct behavior.

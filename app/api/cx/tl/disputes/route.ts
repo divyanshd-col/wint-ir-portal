@@ -3,12 +3,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
-import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
 import { computeIqsFromRawParams } from '@/lib/quality';
 import { getDefinedDispositions } from '@/lib/qa-topics';
+import { agentInTeam, disputesOwnedByTL, getTlAgentNames, isTlActionable } from '@/lib/dispute-owner';
 
 const ROUTE = 'cx/tl/disputes';
 
@@ -62,16 +62,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`);
     agentNames = rows.map(r => r.name);
   } else {
-    const config = await readConfig();
-    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    let tlAgentName = configUser?.agentName;
-    if (!tlAgentName && email) {
-      const { getUserByEmail } = await import('@/lib/users');
-      const dbUser = await getUserByEmail(email).catch(() => null);
-      if (dbUser?.name) tlAgentName = dbUser.name;
-    }
-    if (!tlAgentName) tlAgentName = email;
-    agentNames = await getAgentNamesByTL(tlAgentName);
+    agentNames = await getTlAgentNames(email);
   }
 
   if (!agentNames.length) {
@@ -92,8 +83,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       // 'pending' / 'forwarded_to_tl' = awaiting TL review (the actionable "Disputes Raised" queue).
       // 'resolved' = already forwarded to QA or given a final decision (history).
       // 'reviewed' = reviewed by TL or QA.
-      if (statusFilter === 'pending' || statusFilter === 'forwarded_to_tl') return f.status === 'ir_pending_tl' || f.status === 'pending';
-      if (statusFilter === 'resolved') return f.status === 'tl_forwarded' || f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
+      // When TLs own disputes, the queue is every open IR dispute (including those already forwarded to QA); a TL-raised one stays with QA.
+      if (statusFilter === 'pending' || statusFilter === 'forwarded_to_tl') {
+        return disputesOwnedByTL() ? isTlActionable(f) : f.status === 'ir_pending_tl' || f.status === 'pending';
+      }
+      if (statusFilter === 'resolved') return (f.status === 'tl_forwarded' && !isTlActionable(f)) || f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
       if (statusFilter === 'reviewed') return f.status === 'reviewed' || f.status === 'tl_resolved';
       if (statusFilter === 'all') return f.status !== 'cancelled';
       return false;
@@ -187,14 +181,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     if (!db && !callDb) continue;
 
     // Only show disputes for this TL's agents (supporting prefix/full match)
-    const matchesAgent = (name: string | null) => {
-      if (!name) return false;
-      return agentNames.some(a =>
-        a.toLowerCase() === name.toLowerCase() ||
-        a.toLowerCase().startsWith(name.toLowerCase() + ' ') ||
-        name.toLowerCase().startsWith(a.toLowerCase() + ' ')
-      );
-    };
+    const matchesAgent = (name: string | null) => agentInTeam(agentNames, name);
 
     const agentName = db?.agent_name || callDb?.agent_name || flag.agentName;
     if (!matchesAgent(db?.agent_name ?? null) && !matchesAgent(callDb?.agent_name ?? null) && !matchesAgent(flag.agentName)) continue;
@@ -297,7 +284,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   });
 
   const definedDispositions = await getDefinedDispositions().catch(() => [] as string[]);
-  return NextResponse.json({ disputes: finalDisputes, definedDispositions }, {
+  return NextResponse.json({ disputes: finalDisputes, definedDispositions, disputesOwner: disputesOwnedByTL() ? 'tl' : 'qa' }, {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     },

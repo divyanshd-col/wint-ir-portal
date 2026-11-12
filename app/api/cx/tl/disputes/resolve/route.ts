@@ -7,6 +7,7 @@ import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
+import { disputesOwnedByTL } from '@/lib/dispute-owner';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -29,6 +30,12 @@ export async function POST(req: NextRequest) {
   const flag: IQSFlag | undefined = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .find((f): f is IQSFlag => Boolean(f && f.id === flagId));
+
+  // Once TLs own disputes they resolve through the evaluation panel (scores + audit-queue rule). This note-only close would mark the
+  // chat reviewed and drop below-threshold items out of QA's audit, so it is closed for TLs.
+  if (disputesOwnedByTL() && role === 'tl') {
+    return NextResponse.json({ error: 'Resolve the dispute from the evaluation panel so the scores are updated' }, { status: 409 });
+  }
 
   const now = new Date().toISOString();
   const note = reviewNote?.trim() || 'Dispute reviewed and resolved by TL';
