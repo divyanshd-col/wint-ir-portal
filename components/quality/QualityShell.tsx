@@ -75,9 +75,16 @@ const TrophyIcon = () => (
   </svg>
 );
 
+const ClockIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+  </svg>
+);
+
 export const NAV_ALL: NavItem[] = [
   { label: 'Analytics',        href: '/quality',                icon: StarIcon,       roles: ['admin', 'quality', 'tl', 'agent'], skill: 'quality:analytics:access' },
   { label: 'IR Performance',   href: '/tl/ir-performance',      icon: TrophyIcon,     roles: ['admin'],                           skill: 'tl:team_analytics:access' },
+  { label: 'SLA / TAT Analytics', href: '/tl/sla-analytics',   icon: ClockIcon,      roles: ['admin'] },
   { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'],                skill: 'quality:chat_eval:access', section: 'QA' },
   { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'],                skill: 'quality:call_eval:access', section: 'QA' },
   { label: 'Email Evaluation', href: '/quality/email-evaluation', icon: MailIcon,      roles: ['admin', 'quality'],                section: 'QA' },
