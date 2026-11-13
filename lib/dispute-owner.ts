@@ -35,6 +35,28 @@ const OPEN_STATUSES = ['pending', 'ir_pending_tl', 'tl_forwarded'];
 export const isTlActionable = (f: Pick<IQSFlag, 'status' | 'raisedByRole'>, owner: DisputeOwner) =>
   owner === 'tl' && f.raisedByRole !== 'tl' && OPEN_STATUSES.includes(f.status);
 
+type Denial = { status: number; error: string };
+
+/** Only signed-in admins, QA and TLs may change an email's scores or decide its dispute (agents raise disputes, they never review). */
+export function emailReviewDenial(user: { role?: string; isAdmin?: boolean } | null | undefined): Denial | null {
+  if (!user) return { status: 401, error: 'Unauthorized' };
+  const role = user.role || (user.isAdmin ? 'admin' : '');
+  return ['admin', 'quality', 'tl'].includes(role) ? null : { status: 403, error: 'Forbidden' };
+}
+
+/** Rules for a TL changing an email's scores or deciding its dispute. Null when allowed (always for admin / QA). */
+export function tlEmailDenial(o: {
+  role: string; owner: DisputeOwner; email: string; inTeam: boolean;
+  disputeStatus: string | null | undefined; flagRaisedByRole?: string | null; flagAgentEmail?: string | null;
+}): Denial | null {
+  if (o.role !== 'tl') return null;
+  if (o.owner !== 'tl') return { status: 403, error: 'Disputes are resolved by QA' };
+  if (!['Raised', 'Under_Review'].includes(o.disputeStatus ?? '')) return { status: 409, error: 'A TL can only change scores to resolve an open dispute' };
+  if (o.flagRaisedByRole === 'tl' || (o.flagAgentEmail || '').toLowerCase() === o.email.toLowerCase()) return { status: 403, error: 'You cannot resolve a dispute you raised' };
+  if (!o.inTeam) return { status: 403, error: 'Forbidden: You can only resolve disputes for your assigned agents' };
+  return null;
+}
+
 /** Same prefix / full-name match the TL dispute list always used (Robylon names and portal names differ by a surname). */
 export function agentInTeam(teamAgents: string[], agentName: string | null | undefined): boolean {
   const n = (agentName ?? '').trim().toLowerCase();
