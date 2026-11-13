@@ -476,7 +476,7 @@ export default function PcgScorecardView({
             {/* Header info */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-6 border-b border-[#E4E4E7]">
               <div>
-                <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
                   {activePersona === 'agent' ? 'My Weekly Scorecard' : 'PCG Weekly RM Scorecard'}
                 </h1>
                 <p className="text-sm text-gray-500 font-medium mt-1">
