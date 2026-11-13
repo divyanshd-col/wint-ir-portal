@@ -45,14 +45,18 @@ export async function POST(req: NextRequest) {
   const chatId    = String(body?.chat_id || body?.ticket_id || body?.data?.ticket_id || `email_${Date.now()}`);
   const ticketId  = String(body?.ticket_id || body?.data?.ticket_id || chatId);
 
-  // 1. Immediately save raw payload to robylon_webhook_payloads
-  await saveRobylonWebhookPayload({
-    source: 'email',
-    eventType,
-    eventId,
-    chatId,
-    payload: body,
-  });
+  // 1. Save the raw payload first. If that fails, answer 500 so Robylon retries (it retries non-2xx for ~2 minutes with the same
+  //    event_id). A retry of an event we already stored is acknowledged and not processed twice.
+  let saved: 'stored' | 'duplicate';
+  try {
+    saved = await saveRobylonWebhookPayload({ source: 'email', eventType, eventId, chatId, payload: body });
+  } catch (err: any) {
+    console.error(`[email-webhook] Failed to store ${eventType} ${eventId ?? ''} for ticket ${chatId}:`, err?.message || err);
+    return NextResponse.json({ error: 'Failed to store payload' }, { status: 500 });
+  }
+  if (saved === 'duplicate') {
+    return NextResponse.json({ ok: true, duplicate: true, event_type: eventType, ticket_id: ticketId });
+  }
 
   let messageId: string | null = null;
 

@@ -202,14 +202,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const callId = String(body.call_id || '');
   const eventId = body.event_id || (callId || null);
 
-  // Persist raw incoming webhook payload immediately as received
-  await saveRobylonWebhookPayload({
-    source: 'call',
-    eventType: body?.event_type || 'CC_VOICE_CALL_COMPLETE',
-    eventId: eventId ? String(eventId) : null,
-    chatId: body?.chat_id ? String(body.chat_id) : (callId || null),
-    payload: body,
-  });
+  // Persist the raw payload first; if that fails answer 500 so Robylon retries (see saveRobylonWebhookPayload).
+  try {
+    await saveRobylonWebhookPayload({
+      source: 'call',
+      eventType: body?.event_type || 'CC_VOICE_CALL_COMPLETE',
+      eventId: eventId ? String(eventId) : null,
+      chatId: body?.chat_id ? String(body.chat_id) : (callId || null),
+      payload: body,
+    });
+  } catch (err: any) {
+    console.error(`[call-webhook] Failed to store payload for call ${callId}:`, err?.message || err);
+    return NextResponse.json({ error: 'Failed to store payload' }, { status: 500 });
+  }
 
   if (!callId) {
     return NextResponse.json({ error: 'call_id required' }, { status: 400 });
