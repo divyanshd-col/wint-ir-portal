@@ -115,6 +115,8 @@ export default function TLQualityCallsPage() {
   const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // 'tl': this TL resolves IR disputes by updating the scores in the panel (no Forward to QA). 'qa': the old flow.
+  const [ownerTl, setOwnerTl] = useState(false);
 
   // Filter state for Disputes
   const [pendingAgentFilter, setPendingAgentFilter] = useState('');
@@ -188,6 +190,7 @@ export default function TLQualityCallsPage() {
       ]);
       const [pData, rData] = await Promise.all([pRes.json(), rRes.json()]);
 
+      setOwnerTl(pData.disputesOwner === 'tl');
       const pAll: TLDisputeRow[] = Array.isArray(pData.disputes) ? pData.disputes : [];
       const rAll: TLDisputeRow[] = Array.isArray(rData.disputes) ? rData.disputes : [];
 
@@ -744,6 +747,14 @@ export default function TLQualityCallsPage() {
                             />
                           </td>
                           <td style={{ ...TD_BASE, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                            {ownerTl && dispute.raisedByRole !== 'tl' ? (
+                              <button
+                                onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
+                                style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: '#166534', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+                              >
+                                {isOpen ? 'Close' : 'Review & resolve'}
+                              </button>
+                            ) : (
                             <div style={{ display: 'inline-flex', gap: 6 }}>
                               <button
                                 onClick={() => handleForwardToQA(dispute.flagId)}
@@ -778,6 +789,7 @@ export default function TLQualityCallsPage() {
                                 Resolve
                               </button>
                             </div>
+                            )}
                           </td>
                         </tr>
 
@@ -791,7 +803,7 @@ export default function TLQualityCallsPage() {
                             disposition={dispute.disposition}
                             gates={dispute.gates || dispute.parameters?.gates}
                             iqsScores={dispute.parameters || {}}
-                            mode="view"
+                            mode={ownerTl && dispute.raisedByRole !== 'tl' ? 'resolve' : 'view'}
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}

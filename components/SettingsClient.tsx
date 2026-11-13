@@ -36,6 +36,7 @@ interface SafeConfig {
   qualityAlertSheetUrl?: string;
   hasPyannoteKey?: boolean;
   qualityThresholds?: QualityThresholds;
+  disputeOwner?: 'qa' | 'tl';
   emailParameters?: EvaluationParameterConfig[];
   /** Only the prompts for the workspace the admin is in: field name → saved text and built-in default. */
   prompts?: Record<string, { value: string; defaultValue: string }>;
@@ -843,7 +844,7 @@ export default function SettingsClient({
         {/* ── QUALITY THRESHOLDS ── */}
         {isAdmin && !inPcg && (
           <div className={activeSection === 'thresholds' ? '' : 'hidden'}>
-            <QualityThresholdsSection initial={config.qualityThresholds ?? DEFAULT_QUALITY_THRESHOLDS} onSaved={showToast} />
+            <QualityThresholdsSection initial={config.qualityThresholds ?? DEFAULT_QUALITY_THRESHOLDS} initialDisputeOwner={config.disputeOwner ?? 'qa'} onSaved={showToast} />
           </div>
         )}
 

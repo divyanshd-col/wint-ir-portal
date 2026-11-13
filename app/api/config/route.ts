@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import bcrypt from 'bcryptjs';
 import { parseQualityThresholds } from '@/lib/quality-thresholds';
+import { parseDisputeOwner } from '@/lib/dispute-owner';
 import { parsePromptFields, workspaceAccess, outputFormatIntact } from '@/lib/prompt-overrides';
 import { LOCKED_OUTPUT_DEFAULTS } from '@/lib/prompt-defaults';
 import { diffTrackedSettings } from '@/lib/settings-history-keys';
@@ -61,13 +62,15 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'The output format section is locked and cannot be changed. Edit only the instructions above it.' }, { status: 400 });
     }
   }
-  if ((body.qualityThresholds !== undefined || body.emailRubric !== undefined) && !workspaceAccess(adminSession.user).cx) {
+  if ((body.qualityThresholds !== undefined || body.emailRubric !== undefined || body.disputeOwner !== undefined) && !workspaceAccess(adminSession.user).cx) {
     return NextResponse.json({ error: 'Not allowed to edit CX settings' }, { status: 403 });
   }
 
   // Settings → Quality Thresholds / Scoring Rubric: validate before anything is saved.
   const thresholds = body.qualityThresholds !== undefined ? parseQualityThresholds(body.qualityThresholds) : null;
   if (thresholds && !thresholds.ok) return NextResponse.json({ error: thresholds.error }, { status: 400 });
+  const owner = body.disputeOwner !== undefined ? parseDisputeOwner(body.disputeOwner) : null;
+  if (owner && !owner.ok) return NextResponse.json({ error: owner.error }, { status: 400 });
   const rubric = body.emailRubric !== undefined ? parseEmailRubric(body.emailRubric) : null;
   if (rubric && !rubric.ok) return NextResponse.json({ error: rubric.error }, { status: 400 });
 
@@ -92,6 +95,7 @@ export async function PATCH(req: NextRequest) {
     ...(body.pyannoteApiKey !== undefined && !body.pyannoteApiKey.startsWith('••••') && { pyannoteApiKey: body.pyannoteApiKey }),
     ...prompts.value,
     ...(thresholds?.ok && { qualityThresholds: thresholds.value }),
+    ...(owner?.ok && { disputeOwner: owner.value }),
     ...(rubric?.ok && { emailRubric: rubric.value }),
   };
 
