@@ -92,7 +92,9 @@ export async function POST(req: NextRequest) {
       headers: headers,
     });
   } catch (err: any) {
-    console.warn('[doubletick-webhook] Warning saving raw payload:', err?.message || err);
+    // Not stored: answer 500 so DoubleTick can retry rather than lose the export.
+    console.error('[doubletick-webhook] Failed to store raw payload:', err?.message || err);
+    return NextResponse.json({ error: 'Failed to store payload' }, { status: 500 });
   }
 
   // 2. Parse & Thread messages into `pcg_conversations` table
