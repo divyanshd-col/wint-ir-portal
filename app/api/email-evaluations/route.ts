@@ -31,6 +31,7 @@ const submitterCache = new Map<string, string>();
 
 import { readConfig as readPortalConfig } from '@/lib/config';
 import { reviewThreshold } from '@/lib/quality-thresholds';
+import { disputesOwnedByTL, tlEditStatus } from '@/lib/dispute-owner';
 
 /** SQL for the QA "Pending Review" queue: completed, not yet reviewed, and worth a QA look. Same rule as chats and calls:
  *  IQS at or below the email threshold (Settings → Quality Thresholds), plus emails with no score or a compliance failure. */
@@ -335,15 +336,20 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`(e.compliance_passed = FALSE OR array_length(e.compliance_issues, 1) > 0)`);
     }
 
+    // When TLs own disputes, every open IR dispute (including ones already forwarded to QA) is in the TL queue; TL-raised ones stay with QA.
+    const tlOwns = await disputesOwnedByTL();
+    const raisedByTl = `COALESCE(fl.raised_by_role, 'ir') = 'tl'`;
     if (disputeQueue === 'tl_pending') {
-      whereClauses.push(`e.dispute_status = 'Raised'`);
+      whereClauses.push(tlOwns ? `(e.dispute_status IN ('Raised', 'Under_Review') AND NOT ${raisedByTl})` : `e.dispute_status = 'Raised'`);
     } else if (disputeQueue === 'tl_history') {
       if (disputeStatus === 'reviewed') {
         whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
       } else if (disputeStatus === 'forwarded_to_qa' || disputeStatus === 'Under_Review') {
-        whereClauses.push(`e.dispute_status = 'Under_Review'`);
+        whereClauses.push(tlOwns ? `(e.dispute_status = 'Under_Review' AND ${raisedByTl})` : `e.dispute_status = 'Under_Review'`);
       } else {
-        whereClauses.push(`e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
+        whereClauses.push(tlOwns
+          ? `((e.dispute_status = 'Under_Review' AND ${raisedByTl}) OR e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved'))`
+          : `e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
       }
     } else if (tab === 'disputes') {
       if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl' || disputeStatus === 'Raised') {
@@ -366,6 +372,11 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`(e.dispute_status IS NULL OR e.dispute_status = 'None')`);
     } else if (disputesOnly === 'true' || disputeStatus === 'pending') {
       whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
+    }
+
+    // QA's dispute tab does not list open IR disputes while TLs own them (decided ones and TL-raised ones stay visible).
+    if (tlOwns && tab === 'disputes' && !disputeQueue) {
+      whereClauses.push(`NOT (e.dispute_status IN ('Raised', 'Under_Review') AND NOT ${raisedByTl})`);
     }
 
     if (search) {
@@ -698,6 +709,7 @@ export async function GET(req: NextRequest) {
       },
       agentBreakdown: agentBreakdown || [],
       availableAgents: scopedAgentNames || (agentBreakdown || []).map((a: any) => a.agent_name),
+      disputesOwner: (await disputesOwnedByTL()) ? 'tl' : 'qa',
       assignedDispositions: scopedDispositions || allDispositions,
     });
   } catch (err: any) {
@@ -1083,6 +1095,10 @@ export async function POST(req: NextRequest) {
       const role = ((session?.user as any)?.role || 'tl') as string;
       const submitterName = await getSubmitterName(email);
 
+      if (role === 'tl' && (await disputesOwnedByTL())) {
+        return NextResponse.json({ error: 'Disputes are resolved by the TL; use Resolve with the updated score' }, { status: 409 });
+      }
+
       const evalRows = await query<any>(
         `SELECT id, ticket_id, message_id, flag_id, dispute_notes, challenged_params, agent_name FROM email_reply_evaluations WHERE message_id = $1`,
         [messageId]
@@ -1180,7 +1196,7 @@ export async function POST(req: NextRequest) {
 
     // Action 3c: TL resolves a raised dispute at TL level (no QA review needed)
     if (action === 'tl_resolve_dispute') {
-      const { messageId, notes } = body;
+      const { messageId, notes, newScore, parameterScores, compliancePassed, complianceIssues } = body;
       if (!messageId) {
         return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
       }
@@ -1193,25 +1209,50 @@ export async function POST(req: NextRequest) {
       const submitterName = await getSubmitterName(email);
 
       const evalRows = await query<any>(
-        `SELECT id, ticket_id, message_id, flag_id, dispute_notes, agent_name FROM email_reply_evaluations WHERE message_id = $1`,
+        `SELECT e.id, e.ticket_id, e.message_id, e.flag_id, e.dispute_notes, e.agent_name, e.dispute_status, e.review_status,
+                e.quality_score, e.qa_override_score, e.compliance_passed, e.compliance_issues,
+                fl.raised_by_role AS flag_raised_by_role, fl.agent_email AS flag_agent_email
+         FROM email_reply_evaluations e LEFT JOIN iqs_flags fl ON fl.id = e.flag_id
+         WHERE e.message_id = $1`,
         [messageId]
       );
       if (!evalRows.length) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
       const existing = evalRows[0];
+      const tlOwns = await disputesOwnedByTL();
 
       if (role === 'tl') {
         const tlAgents = await getScopedAgentNamesForUser(email, submitterName, 'tl', false);
-        if (tlAgents && tlAgents.length > 0) {
-          const lowerTL = tlAgents.map(a => a.trim().toLowerCase());
-          if (!lowerTL.includes((existing.agent_name || '').trim().toLowerCase())) {
-            return NextResponse.json({ error: 'Forbidden: You can only resolve disputes for your assigned agents' }, { status: 403 });
+        const lowerTL = (tlAgents || []).map(a => a.trim().toLowerCase());
+        const mine = lowerTL.includes((existing.agent_name || '').trim().toLowerCase());
+        // Old flow: only checked when the TL has agents. TL-owned flow: strict, a TL with no agents resolves nothing.
+        if (tlOwns ? !mine : (tlAgents && tlAgents.length > 0 && !mine)) {
+          return NextResponse.json({ error: 'Forbidden: You can only resolve disputes for your assigned agents' }, { status: 403 });
+        }
+        if (tlOwns) {
+          if (!['Raised', 'Under_Review'].includes(existing.dispute_status)) {
+            return NextResponse.json({ error: 'This dispute is not open for TL review' }, { status: 409 });
+          }
+          if (existing.flag_raised_by_role === 'tl' || (existing.flag_agent_email || '').toLowerCase() === email.toLowerCase()) {
+            return NextResponse.json({ error: 'You cannot resolve a dispute you raised' }, { status: 403 });
           }
         }
       }
 
       const flagId = existing.flag_id;
+      const updateScore = newScore !== undefined && newScore !== null && newScore !== '' ? Number(newScore) : null;
+      if (updateScore !== null && !(updateScore >= 0 && updateScore <= 100)) {
+        return NextResponse.json({ error: 'newScore must be a number from 0 to 100' }, { status: 400 });
+      }
+      // A TL edit keeps at-or-below-threshold emails (and compliance failures) in QA's audit queue; every other path marks reviewed as before.
+      const effectiveScore = updateScore ?? (existing.qa_override_score != null ? Number(existing.qa_override_score) : existing.quality_score != null ? Number(existing.quality_score) : null);
+      const complianceFailing = compliancePassed !== undefined
+        ? !compliancePassed || (Array.isArray(complianceIssues) && complianceIssues.length > 0)
+        : existing.compliance_passed === false || (existing.compliance_issues?.length ?? 0) > 0;
+      const reviewStatus = role === 'tl' && tlOwns
+        ? tlEditStatus(effectiveScore, reviewThreshold(await readPortalConfig().catch(() => null), 'email'), existing.review_status ?? 'pending', complianceFailing)
+        : 'reviewed';
 
       if (flagId) {
         await storeUpdateIQSFlag(flagId, {
@@ -1228,7 +1269,7 @@ export async function POST(req: NextRequest) {
           authorEmail: email,
           authorName: submitterName,
           role: 'tl',
-          content: `Reviewed by TL: ${notes || 'Resolved query at TL level'}`,
+          content: `Reviewed by TL: ${notes || 'Resolved query at TL level'}${updateScore !== null ? ` (score updated to ${updateScore}%)` : ''}`,
           createdAt: new Date().toISOString(),
         });
       }
@@ -1236,14 +1277,27 @@ export async function POST(req: NextRequest) {
       await query(
         `UPDATE email_reply_evaluations
          SET dispute_status = 'Resolved',
-             review_status = 'reviewed',
+             review_status = $4,
              reviewed_by = $1,
              reviewed_at = NOW(),
              qa_notes = COALESCE(qa_notes, '') || ' [TL Reviewed: ' || $2 || ']',
              dispute_notes = COALESCE(dispute_notes, '') || ' [TL Resolved: ' || $2 || ']',
+             qa_override_score = CASE WHEN $5::numeric IS NOT NULL THEN $5::numeric ELSE qa_override_score END,
+             parameter_scores = CASE WHEN $6::text IS NOT NULL THEN COALESCE(parameter_scores, '{}'::jsonb) || $6::jsonb ELSE parameter_scores END,
+             compliance_passed = CASE WHEN $7::boolean IS NOT NULL THEN $7::boolean ELSE compliance_passed END,
+             compliance_issues = CASE WHEN $8::text[] IS NOT NULL THEN $8::text[] ELSE compliance_issues END,
              updated_at = NOW()
          WHERE message_id = $3`,
-        [submitterName, notes || 'Resolved query at TL level', messageId]
+        [
+          submitterName,
+          notes || 'Resolved query at TL level',
+          messageId,
+          reviewStatus,
+          updateScore,
+          parameterScores ? JSON.stringify(parameterScores) : null,
+          compliancePassed !== undefined ? Boolean(compliancePassed) : null,
+          complianceIssues !== undefined ? complianceIssues : null,
+        ]
       );
 
       await storeAppendAuditEntry({
@@ -1253,7 +1307,7 @@ export async function POST(req: NextRequest) {
         actorEmail: email,
         actorRole: role,
         ts: new Date().toISOString(),
-        meta: { flagId, messageId, notes, resolvedBy: 'tl' },
+        meta: { flagId, messageId, notes, resolvedBy: 'tl', newScore: updateScore, reviewStatus },
       } as any);
 
       return NextResponse.json({ ok: true, message: 'Dispute resolved at TL level' });

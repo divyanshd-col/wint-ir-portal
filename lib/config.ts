@@ -54,6 +54,8 @@ export interface PortalConfig {
   pyannoteApiKey?: string;
   // ── QA review thresholds (absent = 85 for every channel) ────────────────────
   qualityThresholds?: QualityThresholds;
+  // ── Who resolves CX disputes: 'tl' = the agent's TL (QA audits at/below the threshold); absent or 'qa' = TL forwards to QA ──
+  disputeOwner?: 'qa' | 'tl';
   // ── Email scoring rubric edits (only what differs from DEFAULT_EMAIL_PARAMETERS) ─
   emailRubric?: EmailRubric;
 }

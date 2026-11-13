@@ -485,6 +485,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const [disputes,   setDisputes]   = useState<TLDisputeRow[]>([]);
   const [definedTopics, setDefinedTopics] = useState<string[]>([]);
   const [topicPick, setTopicPick] = useState<Record<string, string>>({});
+  // 'tl': this TL resolves IR disputes by updating the scores in the panel (no Forward to QA). 'qa': the old flow.
+  const [ownerTl, setOwnerTl] = useState(false);
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning,  setActioning]  = useState<string | null>(null);
@@ -511,6 +513,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           const list = (data.disputes ?? []).filter((d: any) => !d.callId && !d.messageId);
           setDisputes(list);
           setDefinedTopics(data.definedDispositions ?? []);
+          setOwnerTl(data.disputesOwner === 'tl');
           onTotalChange?.(list.length);
         }
       } finally {
@@ -862,7 +865,15 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                                 ))}
                               </div>
                             )}
-                            {status === 'pending' && (
+                            {status === 'pending' && ownerTl && (
+                          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
+                            <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>
+                              Review the transcript, change any score you disagree with in the panel below, add a note and resolve. Chats at or below the review threshold still go to QA for audit.
+                            </div>
+                          </div>
+                            )}
+                            {status === 'pending' && !ownerTl && (
                           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
                             {definedTopics.length > 0 && !definedTopics.some(t => t.trim().toLowerCase() === (d.disposition || '').trim().toLowerCase()) && (
@@ -912,7 +923,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                     disposition={d.disposition}
                     parameters={d.parameters}
                     mobileNumber={d.csatScore != null ? String(d.csatScore) : null}
-                    mode="view"
+                    mode={ownerTl && status === 'pending' && d.raisedByRole !== 'tl' ? 'resolve' : 'view'}
                     flagId={d.flagId}
                     dispute={{
                       raisedBy:        d.raisedBy,
@@ -920,7 +931,13 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                       agentNote:       d.agentNote,
                       challengedParams: d.challengedParams,
                     }}
-                    onDone={() => setExpandedId(null)}
+                    onDone={() => {
+                      setExpandedId(null);
+                      // Resolved by this TL: it leaves the pending queue. (Harmless for view mode: nothing changed.)
+                      if (ownerTl && status === 'pending' && d.raisedByRole !== 'tl') {
+                        setDisputes(prev => { const next = prev.filter(x => x.flagId !== d.flagId); onTotalChange?.(next.length); return next; });
+                      }
+                    }}
                     onClose={() => setExpandedId(null)}
                     colSpan={colCount}
                     inset

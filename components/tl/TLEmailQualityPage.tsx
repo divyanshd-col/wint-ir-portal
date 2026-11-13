@@ -98,6 +98,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const [error, setError] = useState<string | null>(null);
   const [topics, setTopics] = useState<string[]>([]);
   const [topicPick, setTopicPick] = useState<Record<string, string>>({});
+  // 'tl': this TL resolves IR disputes (with an updated score), no Forward to QA. 'qa': the old flow.
+  const [ownerTl, setOwnerTl] = useState(false);
   const [ticketSearch, setTicketSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('');
@@ -110,7 +112,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       const params = new URLSearchParams({ disputeQueue: queue, from, to, limit: '500' });
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
-      if (data.ok) setRows(data.items || []);
+      if (data.ok) { setRows(data.items || []); setOwnerTl(data.disputesOwner === 'tl'); }
     } catch (err) {
       console.error('Failed to load email disputes:', err);
     } finally {
@@ -129,15 +131,16 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const [modalItem, setModalItem] = useState<EvaluationItem | null>(null);
   const [modalAction, setModalAction] = useState<'forward_dispute' | 'tl_resolve_dispute' | null>(null);
   const [modalNotes, setModalNotes] = useState('');
+  const [modalScore, setModalScore] = useState('');
 
-  const act = async (item: EvaluationItem, action: 'forward_dispute' | 'tl_resolve_dispute', notes?: string) => {
+  const act = async (item: EvaluationItem, action: 'forward_dispute' | 'tl_resolve_dispute', notes?: string, newScore?: string) => {
     setActioning(item.message_id);
     setError(null);
     try {
       const res = await fetch('/api/email-evaluations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, messageId: item.message_id, notes, disposition: topicPick[item.message_id] }),
+        body: JSON.stringify({ action, messageId: item.message_id, notes, disposition: topicPick[item.message_id], ...(newScore?.trim() ? { newScore: Number(newScore) } : {}) }),
       });
       if (res.status === 422) { setError('Pick a topic for this email first, so it goes to the QA responsible for it.'); return; }
       if (!res.ok) throw new Error(String(res.status));
@@ -145,6 +148,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       setModalItem(null);
       setModalAction(null);
       setModalNotes('');
+      setModalScore('');
       onChanged();
     } catch {
       setError(action === 'forward_dispute' ? 'Could not forward that dispute. Please retry.' : 'Could not resolve that dispute. Please retry.');
@@ -157,6 +161,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     setModalItem(item);
     setModalAction('tl_resolve_dispute');
     setModalNotes('');
+    setModalScore('');
   };
 
   const openForwardModal = (item: EvaluationItem) => {
@@ -243,6 +248,19 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
               />
             </div>
 
+            {ownerTl && modalAction === 'tl_resolve_dispute' && (
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--qa-text)', marginBottom: 6 }}>
+                  Updated score % (leave empty to keep the current score{modalItem.quality_score != null ? `, ${modalItem.qa_override_score ?? modalItem.quality_score}` : ''}):
+                </label>
+                <input
+                  type="number" min={0} max={100} step="any" value={modalScore} onChange={e => setModalScore(e.target.value)}
+                  style={{ width: 120, height: 32, padding: '0 10px', borderRadius: 6, border: '1px solid var(--qa-border)', background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, outline: 'none' }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 6 }}>Emails at or below the review threshold still go to QA for audit.</div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
               <button
                 type="button"
@@ -257,7 +275,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
               <button
                 type="button"
                 disabled={actioning === modalItem.message_id || (modalAction === 'tl_resolve_dispute' && !modalNotes.trim())}
-                onClick={() => act(modalItem, modalAction, modalNotes)}
+                onClick={() => act(modalItem, modalAction, modalNotes, modalScore)}
                 style={{
                   height: 32, padding: '0 16px', borderRadius: 6, border: 'none',
                   background: 'var(--qa-gray-700, #111111)', color: '#fff', fontSize: 12, fontWeight: 600,
@@ -409,16 +427,18 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                         {pending && (
                           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
-                            {needsTopic(item) && (
+                            {!ownerTl && needsTopic(item) && (
                               <UISelect aria-label="Disposition" value={topicPick[item.message_id] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [item.message_id]: e.target.value }))} style={{ width: '100%' }}>
                                 <option value="">{intentLabel(item.intent_l1) !== '—' ? `${intentLabel(item.intent_l1)} (not assigned), choose` : 'Choose disposition'}</option>
                                 {topics.map(t => <option key={t} value={t}>{t}</option>)}
                               </UISelect>
                             )}
                             <button style={{ ...actionBtn, width: '100%', height: 32 }} disabled={actioning === item.message_id} onClick={() => openResolveModal(item)}>Resolve</button>
+                            {(!ownerTl || item.raised_by_role === 'tl') && (
                             <button style={{ ...actionBtn, width: '100%', height: 32, background: 'var(--qa-gray-700)', color: '#fff', border: 'none' }} disabled={actioning === item.message_id || (needsTopic(item) && !topicPick[item.message_id])} onClick={() => openForwardModal(item)}>
                               {actioning === item.message_id ? '…' : 'Forward to QA'}
                             </button>
+                            )}
                           </div>
                         )}
                       </div>
