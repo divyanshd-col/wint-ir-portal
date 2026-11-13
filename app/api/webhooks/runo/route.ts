@@ -193,7 +193,9 @@ export async function POST(req: NextRequest) {
       headers: headers,
     });
   } catch (err: any) {
-    console.warn('[runo-webhook] Non-critical warning saving raw payload:', err.message);
+    // Not stored: answer 500 so Runo can retry rather than lose the call event.
+    console.error('[runo-webhook] Failed to store raw payload:', err?.message || err);
+    return NextResponse.json({ error: 'Failed to store payload' }, { status: 500 });
   }
 
   // 2. Process & Upsert into dedicated `pcg_call_recordings` table
