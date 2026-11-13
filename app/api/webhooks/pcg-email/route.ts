@@ -61,12 +61,14 @@ export async function POST(req: NextRequest) {
   const chatId = body.chat_id || body.ticket_id || body.data?.ticket_id;
   const ticketId = body.ticket_id || body.data?.ticket_id || null;
 
-  // Direct insert (not savePcgWebhookPayload, which swallows errors): if the
-  // write fails we return 500 so Robylon can retry instead of losing the event.
+  // If the write fails we return 500 so Robylon retries (non-2xx is retried for ~2 minutes with the same event_id).
+  // A retry of an event already stored is not stored again (same rule as saveRobylonWebhookPayload).
   try {
     await query(
       `INSERT INTO pcg_webhook_payloads (source, channel, event_type, event_id, chat_id, payload, headers)
-       VALUES ('robylon_email', 'email', $1, $2, $3, $4, $5)`,
+       SELECT 'robylon_email', 'email', $1::text, $2::text, $3::text, $4::jsonb, $5::jsonb
+       WHERE $2::text IS NULL
+          OR NOT EXISTS (SELECT 1 FROM pcg_webhook_payloads WHERE event_id = $2::text AND source = 'robylon_email')`,
       [eventType, eventId, chatId ? String(chatId) : null, JSON.stringify(body), JSON.stringify(sanitizeHeaders(req))]
     );
   } catch (err: any) {
