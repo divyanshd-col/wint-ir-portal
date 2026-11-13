@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentInTeam, disputeOwnerOf, isTlActionable, parseDisputeOwner, tlEditStatus } from '../lib/dispute-owner';
+import { agentInTeam, disputeOwnerOf, emailReviewDenial, isTlActionable, parseDisputeOwner, tlEditStatus, tlEmailDenial } from '../lib/dispute-owner';
 import { diffTrackedSettings, restoreToConfigPatch } from '../lib/settings-history-keys';
 
 test('the owner comes from the saved config: only "tl" means TL, anything else (or no config) is QA', () => {
@@ -56,4 +56,25 @@ test('TL edit keeps at-or-below-threshold items in the QA audit queue, otherwise
   assert.equal(tlEditStatus(60, 85, null), 'reviewed');
   assert.equal(tlEditStatus(null, 85, 'pending'), 'reviewed');     // no score: nothing to audit by threshold
   assert.equal(tlEditStatus(95, 85, 'pending', true), 'pending');  // critical gate failure (calls) is audited at any score
+});
+
+test('email scoring: only signed-in admin / QA / TL may review (agents and anonymous callers are refused)', () => {
+  assert.equal(emailReviewDenial(null)?.status, 401);
+  assert.equal(emailReviewDenial(undefined)?.status, 401);
+  assert.equal(emailReviewDenial({ role: 'agent' })?.status, 403);
+  assert.equal(emailReviewDenial({ role: '' })?.status, 403);
+  for (const role of ['admin', 'quality', 'tl']) assert.equal(emailReviewDenial({ role }), null, role);
+  assert.equal(emailReviewDenial({ isAdmin: true }), null);              // admin flag without a role string
+});
+
+test('email scoring by a TL: needs TL ownership, an open dispute, not their own, and their own team', () => {
+  const ok = { role: 'tl', owner: 'tl' as const, email: 'tl@x.com', inTeam: true, disputeStatus: 'Raised', flagRaisedByRole: 'ir', flagAgentEmail: 'ir@x.com' };
+  assert.equal(tlEmailDenial(ok), null);
+  assert.equal(tlEmailDenial({ ...ok, disputeStatus: 'Under_Review' }), null);            // already forwarded to QA: now the TL's
+  assert.equal(tlEmailDenial({ ...ok, owner: 'qa' })?.status, 403);                       // QA owns disputes
+  for (const st of ['None', 'Resolved', 'Rejected', null, undefined]) assert.equal(tlEmailDenial({ ...ok, disputeStatus: st })?.status, 409, String(st));
+  assert.equal(tlEmailDenial({ ...ok, flagRaisedByRole: 'tl' })?.status, 403);            // raised by a TL: stays with QA
+  assert.equal(tlEmailDenial({ ...ok, flagAgentEmail: 'TL@x.com' })?.status, 403);        // their own dispute, any case
+  assert.equal(tlEmailDenial({ ...ok, inTeam: false })?.status, 403);                     // not their team (or a TL with no agents)
+  for (const role of ['admin', 'quality']) assert.equal(tlEmailDenial({ ...ok, role, owner: 'qa', inTeam: false, disputeStatus: 'None' }), null, role); // never restricts QA / admin
 });

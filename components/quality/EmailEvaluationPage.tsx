@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import DateRangePicker from './DateRangePicker';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
@@ -428,11 +429,27 @@ const RIGHT: Col[] = ['iqs', 'action'];
 type SortCol = 'dateTime' | 'agent' | 'intent' | 'iqs' | 'dispute' | 'reviewedBy' | 'reviewedAt';
 const SORTABLE: Col[] = ['dateTime', 'agent', 'intent', 'iqs', 'dispute', 'reviewedBy', 'reviewedAt']; // IDs and Action are not sortable; e-mail has no CSAT
 
-export default function EmailEvaluationPage() {
+/** `embedded`: rendered inside another page (the TL's Quality Emails → Disputes Raised). It shows only the disputes list, with no page title or
+ *  tab bar, and tells the host when a dispute was resolved so its counts refresh. */
+export default function EmailEvaluationPage({ embedded = false, onResolved }: { embedded?: boolean; onResolved?: () => void } = {}) {
   const emailParams = useEmailParameters();
   const { data: session } = useSession();
   const isAdmin = (session?.user as any)?.role === 'admin' || Boolean((session?.user as any)?.isAdmin);
-  const [tab, setTab] = useState<Tab>('pending');
+  // A TL reviews disputes here (the same scoring panel QA uses) but cannot score undisputed emails: the server enforces it too.
+  const isTL = (session?.user as any)?.role === 'tl' && !isAdmin;
+  const [tab, setTab] = useState<Tab>(embedded ? 'disputes' : 'pending');
+  // Deep link from the TL dispute list: ?tab=disputes&search=<ticket>. A TL with no link lands on Disputes.
+  const urlParams = useSearchParams();
+  const urlApplied = useRef(false);
+  useEffect(() => {
+    if (embedded || urlApplied.current || !session) return;
+    urlApplied.current = true;
+    const t = urlParams.get('tab');
+    if (t === 'pending' || t === 'reviewed' || t === 'disputes') setTab(isTL && t === 'pending' ? 'disputes' : t);
+    else if (isTL) setTab('disputes');
+    const q = urlParams.get('search');
+    if (q) setSearch(q);
+  }, [embedded, session, isTL, urlParams]);
   const [items, setItems] = useState<EvaluationItem[]>([]);
   const [summary, setSummary] = useState<{
     pendingReviewCount?: number;
@@ -724,7 +741,10 @@ export default function EmailEvaluationPage() {
         }),
       });
       const data = await res.json();
-      if (data.ok) {
+      if (!data.ok) {
+        // e.g. a TL outside their team, or a dispute that is no longer open: say so instead of doing nothing.
+        alert(data.error || 'Could not save the review');
+      } else {
         const isFromDisputeSection = tab === 'disputes' || Boolean(data.wasDispute) || item.dispute_status === 'Under_Review';
         setSuccessMessage(
           isFromDisputeSection
@@ -760,7 +780,8 @@ export default function EmailEvaluationPage() {
           return next;
         });
         setExpandedId(null);
-        if (isFromDisputeSection && tab !== 'reviewed') {
+        onResolved?.();
+        if (isFromDisputeSection && tab !== 'reviewed' && !embedded) {
           setTab('reviewed');
         } else {
           fetchData();
@@ -896,11 +917,13 @@ export default function EmailEvaluationPage() {
   return (
     <div>
       {/* ── Page Header ── */}
+      {!embedded && (
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
           Email Evaluation
         </h1>
       </div>
+      )}
 
       {/* ── Success Toast Banner ── */}
       {successMessage && (
@@ -925,6 +948,7 @@ export default function EmailEvaluationPage() {
       )}
 
       {/* ── Tab Bar (Matching ChatEvaluationPage) ── */}
+      {!embedded && (
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -937,6 +961,7 @@ export default function EmailEvaluationPage() {
           display: 'flex', gap: 4,
           borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
         }}>
+          {!isTL && (
           <button
             style={tabStyle(tab === 'pending')}
             onClick={() => handleTabChange('pending')}
@@ -952,6 +977,7 @@ export default function EmailEvaluationPage() {
               active={tab === 'pending'}
             />
           </button>
+          )}
           <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
             Disputes
             <CountBadge count={summary?.qaDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
@@ -969,6 +995,7 @@ export default function EmailEvaluationPage() {
         </div>
 
       </div>
+      )}
 
       {/* ── One card: filter bar + table + pager (as in the chat tables) ── */}
       <div style={{
@@ -1566,7 +1593,8 @@ export default function EmailEvaluationPage() {
                                         type="button"
                                         className={`eval-submit${!isCompliant ? ' danger' : ''}`}
                                         onClick={() => handleSubmitReview(item)}
-                                        disabled={submittingAction}
+                                        disabled={submittingAction || (isTL && tab !== 'disputes')}
+                                        title={isTL && tab !== 'disputes' ? 'TLs change scores only to resolve an open dispute' : undefined}
                                       >
                                         {submittingAction ? (item.review_status === 'reviewed' ? 'Updating…' : 'Submitting…') : item.review_status === 'reviewed' ? 'Update Review' : 'Submit Evaluation Score'}
                                       </button>
