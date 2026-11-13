@@ -21,6 +21,7 @@ import EmailMessageView, {
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import UISelect from '@/components/quality/UISelect';
 import EmailSplit from '@/components/quality/EmailSplit';
+import EmailEvaluationPage from '@/components/quality/EmailEvaluationPage';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 import * as T from '@/components/quality/tableStyles';
 
@@ -131,16 +132,15 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const [modalItem, setModalItem] = useState<EvaluationItem | null>(null);
   const [modalAction, setModalAction] = useState<'forward_dispute' | 'tl_resolve_dispute' | null>(null);
   const [modalNotes, setModalNotes] = useState('');
-  const [modalScore, setModalScore] = useState('');
 
-  const act = async (item: EvaluationItem, action: 'forward_dispute' | 'tl_resolve_dispute', notes?: string, newScore?: string) => {
+  const act = async (item: EvaluationItem, action: 'forward_dispute' | 'tl_resolve_dispute', notes?: string) => {
     setActioning(item.message_id);
     setError(null);
     try {
       const res = await fetch('/api/email-evaluations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, messageId: item.message_id, notes, disposition: topicPick[item.message_id], ...(newScore?.trim() ? { newScore: Number(newScore) } : {}) }),
+        body: JSON.stringify({ action, messageId: item.message_id, notes, disposition: topicPick[item.message_id] }),
       });
       if (res.status === 422) { setError('Pick a topic for this email first, so it goes to the QA responsible for it.'); return; }
       if (!res.ok) throw new Error(String(res.status));
@@ -148,7 +148,6 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       setModalItem(null);
       setModalAction(null);
       setModalNotes('');
-      setModalScore('');
       onChanged();
     } catch {
       setError(action === 'forward_dispute' ? 'Could not forward that dispute. Please retry.' : 'Could not resolve that dispute. Please retry.');
@@ -161,7 +160,6 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     setModalItem(item);
     setModalAction('tl_resolve_dispute');
     setModalNotes('');
-    setModalScore('');
   };
 
   const openForwardModal = (item: EvaluationItem) => {
@@ -184,6 +182,9 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const paging = usePaging(sortedSrc, `${queue}|${ticketSearch}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
   const colCount = pending ? 6 : 7;
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
+
+  // TLs own disputes: resolve them right here with the full parameter-by-parameter panel (the one QA uses), not on another page.
+  if (pending && ownerTl) return <EmailEvaluationPage embedded onResolved={onChanged} />;
 
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, position: 'relative' }}>
@@ -248,19 +249,6 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
               />
             </div>
 
-            {ownerTl && modalAction === 'tl_resolve_dispute' && (
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--qa-text)', marginBottom: 6 }}>
-                  Updated score % (leave empty to keep the current score{modalItem.quality_score != null ? `, ${modalItem.qa_override_score ?? modalItem.quality_score}` : ''}):
-                </label>
-                <input
-                  type="number" min={0} max={100} step="any" value={modalScore} onChange={e => setModalScore(e.target.value)}
-                  style={{ width: 120, height: 32, padding: '0 10px', borderRadius: 6, border: '1px solid var(--qa-border)', background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, outline: 'none' }}
-                />
-                <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 6 }}>Emails at or below the review threshold still go to QA for audit.</div>
-              </div>
-            )}
-
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
               <button
                 type="button"
@@ -275,7 +263,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
               <button
                 type="button"
                 disabled={actioning === modalItem.message_id || (modalAction === 'tl_resolve_dispute' && !modalNotes.trim())}
-                onClick={() => act(modalItem, modalAction, modalNotes, modalScore)}
+                onClick={() => act(modalItem, modalAction, modalNotes)}
                 style={{
                   height: 32, padding: '0 16px', borderRadius: 6, border: 'none',
                   background: 'var(--qa-gray-700, #111111)', color: '#fff', fontSize: 12, fontWeight: 600,

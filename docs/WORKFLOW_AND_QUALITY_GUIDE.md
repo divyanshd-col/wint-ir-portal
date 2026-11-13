@@ -145,7 +145,7 @@ An admin sets it in **Settings → Quality Thresholds → Dispute owner** (QA or
 | | QA (old) | Team lead (new) |
 | :--- | :--- | :--- |
 | IR raises a dispute | goes to the agent's TL | same |
-| Who reviews and changes the scores | TL forwards to QA, QA edits | **the TL of the agent**, in the evaluation panel (emails: Resolve with an updated score) |
+| Who reviews and changes the scores | TL forwards to QA, QA edits | **the TL of the agent**, in the evaluation panel (emails: Quality Emails → Disputes Raised shows the same parameter-by-parameter panel QA uses, in place) |
 | Forward to QA | yes | not for IR disputes (a dispute a TL raised still goes to QA) |
 | Already forwarded to QA at the switch | stays with QA | moves to the TL queue |
 
@@ -154,6 +154,7 @@ Rules when the owner is Team lead:
 - QA still audits every item at or below the review threshold (Settings → Quality Thresholds, default 85, "at or below"). A TL edit therefore does **not** mark such an item reviewed: it stays `pending` in QA's queue. Above the threshold the TL edit marks it reviewed. An item QA already reviewed stays reviewed. Calls that failed a critical gate are audited at any score.
 - The dispute itself is always closed when the TL resolves, with the TL's name, so IR sees it answered.
 - TL edits are recorded in `chat_review_comparisons` / `call_review_comparisons` with action `tl_resolve`, so TL changes are not mixed with QA overrides when comparing AI and human scores.
+- Emails: scoring actions now require a signed-in admin, QA or TL (agents and anonymous calls are refused). A TL can only change an email's scores to resolve an open dispute of their own team, and sees only their own dispute queue.
 - Code: `lib/dispute-owner.ts` (rules, tests in `scripts/dispute-owner.test.ts`).
 
 ### Key Evaluation Policies
