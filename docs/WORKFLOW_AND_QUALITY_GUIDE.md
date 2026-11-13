@@ -140,16 +140,16 @@ $$\text{IQS Score} = \left( \frac{\sum \text{Weights of "Yes" parameters}}{\sum 
 
 ### Dispute ownership (CX chats, calls and emails; PCG is separate)
 
-Controlled by the `DISPUTES_OWNER` environment variable. Unset or `qa` is the old flow; `tl` is the flow below. Switching changes no data, so rolling back is setting it back.
+An admin sets it in **Settings → Quality Thresholds → Dispute owner** (QA or Team lead). It is saved in the portal config, applies straight away, and every change is recorded in the settings history. QA (the default, nothing saved) is the old flow; Team lead is the flow below. Switching changes no data, so rolling back is switching it back.
 
-| | `qa` (old) | `tl` (new) |
+| | QA (old) | Team lead (new) |
 | :--- | :--- | :--- |
 | IR raises a dispute | goes to the agent's TL | same |
 | Who reviews and changes the scores | TL forwards to QA, QA edits | **the TL of the agent**, in the evaluation panel (emails: Resolve with an updated score) |
 | Forward to QA | yes | not for IR disputes (a dispute a TL raised still goes to QA) |
 | Already forwarded to QA at the switch | stays with QA | moves to the TL queue |
 
-Rules in `tl` mode:
+Rules when the owner is Team lead:
 - A TL resolves only disputes for agents on their own team, and never one they raised themselves.
 - QA still audits every item at or below the review threshold (Settings → Quality Thresholds, default 85, "at or below"). A TL edit therefore does **not** mark such an item reviewed: it stays `pending` in QA's queue. Above the threshold the TL edit marks it reviewed. An item QA already reviewed stays reviewed. Calls that failed a critical gate are audited at any score.
 - The dispute itself is always closed when the TL resolves, with the TL's name, so IR sees it answered.

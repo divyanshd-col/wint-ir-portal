@@ -8,7 +8,7 @@ import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
 import { computeIqsFromRawParams } from '@/lib/quality';
 import { getDefinedDispositions } from '@/lib/qa-topics';
-import { agentInTeam, disputesOwnedByTL, getTlAgentNames, isTlActionable } from '@/lib/dispute-owner';
+import { agentInTeam, getDisputeOwner, getTlAgentNames, isTlActionable } from '@/lib/dispute-owner';
 
 const ROUTE = 'cx/tl/disputes';
 
@@ -70,6 +70,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   const t0 = Date.now();
+  const owner = await getDisputeOwner();
   const rawFlags = await storeGetIQSFlags();
 
   // Filter by requested status (excluding email disputes which have their own queue)
@@ -85,9 +86,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       // 'reviewed' = reviewed by TL or QA.
       // When TLs own disputes, the queue is every open IR dispute (including those already forwarded to QA); a TL-raised one stays with QA.
       if (statusFilter === 'pending' || statusFilter === 'forwarded_to_tl') {
-        return disputesOwnedByTL() ? isTlActionable(f) : f.status === 'ir_pending_tl' || f.status === 'pending';
+        return owner === 'tl' ? isTlActionable(f, owner) : f.status === 'ir_pending_tl' || f.status === 'pending';
       }
-      if (statusFilter === 'resolved') return (f.status === 'tl_forwarded' && !isTlActionable(f)) || f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
+      if (statusFilter === 'resolved') return (f.status === 'tl_forwarded' && !isTlActionable(f, owner)) || f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
       if (statusFilter === 'reviewed') return f.status === 'reviewed' || f.status === 'tl_resolved';
       if (statusFilter === 'all') return f.status !== 'cancelled';
       return false;
@@ -284,7 +285,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   });
 
   const definedDispositions = await getDefinedDispositions().catch(() => [] as string[]);
-  return NextResponse.json({ disputes: finalDisputes, definedDispositions, disputesOwner: disputesOwnedByTL() ? 'tl' : 'qa' }, {
+  return NextResponse.json({ disputes: finalDisputes, definedDispositions, disputesOwner: owner }, {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     },

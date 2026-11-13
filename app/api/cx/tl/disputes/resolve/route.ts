@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   // Once TLs own disputes they resolve through the evaluation panel (scores + audit-queue rule). This note-only close would mark the
   // chat reviewed and drop below-threshold items out of QA's audit, so it is closed for TLs.
-  if (disputesOwnedByTL() && role === 'tl') {
+  if (role === 'tl' && (await disputesOwnedByTL())) {
     return NextResponse.json({ error: 'Resolve the dispute from the evaluation panel so the scores are updated' }, { status: 409 });
   }
 

@@ -67,6 +67,7 @@ export default async function SettingsPageContent({ inModal = false }: { inModal
     hasPyannoteKey: !!config.pyannoteApiKey,
     ...(activeDomain !== 'pcg' && {
       qualityThresholds: { ...DEFAULT_QUALITY_THRESHOLDS, ...config.qualityThresholds },
+      disputeOwner: (config.disputeOwner === 'tl' ? 'tl' : 'qa') as 'qa' | 'tl',
       emailParameters: resolveEmailParameters(config.emailRubric),
     }),
     prompts,

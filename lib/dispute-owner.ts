@@ -3,20 +3,37 @@ import type { IQSFlag } from '@/lib/store';
 
 /**
  * Who resolves CX disputes (chats, calls, emails; PCG is a separate flow and never reads this).
- *  - 'qa' (default): the old flow. IR raises, the TL forwards to QA, QA edits the scores.
+ *  - 'qa' (default, nothing saved): the old flow. IR raises, the TL forwards to QA, QA edits the scores.
  *  - 'tl': IR disputes are reviewed and resolved by the TL of the agent. QA only audits what falls at or below the review threshold.
- * Set DISPUTES_OWNER=tl in the environment to switch, unset it (or 'qa') to roll back. Nothing in the data changes with the switch.
+ * An admin switches it in Settings → Quality Thresholds → Dispute owner (saved in the portal config, change history recorded).
+ * Nothing in the data changes with the switch, so switching back is safe.
  *
  * TL-raised disputes always stay with QA: a TL cannot resolve a dispute they raised themselves.
  */
-export const disputesOwnedByTL = () => process.env.DISPUTES_OWNER === 'tl';
+export type DisputeOwner = 'qa' | 'tl';
+
+/** Validates a saved-settings payload. */
+export function parseDisputeOwner(input: unknown): { ok: true; value: DisputeOwner } | { ok: false; error: string } {
+  return input === 'qa' || input === 'tl' ? { ok: true, value: input } : { ok: false, error: "disputeOwner must be 'qa' or 'tl'" };
+}
+
+/** The saved owner from any object that may carry `disputeOwner` (the portal config). Anything but 'tl' means QA. */
+export const disputeOwnerOf = (config: object | null | undefined): DisputeOwner =>
+  (config as { disputeOwner?: unknown } | null | undefined)?.disputeOwner === 'tl' ? 'tl' : 'qa';
+
+/** Current owner, from the portal config. A config that cannot be read means QA (the old flow). */
+export async function getDisputeOwner(): Promise<DisputeOwner> {
+  const { readConfig } = await import('@/lib/config');
+  return disputeOwnerOf(await readConfig().catch(() => null));
+}
+export const disputesOwnedByTL = async () => (await getDisputeOwner()) === 'tl';
 
 const OPEN_STATUSES = ['pending', 'ir_pending_tl', 'tl_forwarded'];
 
-/** True when this flag is in the TL's queue: TL owns disputes, it was raised by IR (not a TL), and nobody has decided it yet.
+/** True when this flag is in the TL's queue: TLs own disputes, it was raised by IR (not a TL), and nobody has decided it yet.
  *  Includes 'tl_forwarded' so disputes already sitting with QA at the switch move to the TL. */
-export const isTlActionable = (f: Pick<IQSFlag, 'status' | 'raisedByRole'>) =>
-  disputesOwnedByTL() && f.raisedByRole !== 'tl' && OPEN_STATUSES.includes(f.status);
+export const isTlActionable = (f: Pick<IQSFlag, 'status' | 'raisedByRole'>, owner: DisputeOwner) =>
+  owner === 'tl' && f.raisedByRole !== 'tl' && OPEN_STATUSES.includes(f.status);
 
 /** Same prefix / full-name match the TL dispute list always used (Robylon names and portal names differ by a surname). */
 export function agentInTeam(teamAgents: string[], agentName: string | null | undefined): boolean {
@@ -67,14 +84,15 @@ export async function checkTlResolve(opts: {
 }): Promise<{ status: number; error: string } | null> {
   const { role, email, flagId, agentName } = opts;
   if (role !== 'tl') return null;
-  if (!disputesOwnedByTL()) return { status: 403, error: 'Disputes are resolved by QA' };
+  const owner = await getDisputeOwner();
+  if (owner !== 'tl') return { status: 403, error: 'Disputes are resolved by QA' };
   if (!flagId) return { status: 400, error: 'flagId required: a TL can only change scores to resolve a dispute' };
   const { storeGetIQSFlags } = await import('@/lib/store');
   const flag = (await storeGetIQSFlags())
     .map((r) => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .find((f): f is IQSFlag => Boolean(f && f.id === flagId));
   if (!flag) return { status: 404, error: 'Dispute not found' };
-  if (!isTlActionable(flag)) return { status: 409, error: 'This dispute is not open for TL review' };
+  if (!isTlActionable(flag, owner)) return { status: 409, error: 'This dispute is not open for TL review' };
   if ((flag.agentEmail || '').toLowerCase() === email.toLowerCase()) return { status: 403, error: 'You cannot resolve a dispute you raised' };
   const team = await getTlAgentNames(email);
   if (!agentInTeam(team, agentName ?? flag.agentName)) return { status: 403, error: 'Forbidden: this dispute is not for your team' };

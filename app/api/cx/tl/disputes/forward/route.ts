@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!flag) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
 
   // TLs own IR disputes now: they resolve them instead of forwarding to QA. (A TL-raised dispute still goes to QA.)
-  if (disputesOwnedByTL() && flag.raisedByRole !== 'tl') {
+  if ((await disputesOwnedByTL()) && flag.raisedByRole !== 'tl') {
     return NextResponse.json({ error: 'Disputes are resolved by the TL; use Resolve with the updated scores' }, { status: 409 });
   }
 

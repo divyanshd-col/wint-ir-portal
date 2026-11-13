@@ -1,31 +1,40 @@
 /**
- * TL-owned dispute resolution: ownership switch, queue membership, team matching and the QA audit-queue rule.
+ * TL-owned dispute resolution: owner setting, history, queue membership, team matching and the QA audit-queue rule.
  * Run: npx tsx --test scripts/dispute-owner.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentInTeam, disputesOwnedByTL, isTlActionable, tlEditStatus } from '../lib/dispute-owner';
+import { agentInTeam, disputeOwnerOf, isTlActionable, parseDisputeOwner, tlEditStatus } from '../lib/dispute-owner';
+import { diffTrackedSettings, restoreToConfigPatch } from '../lib/settings-history-keys';
 
-const withOwner = (v: string | undefined, fn: () => void) => {
-  const prev = process.env.DISPUTES_OWNER;
-  if (v === undefined) delete process.env.DISPUTES_OWNER; else process.env.DISPUTES_OWNER = v;
-  try { fn(); } finally { if (prev === undefined) delete process.env.DISPUTES_OWNER; else process.env.DISPUTES_OWNER = prev; }
-};
+test('the owner comes from the saved config: only "tl" means TL, anything else (or no config) is QA', () => {
+  assert.equal(disputeOwnerOf({ disputeOwner: 'tl' }), 'tl');
+  assert.equal(disputeOwnerOf({ disputeOwner: 'qa' }), 'qa');
+  assert.equal(disputeOwnerOf({}), 'qa');
+  assert.equal(disputeOwnerOf({ disputeOwner: 'TL' }), 'qa');
+  assert.equal(disputeOwnerOf(null), 'qa');
+});
 
-test('ownership is off unless DISPUTES_OWNER=tl', () => {
-  withOwner(undefined, () => assert.equal(disputesOwnedByTL(), false));
-  withOwner('qa', () => assert.equal(disputesOwnedByTL(), false));
-  withOwner('tl', () => assert.equal(disputesOwnedByTL(), true));
+test('saving the owner validates the value', () => {
+  assert.deepEqual(parseDisputeOwner('tl'), { ok: true, value: 'tl' });
+  assert.deepEqual(parseDisputeOwner('qa'), { ok: true, value: 'qa' });
+  for (const bad of ['', 'admin', 'TL', null, undefined, 1, true]) assert.equal(parseDisputeOwner(bad).ok, false, String(bad));
+});
+
+test('changing the owner is recorded in the settings history and can be restored', () => {
+  assert.deepEqual(diffTrackedSettings({}, { disputeOwner: 'tl' }).map(c => [c.key, c.oldValue, c.newValue]), [['disputeOwner', null, 'tl']]);
+  assert.deepEqual(diffTrackedSettings({ disputeOwner: 'tl' }, { disputeOwner: 'qa' }).map(c => [c.key, c.oldValue, c.newValue]), [['disputeOwner', 'tl', null]]);
+  assert.deepEqual(diffTrackedSettings({}, { disputeOwner: 'qa' }), []);          // QA saved explicitly is still the default
+  assert.deepEqual(restoreToConfigPatch('disputeOwner', null), { ok: true, patch: { disputeOwner: 'qa' } });
+  assert.deepEqual(restoreToConfigPatch('disputeOwner', 'tl'), { ok: true, patch: { disputeOwner: 'tl' } });
 });
 
 test('TL queue: open IR disputes (incl. already forwarded to QA); never TL-raised or decided ones; empty when QA owns', () => {
   const f = (status: string, raisedByRole: any) => ({ status, raisedByRole } as any);
-  withOwner('tl', () => {
-    for (const s of ['pending', 'ir_pending_tl', 'tl_forwarded']) assert.equal(isTlActionable(f(s, 'ir')), true, s);
-    assert.equal(isTlActionable(f('tl_forwarded', 'tl')), false);   // raised by a TL: stays with QA
-    for (const s of ['reviewed', 'tl_resolved', 'cancelled']) assert.equal(isTlActionable(f(s, 'ir')), false, s);
-  });
-  withOwner(undefined, () => assert.equal(isTlActionable(f('pending', 'ir')), false));
+  for (const s of ['pending', 'ir_pending_tl', 'tl_forwarded']) assert.equal(isTlActionable(f(s, 'ir'), 'tl'), true, s);
+  assert.equal(isTlActionable(f('tl_forwarded', 'tl'), 'tl'), false);   // raised by a TL: stays with QA
+  for (const s of ['reviewed', 'tl_resolved', 'cancelled']) assert.equal(isTlActionable(f(s, 'ir'), 'tl'), false, s);
+  assert.equal(isTlActionable(f('pending', 'ir'), 'qa'), false);        // QA owns: nothing is in the TL queue
 });
 
 test('agentInTeam matches full names and the Robylon / portal prefix variants, nothing else', () => {

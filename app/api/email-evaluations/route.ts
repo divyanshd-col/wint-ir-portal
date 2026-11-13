@@ -337,7 +337,7 @@ export async function GET(req: NextRequest) {
     }
 
     // When TLs own disputes, every open IR dispute (including ones already forwarded to QA) is in the TL queue; TL-raised ones stay with QA.
-    const tlOwns = disputesOwnedByTL();
+    const tlOwns = await disputesOwnedByTL();
     const raisedByTl = `COALESCE(fl.raised_by_role, 'ir') = 'tl'`;
     if (disputeQueue === 'tl_pending') {
       whereClauses.push(tlOwns ? `(e.dispute_status IN ('Raised', 'Under_Review') AND NOT ${raisedByTl})` : `e.dispute_status = 'Raised'`);
@@ -709,7 +709,7 @@ export async function GET(req: NextRequest) {
       },
       agentBreakdown: agentBreakdown || [],
       availableAgents: scopedAgentNames || (agentBreakdown || []).map((a: any) => a.agent_name),
-      disputesOwner: disputesOwnedByTL() ? 'tl' : 'qa',
+      disputesOwner: (await disputesOwnedByTL()) ? 'tl' : 'qa',
       assignedDispositions: scopedDispositions || allDispositions,
     });
   } catch (err: any) {
@@ -1095,7 +1095,7 @@ export async function POST(req: NextRequest) {
       const role = ((session?.user as any)?.role || 'tl') as string;
       const submitterName = await getSubmitterName(email);
 
-      if (role === 'tl' && disputesOwnedByTL()) {
+      if (role === 'tl' && (await disputesOwnedByTL())) {
         return NextResponse.json({ error: 'Disputes are resolved by the TL; use Resolve with the updated score' }, { status: 409 });
       }
 
@@ -1220,7 +1220,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
       const existing = evalRows[0];
-      const tlOwns = disputesOwnedByTL();
+      const tlOwns = await disputesOwnedByTL();
 
       if (role === 'tl') {
         const tlAgents = await getScopedAgentNamesForUser(email, submitterName, 'tl', false);
