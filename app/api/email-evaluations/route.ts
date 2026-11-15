@@ -370,8 +370,11 @@ export async function GET(req: NextRequest) {
     // When TLs own disputes, every open IR dispute (including ones already forwarded to QA) is in the TL queue; TL-raised ones stay with QA.
     const tlOwns = await disputesOwnedByTL();
     const raisedByTl = `COALESCE(fl.raised_by_role, 'ir') = 'tl'`;
+    // The TL's Disputes Raised tab embeds the QA table; an admin opening it must get the TL queue too, not the QA one.
+    const tlView = userRole === 'tl' || (isAdmin && searchParams.get('view') === 'tl');
+    const tlOpenSql = `(e.dispute_status IN ('Raised', 'Under_Review') AND NOT ${raisedByTl})`;
     if (disputeQueue === 'tl_pending') {
-      whereClauses.push(tlOwns ? `(e.dispute_status IN ('Raised', 'Under_Review') AND NOT ${raisedByTl})` : `e.dispute_status = 'Raised'`);
+      whereClauses.push(tlOwns ? tlOpenSql : `e.dispute_status = 'Raised'`);
     } else if (disputeQueue === 'tl_history') {
       if (disputeStatus === 'reviewed') {
         whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
@@ -389,9 +392,9 @@ export async function GET(req: NextRequest) {
         whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
       } else if (disputeStatus === 'all') {
         whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
-      } else if (tlOwns && userRole === 'tl') {
+      } else if (tlOwns && tlView) {
         // A TL on this page sees their own queue: every open IR dispute, whether or not it was already forwarded to QA.
-        whereClauses.push(`(e.dispute_status IN ('Raised', 'Under_Review') AND NOT ${raisedByTl})`);
+        whereClauses.push(tlOpenSql);
       } else {
         // Default QA dispute queue shows forwarded disputes ('Under_Review')
         whereClauses.push(`e.dispute_status = 'Under_Review'`);
@@ -409,8 +412,8 @@ export async function GET(req: NextRequest) {
     }
 
     // QA's dispute tab does not list open IR disputes while TLs own them (decided ones and TL-raised ones stay visible).
-    if (tlOwns && tab === 'disputes' && !disputeQueue && userRole !== 'tl') {
-      whereClauses.push(`NOT (e.dispute_status IN ('Raised', 'Under_Review') AND NOT ${raisedByTl})`);
+    if (tlOwns && tab === 'disputes' && !disputeQueue && !tlView) {
+      whereClauses.push(`NOT ${tlOpenSql}`);
     }
 
     if (search) {
@@ -461,6 +464,7 @@ export async function GET(req: NextRequest) {
         COALESCE(e.qa_override_score, e.quality_score) AS effective_score,
         COALESCE(e.reviewed_by, ag.qa_name) AS qa_name,
         fl.raised_by_role,
+        fl.flagged_at AS flag_raised_at,
         fl.agent_name AS flag_author_name,
         -- who raised the dispute (agent_name is the agent it is about; for TL disputes the raiser is the TL)
         COALESCE(
@@ -568,11 +572,12 @@ export async function GET(req: NextRequest) {
     }
 
     const hasDispositionFilter = singleDisposition !== null || effectiveDispositions !== null;
-    let statsFrom = 'FROM email_reply_evaluations e LEFT JOIN email_conversations c ON e.ticket_id = c.id';
+    let statsFrom = 'FROM email_reply_evaluations e LEFT JOIN email_conversations c ON e.ticket_id = c.id LEFT JOIN iqs_flags fl ON fl.id = e.flag_id';
     if (hasDispositionFilter) {
       statsFrom = `
         FROM email_reply_evaluations e
         JOIN email_conversations c ON e.ticket_id = c.id
+        LEFT JOIN iqs_flags fl ON fl.id = e.flag_id
       `;
 
       if (singleDisposition === '__FORBIDDEN__') {
@@ -600,8 +605,8 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN e.dispute_status IN ('Raised', 'Under_Review') THEN 1 END)::int AS active_disputes_count,
         COUNT(CASE WHEN e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved') THEN 1 END)::int AS reviewed_disputes_count,
         COUNT(CASE WHEN e.dispute_status = 'Under_Review' THEN 1 END)::int AS qa_disputes_count,
-        COUNT(CASE WHEN e.dispute_status = 'Raised' THEN 1 END)::int AS tl_pending_disputes_count,
-        COUNT(CASE WHEN e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved') THEN 1 END)::int AS tl_history_disputes_count,
+        COUNT(CASE WHEN ${tlOwns ? tlOpenSql : `e.dispute_status = 'Raised'`} THEN 1 END)::int AS tl_pending_disputes_count,
+        COUNT(CASE WHEN ${tlOwns ? `((e.dispute_status = 'Under_Review' AND ${raisedByTl}) OR e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved'))` : `e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`} THEN 1 END)::int AS tl_history_disputes_count,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS qa_overrides_count
       ${statsFrom}
       ${statsWhere}
