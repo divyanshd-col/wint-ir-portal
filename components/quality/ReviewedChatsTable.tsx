@@ -368,7 +368,7 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
                           style={{
                             background: 'none', border: 0, padding: 0,
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                            color: reopeningId === chat.chatId ? 'var(--qa-text-3, var(--qa-text-3))' : 'var(--qa-active-blue, #2563eb)',
+                            color: reopeningId === chat.chatId ? 'var(--qa-text-3)' : 'var(--color-text-info)',
                             cursor: reopeningId === chat.chatId ? 'not-allowed' : 'pointer',
                           }}
                         >

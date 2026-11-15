@@ -624,11 +624,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent</SortTh>
-                <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</SortTh>
+                <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
                 <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
                 <SortTh k="csat" sort={sort} onSort={toggleSort} style={TH_BASE}>CSAT</SortTh>
                 <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date</SortTh>
-                <th style={TH_BASE}>Dispute</th>
+                <th style={TH_BASE}>Status</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
@@ -949,10 +949,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
+                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
-                <th style={TH_BASE}>Raised Date</th>
+                <th style={TH_BASE}>Raised</th>
                 <th style={TH_BASE}>Status</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
               </tr>
@@ -1319,10 +1319,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
+                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
-                <th style={TH_BASE}>Reviewed Date</th>
+                <th style={TH_BASE}>Reviewed</th>
                 <th style={TH_BASE}>Reviewed By</th>
                 <th style={TH_BASE}>Outcome</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>

@@ -307,7 +307,7 @@ export default function CxIrPerformanceDashboard({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 24, borderBottom: '1px solid var(--dk-bd-e4e4e7, #e4e4e7)', paddingBottom: 16 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--dk-fg-18181b, #18181b)', letterSpacing: '-0.02em' }}>
               IR Performance
             </h1>
             <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 6, ...channelBadgeStyles }}>

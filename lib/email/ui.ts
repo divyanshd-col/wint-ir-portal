@@ -66,7 +66,7 @@ export function periodBounds(period: Period, customFrom?: string, customTo?: str
 }
 
 const DISPUTE_LABELS: Record<string, string> = {
-  Raised: 'Forwarded to TL (Pending Review)',
+  Raised: 'Pending TL review',
   Under_Review: 'Forwarded to QA',
   TL_Resolved: 'Reviewed by TL',
   Resolved: 'Reviewed',
@@ -77,7 +77,7 @@ const DISPUTE_LABELS: Record<string, string> = {
 export function disputeLabel(status: string | null | undefined, qaName?: any): string {
   const nameStr = typeof qaName === 'string' && qaName.trim() ? qaName.trim() : null;
   if (status === 'Raised') {
-    return 'Forwarded to TL (Pending Review)';
+    return 'Pending TL review';
   }
   if (status === 'Under_Review') {
     return nameStr && nameStr.toLowerCase() !== 'qa' ? `Forwarded to ${nameStr}` : 'Forwarded to QA';

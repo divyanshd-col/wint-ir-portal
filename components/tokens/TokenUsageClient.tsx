@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
-import PageNav from '@/components/PageNav';
 import {
   formatTokenCount,
   formatUsd,
@@ -88,14 +87,12 @@ export default function TokenUsageClient({ username, role, isAdmin, flags }: Pro
 
   return (
     <div className="flex h-screen bg-[#f5f3ee] text-gray-900 font-sans antialiased overflow-hidden">
-      <PageNav username={username} role={role} isAdmin={isAdmin} flags={flags} />
-
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Header */}
         <header className="bg-white border-b border-gray-200 px-8 py-5 shrink-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sticky top-0 z-10 shadow-xs">
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Token Usage &amp; Cost Intelligence</h1>
+              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Token Usage &amp; Cost Intelligence</h1>
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
                 Admin
               </span>
