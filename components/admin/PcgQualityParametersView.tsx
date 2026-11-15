@@ -309,7 +309,7 @@ export default function PcgQualityParametersView() {
       <div className="bg-white border border-[#E4E4E7] rounded-xl p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-[#18181B] tracking-tight">
+            <h1 className="text-2xl font-semibold text-[#18181B] tracking-tight">
               Quality Parameter Definitions
             </h1>
           </div>

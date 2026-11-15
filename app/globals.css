@@ -81,6 +81,10 @@ html { zoom: var(--ui-zoom); }
   --line-strong: #c4cac1;
   --faint:       #667066;  /* low-priority text: table heads, metadata (AA on white; reference #8a938a is 3.2:1) */
 
+  /* Font stacks used by the quality pages (same in both themes). */
+  --qa-sans: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  --qa-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
 }

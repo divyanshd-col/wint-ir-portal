@@ -287,7 +287,7 @@ export default function TokensClient() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>Token Usage & Cost Intelligence</h1>
+            <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, letterSpacing: '-0.02em' }}>Token Usage & Cost Intelligence</h1>
             <span style={{ background: 'var(--pass-soft)', color: 'var(--pass)', fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>
               Real Data Tracking
             </span>

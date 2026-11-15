@@ -219,8 +219,8 @@ export default function CallAnalysisClient({ username, role, isAdmin, flags }: P
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
-          <h1 className="text-base font-semibold text-gray-900">Call Quality Analyser</h1>
+        <div className="px-6 pt-6 shrink-0">
+          <h1 className="text-2xl font-semibold text-gray-900">Call Quality Analyser</h1>
           <p className="text-xs text-gray-400 mt-0.5">Two-pass Gemini analysis. Structure extraction then transcription &amp; tone</p>
         </div>
 
