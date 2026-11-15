@@ -232,7 +232,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
           }}
         >
           <option value="">All Open Disputes</option>
-          <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+          <option value="forwarded_to_tl">Pending TL review</option>
           <option value="forwarded_to_qa">Forwarded to QA</option>
           <option value="reviewed">Reviewed Disputes</option>
           <option value="all">All Disputes (incl. Reviewed)</option>

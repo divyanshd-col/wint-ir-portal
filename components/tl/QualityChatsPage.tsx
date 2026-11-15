@@ -71,7 +71,7 @@ export function DisputeStatusPill({
   let label = '';
 
   if (status === 'pending' || status === 'ir_pending_tl') {
-    label = 'Forwarded to TL (Pending Review)';
+    label = 'Pending TL review';
   } else if (status === 'tl_forwarded') {
     if (role === 'tl') {
       label = 'Dispute raised by TL';
@@ -259,7 +259,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
         <DateRangeChip from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
         <UISelect value={disputeFilter} onChange={e => setDisputeFilter(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
           <option value="">All Dispute Statuses</option>
-          <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+          <option value="forwarded_to_tl">Pending TL review</option>
           <option value="reviewed">Reviewed Disputes</option>
           <option value="none">No Dispute</option>
         </UISelect>
@@ -333,7 +333,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
           <tr>
             <th style={th}>Chat ID</th>
             <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
-            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Agent IQS</SortTh>
+            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
             <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
             <SortTh k="csat" sort={sort} onSort={toggleSort} style={{ ...th, paddingLeft: 32 }}>CSAT</SortTh>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
@@ -556,7 +556,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     return true;
   });
 
-  const colCount = status === 'pending' ? 7 : 8;
+  const colCount = 9;
   const totalPages = Math.max(1, Math.ceil(filteredDisputes.length / limit));
   const pagedDisputes = filteredDisputes.slice((page - 1) * limit, page * limit);
 
@@ -659,7 +659,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           </>
         ) : (
           <>
-            <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+            <option value="forwarded_to_tl">Pending TL review</option>
             <option value="raised_ir">Dispute raised by IR</option>
             <option value="raised_tl">Dispute raised by TL</option>
           </>
@@ -733,8 +733,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
         {(status === 'pending'
-          ? ['12%', '15%', undefined, '10%', '9%', '11%', '14%']
-          : ['12%', '14%', undefined, '9%', '8%', '10%', '13%', '20%']
+          ? ['11%', '14%', undefined, '7%', '8%', '10%', '12%', '14%', '9%']
+          : ['11%', '13%', undefined, '7%', '8%', '9%', '12%', '17%', '9%']
         ).map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
       </colgroup>
       <thead>
@@ -742,11 +742,12 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           <th style={th}>Chat ID</th>
           <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
           <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
-          <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS (Agent)</SortTh>
+          <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
           <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
           <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
           <SortTh k="raised" sort={sort} onSort={toggleSort} style={th}>Raised</SortTh>
-          {status !== 'pending' && <th style={th}>Outcome</th>}
+          <th style={th}>{status === 'pending' ? 'Status' : 'Outcome'}</th>
+          <th style={{ ...th, textAlign: 'right' }}>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -803,8 +804,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   <br />
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(d.raisedAt)}</span>
                 </td>
-                {status !== 'pending' && (
-                <td style={{ ...td }}>
+                <td style={{ ...td, fontSize: 13 }}>
                     <DisputeStatusPill
                       status={d.status}
                       raisedByRole={d.raisedByRole}
@@ -817,7 +817,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                       </div>
                     )}
                   </td>
-                )}
+                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>{expandedId === d.chatId ? 'Hide ▲' : 'Review ▼'}</span></td>
               </tr>
 
               {/* Dispute detail: agent note + challenged params + eval panel */}

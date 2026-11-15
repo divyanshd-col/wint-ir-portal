@@ -54,7 +54,7 @@ test('dayBoundsISO - local start/end of the picked days, as instants the API can
 test('disputeLabel - who is holding the dispute, in the words the chat views use', () => {
   assert.deepEqual(
     ['Raised', 'Under_Review', 'TL_Resolved', 'Resolved', 'Rejected', 'None', undefined].map(v => disputeLabel(v)),
-    ['Forwarded to TL (Pending Review)', 'Forwarded to QA', 'Reviewed by TL', 'Reviewed', 'Rejected by QA', '—', '—'],
+    ['Pending TL review', 'Forwarded to QA', 'Reviewed by TL', 'Reviewed', 'Rejected by QA', '—', '—'],
   );
 });
 
