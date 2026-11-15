@@ -37,7 +37,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const urls = (await readConfig()).knowledgeBaseUrls || [];
   const key = urls.join('\n');
   let docs: KbDoc[];
-  let errors: { fileId: string; error: string }[] = [];
+  const errors: { fileId: string; error: string }[] = [];
 
   if (cache && cache.urls === key && Date.now() - cache.at < TTL) {
     docs = cache.docs;
