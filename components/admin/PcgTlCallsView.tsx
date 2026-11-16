@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import PcgPeriodFilter from './PcgPeriodFilter';
+import PcgPeriodFilter, { type PcgPeriod } from './PcgPeriodFilter';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
 
 interface CallParameter {
@@ -65,11 +65,11 @@ export interface PCGCall {
 
 export interface PcgTlCallsViewProps {
   onOpenCallDrawer?: (callId: string) => void;
-  globalDateRange?: '7d' | '30d' | 'custom';
+  globalDateRange?: PcgPeriod;
   globalCustomStartDate?: string;
   globalCustomEndDate?: string;
   /** Called when the period filter on this page changes (the date range lives in the parent). */
-  onPeriodChange?: (range: '7d' | '30d' | 'custom', start: string, end: string) => void;
+  onPeriodChange?: (range: PcgPeriod, start: string, end: string) => void;
 }
 
 // Helpers for CallEvalPanel formatting
@@ -657,11 +657,6 @@ export default function PcgTlCallsView({
             <h3 className="text-sm font-bold text-[#111111]">
               {isExcludedView ? 'Excluded Non-Client Calls (Zero IQS Penalty)' : 'Evaluated Call Audits'}
             </h3>
-            <p className="text-xs text-[#71717A] mt-0.5">
-              {isExcludedView
-                ? 'Calls identified as non-client (Hiring, Courier, Spam, Wrong Number, Personal) — filtered out before 11-parameter evaluation.'
-                : `Showing ${calls.length} of ${totalCalls} calls${totalPages > 1 ? ` • Page ${page} of ${totalPages}` : ''} • Auto-categorised with separate quality parameters`}
-            </p>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
