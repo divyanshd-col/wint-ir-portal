@@ -5,6 +5,7 @@ import UsersManager, { type User } from './settings/UsersManager';
 import PcgUsersManager from './settings/PcgUsersManager';
 import SecuritySection from './settings/SecuritySection';
 import QualityThresholdsSection from './settings/QualityThresholdsSection';
+import PcgEmailInboxSection from './settings/PcgEmailInboxSection';
 import ScoringRubricSection from './settings/ScoringRubricSection';
 import PromptsSection from '@/components/settings/PromptsSection';
 import ChangeHistorySection from './settings/ChangeHistorySection';
@@ -37,6 +38,7 @@ interface SafeConfig {
   hasPyannoteKey?: boolean;
   qualityThresholds?: QualityThresholds;
   disputeOwner?: 'qa' | 'tl';
+  pcgEmailInboxes?: string[];
   emailParameters?: EvaluationParameterConfig[];
   /** Only the prompts for the workspace the admin is in: field name → saved text and built-in default. */
   prompts?: Record<string, { value: string; defaultValue: string }>;
@@ -106,6 +108,7 @@ export default function SettingsClient({
   if (isPcgAdminOnly) {
     SECTIONS = [
       { id: 'pcg-users', label: 'Users & Permissions' },
+      { id: 'pcg-email', label: 'Email Inbox' },
       { id: 'prompt', label: 'Prompts' },
       { id: 'history', label: 'Change History' },
       SECURITY_SECTION,
@@ -121,6 +124,7 @@ export default function SettingsClient({
       { id: 'history', label: 'Change History' },
       { id: 'users', label: 'CX Users & Permissions' },
       { id: 'pcg-users', label: 'PCG Users & Permissions' },
+      { id: 'pcg-email', label: 'PCG Email Inbox' },
       { id: 'tokens', label: 'Token Usage' },
       { id: 'integrations', label: 'Integrations' },
       SECURITY_SECTION,
@@ -133,7 +137,7 @@ export default function SettingsClient({
 
   // Workspaces stay separate: PCG settings never show in the CX workspace, and the CX-only Users / Thresholds / Rubric never show in PCG (super admins included).
   const inPcg = activeDomain === 'pcg';
-  if (!isPcgAdminOnly) SECTIONS = SECTIONS.filter(sec => (inPcg ? !['users', 'thresholds', 'rubric', 'chatbot'].includes(sec.id) : sec.id !== 'pcg-users'));
+  if (!isPcgAdminOnly) SECTIONS = SECTIONS.filter(sec => (inPcg ? !['users', 'thresholds', 'rubric', 'chatbot'].includes(sec.id) : !['pcg-users', 'pcg-email'].includes(sec.id)));
 
   const initialSection = isPcgAdminOnly
     ? 'pcg-users'
@@ -881,6 +885,11 @@ export default function SettingsClient({
             showToast={showToast}
             isSuperAdmin={isSuperAdmin}
           />
+        )}
+
+        {/* ── PCG EMAIL INBOX ── */}
+        {activeSection === 'pcg-email' && hasPcgAccess && (
+          <PcgEmailInboxSection initial={config.pcgEmailInboxes ?? []} onSaved={showToast} />
         )}
 
         {/* ── TOKEN USAGE ── */}
