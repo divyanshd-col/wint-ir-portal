@@ -128,10 +128,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const ALL_TL_NAMES = [
     'Swetha',
     'Swetha Jayakumar',
+    'swetha',
     'Saiyam Rastogi',
+    'Saiyam',
+    'saiyam',
     'Tanisha Mittal',
+    'Tanisha',
+    'tanisha',
     'Dheeraj Bhojwani',
+    'Dheeraj',
+    'dheeraj',
     'Sravanthi',
+    'sravanthi',
   ];
 
   // Resolve effective TL for scoping:
@@ -157,10 +165,21 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     paramIdx++;
   }
 
+  // Check if requested filter is targeting a Team Lead
+  const isTargetTl = Boolean(
+    rmFilter &&
+    rmFilter !== 'all' &&
+    rmFilter !== 'all_rms' &&
+    (
+      ALL_TL_NAMES.some(tl => isSamePcgAgent(tl, rmFilter)) ||
+      ['swetha', 'saiyam', 'dheeraj', 'sravanthi', 'tanisha'].some(s => rmFilter.toLowerCase().includes(s))
+    )
+  );
+
   // Target cohort resolution:
   const effectiveCohort = isAgentPersona
     ? null
-    : (callerRole === 'tl' || roleFilter === 'tl')
+    : (callerRole === 'tl' || roleFilter === 'tl' || isTargetTl)
     ? 'tl'
     : (callerRole === 'dual' || roleFilter === 'dual' || dualFilter === 'true' || dualFilter === 'dual')
     ? 'dual'
@@ -187,8 +206,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       paramIdx += 2;
     }
   } else if (effectiveCohort === 'tl') {
-    // When querying for TL Chat Quality: filter for chats handled by TLs
-    conditions.push(`(is_tl = true OR LOWER(TRIM(rm_name)) = ANY($${paramIdx}::text[]))`);
+    // When querying for TL Chat Quality: filter for chats handled or co-handled by TLs
+    conditions.push(`(
+      is_tl = true
+      OR LOWER(TRIM(rm_name)) = ANY($${paramIdx}::text[])
+      OR LOWER(TRIM(preceding_rm_name)) = ANY($${paramIdx}::text[])
+    )`);
     params.push(ALL_TL_NAMES.map(n => n.toLowerCase()));
     paramIdx++;
 
@@ -196,13 +219,21 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     if (effectiveHandler) {
       const cleanTl = effectiveHandler.replace(/^Team\s+/i, '').trim().toLowerCase();
       const canonicalTl = canonicalizePcgRmName(cleanTl).toLowerCase();
+      const firstName = cleanTl.split(/\s+/)[0] || cleanTl;
       conditions.push(`(
         LOWER(TRIM(rm_name)) = LOWER($${paramIdx})
         OR LOWER(TRIM(rm_name)) = LOWER($${paramIdx + 1})
-        OR LOWER(TRIM(rm_name)) LIKE LOWER($${paramIdx + 2})
+        OR LOWER(TRIM(rm_name)) = LOWER($${paramIdx + 2})
+        OR LOWER(TRIM(rm_name)) LIKE LOWER($${paramIdx + 3})
+        OR LOWER($${paramIdx}) LIKE '%' || LOWER(TRIM(rm_name)) || '%'
+        OR LOWER(TRIM(preceding_rm_name)) = LOWER($${paramIdx})
+        OR LOWER(TRIM(preceding_rm_name)) = LOWER($${paramIdx + 1})
+        OR LOWER(TRIM(preceding_rm_name)) = LOWER($${paramIdx + 2})
+        OR LOWER(TRIM(preceding_rm_name)) LIKE LOWER($${paramIdx + 3})
+        OR LOWER($${paramIdx}) LIKE '%' || LOWER(TRIM(preceding_rm_name)) || '%'
       )`);
-      params.push(cleanTl, canonicalTl, `%${cleanTl}%`);
-      paramIdx += 3;
+      params.push(cleanTl, canonicalTl, firstName, `%${firstName}%`);
+      paramIdx += 4;
     }
   } else if (effectiveCohort === 'dual') {
     // Co-handled dual chats only (has mid-thread handoff)
@@ -240,15 +271,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
   } else if (effectiveCohort === 'rm') {
     // RM handled conversations: handled END-TO-END by an RM with NO handoffs
-    conditions.push(`(
-      (preceding_rm_name IS NULL OR TRIM(preceding_rm_name) = '')
-      AND (is_am IS NOT TRUE)
-      AND (is_tl IS NOT TRUE)
-      AND NOT (LOWER(TRIM(rm_name)) = ANY($${paramIdx}::text[]))
-      AND NOT (LOWER(TRIM(rm_name)) = ANY($${paramIdx + 1}::text[]))
-    )`);
-    params.push(Array.from(PCG_AM_NAMES).map((n: string) => n.toLowerCase()), ALL_TL_NAMES.map(n => n.toLowerCase()));
-    paramIdx += 2;
+    if (!rmFilter || rmFilter === 'all' || rmFilter === 'all_rms') {
+      conditions.push(`(
+        (preceding_rm_name IS NULL OR TRIM(preceding_rm_name) = '')
+        AND (is_am IS NOT TRUE)
+        AND (is_tl IS NOT TRUE)
+        AND NOT (LOWER(TRIM(rm_name)) = ANY($${paramIdx}::text[]))
+        AND NOT (LOWER(TRIM(rm_name)) = ANY($${paramIdx + 1}::text[]))
+      )`);
+      params.push(Array.from(PCG_AM_NAMES).map((n: string) => n.toLowerCase()), ALL_TL_NAMES.map(n => n.toLowerCase()));
+      paramIdx += 2;
+    }
 
     if (mappedMembers.length > 0 && personaParam !== 'admin') {
       if (rmFilter && rmFilter !== 'all' && rmFilter !== 'all_rms') {
@@ -272,12 +305,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     } else if (rmFilter && rmFilter !== 'all' && rmFilter !== 'all_rms') {
       const canonicalReq = canonicalizePcgRmName(rmFilter);
+      const cleanRm = rmFilter.trim().toLowerCase();
       conditions.push(`(
         LOWER(TRIM(rm_name)) = LOWER(TRIM($${paramIdx}))
         OR LOWER(TRIM(rm_name)) = LOWER(TRIM($${paramIdx + 1}))
+        OR LOWER(TRIM(rm_name)) LIKE LOWER($${paramIdx + 2})
+        OR LOWER(TRIM(preceding_rm_name)) = LOWER(TRIM($${paramIdx}))
+        OR LOWER(TRIM(preceding_rm_name)) = LOWER(TRIM($${paramIdx + 1}))
       )`);
-      params.push(rmFilter, canonicalReq);
-      paramIdx += 2;
+      params.push(rmFilter, canonicalReq, `%${cleanRm}%`);
+      paramIdx += 3;
     } else if (effectiveTl && effectiveTl !== 'all') {
       const cleanTl = effectiveTl.replace(/^Team\s+/i, '').trim();
       conditions.push(`(

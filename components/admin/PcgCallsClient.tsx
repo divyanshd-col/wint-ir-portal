@@ -406,7 +406,15 @@ export default function PcgCallsClient() {
   const currentTlTeam = useMemo(() => {
     if (!activeTlName) return teamLeads[0] || null;
     const cleanTl = activeTlName.replace(/^Team\s+/i, '').trim().toLowerCase();
-    const found = teamLeads.find((t) => t.tlName.toLowerCase() === cleanTl || t.tlName.toLowerCase() === activeTlName.toLowerCase());
+    const found = teamLeads.find((t) => {
+      const tLower = t.tlName.toLowerCase().trim();
+      return (
+        tLower === cleanTl ||
+        cleanTl.includes(tLower) ||
+        tLower.includes(cleanTl) ||
+        t.tlName.toLowerCase() === activeTlName.toLowerCase()
+      );
+    });
     if (found) {
       const fallback = PCG_FALLBACK_TL_TEAMS[found.tlName] || PCG_FALLBACK_TL_TEAMS[cleanTl] || [];
       const combinedRms = Array.from(new Set([...found.rms, ...fallback])).sort((a, b) => a.localeCompare(b));
@@ -415,7 +423,8 @@ export default function PcgCallsClient() {
 
     // Fallback to static PCG_FALLBACK_TL_TEAMS so members are instantly available
     for (const [tl, rms] of Object.entries(PCG_FALLBACK_TL_TEAMS)) {
-      if (tl.toLowerCase() === cleanTl) {
+      const tlLower = tl.toLowerCase().trim();
+      if (tlLower === cleanTl || cleanTl.includes(tlLower) || tlLower.includes(cleanTl)) {
         return { tlName: tl, teamSize: rms.length, rms };
       }
     }
@@ -527,8 +536,16 @@ export default function PcgCallsClient() {
       if (activePersona === 'agent' && selectedRm) {
         p.set('rm_name', selectedRm);
       } else if (activePersona === 'tl') {
-        const tlQueryName = loggedInUserName || selectedTl;
-        if (tlQueryName) p.set('tl_name', tlQueryName);
+        const rawTl = loggedInUserName || selectedTl;
+        const cleanTl = rawTl.replace(/^Team\s+/i, '').trim();
+        const matchedTl = teamLeads.find((t) => {
+          const tLower = t.tlName.toLowerCase().trim();
+          const cLower = cleanTl.toLowerCase().trim();
+          return tLower === cLower || cLower.includes(tLower) || tLower.includes(cLower);
+        })?.tlName || (
+          ['swetha', 'swetha jayakumar'].some((s) => cleanTl.toLowerCase() === s) ? 'Swetha' : cleanTl
+        );
+        if (matchedTl) p.set('tl_name', matchedTl);
         if (selectedRmName !== 'all') p.set('rm_name', selectedRmName);
       } else if (activePersona === 'admin') {
         if (activeCohortToggle === 'rm') {
@@ -937,34 +954,8 @@ export default function PcgCallsClient() {
   const disputeRaisedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'pending');
   const disputeReviewedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'resolved' || c.disputeStatus === 'overridden');
 
-  // Filtered evaluated calls list based on Min and Max IQS filter
-  const displayedEvaluatedCalls = calls.filter((call) => {
-    if (!call.isAnswered) return false;
-    if (activePersona === 'agent' && selectedRm) {
-      if (!isSamePcgAgent(call.rmName, selectedRm)) return false;
-    }
-    if (activePersona === 'tl' && teamRms.length > 0) {
-      if (!teamRms.some((rm) => isSamePcgAgent(rm, call.rmName))) return false;
-    }
-    // Any excluded calls should show under the excluded category; otherwise by default it should only show valid calls
-    if (!['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)) {
-      if (call.isEvaluable === false || call.verdict === 'EXCLUDED_NON_CLIENT' || call.callNature === 'non_client') {
-        return false;
-      }
-    }
-    if (minIqsFilter.trim() !== '' && minIqsFilter !== 'all') {
-      const minVal = parseFloat(minIqsFilter);
-      if (!isNaN(minVal) && (call.iqsScore == null || call.iqsScore < minVal)) return false;
-    }
-    if (maxIqsFilter.trim() !== '' && maxIqsFilter !== 'all') {
-      const maxVal = parseFloat(maxIqsFilter);
-      if (!isNaN(maxVal) && (call.iqsScore == null || call.iqsScore > maxVal)) return false;
-    }
-    if (selectedCategory === 'sop_breached') {
-      if (!call.sopTriggers || call.sopTriggers.length === 0) return false;
-    }
-    return true;
-  });
+  // Evaluated calls list for current page (server-filtered and paginated)
+  const displayedEvaluatedCalls = calls || [];
 
   // RM Scorecard lookups & real computed metrics for RM view
   // Metrics represent the selected date range & scope — NEVER the paginated table slice!
@@ -1092,7 +1083,10 @@ export default function PcgCallsClient() {
 
   const allKnownRms: string[] = useMemo(() => {
     const set = new Set<string>();
-    teamLeads.forEach((t) => t.rms.forEach((r: string) => set.add(r)));
+    teamLeads.forEach((t) => {
+      if (t.tlName) set.add(t.tlName);
+      (t.rms || []).forEach((r: string) => set.add(r));
+    });
     rms.forEach((r) => set.add(r.name));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [teamLeads, rms]);
@@ -1785,6 +1779,7 @@ export default function PcgCallsClient() {
                 selectedRm={selectedRm}
                 onSelectRm={(rm) => setSelectedRm(rm)}
                 availableRms={activePersona === 'admin' ? allKnownRms : activePersona === 'tl' ? teamRms : [selectedRm]}
+                allTlNames={teamLeads.map((t) => t.tlName)}
                 calls={calls}
                 activePersona={activePersona}
                 rmScorecards={rmScorecards}

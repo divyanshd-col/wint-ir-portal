@@ -765,10 +765,21 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     if (tlFilter && tlFilter !== 'all') {
       const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
-      const matchedTlKey = allTlNames.find((t) => t.toLowerCase() === cleanTl);
+      const matchedTlKey = allTlNames.find((t) => {
+        const tLower = t.toLowerCase().trim();
+        return (
+          tLower === cleanTl ||
+          cleanTl.includes(tLower) ||
+          tLower.includes(cleanTl) ||
+          canonicalizePcgRmName(t).toLowerCase() === canonicalizePcgRmName(cleanTl).toLowerCase()
+        );
+      });
       const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
       const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
+        .filter(([_, tl]) => {
+          const tlLower = tl.toLowerCase().trim();
+          return tlLower === cleanTl || cleanTl.includes(tlLower) || tlLower.includes(cleanTl);
+        })
         .map(([rm]) => rm.toLowerCase());
       const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
 
@@ -1262,10 +1273,21 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       );
     } else if (tlFilter && tlFilter !== 'all') {
       const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
-      const matchedTlKey = allTlNames.find((t) => t.toLowerCase() === cleanTl);
+      const matchedTlKey = allTlNames.find((t) => {
+        const tLower = t.toLowerCase().trim();
+        return (
+          tLower === cleanTl ||
+          cleanTl.includes(tLower) ||
+          tLower.includes(cleanTl) ||
+          canonicalizePcgRmName(t).toLowerCase() === canonicalizePcgRmName(cleanTl).toLowerCase()
+        );
+      });
       const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
       const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
+        .filter(([_, tl]) => {
+          const tlLower = tl.toLowerCase().trim();
+          return tlLower === cleanTl || cleanTl.includes(tlLower) || tlLower.includes(cleanTl);
+        })
         .map(([rm]) => rm.toLowerCase());
       const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
 
@@ -1499,13 +1521,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       const cleanLower = canonicalName.toLowerCase();
       const rawLower = (r.rm_name || '').toLowerCase();
 
-      // Skip non-RMs (Admins, Team Leads, QA users, Unknown)
-      if (
-        nonRmNames.has(cleanLower) ||
-        nonRmNames.has(rawLower) ||
+      // Skip non-members (Admins, QA system accounts, Unknown)
+      const isExcludedNonMember =
         cleanLower.includes('admin') ||
-        cleanLower === 'unknown rm'
-      ) {
+        cleanLower.includes('test-') ||
+        cleanLower === 'unknown rm' ||
+        cleanLower === 'unknown' ||
+        ['aahan thaker', 'aahan', 'gokul', 'gokul_admin'].includes(cleanLower);
+
+      if (isExcludedNonMember) {
         continue;
       }
 
