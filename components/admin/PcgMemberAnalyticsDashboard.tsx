@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
-import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
+import { isSamePcgAgent, canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
 
 export type Period = '7' | '30' | 'custom';
 
@@ -13,6 +13,7 @@ export interface PcgMemberAnalyticsProps {
   selectedRm: string;
   onSelectRm: (rm: string) => void;
   availableRms: string[];
+  allTlNames?: string[];
   calls?: Array<{
     id: string;
     rmName: string;
@@ -89,6 +90,7 @@ export default function PcgMemberAnalyticsDashboard({
   selectedRm,
   onSelectRm,
   availableRms,
+  allTlNames = [],
   calls = [],
   activePersona = 'tl',
   rmScorecards = [],
@@ -105,9 +107,8 @@ export default function PcgMemberAnalyticsDashboard({
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
-  const [showAgentDrop, setShowAgentDrop] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [agentSearch, setAgentSearch] = useState('');
-  const agentDropRef = useRef<HTMLDivElement>(null);
 
   // Sync internal period with external dateRange prop when it changes
   useEffect(() => {
@@ -121,21 +122,71 @@ export default function PcgMemberAnalyticsDashboard({
   const [wowCategory, setWowCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support'>('all');
 
   const effectiveRm = useMemo(() => {
-    if (selectedRm && availableRms.some((r) => isSamePcgAgent(r, selectedRm))) {
+    if (
+      selectedRm &&
+      (availableRms.some((r) => isSamePcgAgent(r, selectedRm)) ||
+        (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, selectedRm))))
+    ) {
       return selectedRm;
     }
     return availableRms[0] || selectedRm || '';
-  }, [selectedRm, availableRms]);
+  }, [selectedRm, availableRms, allTlNames]);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (agentDropRef.current && !agentDropRef.current.contains(e.target as Node)) {
-        setShowAgentDrop(false);
+    if (effectiveRm) {
+      setAgentSearch(effectiveRm);
+    }
+  }, [effectiveRm]);
+
+  const isCurrentTl = useMemo(() => {
+    return (
+      (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, effectiveRm))) ||
+      (teamLeads && teamLeads.some((tl) => isSamePcgAgent(tl.tlName, effectiveRm))) ||
+      ['swetha', 'saiyam', 'dheeraj', 'sravanthi', 'tanisha'].some((tl) =>
+        effectiveRm.toLowerCase().includes(tl)
+      )
+    );
+  }, [allTlNames, teamLeads, effectiveRm]);
+
+  const allSelectableMembers = useMemo(() => {
+    const list: Array<{ name: string; isTl: boolean; teamName: string }> = [];
+    const seen = new Set<string>();
+
+    // 1. Team Leads (for Admin view, or if allTlNames is passed)
+    if (activePersona === 'admin') {
+      const knownTls = (allTlNames && allTlNames.length > 0)
+        ? allTlNames
+        : (teamLeads && teamLeads.length > 0 ? teamLeads.map(t => t.tlName) : ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani', 'Sravanthi']);
+
+      knownTls.forEach((tl) => {
+        const lower = tl.toLowerCase().trim();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          list.push({ name: tl, isTl: true, teamName: 'Team Lead' });
+        }
+      });
+    }
+
+    // 2. Relationship Managers
+    availableRms.forEach((rm) => {
+      const lower = rm.toLowerCase().trim();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        const isTl = (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, rm))) ||
+          (teamLeads && teamLeads.some((tl) => isSamePcgAgent(tl.tlName, rm)));
+        const foundTl = teamLeads.find((t) => (t.rms || []).some((r: string) => isSamePcgAgent(r, rm)));
+        list.push({
+          name: rm,
+          isTl,
+          teamName: isTl ? 'Team Lead' : (foundTl ? `Team ${foundTl.tlName}` : 'PCG RM'),
+        });
       }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    });
+
+    return list;
+  }, [activePersona, allTlNames, teamLeads, availableRms]);
+
+
 
   const handlePeriod = (p: Period) => {
     if (p === 'custom') {
@@ -179,6 +230,9 @@ export default function PcgMemberAnalyticsDashboard({
     const params = new URLSearchParams();
     params.set('rm', effectiveRm);
     params.set('limit', '500');
+    if (isCurrentTl) {
+      params.set('caller_role', 'tl');
+    }
     if (activePersona) params.set('persona', activePersona);
     if (tlName && activePersona !== 'admin') params.set('tl', tlName);
 
@@ -193,7 +247,7 @@ export default function PcgMemberAnalyticsDashboard({
       .finally(() => {
         setLoadingChats(false);
       });
-  }, [effectiveRm, activePersona, tlName]);
+  }, [effectiveRm, activePersona, tlName, isCurrentTl]);
 
   const filteredChats = useMemo(() => {
     if (!chats || chats.length === 0) return [];
@@ -258,7 +312,7 @@ export default function PcgMemberAnalyticsDashboard({
     filteredChats.forEach(chat => {
       let params = chat.parameters;
       if (typeof params === 'string') {
-        try { params = JSON.parse(params); } catch {}
+        try { params = JSON.parse(params); } catch { }
       }
       if (!params || typeof params !== 'object') return;
 
@@ -477,197 +531,136 @@ export default function PcgMemberAnalyticsDashboard({
             {activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}
           </h1>
 
-          {/* Viewing Dropdown */}
-          <div ref={agentDropRef} style={{ position: 'relative' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)' }}>
-              <span>Viewing:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (activePersona !== 'agent') setShowAgentDrop(p => !p);
-                }}
-                disabled={activePersona === 'agent'}
-                style={{
-                  height: 32,
-                  padding: '0 12px',
-                  background: 'var(--qa-card, #ffffff)',
-                  border: '1px solid var(--qa-border, #E4E4E7)',
-                  borderRadius: 8,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: 'var(--qa-text, #111111)',
-                  cursor: activePersona === 'agent' ? 'default' : 'pointer',
-                  fontFamily: 'inherit',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                }}
-              >
-                <span>{effectiveRm}</span>
-                {activePersona !== 'agent' && (
-                  <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 10 }}>▾</span>
-                )}
-              </button>
-            </div>
-
-            {/* Dropdown Menu */}
-            {showAgentDrop && activePersona !== 'agent' && (
+          {/* Member Search Bar (Replaces Dropdown Toggle) */}
+          {activePersona !== 'agent' ? (
+            <div style={{ position: 'relative', width: 340 }}>
               <div
                 style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 6px)',
-                  left: 0,
-                  zIndex: 50,
+                  display: 'flex',
+                  alignItems: 'center',
                   background: 'var(--qa-card, #ffffff)',
-                  border: '1px solid var(--qa-border, #E4E4E7)',
-                  borderRadius: 10,
-                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
-                  minWidth: 280,
-                  maxHeight: 'min(420px, calc(100vh - 220px))',
-                  overflowY: 'auto',
-                  overflowX: 'hidden',
-                  overscrollBehavior: 'contain',
+                  border: isSearchFocused ? '1px solid #10b981' : '1px solid var(--qa-border, #E4E4E7)',
+                  borderRadius: 8,
+                  padding: '0 10px',
+                  height: 36,
+                  gap: 8,
+                  boxShadow: isSearchFocused ? '0 0 0 2px rgba(16, 185, 129, 0.15)' : '0 1px 2px rgba(0,0,0,0.03)',
+                  transition: 'all 0.15s ease',
                 }}
               >
-                {/* Search Agent in Dropdown */}
-                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', background: 'var(--dk-bg-fafafb, #FAFAFB)', position: 'sticky', top: 0, zIndex: 10 }}>
-                  <input
-                    type="text"
-                    value={agentSearch}
-                    onChange={(e) => setAgentSearch(e.target.value)}
-                    placeholder={activePersona === 'tl' ? 'Search team member...' : 'Search agent across teams...'}
-                    style={{
-                      width: '100%',
-                      height: 28,
-                      padding: '0 8px',
-                      fontSize: 12,
-                      border: '1px solid var(--qa-border, #E4E4E7)',
-                      borderRadius: 6,
-                      outline: 'none',
-                      background: 'var(--dk-bg-ffffff, #ffffff)',
-                      boxSizing: 'border-box',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-
-                {/* Team Groups */}
-                {(() => {
-                  const groups: { teamName: string; agents: string[] }[] = [];
-
-                  if (activePersona === 'tl') {
-                    // For TL, strictly show ONLY this TL's team members
-                    const teamTitle = tlName ? `Team ${tlName}` : 'My Team';
-                    groups.push({ teamName: teamTitle, agents: availableRms });
-                  } else if (activePersona === 'admin') {
-                    if (teamLeads && teamLeads.length > 0) {
-                      teamLeads.forEach((tl) => {
-                        groups.push({ teamName: `Team ${tl.tlName}`, agents: tl.rms });
-                      });
-                    } else {
-                      groups.push({ teamName: 'All PCG Agents', agents: availableRms });
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ color: 'var(--qa-text-3, #A1A1AA)', flexShrink: 0 }}
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  value={agentSearch}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => {
+                    setIsSearchFocused(false);
+                    const s = agentSearch.trim().toLowerCase();
+                    if (s) {
+                      const match = allSelectableMembers.find(
+                        (m) => m.name.toLowerCase() === s || isSamePcgAgent(m.name, s) || m.name.toLowerCase().includes(s)
+                      );
+                      if (match) {
+                        onSelectRm(match.name);
+                        setAgentSearch(match.name);
+                      }
                     }
-                  } else {
-                    // Agent
-                    groups.push({ teamName: 'My Profile', agents: [effectiveRm] });
-                  }
-
-                  const s = agentSearch.trim().toLowerCase();
-
-                  return groups.map((g) => {
-                    const filteredAgents = g.agents.filter(a => !s || a.toLowerCase().includes(s));
-                    if (filteredAgents.length === 0) return null;
-
-                    return (
-                      <div key={g.teamName}>
-                        <div
-                          style={{
-                            padding: '6px 12px',
-                            fontSize: 10,
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            color: 'var(--dk-fg-71717a, #71717A)',
-                            background: 'var(--dk-bg-f4f4f5, #F4F4F5)',
-                            borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                          }}
-                        >
-                          <span>{g.teamName}</span>
-                          <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--dk-fg-a1a1aa, #A1A1AA)' }}>
-                            {filteredAgents.length} Agents
-                          </span>
-                        </div>
-                        {filteredAgents.map(a => (
-                          <button
-                            key={a}
-                            type="button"
-                            onClick={() => {
-                              onSelectRm(a);
-                              setShowAgentDrop(false);
-                              setAgentSearch('');
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              width: '100%',
-                              padding: '8px 12px',
-                              background: a.toLowerCase() === effectiveRm.toLowerCase() ? 'var(--qa-fill-light, #F4F4F5)' : 'transparent',
-                              border: 0,
-                              borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
-                              cursor: 'pointer',
-                              fontSize: 13,
-                              color: 'var(--qa-text, #111111)',
-                              fontFamily: 'inherit',
-                              textAlign: 'left',
-                              fontWeight: a.toLowerCase() === effectiveRm.toLowerCase() ? 600 : 400,
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span
-                                style={{
-                                  width: 26,
-                                  height: 26,
-                                  borderRadius: '50%',
-                                  background: a.toLowerCase() === effectiveRm.toLowerCase() ? '#18181b' : 'var(--qa-fill-med, #E4E4E7)',
-                                  color: a.toLowerCase() === effectiveRm.toLowerCase() ? '#ffffff' : 'var(--qa-text-2, #6B6B6B)',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {agentInitials(a)}
-                              </span>
-                              <span>{a}</span>
-                            </div>
-                            <span
-                              style={{
-                                fontSize: 10,
-                                padding: '2px 6px',
-                                borderRadius: 4,
-                                background: 'var(--dk-bg-e4e4e7, #E4E4E7)',
-                                color: 'var(--dk-fg-52525b, #52525B)',
-                                fontWeight: 500,
-                              }}
-                            >
-                              {g.teamName.replace(/^Team\s+/i, '')}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  });
-                })()}
+                  }}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAgentSearch(val);
+                    const s = val.trim().toLowerCase();
+                    if (s) {
+                      const exact = allSelectableMembers.find(
+                        (m) => m.name.toLowerCase() === s || isSamePcgAgent(m.name, s)
+                      );
+                      if (exact) {
+                        onSelectRm(exact.name);
+                      }
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const s = agentSearch.trim().toLowerCase();
+                      const match = allSelectableMembers.find(
+                        (m) => m.name.toLowerCase() === s || isSamePcgAgent(m.name, s) || m.name.toLowerCase().includes(s)
+                      );
+                      if (match) {
+                        onSelectRm(match.name);
+                        setAgentSearch(match.name);
+                      }
+                    }
+                  }}
+                  placeholder={activePersona === 'admin' ? 'Search RM or TL name...' : 'Search team member...'}
+                  style={{
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--qa-text, #111111)',
+                    width: '100%',
+                    fontFamily: 'inherit',
+                  }}
+                />
+                {agentSearch && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAgentSearch('');
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--qa-text-3, #A1A1AA)',
+                      cursor: 'pointer',
+                      padding: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 12,
+                      lineHeight: 1,
+                    }}
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+                {/* Role indicator badge */}
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: isCurrentTl ? '#FEF3C7' : 'var(--qa-fill-light, #F4F4F5)',
+                    color: isCurrentTl ? '#92400E' : 'var(--qa-text-2, #52525B)',
+                    border: isCurrentTl ? '1px solid #FDE68A' : '1px solid var(--qa-border, #E4E4E7)',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {isCurrentTl ? 'Team Lead' : 'RM'}
+                </span>
               </div>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Time Range Switcher */}
