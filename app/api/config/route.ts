@@ -5,6 +5,7 @@ import { authOptions } from '@/auth';
 import bcrypt from 'bcryptjs';
 import { parseQualityThresholds } from '@/lib/quality-thresholds';
 import { parseDisputeOwner } from '@/lib/dispute-owner';
+import { CX_INBOX_SHARE_LIMIT, cxShareOfInbox, parsePcgEmailInboxes, pcgInboxesOf } from '@/lib/email/inbox';
 import { parsePromptFields, workspaceAccess, outputFormatIntact } from '@/lib/prompt-overrides';
 import { LOCKED_OUTPUT_DEFAULTS } from '@/lib/prompt-defaults';
 import { diffTrackedSettings } from '@/lib/settings-history-keys';
@@ -69,6 +70,23 @@ export async function PATCH(req: NextRequest) {
   // Settings → Quality Thresholds / Scoring Rubric: validate before anything is saved.
   const thresholds = body.qualityThresholds !== undefined ? parseQualityThresholds(body.qualityThresholds) : null;
   if (thresholds && !thresholds.ok) return NextResponse.json({ error: thresholds.error }, { status: 400 });
+  // Settings → PCG → Email Inbox. Only a PCG admin; and refuse an inbox that carries most of the CX email traffic, which would
+  // move every CX email out of CX.
+  if (body.pcgEmailInboxes !== undefined && !workspaceAccess(adminSession.user).pcg) {
+    return NextResponse.json({ error: 'Not allowed to edit PCG settings' }, { status: 403 });
+  }
+  const inboxes = body.pcgEmailInboxes !== undefined ? parsePcgEmailInboxes(body.pcgEmailInboxes) : null;
+  if (inboxes && !inboxes.ok) return NextResponse.json({ error: inboxes.error }, { status: 400 });
+  if (inboxes?.ok) {
+    const had = new Set(pcgInboxesOf(config));
+    for (const inbox of inboxes.value.filter(i => !had.has(i))) {
+      const share = await cxShareOfInbox(inbox).catch(() => null);
+      if (share === null) return NextResponse.json({ error: 'Could not check this inbox against recent CX email traffic. Please try again.' }, { status: 500 });
+      if (share >= CX_INBOX_SHARE_LIMIT) {
+        return NextResponse.json({ error: `${inbox} carries ${Math.round(share * 100)}% of the CX emails from the last 7 days. Routing it to PCG would move CX emails out of CX, so it was not saved.` }, { status: 400 });
+      }
+    }
+  }
   const owner = body.disputeOwner !== undefined ? parseDisputeOwner(body.disputeOwner) : null;
   if (owner && !owner.ok) return NextResponse.json({ error: owner.error }, { status: 400 });
   const rubric = body.emailRubric !== undefined ? parseEmailRubric(body.emailRubric) : null;
@@ -96,6 +114,7 @@ export async function PATCH(req: NextRequest) {
     ...prompts.value,
     ...(thresholds?.ok && { qualityThresholds: thresholds.value }),
     ...(owner?.ok && { disputeOwner: owner.value }),
+    ...(inboxes?.ok && { pcgEmailInboxes: inboxes.value }),
     ...(rubric?.ok && { emailRubric: rubric.value }),
   };
 

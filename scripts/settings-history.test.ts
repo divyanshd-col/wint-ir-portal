@@ -14,7 +14,7 @@ test('every editable prompt is tracked, in the same workspace', () => {
 });
 
 test('history is split by workspace', () => {
-  assert.deepEqual(trackedKeysFor('pcg').sort(), ['pcgClassificationPrompt', 'pcgQualityPrompt']);
+  assert.deepEqual(trackedKeysFor('pcg').sort(), ['pcgClassificationPrompt', 'pcgEmailInboxes', 'pcgQualityPrompt']);
   assert.ok(!trackedKeysFor('cx').some(k => k.startsWith('pcg')));
   assert.ok(trackedKeysFor('cx').includes('callGatesPrompt'));
 });
