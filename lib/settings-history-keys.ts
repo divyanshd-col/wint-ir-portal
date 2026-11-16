@@ -7,6 +7,7 @@ import { MAX_PROMPT_CHARS, type Workspace } from './prompt-overrides';
 import { parseEmailRubric } from './email/context-builder';
 import { DEFAULT_QUALITY_THRESHOLDS, parseQualityThresholds } from './quality-thresholds';
 import { parseDisputeOwner } from './dispute-owner';
+import { DEFAULT_PCG_EMAIL_INBOXES, parsePcgEmailInboxes, pcgInboxesOf } from './email/inbox';
 
 export const TRACKED_SETTINGS = {
   systemPrompt:            { label: 'Chat Assistant prompt',          workspace: 'cx' },
@@ -18,6 +19,7 @@ export const TRACKED_SETTINGS = {
   emailRubric:             { label: 'Email scoring rubric',           workspace: 'cx' },
   qualityThresholds:       { label: 'Quality thresholds',             workspace: 'cx' },
   disputeOwner:            { label: 'Dispute owner (QA or TL)',       workspace: 'cx' },
+  pcgEmailInboxes:         { label: 'PCG: Email inboxes',             workspace: 'pcg' },
   pcgQualityPrompt:        { label: 'PCG: Quality prompt',            workspace: 'pcg' },
   pcgClassificationPrompt: { label: 'PCG: Classification prompt',     workspace: 'pcg' },
 } as const satisfies Record<string, { label: string; workspace: Workspace }>;
@@ -42,6 +44,11 @@ function canon(v: unknown): string {
 /** A stored config value as history sees it: blank text, an empty rubric and default thresholds all count as "default" (null). */
 export function normalizeSettingValue(key: TrackedKey, raw: unknown): SettingValue {
   if (key === 'emailRubric') return raw && typeof raw === 'object' && Object.keys(raw as object).length ? (raw as Record<string, unknown>) : null;
+  if (key === 'pcgEmailInboxes') {
+    // Nothing saved and the built-in default list are the same thing (null); a saved empty list is "none".
+    const list = pcgInboxesOf({ pcgEmailInboxes: raw }).sort();
+    return canon(list) === canon([...DEFAULT_PCG_EMAIL_INBOXES].sort()) ? null : list.length ? list.join(', ') : '(none)';
+  }
   if (key === 'disputeOwner') return raw === 'tl' ? 'tl' : null; // 'qa' and nothing saved are the same: the default
   if (key === 'qualityThresholds') {
     if (!raw || typeof raw !== 'object') return null;
@@ -67,6 +74,11 @@ export function restoreToConfigPatch(key: TrackedKey, value: SettingValue): { ok
     if (value === null) return { ok: true, patch: { emailRubric: {} } };
     const r = parseEmailRubric(value);
     return r.ok ? { ok: true, patch: { emailRubric: r.value } } : { ok: false, error: r.error };
+  }
+  if (key === 'pcgEmailInboxes') {
+    if (value === null) return { ok: true, patch: { pcgEmailInboxes: undefined } };   // back to the built-in default
+    const r = parsePcgEmailInboxes(typeof value === 'string' && value !== '(none)' ? value : '');
+    return r.ok ? { ok: true, patch: { pcgEmailInboxes: r.value } } : { ok: false, error: r.error };
   }
   if (key === 'disputeOwner') {
     const r = parseDisputeOwner(value ?? 'qa');

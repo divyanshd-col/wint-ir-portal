@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_QUALITY_THRESHOLDS } from '@/lib/quality-thresholds';
 import { resolveEmailParameters } from '@/lib/email/context-builder';
+import { pcgInboxesOf } from '@/lib/email/inbox';
 import { visiblePromptFields } from '@/lib/prompt-overrides';
 import { PROMPT_DEFAULTS } from '@/lib/prompt-defaults';
 
@@ -65,6 +66,7 @@ export default async function SettingsPageContent({ inModal = false }: { inModal
     hasSlackToken: !!config.slackUserToken,
     qualityAlertSheetUrl: config.qualityAlertSheetUrl || '',
     hasPyannoteKey: !!config.pyannoteApiKey,
+    ...(activeDomain === 'pcg' && { pcgEmailInboxes: pcgInboxesOf(config) }),
     ...(activeDomain !== 'pcg' && {
       qualityThresholds: { ...DEFAULT_QUALITY_THRESHOLDS, ...config.qualityThresholds },
       disputeOwner: (config.disputeOwner === 'tl' ? 'tl' : 'qa') as 'qa' | 'tl',
