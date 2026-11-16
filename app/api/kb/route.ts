@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash, timingSafeEqual } from 'crypto';
 import { readConfig } from '@/lib/config';
-import { fetchGoogleDoc } from '@/lib/drive';
+import { fetchGoogleDoc, fetchFileLastEdit } from '@/lib/drive';
 
 // A cold call reads every KB Google Doc.
 export const maxDuration = 60;
@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 
 const sha = (s: string) => createHash('sha256').update(s).digest();
 
-interface KbDoc { fileId: string; fileName: string; text: string }
+type LastEdit = Awaited<ReturnType<typeof fetchFileLastEdit>>;
+interface KbDoc extends LastEdit { fileId: string; fileName: string; text: string }
 // ponytail: per-instance memory cache; each serverless instance fetches once per TTL. Move to the KV store if cold calls get too frequent.
 const TTL = 15 * 60 * 1000;
 let cache: { at: number; urls: string; docs: KbDoc[] } | null = null;
@@ -18,7 +19,9 @@ let cache: { at: number; urls: string; docs: KbDoc[] } | null = null;
  * GET /api/kb
  *
  * The CX knowledge base as the full text of every document, exactly as exported from Google Docs:
- *   { generatedAt, docCount, docs: [{ fileId, fileName, text }], errors?: [{ fileId, error }] }
+ *   { generatedAt, docCount, docs: [{ fileId, fileName, text, modifiedTime, lastModifyingUser }], errors?: [{ fileId, error }] }
+ * `modifiedTime` and `lastModifyingUser: { displayName, emailAddress }` are Google Drive's own values for the last edit (null if Drive
+ * will not share them for that document); only the latest editor is available, not a history.
  * `fileId` is the document URL saved in the portal settings. PCG's private AIF / MLD files are not included.
  * Documents that cannot be read are listed in `errors` instead of failing the whole call (and that result is not cached).
  *
@@ -42,10 +45,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (cache && cache.urls === key && Date.now() - cache.at < TTL) {
     docs = cache.docs;
   } else {
-    const results = await Promise.allSettled(urls.map(u => fetchGoogleDoc(u)));
+    const results = await Promise.allSettled(urls.map(async u => {
+      const [doc, edit] = await Promise.all([fetchGoogleDoc(u), fetchFileLastEdit(u)]);
+      return { doc, edit };
+    }));
     docs = [];
     results.forEach((r, i) => {
-      if (r.status === 'fulfilled') docs.push({ fileId: urls[i], fileName: r.value.name, text: r.value.text });
+      if (r.status === 'fulfilled') docs.push({ fileId: urls[i], fileName: r.value.doc.name, text: r.value.doc.text, ...r.value.edit });
       else errors.push({ fileId: urls[i], error: String(r.reason?.message ?? r.reason).slice(0, 200) });
     });
     if (docs.length === 0 && urls.length > 0) {

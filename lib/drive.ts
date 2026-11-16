@@ -59,6 +59,25 @@ export async function fetchFileNameFromDrive(id: string): Promise<string> {
 }
 
 
+/** Who last edited a Drive file and when, exactly as Google reports it. Nulls when the file cannot be read. */
+export async function fetchFileLastEdit(url: string): Promise<{ modifiedTime: string | null; lastModifyingUser: { displayName: string | null; emailAddress: string | null } | null }> {
+  const none = { modifiedTime: null, lastModifyingUser: null };
+  const id = extractIds(url).id;
+  const drive = id ? getDriveClient() : null;
+  if (!id || !drive) return none;
+  try {
+    const res = await drive.files.get({ fileId: id, fields: 'modifiedTime,lastModifyingUser(displayName,emailAddress)', supportsAllDrives: true });
+    const u = res.data.lastModifyingUser;
+    return {
+      modifiedTime: res.data.modifiedTime ?? null,
+      lastModifyingUser: u ? { displayName: u.displayName ?? null, emailAddress: u.emailAddress ?? null } : null,
+    };
+  } catch (err: any) {
+    console.error(`[drive] Failed to fetch last edit for file ${id}:`, err?.message ?? err);
+    return none;
+  }
+}
+
 async function fetchWithTimeout(url: string, ms = 10000): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
