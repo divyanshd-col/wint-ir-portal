@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
-import { runPcgCallPipeline, resolvePcgAgent, PCG_QUALITY_PARAMETERS } from '@/lib/scoring/pcg-pipeline';
+import { runPcgCallPipeline, resolvePcgAgent, resolvePcgAgentAsync, PCG_QUALITY_PARAMETERS } from '@/lib/scoring/pcg-pipeline';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max duration on Vercel
@@ -26,7 +26,7 @@ async function syncShortCalls(fromDate: string, minDuration: number) {
   const emptyParamsJson = JSON.stringify(emptyParams);
 
   for (const c of shortCalls) {
-    const { rm, tl } = resolvePcgAgent(c.called_by || c.agent_name || c);
+    const { rm, tl } = await resolvePcgAgentAsync(c.called_by || c.agent_name || c);
     await query(`
       INSERT INTO pcg_call_evaluations (
         call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,

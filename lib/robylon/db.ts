@@ -1454,47 +1454,51 @@ export interface RobylonWebhookPayloadRecord {
 }
 
 /**
- * Stores incoming webhook payloads as-is into `robylon_webhook_payloads`.
- * Catches and logs errors so that failure to log never interrupts webhook processing.
+ * Stores an incoming webhook payload as-is in `robylon_webhook_payloads`.
  *
- * NOTE: Any PCG sources ('doubletick', 'runo') are automatically routed to
- * the dedicated `pcg_webhook_payloads` table.
+ * Robylon's delivery rules (Hriday, Robylon, Nov 2026): a delivery that gets a non-2xx, cannot connect, or takes longer than
+ * 10 seconds is retried up to 5 more times (5, 10, 20, 40, 45 s apart; about 2 minutes in all), then dropped for good.
+ * Every retry carries the same event_id. So:
+ *  - a failed write THROWS, and the webhook route must answer 5xx so Robylon retries. (It used to be swallowed and answered 200,
+ *    which made Robylon treat the event as delivered: the main source of missing email events.)
+ *  - an event_id already stored for this source is not stored again: returns 'duplicate' (a retry of a delivery we already have,
+ *    e.g. when our first reply took longer than 10 s).
+ *
+ * PCG sources ('doubletick', 'runo') are routed to `pcg_webhook_payloads` as before.
  */
-export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRecord): Promise<void> {
+export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRecord): Promise<'stored' | 'duplicate'> {
   // Defensive routing: ensure PCG payloads always go to pcg_webhook_payloads
   if (record.source === 'doubletick' || record.source === 'runo') {
-    try {
-      const { savePcgWebhookPayload } = await import('@/lib/pcg/db');
-      await savePcgWebhookPayload({
-        source: record.source,
-        channel: record.source === 'doubletick' ? 'whatsapp' : 'call',
-        eventType: record.eventType,
-        eventId: record.eventId,
-        chatId: record.chatId,
-        payload: record.payload,
-        headers: record.headers,
-      });
-      return;
-    } catch (err: any) {
-      console.error('[db] Failed to route PCG webhook payload to pcg_webhook_payloads:', err?.message || err);
-      return;
-    }
+    const { savePcgWebhookPayload } = await import('@/lib/pcg/db');
+    await savePcgWebhookPayload({            // throws on failure, like the insert below
+      source: record.source,
+      channel: record.source === 'doubletick' ? 'whatsapp' : 'call',
+      eventType: record.eventType,
+      eventId: record.eventId,
+      chatId: record.chatId,
+      payload: record.payload,
+      headers: record.headers,
+    });
+    return 'stored';
   }
 
-  try {
-    await query(
-      `INSERT INTO robylon_webhook_payloads (source, event_type, event_id, chat_id, payload, headers)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        record.source || 'chat',
-        record.eventType ?? null,
-        record.eventId ?? null,
-        record.chatId ?? null,
-        JSON.stringify(record.payload),
-        record.headers ? JSON.stringify(record.headers) : null,
-      ]
-    );
-  } catch (err: any) {
-    console.error('[db] Failed to save webhook payload:', err.message);
-  }
+  const source = record.source || 'chat';
+  // ponytail: check-then-insert, so two deliveries of one event arriving in the same instant can both land; a unique index on
+  // (source, event_id) would close that, add it if duplicates ever show up.
+  const rows = await query<{ id: number }>(
+    `INSERT INTO robylon_webhook_payloads (source, event_type, event_id, chat_id, payload, headers)
+     SELECT $1::text, $2::text, $3::text, $4::text, $5::jsonb, $6::jsonb
+     WHERE $3::text IS NULL
+        OR NOT EXISTS (SELECT 1 FROM robylon_webhook_payloads WHERE event_id = $3::text AND source = $1::text)
+     RETURNING id`,
+    [
+      source,
+      record.eventType ?? null,
+      record.eventId ?? null,
+      record.chatId ?? null,
+      JSON.stringify(record.payload),
+      record.headers ? JSON.stringify(record.headers) : null,
+    ]
+  );
+  return rows.length ? 'stored' : 'duplicate';
 }

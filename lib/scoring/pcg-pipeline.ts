@@ -32,6 +32,18 @@ export const PCG_QUALITY_PARAMETERS = [
 ];
 
 import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
+import {
+  detectPcgSopTriggers,
+  savePcgSopTriggers,
+  sendPcgSopSlackAlert,
+  updatePcgSopSlackStatus,
+  getPcgSopSlackChannel,
+  PcgSopTrigger,
+} from '@/lib/pcg/sop-alert';
+import {
+  resolvePcgAgentFromDirectory,
+  resolvePcgAgentSync,
+} from '@/lib/pcg/rm-directory';
 
 // ── Known RM to Team Lead Mappings (Default fallbacks) ─────────────────────────
 const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
@@ -47,15 +59,19 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   'harshita dhona': { rm: 'Harshita Dhona', tl: 'Team Tanisha Mittal' },
   'keshvi suresh thacker': { rm: 'Keshvi Suresh Thacker', tl: 'Team Tanisha Mittal' },
   'nischay manish jain': { rm: 'Nischay Manish Jain', tl: 'Team Tanisha Mittal' },
+  'tanisha mittal': { rm: 'Tanisha Mittal', tl: 'Team Tanisha Mittal' },
+  'tanisha': { rm: 'Tanisha Mittal', tl: 'Team Tanisha Mittal' },
 
   // Team Dheeraj Bhojwani
   'ramita kapoor': { rm: 'Ramita Kapoor', tl: 'Team Dheeraj Bhojwani' },
-  'shrey jain': { rm: 'Shrey jain', tl: 'Team Dheeraj Bhojwani' },
+  'shrey jain': { rm: 'Shrey Jain', tl: 'Team Dheeraj Bhojwani' },
   'ishaan kapoor': { rm: 'Ishaan Kapoor', tl: 'Team Dheeraj Bhojwani' },
   'yaashvi arora': { rm: 'Yaashvi Arora', tl: 'Team Dheeraj Bhojwani' },
   'paritosh ashiya': { rm: 'Paritosh Ashiya', tl: 'Team Dheeraj Bhojwani' },
   'shivam kumar baghel': { rm: 'Shivam Kumar Baghel', tl: 'Team Dheeraj Bhojwani' },
   'sargun singh': { rm: 'Sargun Singh', tl: 'Team Dheeraj Bhojwani' },
+  'dheeraj bhojwani': { rm: 'Dheeraj Bhojwani', tl: 'Team Dheeraj Bhojwani' },
+  'dheeraj': { rm: 'Dheeraj Bhojwani', tl: 'Team Dheeraj Bhojwani' },
 
   // Team Swetha
   'sujal dadwani': { rm: 'Sujal Dadwani', tl: 'Team Swetha' },
@@ -68,6 +84,11 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   'suryansh sharma': { rm: 'Suryansh Sharma', tl: 'Team Swetha' },
   'ankita agarwal': { rm: 'Ankita Agarwal', tl: 'Team Swetha' },
   'vishyata tulsani': { rm: 'Vishyata Tulsani', tl: 'Team Swetha' },
+  'shreya premkumar mundada': { rm: 'Shreya Premkumar Mundada', tl: 'Team Swetha' },
+  'shreya mundada': { rm: 'Shreya Premkumar Mundada', tl: 'Team Swetha' },
+  'mishra richa santoshkumar': { rm: 'Mishra Richa Santoshkumar', tl: 'Team Swetha' },
+  'richa mishra': { rm: 'Mishra Richa Santoshkumar', tl: 'Team Swetha' },
+  'swetha': { rm: 'Swetha', tl: 'Team Swetha' },
 
   // Team Saiyam Rastogi
   'vishal kumar yadav': { rm: 'Vishal Kumar Yadav', tl: 'Team Saiyam Rastogi' },
@@ -81,15 +102,49 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   'mahi agarwal': { rm: 'Mahi Agarwal', tl: 'Team Saiyam Rastogi' },
   'nandini': { rm: 'Nandini', tl: 'Team Saiyam Rastogi' },
   'nandani': { rm: 'Nandini', tl: 'Team Saiyam Rastogi' },
+  'saiyam rastogi': { rm: 'Saiyam Rastogi', tl: 'Team Saiyam Rastogi' },
+  'saiyam': { rm: 'Saiyam Rastogi', tl: 'Team Saiyam Rastogi' },
+
+  // Team Sravanthi
+  'anurag negi': { rm: 'Anurag Negi', tl: 'Team Sravanthi' },
+  'mahek bihani': { rm: 'Mahek Bihani', tl: 'Team Sravanthi' },
+  'sravanthi': { rm: 'Sravanthi', tl: 'Team Sravanthi' },
+  'vidyul kapoor': { rm: 'Vidyul Kapoor', tl: 'Team Sravanthi' },
 
   // Admin / General
   'aahan thaker': { rm: 'Aahan Thaker', tl: 'Team Admin' },
   'aahan': { rm: 'Aahan Thaker', tl: 'Team Admin' },
   'aahan pcg': { rm: 'Aahan Thaker', tl: 'Team Admin' },
   'dhanush': { rm: 'Dhanush', tl: 'Team Admin' },
+  'sreeram': { rm: 'Sreeram', tl: 'Team Admin' },
+  'sreeram v': { rm: 'Sreeram', tl: 'Team Admin' },
+  'pranav sharma': { rm: 'Pranav Sharma', tl: 'Team Admin' },
+  'aboli jawkhedkar': { rm: 'Aboli Jawkhedkar', tl: 'Team Admin' },
 };
 
-export function resolvePcgAgent(rawAgentName: any, customTeamMap?: Record<string, string>): { rm: string; tl: string } {
+/**
+ * Asynchronously resolves RM and TL directly from dynamic pcg_rm_directory table.
+ */
+export async function resolvePcgAgentAsync(
+  rawAgentName: any,
+  customTeamMap?: Record<string, string>
+): Promise<{ rm: string; tl: string }> {
+  const res = await resolvePcgAgentFromDirectory(rawAgentName, customTeamMap);
+  return { rm: res.rm, tl: res.tl };
+}
+
+/**
+ * Synchronously resolves RM and TL using in-memory directory cache with static fallbacks.
+ */
+export function resolvePcgAgent(
+  rawAgentName: any,
+  customTeamMap?: Record<string, string>
+): { rm: string; tl: string } {
+  const dirRes = resolvePcgAgentSync(rawAgentName, customTeamMap);
+  if (dirRes.tl && dirRes.tl !== 'PCG Team') {
+    return { rm: dirRes.rm, tl: dirRes.tl };
+  }
+
   if (!rawAgentName) return { rm: 'Unassigned RM', tl: 'PCG Team' };
   const rawStr = typeof rawAgentName === 'object'
     ? (rawAgentName.called_by || rawAgentName.agent_name || '')
@@ -103,11 +158,11 @@ export function resolvePcgAgent(rawAgentName: any, customTeamMap?: Record<string
   }
 
   for (const [key, val] of Object.entries(PCG_RM_TL_MAP)) {
-    if (clean === key || clean.includes(key)) {
+    if (clean === key || clean.startsWith(key + ' ')) {
       return { rm: canonical, tl: val.tl };
     }
   }
-  return { rm: canonical, tl: 'PCG Team' };
+  return { rm: dirRes.rm || canonical, tl: dirRes.tl || 'PCG Team' };
 }
 
 // ── Detect MIME type from audio buffer or extension ─────────────────────────
@@ -362,7 +417,7 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
   const caller = (call.called_by && call.called_by.trim() && call.called_by.toLowerCase() !== 'unknown')
     ? call.called_by.trim()
     : (call.agent_name && call.agent_name.trim() && call.agent_name.toLowerCase() !== 'unknown' ? call.agent_name.trim() : 'Unassigned RM');
-  const { rm: resolvedRm, tl: resolvedTl } = resolvePcgAgent(caller);
+  const { rm: resolvedRm, tl: resolvedTl } = await resolvePcgAgentAsync(caller);
 
   // If call is unopened / zero duration, mark as NOT_SCOREABLE immediately
   if (!call.duration_seconds || call.duration_seconds < 15 || !call.recording_url) {
@@ -772,16 +827,22 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
   // 6c. Parse & Sanitize SOP Triggers (7 Communication & Conduct Monitoring Categories)
   const rawSopTriggers = Array.isArray(evalJson.sop_triggers) ? evalJson.sop_triggers : [];
   const validCategories = new Set([
+    'Customer Behaviour & Hostility',
+    'Guaranteed or Assured Returns',
+    'Unauthorized Advice & Mis-selling',
+    'Customer Churn & Capital Withdrawal Threat',
+    'Missed Commitment & Service Escalation',
+    'Confidentiality & Data Privacy Breach',
+    'Unprofessional Conduct & Communication Slips',
     'RM Communication & Tone',
     'Professional Boundary Monitoring',
     'Returns & Benefits Negotiation',
     'Out-of-Scope Queries',
     'Internal Tools Probing',
-    'Customer Behaviour & Hostility',
     'Business Information Probing',
   ]);
 
-  const sanitizedSopTriggers: SopTrigger[] = rawSopTriggers
+  const sanitizedSopTriggers: PcgSopTrigger[] = rawSopTriggers
     .filter((tr: any) => tr && typeof tr === 'object' && (tr.quote || tr.signal))
     .map((tr: any) => {
       const cat = String(tr.category || '').trim();
@@ -802,6 +863,10 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
         : undefined;
 
       return {
+        call_id: call.call_id,
+        rm_name: resolvedRm,
+        tl_name: resolvedTl,
+        customer_phone: call.phone_number,
         category,
         severity,
         direction,
@@ -811,6 +876,75 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
         quote: String(tr.quote || '').trim(),
       };
     });
+
+  // Also run deterministic and deep SOP behavioral tripwires
+  let detectedTriggers: PcgSopTrigger[] = [];
+  try {
+    detectedTriggers = await detectPcgSopTriggers(
+      transcriptTurns,
+      {
+        callId: call.call_id,
+        rmName: resolvedRm,
+        tlName: resolvedTl,
+        customerPhone: call.phone_number,
+        durationSeconds: call.duration_seconds,
+      },
+      geminiKeys
+    );
+  } catch (sopErr: any) {
+    log.error(ROUTE, `SOP detection error for call ${call.call_id}: ${sopErr.message}`);
+  }
+
+  // Deduplicate triggers by quote/signal
+  const combinedTriggers: PcgSopTrigger[] = [...sanitizedSopTriggers];
+  for (const dt of detectedTriggers) {
+    const exists = combinedTriggers.some(
+      (ct) => (ct.quote && dt.quote && (ct.quote.includes(dt.quote) || dt.quote.includes(ct.quote))) ||
+              (ct.category === dt.category && ct.timestamp === dt.timestamp)
+    );
+    if (!exists) {
+      combinedTriggers.push(dt);
+    }
+  }
+
+  // 6d. Persist SOP triggers to database
+  let savedTriggers: PcgSopTrigger[] = [];
+  if (combinedTriggers.length > 0) {
+    log.info(ROUTE, `Detected ${combinedTriggers.length} SOP trigger(s) for call ${call.call_id}. Persisting to DB...`);
+    savedTriggers = await savePcgSopTriggers(call.call_id, combinedTriggers, {
+      rmName: resolvedRm,
+      tlName: resolvedTl,
+      customerPhone: call.phone_number,
+    });
+
+    // 6e. Automatically fire Slack alerts to designated channel
+    const sopSlackChannel = getPcgSopSlackChannel();
+    for (const trig of savedTriggers) {
+      try {
+        const slackRes = await sendPcgSopSlackAlert(
+          trig,
+          {
+            callId: call.call_id,
+            rmName: resolvedRm,
+            tlName: resolvedTl,
+            customerPhone: call.phone_number,
+            durationSeconds: call.duration_seconds,
+          }
+        );
+        if (trig.id) {
+          await updatePcgSopSlackStatus(
+            trig.id,
+            slackRes.ok,
+            sopSlackChannel,
+            slackRes.ts,
+            slackRes.error
+          );
+        }
+      } catch (slackErr: any) {
+        log.error(ROUTE, `Failed to post Slack alert for SOP trigger: ${slackErr.message}`);
+      }
+    }
+  }
 
   // 7. Store Result in pcg_call_evaluations
   await query(`
@@ -859,7 +993,7 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
     complianceTripwire,
     complianceReason,
     JSON.stringify(transcriptTurns),
-    JSON.stringify(sanitizedSopTriggers),
+    JSON.stringify(savedTriggers),
   ]);
 
   await query(`
@@ -871,7 +1005,7 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
     WHERE call_id = $2
   `, [category, call.call_id]);
 
-  log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}, SOP Triggers: ${sanitizedSopTriggers.length}`);
+  log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}, SOP Triggers: ${savedTriggers.length}`);
 
   return {
     callId: call.call_id,
@@ -883,7 +1017,7 @@ Please evaluate this PCG call strictly against the 11 parameters, compliance gat
     verdict,
     parameters: cleanedParameters,
     transcriptTurns,
-    sopTriggers: sanitizedSopTriggers,
+    sopTriggers: savedTriggers,
   };
 }
 

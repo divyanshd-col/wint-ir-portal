@@ -2,7 +2,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
-import PageNav from '@/components/PageNav';
 import TokensClient from '@/components/TokensClient';
 import TokenUsageClient from '@/components/tokens/TokenUsageClient';
 import Link from 'next/link';
@@ -61,12 +60,6 @@ export default async function TokenUsagePage({
 
   return (
     <div className="flex h-screen bg-[#f5f3ee] text-gray-900 font-sans antialiased overflow-hidden">
-      <PageNav
-        username={user.email ?? user.name ?? ''}
-        role={user.role ?? 'admin'}
-        isAdmin={isAdmin}
-        flags={flags}
-      />
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <div className="bg-white border-b border-gray-200 px-8 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">

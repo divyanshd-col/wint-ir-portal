@@ -85,3 +85,18 @@ test('email prompt: JSON example has placeholders, not copyable values, and one 
     assert.equal(format.split(`"${key}": "<`).length - 1, 2, key);   // once in parameter_scores, once in parameter_reasoning
   }
 });
+
+test('output format is locked: split/join round-trips every default and edits to it are rejected', async () => {
+  const { splitPrompt, joinPrompt, outputFormatIntact } = await import('../lib/prompt-overrides');
+  const { PROMPT_DEFAULTS } = await import('../lib/prompt-defaults');
+  for (const [field, text] of Object.entries(PROMPT_DEFAULTS)) {
+    const { editable, locked } = splitPrompt(text);
+    assert.equal(joinPrompt(editable, locked), text, `${field} round-trips`);
+    if (field.startsWith('email')) continue;               // email output format lives in code, outside these fields
+    assert.ok(locked.length > 50, `${field} has a locked output block`);
+    assert.ok(outputFormatIntact(joinPrompt('new wording', locked), text));
+    assert.ok(!outputFormatIntact(joinPrompt('new wording', ''), text), `${field}: removing output format is blocked`);
+    assert.ok(!outputFormatIntact(joinPrompt('new wording', locked.replace('{', '{ "x": 1,')), text), `${field}: editing it is blocked`);
+  }
+  assert.ok(outputFormatIntact('', PROMPT_DEFAULTS.callGatesPrompt));   // blank = use default
+});

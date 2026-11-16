@@ -1,17 +1,50 @@
+import './_load-env';
 import { query } from '../lib/cx/db';
+import {
+  savePcgSopTriggers,
+  sendPcgSopSlackAlert,
+  updatePcgSopSlackStatus,
+  getPcgSopSlackChannel,
+} from '../lib/pcg/sop-alert';
 
 async function seedDiyaSopCall() {
   console.log('--- Seeding SOP Trigger Test Call for Diya Sharma ---');
 
-  // 1. Ensure sop_triggers column exists on pcg_call_evaluations
+  // 1. Ensure sop_triggers column and pcg_call_sop_triggers table exist
   try {
     await query(`
       ALTER TABLE pcg_call_evaluations
         ADD COLUMN IF NOT EXISTS sop_triggers JSONB DEFAULT '[]'::jsonb;
     `);
-    console.log('✓ Ensured sop_triggers column exists in pcg_call_evaluations');
+    await query(`
+      CREATE TABLE IF NOT EXISTS pcg_call_sop_triggers (
+        id BIGSERIAL PRIMARY KEY,
+        call_id VARCHAR(100) NOT NULL REFERENCES pcg_call_recordings(call_id) ON DELETE CASCADE,
+        rm_name VARCHAR(255) NOT NULL,
+        tl_name VARCHAR(255) NOT NULL,
+        customer_phone VARCHAR(50),
+        category VARCHAR(100) NOT NULL,
+        severity VARCHAR(20) NOT NULL,
+        direction VARCHAR(50) NOT NULL,
+        signal VARCHAR(255) NOT NULL,
+        quote TEXT NOT NULL,
+        timestamp VARCHAR(20),
+        turn_index INT,
+        slack_alert_sent BOOLEAN DEFAULT false,
+        slack_channel_id VARCHAR(50),
+        slack_message_ts VARCHAR(50),
+        slack_error TEXT,
+        review_status VARCHAR(30) DEFAULT 'PENDING',
+        reviewed_by VARCHAR(100),
+        reviewed_at TIMESTAMPTZ,
+        review_note TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    console.log('✓ Ensured sop_triggers column & pcg_call_sop_triggers table exist');
   } catch (err: any) {
-    console.warn('Column ensure warning:', err?.message || err);
+    console.warn('Column / Table ensure warning:', err?.message || err);
   }
 
   const callId = 'demo-diya-sop-001';
@@ -267,7 +300,30 @@ async function seedDiyaSopCall() {
     JSON.stringify(sopTriggers)
   ]);
   console.log(`✓ Inserted evaluation with SOP triggers for ${callId} (${rmName} - ${tlName})`);
-  console.log('--- SEED COMPLETED SUCCESSFULLY ---');
+
+  // 4. Save to dedicated pcg_call_sop_triggers table & automatically fire Slack alert
+  console.log('--- Firing Automatic Slack Alert for SOP Breached Call ---');
+  try {
+    const saved = await savePcgSopTriggers(callId, sopTriggers as any, { rmName, tlName, customerPhone });
+    const channel = getPcgSopSlackChannel();
+    for (const trig of saved) {
+      const slackRes = await sendPcgSopSlackAlert(trig, {
+        callId,
+        rmName,
+        tlName,
+        customerPhone,
+        durationSeconds,
+      });
+      if (trig.id) {
+        await updatePcgSopSlackStatus(trig.id, slackRes.ok, channel, slackRes.ts, slackRes.error);
+      }
+      console.log(`✓ Automated Slack alert sent: ${slackRes.ok ? 'SUCCESS (ts: ' + slackRes.ts + ')' : 'FAILED (' + slackRes.error + ')'}`);
+    }
+  } catch (alertErr: any) {
+    console.error('Failed to dispatch automated Slack alert:', alertErr);
+  }
+
+  console.log('--- SEED & SLACK ALERT COMPLETED SUCCESSFULLY ---');
 }
 
 seedDiyaSopCall().catch((err) => {

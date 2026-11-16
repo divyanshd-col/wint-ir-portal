@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import DateRangePicker from './DateRangePicker';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import * as T from '@/components/quality/tableStyles';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
@@ -39,6 +41,7 @@ interface EvaluationItem {
   customer_email?: string;
   customer_phone?: string | null;
   raised_by_role?: 'ir' | 'tl' | null;
+  flag_raised_at?: string | null;
   flag_author_name?: string | null;
   flag_raiser_name?: string | null;
   agent_id?: string;
@@ -408,31 +411,48 @@ function formatReviewerName(raw?: string | null): string {
 }
 
 // Columns per tab, ordered like the chat tables (ID, Date & Time, Agent, ..., Action).
-type Col = 'ticket' | 'dateTime' | 'agent' | 'intent' | 'iqs' | 'csat' | 'dispute' | 'reviewedBy' | 'reviewedAt' | 'action';
+// E-mail has no CSAT yet, so there is no CSAT column. Disputes show when the dispute was raised, not when the e-mail was sent.
+type Col = 'ticket' | 'dateTime' | 'agent' | 'intent' | 'iqs' | 'raised' | 'dispute' | 'reviewedBy' | 'reviewedAt' | 'action';
 const TAB_COLS: Record<Tab, Col[]> = {
-  pending: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'action'],
-  reviewed: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'reviewedBy', 'reviewedAt', 'action'],
-  disputes: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'dispute', 'action'],
+  pending: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'action'],
+  reviewed: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'reviewedBy', 'reviewedAt', 'action'],
+  disputes: ['ticket', 'agent', 'intent', 'iqs', 'raised', 'dispute', 'action'],
   unscored: ['ticket', 'dateTime', 'agent', 'intent', 'action'],
 };
-const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', dateTime: 'Date & Time', agent: 'Agent', intent: 'Intent', iqs: 'IQS', csat: 'CSAT', dispute: 'Dispute', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
+const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', dateTime: 'Date & Time', agent: 'Agent', intent: 'Disposition', iqs: 'IQS', raised: 'Raised', dispute: 'Status', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
 const COL_WIDTH: Partial<Record<Col, number>> = {};
 // Column widths (%) put the ID, date and agent columns on the left of the panel split (57.4%), scores + action on the right.
 const TAB_WIDTHS: Record<Tab, number[]> = {
-  pending:  [12, 13, 16, 16.4, 14.2, 14.2, 14.2],
-  reviewed: [12, 12, 15, 18.4, 8, 8, 11, 8, 7.6],
-  disputes: [11, 12, 15, 19.4, 10, 10, 12, 10.6],
+  pending:  [12, 13, 16, 16.4, 21.3, 21.3],
+  reviewed: [12, 12, 15, 18.4, 10, 14, 10, 8.6],
+  disputes: [11, 16, 30.4, 8, 12, 14, 8.6],
   unscored: [14, 14, 22, 34, 16],
 };
 const RIGHT: Col[] = ['iqs', 'action'];
-type SortCol = 'dateTime' | 'agent' | 'intent' | 'iqs' | 'dispute' | 'reviewedBy' | 'reviewedAt';
-const SORTABLE: Col[] = ['dateTime', 'agent', 'intent', 'iqs', 'dispute', 'reviewedBy', 'reviewedAt']; // IDs and Action are not sortable; e-mail has no CSAT
+type SortCol = 'dateTime' | 'agent' | 'intent' | 'iqs' | 'raised' | 'dispute' | 'reviewedBy' | 'reviewedAt';
+const SORTABLE: Col[] = ['dateTime', 'agent', 'intent', 'iqs', 'raised', 'dispute', 'reviewedBy', 'reviewedAt']; // IDs and Action are not sortable; e-mail has no CSAT
 
-export default function EmailEvaluationPage() {
+/** `embedded`: rendered inside another page (the TL's Quality Emails → Disputes Raised). It shows only the disputes list, with no page title or
+ *  tab bar, and tells the host when a dispute was resolved so its counts refresh. */
+export default function EmailEvaluationPage({ embedded = false, onResolved }: { embedded?: boolean; onResolved?: () => void } = {}) {
   const emailParams = useEmailParameters();
   const { data: session } = useSession();
   const isAdmin = (session?.user as any)?.role === 'admin' || Boolean((session?.user as any)?.isAdmin);
-  const [tab, setTab] = useState<Tab>('pending');
+  // A TL reviews disputes here (the same scoring panel QA uses) but cannot score undisputed emails: the server enforces it too.
+  const isTL = (session?.user as any)?.role === 'tl' && !isAdmin;
+  const [tab, setTab] = useState<Tab>(embedded ? 'disputes' : 'pending');
+  // Deep link from the TL dispute list: ?tab=disputes&search=<ticket>. A TL with no link lands on Disputes.
+  const urlParams = useSearchParams();
+  const urlApplied = useRef(false);
+  useEffect(() => {
+    if (embedded || urlApplied.current || !session) return;
+    urlApplied.current = true;
+    const t = urlParams.get('tab');
+    if (t === 'pending' || t === 'reviewed' || t === 'disputes') setTab(isTL && t === 'pending' ? 'disputes' : t);
+    else if (isTL) setTab('disputes');
+    const q = urlParams.get('search');
+    if (q) setSearch(q);
+  }, [embedded, session, isTL, urlParams]);
   const [items, setItems] = useState<EvaluationItem[]>([]);
   const [summary, setSummary] = useState<{
     pendingReviewCount?: number;
@@ -640,6 +660,7 @@ export default function EmailEvaluationPage() {
       if (to) params.set('to', to);
       if (disputeFilter) params.set('disputeStatus', disputeFilter);
       params.set('tab', tab);
+      if (embedded) params.set('view', 'tl'); // inside the TL's Disputes Raised tab: the TL queue, for admins too
       params.set('limit', '500');
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
@@ -663,7 +684,7 @@ export default function EmailEvaluationPage() {
     } finally {
       if (seq === fetchSeq.current) setLoading(false);
     }
-  }, [tab, search, agentFilter, dispositionFilter, disputeFilter, period]);
+  }, [tab, search, agentFilter, dispositionFilter, disputeFilter, period, embedded]);
 
   useEffect(() => {
     fetchData();
@@ -724,7 +745,10 @@ export default function EmailEvaluationPage() {
         }),
       });
       const data = await res.json();
-      if (data.ok) {
+      if (!data.ok) {
+        // e.g. a TL outside their team, or a dispute that is no longer open: say so instead of doing nothing.
+        alert(data.error || 'Could not save the review');
+      } else {
         const isFromDisputeSection = tab === 'disputes' || Boolean(data.wasDispute) || item.dispute_status === 'Under_Review';
         setSuccessMessage(
           isFromDisputeSection
@@ -760,7 +784,8 @@ export default function EmailEvaluationPage() {
           return next;
         });
         setExpandedId(null);
-        if (isFromDisputeSection && tab !== 'reviewed') {
+        onResolved?.();
+        if (isFromDisputeSection && tab !== 'reviewed' && !embedded) {
           setTab('reviewed');
         } else {
           fetchData();
@@ -871,6 +896,7 @@ export default function EmailEvaluationPage() {
       case 'agent': return i.agent_name ?? '';
       case 'intent': return i.intent_l1 ?? '';
       case 'dispute': return i.dispute_status ?? '';
+      case 'raised': return new Date(i.flag_raised_at || 0).getTime();
       case 'reviewedBy': return i.reviewed_by ?? '';
       default: return i.reviewed_at ?? '';
     }
@@ -896,11 +922,13 @@ export default function EmailEvaluationPage() {
   return (
     <div>
       {/* ── Page Header ── */}
+      {!embedded && (
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
           Email Evaluation
         </h1>
       </div>
+      )}
 
       {/* ── Success Toast Banner ── */}
       {successMessage && (
@@ -925,6 +953,7 @@ export default function EmailEvaluationPage() {
       )}
 
       {/* ── Tab Bar (Matching ChatEvaluationPage) ── */}
+      {!embedded && (
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -937,6 +966,7 @@ export default function EmailEvaluationPage() {
           display: 'flex', gap: 4,
           borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
         }}>
+          {!isTL && (
           <button
             style={tabStyle(tab === 'pending')}
             onClick={() => handleTabChange('pending')}
@@ -952,6 +982,7 @@ export default function EmailEvaluationPage() {
               active={tab === 'pending'}
             />
           </button>
+          )}
           <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
             Disputes
             <CountBadge count={summary?.qaDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
@@ -969,6 +1000,7 @@ export default function EmailEvaluationPage() {
         </div>
 
       </div>
+      )}
 
       {/* ── One card: filter bar + table + pager (as in the chat tables) ── */}
       <div style={{
@@ -1138,7 +1170,7 @@ export default function EmailEvaluationPage() {
             }}
           >
             <option value="">{tab === 'disputes' ? 'All Disputes' : 'All Dispute Statuses'}</option>
-            <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+            <option value="forwarded_to_tl">Pending TL review</option>
             <option value="forwarded_to_qa">Forwarded to QA</option>
             <option value="reviewed">Reviewed Disputes</option>
             {tab !== 'disputes' && <option value="none">No Dispute</option>}
@@ -1256,7 +1288,7 @@ export default function EmailEvaluationPage() {
                           : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                       </td>
                     ),
-                    csat: <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>,
+                    raised: <td style={{ ...td, whiteSpace: 'nowrap', color: 'var(--qa-text-2)' }}><T.DateTime value={item.flag_raised_at} /></td>,
                     dispute: (
                       <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status, item.qa_name || item.reviewed_by)}</td>
                     ),
@@ -1566,7 +1598,8 @@ export default function EmailEvaluationPage() {
                                         type="button"
                                         className={`eval-submit${!isCompliant ? ' danger' : ''}`}
                                         onClick={() => handleSubmitReview(item)}
-                                        disabled={submittingAction}
+                                        disabled={submittingAction || (isTL && tab !== 'disputes')}
+                                        title={isTL && tab !== 'disputes' ? 'TLs change scores only to resolve an open dispute' : undefined}
                                       >
                                         {submittingAction ? (item.review_status === 'reviewed' ? 'Updating…' : 'Submitting…') : item.review_status === 'reviewed' ? 'Update Review' : 'Submit Evaluation Score'}
                                       </button>

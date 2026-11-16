@@ -137,6 +137,17 @@ test('findBreachingTickets - the customer clock is the newest customer message; 
   assert.equal(noMsg[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
 });
 
+test('findBreachingTickets - a Portal ticket (we sent the first email) has no customer waiting until the customer replies', () => {
+  // ticket 200528: created from the Portal, only our mail, status PENDING, no incoming message
+  const portal = row({ chat_id: 'portal', created_at: d('2026-09-30T05:00:00Z'), ticket_source: 'Portal', robylon_status: 'PENDING', has_incoming_message: false });
+  assert.deepEqual(find([portal]), []);
+  // the customer replies: the clock starts at their message
+  const replied = find([{ ...portal, chat_id: 'replied', has_incoming_message: true, last_customer_message_at: d('2026-09-30T09:00:00Z') }]);
+  assert.equal(replied[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
+  // an Email-sourced ticket with no stored message still falls back to created_at
+  assert.equal(find([row({ chat_id: 'email', ticket_source: 'Email', created_at: d('2026-09-30T09:00:00Z') })]).length, 1);
+});
+
 test('findBreachingTickets - skips tickets with no stored events at all (cannot tell who spoke last)', () => {
   assert.deepEqual(find([row({ chat_id: 'old', has_events: false, created_at: d('2026-09-30T08:00:00Z') })]), []);
 });

@@ -77,6 +77,7 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
   • If the agent says they will check or follow up, the reply explains what will happen next. Mentioning "our team" or "the concerned team" is acceptable; the team does not need to be named specifically.
   • If the customer shares a document, screenshot, account update, or confirmation without asking a direct question, the agent acknowledges it and takes the appropriate next step.
   • The customer is not left without guidance on what to do next.
+  • If a question was already fully answered earlier in the thread, do not require it to be answered again. Deduct only if something was missed (an unanswered part, or a new question).
 - Scoring:
   • "yes": Every question and request is addressed, and the issue is resolved or properly progressed. Examples include raising a ticket, escalating the case, forwarding a document, arranging a call, or giving the customer a clear next step.
   • "half": The main issue is addressed, but a smaller question or request is missed or only partly answered, or the next step is unclear.
@@ -113,6 +114,8 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
   • General rules (how product works, charges, TDS, settlement cycles, steps, TATs, offer terms, app paths): knowledge base (KB).
   • Claims about thread ("as shared in our earlier email"): thread itself.
   • Essential information must be restated in current reply: Amount, date and time, transaction reference, and document or reward details must appear in the reply itself. If reply points to an earlier email for these details instead of restating them, score "no", whether or not the earlier email exists.
+  • Apply this restating rule only when the reply actually states a fact or sends a document. A pure acknowledgement ("You're welcome", "Glad we could help") has nothing to restate; do not mark it down here.
+  • Do not penalise the same gap under both Accuracy and Personalisation. A missing bond/ISIN/ID detail is scored under Accuracy only when it makes a stated fact incomplete, and under Personalisation only when the reply reads as generic. If you already deducted for it in one, do not deduct again in the other.
   • If sources conflict, account data wins for client facts and KB wins for general rules.
   • Never mark something right or wrong from your own knowledge of product, SEBI rules or tax.
   • If a claim cannot be checked against any source, note it as unverified for human review.
@@ -141,6 +144,7 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
   • If user isn't understanding, agent reframes in simpler words until they do.
   • Correct process and realistic TAT always stated. Example: missed interest repayment: ask user to check bank statement (last 4 digits). If not credited, ask to send statement to registered email, and set TAT for check and escalation.
   • For repayment cases where specific TAT cannot be defined, agent should communicate available information and explain next steps without committing to unrealistic timeline. Do not deduct marks solely for absence of timeline in such cases.
+  • When the issue is escalated to an internal team and a response is awaited, the agent cannot commit to a TAT. Saying they will update the customer as soon as they hear back is appropriate expectation setting; do not deduct for the absence of a specific timeline.
   • Follow-ups are personalized to user's query, not generic.
   • Correct any past errors in the thread without being asked.
   • Give helpful educational points client did not ask for.
@@ -148,7 +152,7 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
   • "yes": Complete answer, correct process, clear TAT wherever applicable, and personalised follow-up.
   • "half": Answer is correct, but process, TAT (where applicable), or follow-up is missing or generic.
   • "no": Core query unanswered, wrong process, or no expectation set.
-  • Exception: In repayment cases where specific TAT cannot be defined, do not deduct marks solely for absence of specific timeline, provided agent communicates available information and explains next steps.`,
+  • Exception: In repayment cases, or when the issue is escalated to an internal team and a response is awaited, where specific TAT cannot be defined, do not deduct marks solely for absence of specific timeline, provided agent communicates available information, explains next steps and says they will update the customer as soon as they hear back.`,
     allowNA: true,
     aliases: ['expectation_setting', 'ExpectationSetting', 'expectation'],
     scoringGuide: {
@@ -156,7 +160,7 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
       half: 'Answer is correct, but the process, TAT (where applicable), or follow-up is missing or generic.',
       no: 'Core query unanswered, wrong process, or no expectation set.',
       na: 'Not applicable to this email context.',
-      exception: 'In repayment cases where a specific TAT cannot be defined, do not deduct marks solely for the absence of a specific timeline, provided the agent communicates available information and explains next steps.',
+      exception: 'In repayment cases, or when the issue is escalated internally and a response is awaited, where a specific TAT cannot be defined, do not deduct marks solely for the absence of a specific timeline, provided the agent communicates available information, explains next steps and promises to update the customer as soon as they hear back.',
     },
   },
   {
@@ -169,6 +173,7 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
   • Uses client's actual situation and earlier replies.
   • Does not ask for information client already gave.
   • Uses correct pronunciations and terms.
+  • Opening with "Dear Investor" is acceptable. Do not deduct marks for the greeting alone.
   • Refers to customer's actual bond, amounts, dates, or account status; on transferred chat, uses what bot already collected instead of asking to repeat.
 - Scoring:
   • "yes": Reflects client's actual case. References specific details (bond, amounts, dates, account status), builds on earlier replies, asks for nothing client already shared. Uses bot collected information.
@@ -194,6 +199,7 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
   2. Understanding emotion: acknowledges specific feeling or stakes (urgency, frustration, confusion, money at risk).
   3. Colloquial / too formal: natural and professional tone, neither slangy nor stiff/robotic.
   4. Requesting the user: polite and comes with a reason, not a command.
+- A sentence such as "We understand your concern and sincerely apologise for the inconvenience caused" is a valid acknowledgement when the customer raised a concern or problem. Do not dismiss it as a stock phrase just because the wording is common; judge whether it fits what the customer said.
 - Scoring:
   • "yes": Ownership and warmth are genuine and specific to this customer's situation. At least one sentence acknowledges their actual concern, urgency or feeling in words that could not be pasted into another email.
   • "half": Polite and acknowledges customer, but acknowledgement is generic/templated, or warmth comes only from stock courtesy lines.
@@ -216,9 +222,10 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
     instructions: `- Objective: Response is easy to read, correctly written, and sounds like a real person.
 - What to check:
   • Simple and clear: Sentences are short and easy to follow; technical jargon avoided or explained.
-  • Well formatted: Important details (amounts, dates, TAT, steps) are emphasized with bold, italics, or underline where needed so user finds them quickly.
+  • Well formatted: Important details (amounts, dates, TAT, steps) are emphasized with bold, italics, or underline where needed so user finds them quickly. If key details are already bolded, do not deduct for lack of emphasis.
+  • Lists: points that are already numbered or bulleted in the email count as formatted lists, including numbered text typed inline. Do not say "a colon followed by a block of text should be bulleted" when the points are numbered.
   • Error-free: No spelling mistakes, typos, omitted words, or grammatical errors.
-  • Not robotic: Natural and conversational tone. Does not read as stiff script. Filler and stock phrases in body judged here (e.g. "We understand your concern" when none raised).
+  • Not robotic: Natural and conversational tone. Does not read as stiff script. Filler and stock phrases in body judged here (e.g. "We understand your concern" when none raised; not when a concern was raised).
 - Scoring:
   • "yes": All four checks pass: clear, simple, well formatted, error-free, and sounds natural.
   • "half": Understandable, but dense, cluttered, or lacks emphasis on key details; or minor errors that don't affect understanding; or partly scripted/stiff; or contains filler/stock phrases in body that add nothing.
@@ -238,6 +245,7 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
     description: 'Opening and closing messages are natural, personalised, and appropriate to the context of the thread and current stage of resolution.',
     defaultWeight: 5,
     instructions: `- Objective: Evaluate whether opening and closing messages are natural, personalised, and appropriate to context and stage of resolution.
+- Not using the customer's name in the opening is acceptable and is not a stock phrase. "Dear Investor" or a plain "Hello" is fine.
 - Scoring:
   • "yes": Opening and closing tied to case, or standard pair on first educational reply. One stock courtesy line is fine when personal touch is present.
   • "half": One stock phrase, and personal touch is missing or very light.
@@ -434,6 +442,27 @@ Mark compliance_passed as false and list specific violation in compliance_issues
 - Misinforming the investor about withdrawal, tax, or maturity timelines
 - Using rude, disrespectful, or unprofessional language`;
 
+/** The locked JSON output format sent to the email evaluator; shown read-only in Settings. */
+export function buildEmailOutputFormat(paramKeys: string[]): string {
+  return `OUTPUT FORMAT:
+Return ONLY a valid JSON object in this shape (no markdown formatting, no commentary outside the JSON). Replace every <placeholder> with your own assessment of THIS email:
+{
+  "core_query": "<1-2 sentence plain English summary of what the customer asked>",
+  "quality_score": <integer 0-100>,
+  "compliance_passed": <true or false>,
+  "compliance_issues": ["<each specific violation; leave the list empty if none>"],
+  "parameter_scores": {
+${paramKeys.map(k => `    "${k}": "<yes | half | no | na>"`).join(',\n')}
+  },
+  "parameter_reasoning": {
+${paramKeys.map(k => `    "${k}": "<one or two sentences citing what the agent wrote>"`).join(',\n')}
+  },
+  "summary": "<one or two sentence overall assessment>",
+  "strengths": ["<specific strength>"],
+  "areas_for_improvement": ["<specific improvement>"]
+}`;
+}
+
 /**
  * Builds the comprehensive prompt for evaluating an agent reply against the 7 parameters.
  */
@@ -506,21 +535,5 @@ ${rubricBlock}
 ${compliance}
 
 ---
-OUTPUT FORMAT:
-Return ONLY a valid JSON object in this shape (no markdown formatting, no commentary outside the JSON). Replace every <placeholder> with your own assessment of THIS email:
-{
-  "core_query": "<1-2 sentence plain English summary of what the customer asked>",
-  "quality_score": <integer 0-100>,
-  "compliance_passed": <true or false>,
-  "compliance_issues": ["<each specific violation; leave the list empty if none>"],
-  "parameter_scores": {
-${paramKeys.map(k => `    "${k}": "<yes | half | no | na>"`).join(',\n')}
-  },
-  "parameter_reasoning": {
-${paramKeys.map(k => `    "${k}": "<one or two sentences citing what the agent wrote>"`).join(',\n')}
-  },
-  "summary": "<one or two sentence overall assessment>",
-  "strengths": ["<specific strength>"],
-  "areas_for_improvement": ["<specific improvement>"]
-}`;
+${buildEmailOutputFormat(paramKeys)}`;
 }

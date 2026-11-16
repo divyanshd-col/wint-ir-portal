@@ -198,7 +198,7 @@ export default function UnscoredChatsTable({ leadingFilter, agentFilter = 'all',
             disabled={scoringBatch || loading}
             style={{
               height: 32, padding: '0 14px', borderRadius: 8, border: 'none',
-              background: scoringBatch ? 'var(--qa-gray-400)' : '#2563eb',
+              background: scoringBatch ? 'var(--qa-text-4)' : '#2563eb',
               color: '#fff', fontSize: 13, fontWeight: 500, cursor: scoringBatch ? 'not-allowed' : 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 6,
             }}

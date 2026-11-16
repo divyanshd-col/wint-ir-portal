@@ -54,6 +54,11 @@ export interface PortalConfig {
   pyannoteApiKey?: string;
   // ── QA review thresholds (absent = 85 for every channel) ────────────────────
   qualityThresholds?: QualityThresholds;
+  // ── Who resolves CX disputes: 'tl' = the agent's TL (QA audits at/below the threshold); absent or 'qa' = TL forwards to QA ──
+  disputeOwner?: 'qa' | 'tl';
+  // ── Robylon email inboxes that belong to PCG: their events go to pcg_webhook_payloads, not the CX email pipeline.
+  //    Absent = the built-in default list (lib/email/inbox.ts); a saved list, even an empty one, replaces it ──
+  pcgEmailInboxes?: string[];
   // ── Email scoring rubric edits (only what differs from DEFAULT_EMAIL_PARAMETERS) ─
   emailRubric?: EmailRubric;
 }

@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 import { computeCallIQS, finalVerdict } from '@/lib/scoring/call-pipeline';
+import { checkTlResolve, tlEditStatus } from '@/lib/dispute-owner';
+import { readConfig } from '@/lib/config';
+import { reviewThreshold } from '@/lib/quality-thresholds';
 
 async function _PATCH(req: NextRequest): Promise<NextResponse> {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
@@ -44,6 +47,16 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
   const actualCallId = existingEval.call_id;
   const actualChatId = existingEval.chat_id || callId.trim();
 
+  // A TL may only change scores to resolve an open dispute of their own team.
+  const role = (session.user as any)?.role as string;
+  if (role === 'tl') {
+    const agentRows = existingEval.agent_id != null
+      ? await query<{ name: string }>(`SELECT name FROM agents WHERE id = $1`, [existingEval.agent_id])
+      : [];
+    const denied = await checkTlResolve({ role, email, flagId, agentName: agentRows[0]?.name });
+    if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
+  }
+
   // Merge gates
   const existingGates = existingEval.gates || {};
   const mergedGates = incomingGates ? { ...existingGates, ...incomingGates } : existingGates;
@@ -74,7 +87,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
     await query(`
       INSERT INTO call_review_comparisons (
         call_id, ai_score, human_score, ai_parameters, human_parameters, action, reviewed_by, reviewed_at, review_note
-      ) VALUES ($1, $2, $3, $4, $5, 'override', $6, NOW(), $7)
+      ) VALUES ($1, $2, $3, $4, $5, $8, $6, NOW(), $7)
       ON CONFLICT (call_id) DO UPDATE SET
         human_score = EXCLUDED.human_score,
         human_parameters = EXCLUDED.human_parameters,
@@ -88,7 +101,8 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       JSON.stringify(oldIqsScores.scores || {}),
       JSON.stringify({ ...scores, __gates: mergedGates, call_gate_result: gateVerdict }),
       email,
-      note || ''
+      note || '',
+      role === 'tl' ? 'tl_resolve' : 'override',
     ]);
 
     // 2. Update call_evaluations
@@ -110,7 +124,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
           reviewed_by = $7,
           reviewed_at = NOW(),
           review_note = $8,
-          status = 'reviewed'
+          status = $10
         WHERE call_id = $9
     `, [
       JSON.stringify(newIqsScoresPayload),
@@ -121,7 +135,11 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       newVerdict,
       email,
       note || '',
-      actualCallId
+      actualCallId,
+      // A TL edit keeps at-or-below-threshold calls (and critical-gate failures) in QA's audit queue; QA / admin edits mark reviewed as before.
+      role === 'tl'
+        ? tlEditStatus(iqs_percent, reviewThreshold(await readConfig().catch(() => null), 'call'), existingEval.status, newVerdict === 'FAILED_CRITICAL')
+        : 'reviewed',
     ]);
 
     // 3. Update IQSFlag if associated with a dispute

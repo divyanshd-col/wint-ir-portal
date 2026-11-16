@@ -4,7 +4,7 @@ import { disputeLabel } from '../lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '../lib/email/context-builder';
 
 test('disputeLabel - correctly maps dispute statuses and QA assignee', () => {
-  assert.equal(disputeLabel('Raised'), 'Forwarded to TL (Pending Review)');
+  assert.equal(disputeLabel('Raised'), 'Pending TL review');
   assert.equal(disputeLabel('Under_Review'), 'Forwarded to QA');
   assert.equal(disputeLabel('Under_Review', 'Yashvi Chajjer'), 'Forwarded to Yashvi Chajjer');
   assert.equal(disputeLabel('TL_Resolved'), 'Reviewed by TL');

@@ -10,6 +10,9 @@ import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
 import { ALL_DB_KEY_TO_PASCAL as DB_TO_PASCAL } from '@/lib/param-keys';
 import { fireKbChangeAlert } from '@/lib/quality-alert';
+import { checkTlResolve, tlEditStatus } from '@/lib/dispute-owner';
+import { readConfig } from '@/lib/config';
+import { reviewThreshold } from '@/lib/quality-thresholds';
 
 // Bot-distinctive DB keys — parameters that appear ONLY in the bot rubric, never
 // the human one. IssueResolution/Accuracy/Personalization are shared between both
@@ -52,12 +55,24 @@ export async function PATCH(
   }
 
   try {
-    const beforeState = await query<{ conversation_type: string; iqs_score: number; parameters: any }>(
-      `SELECT c.conversation_type, i.iqs_score, i.parameters
+    const beforeState = await query<{ conversation_type: string; iqs_score: number; parameters: any; status: string | null; agent_name: string | null }>(
+      `SELECT c.conversation_type, i.iqs_score, i.parameters, i.status, a.name AS agent_name
        FROM iqs_scores i
        LEFT JOIN conversations c ON c.id = i.chat_id
+       LEFT JOIN agents a ON a.id = c.agent_id
        WHERE i.chat_id = $1`, [chatId]
     );
+    // A TL may only resolve an open dispute of their own team, and only by 'resolve' (never a plain submit/override/reopen).
+    if (role === 'tl') {
+      const denied = action !== 'resolve'
+        ? { status: 403, error: 'A TL can only resolve a dispute' }
+        : await checkTlResolve({ role, email, flagId, agentName: beforeState[0]?.agent_name });
+      if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
+    }
+    const config = role === 'tl' ? await readConfig().catch(() => null) : null;
+    // Only a TL edit keeps below-threshold chats in QA's audit queue; QA and admin edits mark the chat reviewed as before.
+    const statusAfter = (iqs: number | null) =>
+      role === 'tl' ? tlEditStatus(iqs, reviewThreshold(config, 'chat'), beforeState[0]?.status) : 'reviewed';
     const oldScore = beforeState[0]?.iqs_score ?? null;
     const oldParams = beforeState[0]?.parameters ?? null;
     const convType = beforeState[0]?.conversation_type;
@@ -182,9 +197,9 @@ export async function PATCH(
           `UPDATE iqs_scores
            SET parameters = $1, iqs_score = $2,
                reviewed_by = $3, reviewed_at = NOW(), review_note = $4,
-               status = 'reviewed'
+               status = $6
            WHERE chat_id = $5`,
-          [JSON.stringify(merged), newIqs, email, note ?? null, chatId]
+          [JSON.stringify(merged), newIqs, email, note ?? null, chatId, statusAfter(newIqs)]
         );
 
         log.info(ROUTE, action, { chatId, reviewer: email, oldIqs, newIqs, paramChanges });
@@ -193,9 +208,9 @@ export async function PATCH(
         // action without parameter changes — just mark reviewed
         await query(
           `UPDATE iqs_scores
-           SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2, status = 'reviewed'
+           SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2, status = $4
            WHERE chat_id = $3`,
-          [email, note ?? null, chatId]
+          [email, note ?? null, chatId, statusAfter(oldScore)]
         );
         log.info(ROUTE, action, { chatId, reviewer: email, paramChanges: 0 });
         await storeAppendAuditEntry({ id: randomUUID(), action: 'review_submitted', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { note: note ?? null } } as IQSAuditEntry);
@@ -203,7 +218,8 @@ export async function PATCH(
 
       // For resolve: mark the KV flag as reviewed
       if (action === 'resolve' && flagId) {
-        const autoNote = isScoreUpdated ? 'Score updated by QA' : 'Resolved by QA (No score change)';
+        const who = role === 'tl' ? 'TL' : 'QA';
+        const autoNote = isScoreUpdated ? `Score updated by ${who}` : `Resolved by ${who} (No score change)`;
         const finalNote = note ? (isScoreUpdated && !note.toLowerCase().includes('score') ? `${note} (Score updated)` : note) : autoNote;
 
         await storeUpdateIQSFlag(flagId, {
@@ -286,7 +302,7 @@ export async function PATCH(
             afterState[0].iqs_score,
             oldParams ? JSON.stringify(oldParams) : null,
             JSON.stringify(afterState[0].parameters),
-            action,
+            role === 'tl' ? 'tl_resolve' : action,
             email,
             note ?? null
           ]

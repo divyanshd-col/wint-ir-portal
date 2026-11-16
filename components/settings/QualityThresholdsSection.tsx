@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DEFAULT_QUALITY_THRESHOLDS, type QualityThresholds } from '@/lib/quality-thresholds';
+import type { DisputeOwner } from '@/lib/dispute-owner';
 
 const ROWS: { key: keyof QualityThresholds; label: string; rule: string }[] = [
   { key: 'chatReview', label: 'Chats', rule: 'Chats with an IQS at or below this go to QA review. Chats with no IQS but a bad CSAT go too.' },
@@ -10,7 +11,28 @@ const ROWS: { key: keyof QualityThresholds; label: string; rule: string }[] = [
 ];
 
 /** Settings → Quality Thresholds: the IQS at or below which a chat, call or email lands in the QA Pending Review queue. */
-export default function QualityThresholdsSection({ initial, onSaved }: { initial: QualityThresholds; onSaved: (msg: string) => void }) {
+const OWNER_OPTIONS: { value: DisputeOwner; label: string; rule: string }[] = [
+  { value: 'qa', label: 'QA', rule: 'IR raises a dispute, the TL forwards it to QA, and QA changes the scores.' },
+  { value: 'tl', label: 'Team lead', rule: "The TL of the agent reviews the dispute and changes the scores. QA still audits items at or below the review threshold above. A TL resolves only their own team's disputes, never one they raised." },
+];
+
+export default function QualityThresholdsSection({ initial, initialDisputeOwner = 'qa', onSaved }: { initial: QualityThresholds; initialDisputeOwner?: DisputeOwner; onSaved: (msg: string) => void }) {
+  const [owner, setOwner] = useState<DisputeOwner>(initialDisputeOwner);
+  const [savedOwner, setSavedOwner] = useState<DisputeOwner>(initialDisputeOwner);
+  const [savingOwner, setSavingOwner] = useState(false);
+  const [ownerError, setOwnerError] = useState('');
+
+  async function saveOwner() {
+    setSavingOwner(true); setOwnerError('');
+    try {
+      const res = await fetch('/api/config', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ disputeOwner: owner }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { setOwnerError(body.error || 'Could not save'); return; }
+      setSavedOwner(owner);
+      onSaved('Dispute owner saved');
+    } catch { setOwnerError('Could not save'); } finally { setSavingOwner(false); }
+  }
+
   const [vals, setVals] = useState<Record<keyof QualityThresholds, string>>({
     chatReview: String(initial.chatReview), callReview: String(initial.callReview), emailReview: String(initial.emailReview),
   });
@@ -71,6 +93,29 @@ export default function QualityThresholdsSection({ initial, onSaved }: { initial
           >Reset all to 85</button>
           {invalid && <span className="text-xs text-red-600">Each value must be a number from 0 to 100.</span>}
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900">Dispute owner</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Who reviews and resolves CX disputes (chats, calls and emails). Applies straight away; disputes already raised move with the setting and nothing stored is changed. PCG is not affected.</p>
+        </div>
+        <div role="radiogroup" aria-label="Dispute owner" className="space-y-3">
+          {OWNER_OPTIONS.map(o => (
+            <label key={o.value} className="flex items-start gap-3 cursor-pointer">
+              <input type="radio" name="dispute-owner" value={o.value} checked={owner === o.value} onChange={() => setOwner(o.value)} className="mt-1" />
+              <span>
+                <span className="text-sm font-semibold text-gray-900">{o.label}</span>
+                <span className="block text-xs text-gray-400 mt-0.5">{o.rule}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {ownerError && <p role="alert" className="text-xs text-red-600">{ownerError}</p>}
+        <button
+          onClick={saveOwner} disabled={savingOwner || owner === savedOwner}
+          className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition"
+        >{savingOwner ? 'Saving…' : 'Save'}</button>
       </div>
 
       <p className="text-xs text-gray-400 max-w-xl">

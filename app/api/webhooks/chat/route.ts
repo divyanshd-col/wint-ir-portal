@@ -579,14 +579,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  // Persist raw incoming webhook payload immediately as received
-  await saveRobylonWebhookPayload({
-    source: 'chat',
-    eventType: body?.event_type ? String(body.event_type) : null,
-    eventId: body?.event_id ? String(body.event_id) : null,
-    chatId: body?.chat_id ? String(body.chat_id) : (body?.conversation_id ? String(body.conversation_id) : null),
-    payload: body,
-  });
+  // Persist the raw payload first; if that fails answer 500 so Robylon retries (see saveRobylonWebhookPayload).
+  // A duplicate (a retry of a stored event) still goes through the existing event_type + event_id dedupe below.
+  try {
+    await saveRobylonWebhookPayload({
+      source: 'chat',
+      eventType: body?.event_type ? String(body.event_type) : null,
+      eventId: body?.event_id ? String(body.event_id) : null,
+      chatId: body?.chat_id ? String(body.chat_id) : (body?.conversation_id ? String(body.conversation_id) : null),
+      payload: body,
+    });
+  } catch (err: any) {
+    console.error('[webhook] Failed to store chat payload:', err?.message || err);
+    return NextResponse.json({ error: 'Failed to store payload' }, { status: 500 });
+  }
 
   // Log only non-sensitive metadata — never dump full payload in production
   if (process.env.NODE_ENV !== 'production') {

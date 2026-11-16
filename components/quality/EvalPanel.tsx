@@ -143,7 +143,7 @@ function linkifyText(text: string, isOutgoing?: boolean) {
           href={part}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: isOutgoing ? '#fff' : 'var(--qa-text-link, #2563eb)', textDecoration: 'underline' }}
+          style={{ color: isOutgoing ? '#fff' : 'var(--color-text-info)', textDecoration: 'underline' }}
           className={linkClass}
         >
           Link

@@ -1,7 +1,7 @@
 -- Email SLA alert: every ticket the alert considers "waiting on an agent", with the facts behind it.
 -- Read-only. Same rules as lib/sla-breach.ts + lib/sla-breach-db.ts, written independently, so the two can be compared.
 -- Rules: docs/intent/email-sla-alert.md
---   customer_clock  = newest customer message (incoming, sender not @wintwealth.com); created_at only if the ticket has no incoming message stored
+--   customer_clock  = newest customer message (incoming, sender not @wintwealth.com); created_at only if the ticket has no incoming message stored and is not a Portal ticket (we sent the first email)
 --   agent_last      = newest of: reply sent, incoming mail from a @wintwealth.com address, first_response_at, status moved to Answered / Pending email sent
 --   waiting         = customer_clock is later than agent_last (or there is no agent action)
 --   breach_at       = customer_clock + 24h; overdue = breach_at is already past
@@ -10,11 +10,15 @@ WITH ev AS (
          w.payload->'data'->'message'->>'message_type' AS mt,
          lower(COALESCE(w.payload->'data'->'message'->>'from_email', '')) AS frm,
          w.payload->'data'->>'new_status' AS new_status,
+         (SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value')
+            FROM jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
+           WHERE p->>'name' = 'ticket_source_rb_em' LIMIT 1) AS src,
          COALESCE((w.payload->'data'->'message'->>'created_at')::timestamptz, w.received_at) AS msg_at
   FROM robylon_webhook_payloads w
   WHERE w.source = 'email'),
 facts AS (
   SELECT chat_id,
+    (array_agg(src ORDER BY received_at DESC) FILTER (WHERE src IS NOT NULL))[1] AS ticket_source,
     max(msg_at) FILTER (WHERE event_type = 'NEW_MESSAGE' AND mt = 'incoming' AND frm NOT LIKE '%@wintwealth.com') AS last_customer_msg,
     bool_or(event_type = 'NEW_MESSAGE' AND mt = 'incoming') AS has_incoming,
     max(msg_at) FILTER (WHERE (event_type = 'REPLY_SENT' AND mt = 'reply')
@@ -27,7 +31,7 @@ latest_status AS (
   ORDER BY chat_id, received_at DESC),
 t AS (
   SELECT e.chat_id, e.customer_email, e.created_at, ls.new_status AS robylon_status,
-         COALESCE(f.last_customer_msg, CASE WHEN COALESCE(f.has_incoming, false) THEN NULL ELSE e.created_at END) AS customer_clock,
+         COALESCE(f.last_customer_msg, CASE WHEN COALESCE(f.has_incoming, false) OR lower(f.ticket_source) = 'portal' THEN NULL ELSE e.created_at END) AS customer_clock,
          GREATEST(e.first_response_at, f.last_agent_msg, f.last_agent_status) AS agent_last
   FROM email_conversations e
   JOIN facts f ON f.chat_id = e.chat_id            -- tickets with no stored events at all are skipped

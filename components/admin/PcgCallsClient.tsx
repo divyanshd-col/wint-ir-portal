@@ -373,7 +373,7 @@ export default function PcgCallsClient() {
           setActiveTab(tabParam as PcgTab);
         }
       }
-      const callIdParam = urlParams.get('callId');
+      const callIdParam = urlParams.get('callId') || urlParams.get('call_id') || urlParams.get('cid');
       if (callIdParam) {
         handleOpenCallById(callIdParam);
       }
@@ -469,8 +469,15 @@ export default function PcgCallsClient() {
 
   // Active call view state
   const [activeCallAudit, setActiveCallAudit] = useState<PCGCall | null>(null);
+  const activeCallAuditRef = useRef<PCGCall | null>(null);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
+  const [loadingCallById, setLoadingCallById] = useState<boolean>(false);
+  const [callNotFoundNotice, setCallNotFoundNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    activeCallAuditRef.current = activeCallAudit;
+  }, [activeCallAudit]);
 
   // Dispute Section Tab: 'raised' | 'reviewed'
   const [disputeTab, setDisputeTab] = useState<'raised' | 'reviewed'>('raised');
@@ -556,8 +563,9 @@ export default function PcgCallsClient() {
       const data = await res.json();
       setCalls((prev) => {
         const loaded = data.calls || [];
-        if (activeCallAudit && !loaded.some((c: PCGCall) => c.id === activeCallAudit.id || c.callId === activeCallAudit.callId)) {
-          return [activeCallAudit, ...loaded];
+        const currentAudit = activeCallAuditRef.current || activeCallAudit;
+        if (currentAudit && !loaded.some((c: PCGCall) => c.id === currentAudit.id || c.callId === currentAudit.callId)) {
+          return [currentAudit, ...loaded];
         }
         return loaded;
       });
@@ -612,10 +620,13 @@ export default function PcgCallsClient() {
     }
   };
 
-  // Open Call View by ID (used by RM Scorecard evidence links)
+  // Open Call View by ID (used by RM Scorecard evidence links & Slack deep links)
   const handleOpenCallById = async (cid: string) => {
-    const cleanId = cid.replace('#', '').trim();
+    const cleanId = cid.replace(/^#/, '').replace(/^call-/, '').replace(/^runo-/, '').trim();
+    if (!cleanId) return;
+
     handleTabChange('calls');
+    setCallNotFoundNotice(null);
 
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -628,9 +639,9 @@ export default function PcgCallsClient() {
       (c) =>
         c.id === cleanId ||
         c.callId === cleanId ||
-        c.id.replace(/^call-/, '').replace(/^runo-/, '') === cleanId.replace(/^call-/, '').replace(/^runo-/, '') ||
-        c.callId?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId.replace(/^call-/, '').replace(/^runo-/, '') ||
-        c.id.includes(cleanId) ||
+        c.id?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId ||
+        c.callId?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId ||
+        c.id?.includes(cleanId) ||
         c.callId?.includes(cleanId)
     );
 
@@ -640,6 +651,7 @@ export default function PcgCallsClient() {
       return;
     }
 
+    setLoadingCallById(true);
     try {
       const res = await fetch(`/api/admin/pcg-calls?call_id=${encodeURIComponent(cleanId)}`);
       if (res.ok) {
@@ -651,11 +663,16 @@ export default function PcgCallsClient() {
           ]);
           setExpandedCallId(data.call.id);
           handleOpenCallView(data.call);
+          setCallNotFoundNotice(null);
           return;
         }
       }
+      setCallNotFoundNotice(`Call evaluation for ID "${cleanId}" could not be found.`);
     } catch (err) {
       console.error('[PcgCallsClient] Failed to fetch call by ID:', err);
+      setCallNotFoundNotice(`Failed to load call evaluation for ID "${cleanId}".`);
+    } finally {
+      setLoadingCallById(false);
     }
   };
 
@@ -1431,7 +1448,7 @@ export default function PcgCallsClient() {
   return (
     <div className="min-h-screen bg-[#f5f3ee] text-[#111111] flex flex-col font-sans">
       {/* ── TOP HEADER (GLOBAL) ─────────────────────────────────────────── */}
-      <header className="bg-white border-b border-[#e6e2d8] px-6 py-3.5 sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+      <header className="bg-[var(--tb-bg)] border-b border-[var(--tb-border)] px-6 py-3.5 sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-[#111111] flex items-center justify-center text-white font-bold text-sm">
             W
@@ -1504,7 +1521,7 @@ export default function PcgCallsClient() {
       <div className="flex flex-1 min-h-[calc(var(--vh100)_-_65px)] bg-[#f5f3ee]">
         {/* Left Sidebar Panel (Replicated from CX TL with Call Quality & RM Scorecard) */}
         <aside
-          className="w-[235px] shrink-0 bg-[#f5f3ee] border-r border-[#e6e2d8] py-4 select-none"
+          className="w-[240px] shrink-0 bg-[var(--sb-bg)] border-r border-[var(--sb-border)] py-4 select-none"
         >
           {/* Workspace switcher at the top of the sidebar (same spot as the CX sidebar) */}
           {(isSuperAdmin || platformDomain === 'both') && (
@@ -1515,9 +1532,9 @@ export default function PcgCallsClient() {
 
           {/* Section Title */}
           <div
-            className="text-[11px] uppercase tracking-[0.08em] text-[#71717a] px-4 pt-3 pb-2 font-semibold"
+            className="quality-shell-sidebar-title"
           >
-            {activePersona === 'admin' ? 'ADMIN' : activePersona === 'tl' ? 'TEAM LEAD' : 'AGENT'}
+            {activePersona === 'admin' ? 'Admin' : activePersona === 'tl' ? 'Team Lead' : 'Agent'}
           </div>
 
           {/* 1. Team Analytics Navigation Link (For Admin) */}
@@ -1525,22 +1542,16 @@ export default function PcgCallsClient() {
             <button
               type="button"
               onClick={() => handleTabChange('team_analytics')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'team_analytics'
-                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-                }`}
+              className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'team_analytics' ? ' active' : ''}`}
             >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'team_analytics' ? 'text-[#18181b]' : 'text-[#71717a]'
-                  }`}
-              >
+              <span>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="20" x2="18" y2="10" />
                   <line x1="12" y1="20" x2="12" y2="4" />
                   <line x1="6" y1="20" x2="6" y2="14" />
                 </svg>
               </span>
-              <span className="flex-1">Team Analytics</span>
+              <span className="quality-shell-sidebar-label">Team Analytics</span>
             </button>
           )}
 
@@ -1548,78 +1559,71 @@ export default function PcgCallsClient() {
           <button
             type="button"
             onClick={() => handleTabChange('member_analytics')}
-            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'member_analytics'
-              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'member_analytics' ? ' active' : ''}`}
           >
-            <span
-              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'member_analytics' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-            >
+            <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </span>
-            <span className="flex-1">{activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}</span>
+            <span className="quality-shell-sidebar-label">{activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}</span>
           </button>
 
           {/* 3. Call Quality Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('calls')}
-            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'calls' || activeTab === 'disputes'
-              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'calls' || activeTab === 'disputes' ? ' active' : ''}`}
           >
-            <span
-              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'calls' || activeTab === 'disputes' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-            >
+            <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3-8.63 2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
               </svg>
             </span>
-            <span className="flex-1">Call Quality</span>
+            <span className="quality-shell-sidebar-label">Call Quality</span>
           </button>
+
+          {/* 3b. TL Call Quality Navigation Link (For Admin) */}
+          {activePersona === 'admin' && (
+            <button
+              type="button"
+              onClick={() => handleTabChange('tl_calls')}
+              className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'tl_calls' ? ' active' : ''}`}
+            >
+              <span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </span>
+              <span className="quality-shell-sidebar-label">TL Call Quality</span>
+            </button>
+          )}
 
           {/* 3c. Chat Quality Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('chat_quality')}
-            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'chat_quality'
-              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'chat_quality' ? ' active' : ''}`}
           >
-            <span
-              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'chat_quality' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-            >
+            <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
             </span>
-            <span className="flex-1">Chat Quality</span>
+            <span className="quality-shell-sidebar-label">Chat Quality</span>
           </button>
-
-
 
           {/* 4. RM Scorecard Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('scorecard')}
-            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'scorecard'
-              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'scorecard' ? ' active' : ''}`}
           >
-            <span
-              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'scorecard' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-            >
+            <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
@@ -1628,7 +1632,7 @@ export default function PcgCallsClient() {
                 <polyline points="10 9 9 9 8 9" />
               </svg>
             </span>
-            <span className="flex-1">{activePersona === 'agent' ? 'My Scorecard' : 'RM Scorecard'}</span>
+            <span className="quality-shell-sidebar-label">{activePersona === 'agent' ? 'My Scorecard' : 'RM Scorecard'}</span>
           </button>
 
           {/* 5. RM Performance Navigation Link */}
@@ -1636,15 +1640,9 @@ export default function PcgCallsClient() {
             <button
               type="button"
               onClick={() => handleTabChange('rm_performance')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'rm_performance'
-                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-                }`}
+              className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'rm_performance' ? ' active' : ''}`}
             >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'rm_performance' ? 'text-[#18181b]' : 'text-[#71717a]'
-                  }`}
-              >
+              <span>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
                   <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
@@ -1654,7 +1652,7 @@ export default function PcgCallsClient() {
                   <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
                 </svg>
               </span>
-              <span className="flex-1">RM Performance</span>
+              <span className="quality-shell-sidebar-label">RM Performance</span>
             </button>
           )}
 
@@ -1663,15 +1661,9 @@ export default function PcgCallsClient() {
             <button
               type="button"
               onClick={() => handleTabChange('parameter_definitions')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'parameter_definitions'
-                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-                }`}
+              className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'parameter_definitions' ? ' active' : ''}`}
             >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'parameter_definitions' ? 'text-[#18181b]' : 'text-[#71717a]'
-                  }`}
-              >
+              <span>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
                   <path d="M8 7h8" />
@@ -1679,32 +1671,26 @@ export default function PcgCallsClient() {
                   <path d="M8 15h5" />
                 </svg>
               </span>
-              <span className="flex-1">Quality Parameters</span>
+              <span className="quality-shell-sidebar-label">Quality Parameters</span>
             </button>
           )}
 
           {/* Bottom section: Security & Settings */}
-          <div className="mt-4 pt-3 border-t border-[#e6e2d8]">
+          <div className="mt-4 pt-3 border-t border-[var(--sb-border)]">
             {/* Security Navigation Link (Agent and TL). Admins reach Security inside Settings, so it is not repeated for them. */}
             {activePersona !== 'admin' && (
               <button
                 type="button"
                 onClick={() => handleTabChange('security')}
-                className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'security'
-                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-                  }`}
+                className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'security' ? ' active' : ''}`}
               >
-                <span
-                  className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'security' ? 'text-[#18181b]' : 'text-[#71717a]'
-                    }`}
-                >
+                <span>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
                 </span>
-                <span className="flex-1">Security</span>
+                <span className="quality-shell-sidebar-label">Security</span>
               </button>
             )}
 
@@ -1712,22 +1698,47 @@ export default function PcgCallsClient() {
             {activePersona === 'admin' && (
               <Link
                 href="/settings?section=pcg-users"
-                className="w-[calc(100%-24px)] mx-3 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]"
+                className="quality-shell-sidebar-link"
               >
-                <span className="inline-flex items-center justify-center shrink-0 text-[#71717a]">
+                <span>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="3" />
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
                 </span>
-                <span className="flex-1">Settings</span>
+                <span className="quality-shell-sidebar-label">Settings</span>
               </Link>
             )}
           </div>
+                  <span className="quality-shell-sidebar-label">Settings</span>
+                </Link>
+              )}
+            </div>
+>>>>>>> origin/main
         </aside>
 
         {/* Main Content Area */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto min-w-0 max-w-7xl">
+          {loadingCallById && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-sm flex items-center gap-2 animate-pulse">
+              <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin inline-block"></span>
+              <span>Loading requested call evaluation...</span>
+            </div>
+          )}
+          {callNotFoundNotice && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-sm flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{callNotFoundNotice}</span>
+              </div>
+              <button
+                onClick={() => setCallNotFoundNotice(null)}
+                className="text-amber-700 hover:text-amber-950 font-bold text-xs px-2 py-1 rounded hover:bg-amber-100"
+              >
+                ✕ Dismiss
+              </button>
+            </div>
+          )}
           {activeTab === 'security' ? (
             <div>
               <SecuritySection />
