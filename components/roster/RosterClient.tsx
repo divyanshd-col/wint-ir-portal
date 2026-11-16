@@ -142,7 +142,7 @@ export default function RosterClient() {
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: 12, color: 'var(--qa-text-3)' }}><span>Can be edited or cancelled until the start date</span><span>Past days never change</span></div></div>);
   } else {
     body = (<div style={card}><table className="roster-tbl"><thead><tr><th>Person</th><th style={{ width: 160 }}>Role</th>{CHANNELS.map(c => <th key={c} style={{ width: 90 }}>{c}</th>)}</tr></thead>
-      <tbody>{data.people.map(p => (<tr key={p.userId}><td style={{ fontWeight: 600 }}>{p.name}</td><td style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{p.role === 'tl' ? 'Team lead' : 'Agent'}{p.tlName ? ` · ${p.tlName}’s team` : ''}</td>
+      <tbody>{data.people.map(p => (<tr key={p.userId}><td style={{ fontWeight: 600 }}>{p.name}</td><td style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{p.role === 'tl' ? 'Team lead' : 'Agent'}</td>
         {CHANNELS.map(c => <td key={c}><Switch label={`${c} for ${p.name}`} on={p.channels.includes(c)} disabled={!p.canEdit} onChange={v => setChannel(p, c, v)} /></td>)}</tr>))}</tbody></table>
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: 12, color: 'var(--qa-text-3)' }}><span>Channels are for information only. They aren’t used in any leave decision.</span><span>{anyEdit ? 'Changes save straight away and are logged' : 'View only'}</span></div></div>);
   }
