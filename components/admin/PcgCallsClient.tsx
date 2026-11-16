@@ -1710,11 +1710,6 @@ export default function PcgCallsClient() {
               </Link>
             )}
           </div>
-                  <span className="quality-shell-sidebar-label">Settings</span>
-                </Link>
-              )}
-            </div>
->>>>>>> origin/main
         </aside>
 
         {/* Main Content Area */}
