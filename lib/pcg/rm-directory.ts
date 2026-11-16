@@ -26,6 +26,8 @@ export interface PcgRmDirectoryRow {
   status?: string | null;
 }
 
+export type PcgRmDirectoryRecord = PcgRmDirectoryRow;
+
 // ── In-Memory Static Fallback (Snapshot of pcg_rm_directory) ─────────────────
 export const STATIC_PCG_DIRECTORY: PcgRmDirectoryRow[] = [
   // Team Swetha
@@ -126,6 +128,19 @@ export async function getPcgRmDirectory(forceRefresh = false): Promise<PcgRmDire
 }
 
 /**
+ * Normalizes a phone number to standard 12-digit Indian format (e.g. '919187709712')
+ */
+export function normalizeRmPhone(rawPhone?: string | number | null): string {
+  if (!rawPhone) return '';
+  const clean = String(rawPhone).replace(/\D/g, '').trim();
+  if (!clean) return '';
+  if (clean.length === 10) return `91${clean}`;
+  if (clean.length === 11 && clean.startsWith('0')) return `91${clean.slice(1)}`;
+  if (clean.length === 12 && clean.startsWith('91')) return clean;
+  return clean;
+}
+
+/**
  * Cleans phone number to last 10 digits for reliable cross-system matching.
  */
 function cleanPhoneDigits(phone?: string | null): string {
@@ -171,6 +186,8 @@ export async function resolvePcgAgentFromDirectory(
   const directory = await getPcgRmDirectory();
   return matchAgentInDirectory(rawStr.trim(), directory, customTeamMap);
 }
+
+export const resolvePcgAgent = resolvePcgAgentFromDirectory;
 
 /**
  * Synchronous resolver using the current cached directory (or static snapshot).
@@ -267,6 +284,49 @@ function matchAgentInDirectory(
 }
 
 /**
+ * Resolves RM name and Team Lead for a given agent phone number.
+ */
+export async function resolvePcgRmByPhone(rawPhone?: string | number | null): Promise<{
+  rm: string;
+  tl: string;
+  email?: string | null;
+} | null> {
+  if (!rawPhone) return null;
+  const digits = cleanPhoneDigits(String(rawPhone));
+  if (!digits || digits.length < 10) return null;
+
+  const directory = await getPcgRmDirectory();
+  for (const row of directory) {
+    const rowDigits = cleanPhoneDigits(row.phone_number);
+    if (rowDigits && rowDigits === digits) {
+      const tl = row.tl_name?.startsWith('Team ') ? row.tl_name : `Team ${row.tl_name}`;
+      return {
+        rm: canonicalizePcgRmName(row.rm_name),
+        tl,
+        email: row.email || null,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Loads all active RM directory mappings into an in-memory map keyed by normalized phone.
+ */
+export async function getPcgRmDirectoryMap(forceRefresh = false): Promise<Map<string, PcgRmDirectoryRow>> {
+  const directory = await getPcgRmDirectory(forceRefresh);
+  const map = new Map<string, PcgRmDirectoryRow>();
+  for (const row of directory) {
+    const norm = normalizeRmPhone(row.phone_number);
+    if (norm) {
+      map.set(norm, row);
+    }
+  }
+  return map;
+}
+
+/**
  * Returns dynamic TL -> RM array mapping for team dashboards and views.
  */
 export async function getPcgDynamicTlTeams(): Promise<Record<string, string[]>> {
@@ -287,3 +347,47 @@ export async function getPcgDynamicTlTeams(): Promise<Record<string, string[]>> 
   return teams;
 }
 
+/**
+ * Returns all mapped RM names for a given Team Lead identifier.
+ * Combines database mappings from pcg_rm_directory and fallback TL_TEAMS.
+ */
+export async function getPcgRmsForTl(tlIdentifier: string): Promise<string[]> {
+  if (!tlIdentifier || tlIdentifier.trim() === '' || tlIdentifier === 'all') return [];
+
+  const cleanTl = tlIdentifier.replace(/^Team\s+/i, '').trim().toLowerCase();
+  const rmsSet = new Set<string>();
+
+  // 1. From pcg_rm_directory
+  try {
+    const directory = await getPcgRmDirectory();
+    for (const entry of directory) {
+      const entryTlClean = entry.tl_name.replace(/^Team\s+/i, '').trim().toLowerCase();
+      if (entryTlClean === cleanTl || entryTlClean.includes(cleanTl) || cleanTl.includes(entryTlClean)) {
+        if (entry.role !== 'tl') {
+          rmsSet.add(canonicalizePcgRmName(entry.rm_name));
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[getPcgRmsForTl] Failed to query pcg_rm_directory:', err);
+  }
+
+  // 2. From static fallback TL_TEAMS in pcg-calls
+  try {
+    const { TL_TEAMS } = await import('@/app/api/admin/pcg-calls/route');
+    for (const [tlName, members] of Object.entries(TL_TEAMS)) {
+      const tlClean = tlName.replace(/^Team\s+/i, '').trim().toLowerCase();
+      if (tlClean === cleanTl || tlClean.includes(cleanTl) || cleanTl.includes(tlClean)) {
+        members.forEach((m) => rmsSet.add(canonicalizePcgRmName(m)));
+      }
+    }
+  } catch (err) {
+    console.warn('[getPcgRmsForTl] Failed to load TL_TEAMS:', err);
+  }
+
+  // Purge any TL themselves or admin names
+  rmsSet.delete(canonicalizePcgRmName(tlIdentifier));
+  rmsSet.delete(cleanTl);
+
+  return Array.from(rmsSet).sort((a, b) => a.localeCompare(b));
+}

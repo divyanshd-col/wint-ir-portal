@@ -1,9 +1,20 @@
+import './_load-env';
 import { query } from '../lib/cx/db';
-import { type DoubleTickTranscriptItem, closeInactivePcgConversations, PCG_INACTIVITY_MS } from '../lib/pcg/doubletick';
+import { type DoubleTickTranscriptItem, PCG_INACTIVITY_MS } from '../lib/pcg/doubletick';
+
+function toIso(ts: any): string {
+  if (!ts) return new Date(0).toISOString();
+  if (ts instanceof Date) return ts.toISOString();
+  if (typeof ts === 'number') return new Date(ts).toISOString();
+  const s = String(ts).trim();
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString();
+  return s;
+}
 
 async function fastBackfill() {
   console.log('=====================================================');
-  console.log(' Starting Fast DoubleTick Backfill into pcg_conversations');
+  console.log(' Starting 48-Hour Session-Based DoubleTick Backfill');
   console.log(' (pcg_webhook_payloads remains completely untouched)');
   console.log('=====================================================');
 
@@ -13,7 +24,7 @@ async function fastBackfill() {
   console.log(`Total DoubleTick payloads to process: ${initialRaw.count}`);
 
   // 1. Fetch all DoubleTick payloads chronologically
-  console.log('Fetching all payloads from DB...');
+  console.log('Fetching all raw DoubleTick payloads from DB...');
   const rows = await query<{ id: number; payload: any; received_at: string }>(
     `SELECT id, payload, received_at 
      FROM pcg_webhook_payloads 
@@ -21,18 +32,7 @@ async function fastBackfill() {
      ORDER BY id ASC`
   );
 
-  console.log(`Fetched ${rows.length} payloads. Grouping into conversations in memory...`);
-
-  // 2. Fetch all existing pcg_conversations so we can merge without losing existing data
-  const existingConvs = await query<{
-    customer_phone: string;
-    waba_number: string;
-    transcript: DoubleTickTranscriptItem[];
-    customer_name: string | null;
-    customer_id: string | null;
-    assigned_rm_id: string | null;
-    rm_name: string | null;
-  }>(`SELECT customer_phone, waba_number, transcript, customer_name, customer_id, assigned_rm_id, rm_name FROM pcg_conversations`);
+  console.log(`Fetched ${rows.length} payloads. Grouping into customer threads in memory...`);
 
   interface ConvAccumulator {
     customerPhone: string;
@@ -44,44 +44,11 @@ async function fastBackfill() {
     turnsMap: Map<string, DoubleTickTranscriptItem>;
     unkeyedTurns: DoubleTickTranscriptItem[];
     lastPayload: any;
-    lastMessageAt: string;
   }
 
   const convMap = new Map<string, ConvAccumulator>();
-
-  // Pre-seed with existing conversations
-  for (const ec of existingConvs) {
-    const key = `${ec.customer_phone}_${ec.waba_number}`;
-    const acc: ConvAccumulator = {
-      customerPhone: ec.customer_phone,
-      wabaNumber: ec.waba_number,
-      customerName: ec.customer_name,
-      customerId: ec.customer_id,
-      assignedRmId: ec.assigned_rm_id,
-      rmName: ec.rm_name,
-      turnsMap: new Map(),
-      unkeyedTurns: [],
-      lastPayload: null,
-      lastMessageAt: new Date(0).toISOString(),
-    };
-    if (Array.isArray(ec.transcript)) {
-      for (const t of ec.transcript) {
-        if (t.message_id) {
-          acc.turnsMap.set(t.message_id, t);
-        } else {
-          acc.unkeyedTurns.push(t);
-        }
-        if (t.timestamp && t.timestamp > acc.lastMessageAt) {
-          acc.lastMessageAt = t.timestamp;
-        }
-      }
-    }
-    convMap.set(key, acc);
-  }
-
   let totalParsedItems = 0;
 
-  // 3. Process each payload chronologically in memory
   for (const r of rows) {
     const rawBody = r.payload;
     if (!rawBody || typeof rawBody !== 'object') continue;
@@ -115,9 +82,6 @@ async function fastBackfill() {
       } else if (isStatusUpdate) {
         direction = 'outbound';
         speaker = 'RM';
-      } else {
-        direction = 'inbound';
-        speaker = 'Customer';
       }
 
       let rawCustomerPhone = item['Customer Phone'] || (direction === 'outbound' ? item.to : item.from) || item.phone || null;
@@ -140,12 +104,10 @@ async function fastBackfill() {
           turnsMap: new Map(),
           unkeyedTurns: [],
           lastPayload: null,
-          lastMessageAt: new Date(0).toISOString(),
         });
       }
 
       const acc = convMap.get(key)!;
-
       const customerName = item.contact?.name || item.customerName || item['Customer Name'] || item.name || null;
       const customerId = item.customerId || item.dtCustomerId || null;
       const assignedRmId = item.assignedTo || item.sentBy || item.userId || null;
@@ -166,14 +128,10 @@ async function fastBackfill() {
       const mediaUrl = item.message?.url || null;
       const messageType = item.message?.type || item['Message Type'] || (item.message?.templateName ? 'template' : 'TEXT');
       const templateName = item.message?.templateName || null;
-      const messageTime = item.statusTimestamp || item.receivedAt || item['Sent At'] || r.received_at || new Date().toISOString();
-
-      if (messageTime > acc.lastMessageAt) {
-        acc.lastMessageAt = messageTime;
-      }
+      const rawTime = item.statusTimestamp || item.receivedAt || item['Sent At'] || r.received_at || new Date().toISOString();
+      const messageTime = toIso(rawTime);
 
       if (messageId && acc.turnsMap.has(messageId)) {
-        // Update status of existing turn
         const existing = acc.turnsMap.get(messageId)!;
         if (status) existing.status = status;
         if (status === 'DELIVERED' && !existing.delivered_at) existing.delivered_at = messageTime;
@@ -205,105 +163,160 @@ async function fastBackfill() {
     }
   }
 
-  console.log(`Parsed ${totalParsedItems} message events into ${convMap.size} unique conversation threads.`);
-  console.log('Upserting conversations into pcg_conversations...');
+  console.log(`Parsed ${totalParsedItems} message events into ${convMap.size} customer contacts.`);
 
-  let upsertedConvs = 0;
+  // 2. Clear existing pcg_conversations to rebuild with distinct session rows
+  console.log('Truncating pcg_conversations to repopulate session records...');
+  await query('TRUNCATE pcg_conversations RESTART IDENTITY CASCADE');
+
+  interface SessionToInsert {
+    customerPhone: string;
+    wabaNumber: string;
+    customerName: string | null;
+    customerId: string | null;
+    assignedRmId: string | null;
+    rmName: string | null;
+    sessionTurns: DoubleTickTranscriptItem[];
+    totalMessages: number;
+    lastTurn: DoubleTickTranscriptItem | null;
+    sessionLastTime: string;
+    rawPayload: any;
+    convStatus: string;
+    closedAt: string | null;
+    sessionFirstTime: string;
+  }
+
+  const allSessionsToInsert: SessionToInsert[] = [];
+  let closedSessions = 0;
+  let openSessions = 0;
+
   for (const acc of convMap.values()) {
-    // Combine keyed and unkeyed turns, sorted by timestamp
     const allTurns = [...Array.from(acc.turnsMap.values()), ...acc.unkeyedTurns];
-    allTurns.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+    allTurns.sort((a, b) => toIso(a.timestamp).localeCompare(toIso(b.timestamp)));
 
-    const lastTurn = allTurns[allTurns.length - 1];
-    const totalMessages = allTurns.length;
-    const lastMsgTime = acc.lastMessageAt && acc.lastMessageAt !== new Date(0).toISOString()
-      ? acc.lastMessageAt
-      : (lastTurn?.timestamp || null);
+    // Segment into 48-hour sessions
+    const sessions: DoubleTickTranscriptItem[][] = [];
+    let currentSession: DoubleTickTranscriptItem[] = [];
 
-    const isOld = lastMsgTime && (Date.now() - new Date(lastMsgTime).getTime() >= PCG_INACTIVITY_MS);
-    const convStatus = isOld ? 'CLOSED' : 'OPEN';
-    const closedAt = isOld && lastMsgTime
-      ? new Date(new Date(lastMsgTime).getTime() + PCG_INACTIVITY_MS).toISOString()
-      : null;
+    for (let i = 0; i < allTurns.length; i++) {
+      const turn = allTurns[i];
+      if (currentSession.length === 0) {
+        currentSession.push(turn);
+      } else {
+        const prev = currentSession[currentSession.length - 1];
+        const prevTime = new Date(toIso(prev.timestamp)).getTime();
+        const curTime = new Date(toIso(turn.timestamp)).getTime();
+        const gapMs = !isNaN(prevTime) && !isNaN(curTime) ? curTime - prevTime : 0;
 
-    await query(
-      `INSERT INTO pcg_conversations (
-         customer_phone, waba_number, customer_name, customer_id, assigned_rm_id, rm_name,
-         transcript, total_messages, last_message_text, last_event_type, last_direction,
-         last_status, last_message_at, raw_payload, status, closed_at, updated_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
-       ON CONFLICT (customer_phone, waba_number) DO UPDATE SET
-         customer_name     = COALESCE(EXCLUDED.customer_name, pcg_conversations.customer_name),
-         customer_id       = COALESCE(EXCLUDED.customer_id, pcg_conversations.customer_id),
-         assigned_rm_id    = COALESCE(EXCLUDED.assigned_rm_id, pcg_conversations.assigned_rm_id),
-         rm_name           = COALESCE(EXCLUDED.rm_name, pcg_conversations.rm_name),
-         transcript        = EXCLUDED.transcript,
-         total_messages    = EXCLUDED.total_messages,
-         last_message_text = COALESCE(EXCLUDED.last_message_text, pcg_conversations.last_message_text),
-         last_event_type   = EXCLUDED.last_event_type,
-         last_direction    = EXCLUDED.last_direction,
-         last_status       = COALESCE(EXCLUDED.last_status, pcg_conversations.last_status),
-         last_message_at   = EXCLUDED.last_message_at,
-         raw_payload       = COALESCE(EXCLUDED.raw_payload, pcg_conversations.raw_payload),
-         status            = EXCLUDED.status,
-         closed_at         = EXCLUDED.closed_at,
-         updated_at        = NOW()`,
-      [
-        acc.customerPhone,
-        acc.wabaNumber,
-        acc.customerName,
-        acc.customerId,
-        acc.assignedRmId,
-        acc.rmName,
-        JSON.stringify(allTurns),
+        if (gapMs >= PCG_INACTIVITY_MS) {
+          sessions.push(currentSession);
+          currentSession = [turn];
+        } else {
+          currentSession.push(turn);
+        }
+      }
+    }
+    if (currentSession.length > 0) {
+      sessions.push(currentSession);
+    }
+
+    // Prepare each session for insertion
+    for (const sessionTurns of sessions) {
+      const firstTurn = sessionTurns[0];
+      const lastTurn = sessionTurns[sessionTurns.length - 1];
+      const totalMessages = sessionTurns.length;
+      const sessionFirstTime = toIso(firstTurn.timestamp);
+      const sessionLastTime = toIso(lastTurn.timestamp);
+
+      const lastMs = new Date(sessionLastTime).getTime();
+      const isOld = !isNaN(lastMs) && (Date.now() - lastMs >= PCG_INACTIVITY_MS);
+      const convStatus = isOld ? 'CLOSED' : 'OPEN';
+      const closedAt = isOld && !isNaN(lastMs)
+        ? new Date(lastMs + PCG_INACTIVITY_MS).toISOString()
+        : null;
+
+      if (convStatus === 'CLOSED') closedSessions++; else openSessions++;
+
+      allSessionsToInsert.push({
+        customerPhone: acc.customerPhone,
+        wabaNumber: acc.wabaNumber,
+        customerName: acc.customerName,
+        customerId: acc.customerId,
+        assignedRmId: acc.assignedRmId,
+        rmName: acc.rmName,
+        sessionTurns,
         totalMessages,
-        lastTurn?.text || null,
-        lastTurn?.event_type || 'message_received',
-        lastTurn?.direction || 'inbound',
-        lastTurn?.status || null,
-        lastMsgTime,
-        acc.lastPayload ? JSON.stringify(acc.lastPayload) : '{}',
+        lastTurn: lastTurn || null,
+        sessionLastTime,
+        rawPayload: acc.lastPayload,
         convStatus,
         closedAt,
-      ]
-    );
-
-    upsertedConvs++;
-    if (upsertedConvs % 25 === 0 || upsertedConvs === convMap.size) {
-      console.log(`Upserted ${upsertedConvs} / ${convMap.size} conversations...`);
+        sessionFirstTime,
+      });
     }
   }
 
-  console.log('Running inactivity sweep to close any conversations inactive > 48h...');
-  const { closedCount } = await closeInactivePcgConversations(48);
-  console.log(`Auto-closed ${closedCount} conversations.`);
+  console.log(`Total sessions to insert: ${allSessionsToInsert.length} (${closedSessions} CLOSED, ${openSessions} OPEN)`);
+  console.log('Inserting sessions in batches of 50...');
 
-  // 4. Verify integrity
-  const [finalRaw] = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM pcg_webhook_payloads WHERE source = 'doubletick'`
-  );
-  const [finalConv] = await query<{ count: string; total_msgs: string }>(
-    `SELECT COUNT(*) as count, COALESCE(SUM(total_messages), 0) as total_msgs FROM pcg_conversations`
-  );
-  const [statusBreakdown] = await query<{ open_count: string; closed_count: string }>(
-    `SELECT 
-       COUNT(*) FILTER (WHERE status = 'OPEN') as open_count,
-       COUNT(*) FILTER (WHERE status = 'CLOSED') as closed_count
-     FROM pcg_conversations`
-  );
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < allSessionsToInsert.length; i += BATCH_SIZE) {
+    const batch = allSessionsToInsert.slice(i, i + BATCH_SIZE);
+    const values: any[] = [];
+    const valueClauses: string[] = [];
 
-  console.log('\n=====================================================');
-  console.log(' Fast Backfill Successfully Completed! ');
-  console.log('=====================================================');
-  console.log(`pcg_webhook_payloads: ${finalRaw.count} (Verified untouched, nothing deleted)`);
-  console.log(`pcg_conversations total threads: ${finalConv.count}`);
-  console.log(`pcg_conversations total message turns: ${finalConv.total_msgs}`);
-  console.log(`pcg_conversations status breakdown -> OPEN: ${statusBreakdown.open_count}, CLOSED: ${statusBreakdown.closed_count}`);
+    batch.forEach((item, rowIdx) => {
+      const offset = rowIdx * 17;
+      valueClauses.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, NOW())`
+      );
+      values.push(
+        item.customerPhone,
+        item.wabaNumber,
+        item.customerName,
+        item.customerId,
+        item.assignedRmId,
+        item.rmName,
+        JSON.stringify(item.sessionTurns),
+        item.totalMessages,
+        item.lastTurn?.text || null,
+        item.lastTurn?.event_type || 'message_received',
+        item.lastTurn?.direction || 'inbound',
+        item.lastTurn?.status || null,
+        item.sessionLastTime,
+        item.rawPayload ? JSON.stringify(item.rawPayload) : '{}',
+        item.convStatus,
+        item.closedAt,
+        item.sessionFirstTime
+      );
+    });
+
+    const sql = `
+      INSERT INTO pcg_conversations (
+        customer_phone, waba_number, customer_name, customer_id, assigned_rm_id, rm_name,
+        transcript, total_messages, last_message_text, last_event_type, last_direction,
+        last_status, last_message_at, raw_payload, status, closed_at, created_at, updated_at
+      ) VALUES ${valueClauses.join(', ')}
+    `;
+
+    await query(sql, values);
+    const progress = Math.min(i + BATCH_SIZE, allSessionsToInsert.length);
+    if (progress % 250 === 0 || progress === allSessionsToInsert.length) {
+      console.log(`  Inserted ${progress} / ${allSessionsToInsert.length} sessions...`);
+    }
+  }
+
+  console.log(`\n=====================================================`);
+  console.log(`🎉 48-Hour Session Backfill Complete!`);
+  console.log(`   - Total Conversation Sessions: ${allSessionsToInsert.length}`);
+  console.log(`   - CLOSED Sessions: ${closedSessions}`);
+  console.log(`   - OPEN Sessions:   ${openSessions}`);
+  console.log(`=====================================================`);
 }
 
 fastBackfill()
   .then(() => process.exit(0))
-  .catch((err) => {
-    console.error('Fast backfill error:', err);
+  .catch((e) => {
+    console.error('❌ Error during backfill:', e);
     process.exit(1);
   });

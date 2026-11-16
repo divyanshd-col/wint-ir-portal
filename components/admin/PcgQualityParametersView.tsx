@@ -11,16 +11,35 @@ export interface QualityParameterDefinition {
   group: 'Process Skills' | 'Communication Skills' | 'Customer Service Skills';
   groupWeight: string;
   isTripwire?: boolean;
+  conditional?: boolean;
+  conditionalInfo?: {
+    whenEvaluated: string;
+    whenNA: string;
+    reason: string;
+  };
   summary: string;
   criteria: string[];
   standards: {
     yes: string;
+    half?: string;
     no: string;
     na: string;
   };
   tripwireRules?: string[];
 }
 
+export interface ChatComplianceCheckItem {
+  id: string;
+  num: number;
+  name: string;
+  rule: string;
+  description: string;
+  triggerExample: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 1. VOICE CALL QUALITY PARAMETERS (11 Parameters across 3 Groups)
+// ══════════════════════════════════════════════════════════════════════════════
 export const PCG_PARAMETER_DEFINITIONS: QualityParameterDefinition[] = [
   // ── GROUP 1: PROCESS SKILLS (50%) ──────────────────────────────────────────
   {
@@ -265,13 +284,555 @@ export const PCG_PARAMETER_DEFINITIONS: QualityParameterDefinition[] = [
   },
 ];
 
-export default function PcgQualityParametersView() {
+// ══════════════════════════════════════════════════════════════════════════════
+// 2. WHATSAPP CHAT QUALITY PARAMETERS (11 Parameters across 3 Groups)
+// ══════════════════════════════════════════════════════════════════════════════
+export const PCG_CHAT_PARAMETER_DEFINITIONS: QualityParameterDefinition[] = [
+  // ── GROUP 1: PROCESS SKILLS (50%) ──────────────────────────────────────────
+  {
+    id: 'QueryResolution',
+    num: 1,
+    name: 'Query Resolution',
+    key: 'QueryResolution',
+    weight: 20,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    summary:
+      'Did the RM or AM deal with every single query, objection, or request raised by the client, and either resolve it fully or properly move it forward to the right team or call.',
+    criteria: [
+      'Every question and request raised by the customer is addressed across the conversation, not just the first or easiest query.',
+      'If the agent cannot answer live, properly escalates to ops, product, or fund management team, or coordinates a voice call.',
+      'Never leaves a customer question hanging, brushed aside, or ignored.',
+      'Leaves the investor with a clear next step or confirmed resolution before concluding the session.',
+    ],
+    standards: {
+      yes: 'Every single client question was resolved fully, or escalated with confirmed next steps and clear ownership.',
+      half: 'The main query was resolved, but a secondary question or follow-up clarification was missed or left partially answered.',
+      no: 'Ignored, dodged, or dismissed key investor questions, gave an incorrect brush-off, or closed the chat leaving open queries unaddressed.',
+      na: 'No queries or questions were raised by the customer in this thread (pure greeting exchange or acknowledgment).',
+    },
+  },
+  {
+    id: 'Accuracy',
+    num: 2,
+    name: 'Accuracy (Technically / Legally Correct)',
+    key: 'Accuracy',
+    weight: 20,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    isTripwire: true,
+    summary:
+      'Was what the RM or AM said 100% correct per Wint Knowledge Base, PMS Disclosure Document, AIF PPM, and SEBI rules (strategies, fees, lock-in, taxation, NAV, returns).',
+    criteria: [
+      'All product statements regarding AIF, PMS, MLDs, and High-Yield Bonds match official Knowledge Base and SEBI rules.',
+      'Accurately explains yields (XIRR, target IRR, coupon vs. principal), fees, hurdle rate, lock-in, tenure, and pass-through taxation.',
+      'Zero promises or implications of guaranteed, fixed, or risk-free returns on market-linked securities.',
+      'Minor phrasing slips that are immediately self-corrected in the same thread before client action are scored leniently.',
+    ],
+    tripwireRules: [
+      'Promises or implies guaranteed, assured, or fixed returns on AIF, MLDs, or market-linked bonds.',
+      'Quotes past performance without stating the mandatory statutory disclaimer that past performance does not guarantee future results.',
+      'Misrepresents product structure, lock-in, tenure, hurdle rate, or taxation (e.g. claiming AIF returns are tax-free).',
+      'Provides unauthorized personalized investment advice beyond permitted SEBI execution and distribution scope.',
+    ],
+    standards: {
+      yes: 'All financial details, product mechanics, tax implications, and regulatory terms were completely accurate per Knowledge Base; zero return guarantees.',
+      half: 'Minor slip in phrasing or non-critical specification that was immediately self-corrected in thread and did not mislead the client.',
+      no: 'Factual inaccuracy, incorrect product terms, or misleading statement regarding returns, lock-in, taxation, or risk. Triggers Compliance Gate Review.',
+      na: 'Purely administrative logistics with zero discussion of financial products, returns, yields, or tax mechanics.',
+    },
+  },
+  {
+    id: 'ExpectationFollowThrough',
+    num: 3,
+    name: 'Expectation & Follow-Through',
+    key: 'ExpectationFollowThrough',
+    weight: 15,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    summary:
+      'Does the client know when they will hear back (clear TAT / next steps), took personal ownership, and did the agent honour visible follow-through commitments.',
+    criteria: [
+      'On open items or pending requests (drawdown, allotment, statement generation, redemption, KYC), establishes a transparent timeline (TAT) or next update window.',
+      'Takes clear personal ownership ("I am coordinating with our ops team and will update you by 3 PM") rather than vague hand-waving.',
+      'Faithfully honours follow-through commitments made in earlier messages or preceding sessions.',
+    ],
+    standards: {
+      yes: 'Client clearly knows when they will hear back, next steps are explicit, and all follow-through commitments were honoured.',
+      half: 'Took ownership to follow up, but timeline was vague ("soon", "later") or delayed without a proactive advance update.',
+      no: 'Open pending items left without any expectation set, vague uncommitted promises, or failed to deliver on committed updates.',
+      na: 'Query resolved immediately and completely on the spot with zero open items or pending operational workflows.',
+    },
+  },
+  {
+    id: 'Personalisation',
+    num: 4,
+    name: 'Personalisation & Relationship Context',
+    key: 'Personalisation',
+    weight: 15,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    summary:
+      'Was the reply built around this client\'s portfolio, specific holdings/tranches, and conversation history, without asking for info already shared.',
+    criteria: [
+      'References the investor\'s specific holdings, tranche names, invested amounts, or prior interactions from CRM / preceding chat summary.',
+      'Avoids asking the investor for information, screenshots, or documents already provided in earlier messages or preceding chats.',
+      'Does not send robotic, one-size-fits-all copy-paste templates that ignore the investor\'s specific scenario.',
+    ],
+    standards: {
+      yes: 'Response was distinctly tailored to this client\'s specific portfolio, holdings, and history, leveraging preceding context seamlessly.',
+      half: 'Partially tailored to the issue, but relies on boilerplate text or re-confirms a detail already visible in the conversation history.',
+      no: 'Generic copy-pasted template that ignores client context, or forces the client to repeat details already provided.',
+      na: 'Brand new lead with zero prior CRM history or account records.',
+    },
+  },
+  {
+    id: 'EscalationToCall',
+    num: 8,
+    name: 'Escalation to Call',
+    key: 'EscalationToCall',
+    weight: 4,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    conditional: true,
+    conditionalInfo: {
+      whenEvaluated: 'Only when an issue is complex or heated enough that offering or conducting a voice call is relevant.',
+      whenNA: 'When the customer\'s question is straightforward and easily handled via text in chat.',
+      reason: 'Transitioning to a voice call is only evaluated when necessary for high-touch complex topics or severe complaints. Routine inquiries drop cleanly to NA without penalty.',
+    },
+    summary:
+      'Was moving to a call, or staying in chat, the right decision for this client situation. NA if call question never arose.',
+    criteria: [
+      'Correctly recognizes when a complex query, multi-step financial planning topic, or escalating frustration requires a voice call rather than prolonged typing.',
+      'Smoothly coordinates the call offer: checks client convenience and confirms scheduled dialing time.',
+      'Does not push unnecessary calls for simple questions that can easily be answered in a 2-line chat.',
+    ],
+    standards: {
+      yes: 'Made the right call: proactively offered/executed a voice call for high-touch complexity, or kept simple matter in chat seamlessly.',
+      half: 'Offered a call but did not specify a time or follow up to confirm client convenience.',
+      no: 'Persisted in endless back-and-forth chat text during a complex escalation that clearly demanded an immediate voice call.',
+      na: 'Routine inquiry where call escalation was neither necessary nor suggested.',
+    },
+  },
+  {
+    id: 'PostCallRecap',
+    num: 9,
+    name: 'Post-Call Recap',
+    key: 'PostCallRecap',
+    weight: 4,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    conditional: true,
+    conditionalInfo: {
+      whenEvaluated: 'Only when a phone call actually took place between the RM and client.',
+      whenNA: 'When no voice call occurred (100% text-only conversation on WhatsApp).',
+      reason: 'A written recap is mandatory only after concluding a call so that both parties share documented next steps. If no call was conducted, this parameter drops to NA without deducting points.',
+    },
+    summary:
+      'Evaluated whenever chat references a completed call: did RM post a written summary of what was discussed and agreed. NA if no call took place.',
+    criteria: [
+      'Sends a concise written recap on WhatsApp summarizing agreed decisions, investment actions, and next steps discussed on the call.',
+      'Provides a clear reference point so the investor has a documented record of commitments.',
+    ],
+    standards: {
+      yes: 'Sent a clear, structured written recap on WhatsApp summarizing what was agreed on the call and next steps.',
+      half: 'Sent a message after the call, but only thanked the client without summarizing agreed actions or timelines.',
+      no: 'Completed a substantive call but posted zero written recap or follow-up summary in the chat thread.',
+      na: 'No phone call occurred during or preceding this WhatsApp session (purely text conversation).',
+    },
+  },
+
+  // ── GROUP 2: CUSTOMER SERVICE SKILLS (20%) ────────────────────────────────
+  {
+    id: 'DissatisfactionHandling',
+    num: 5,
+    name: 'Dissatisfaction Handling',
+    key: 'DissatisfactionHandling',
+    weight: 8,
+    group: 'Customer Service Skills',
+    groupWeight: '20%',
+    conditional: true,
+    conditionalInfo: {
+      whenEvaluated: 'Only when the client is visibly upset, complaining, demanding, or distressed.',
+      whenNA: 'On calm, routine, or positive chats with zero expressions of dissatisfaction.',
+      reason: 'RMs are never penalized for dissatisfaction handling on calm chats where the client never raised a grievance. The parameter drops from both numerator and denominator (NA).',
+    },
+    summary:
+      'Judged only when client is visibly unhappy, complaining, demanding, or distressed. Stays non-defensive, offers a concrete way forward. Otherwise NA.',
+    criteria: [
+      'Stays calm, courteous, and non-defensive when the investor expresses frustration or criticism.',
+      'Validates the client\'s frustration without blaming other internal departments or arguing.',
+      'Offers a concrete, actionable resolution path and prioritization.',
+    ],
+    standards: {
+      yes: 'Handled dissatisfaction with poise, empathy, and non-defensiveness; provided an immediate, concrete solution and escalation plan.',
+      half: 'Polite and non-argumentative, but response was somewhat mechanical or failed to fully address the emotional temperature.',
+      no: 'Defensive, argumentative, dismissive of client frustration, shifted blame, or ignored the complaint entirely.',
+      na: 'Calm, routine conversation with zero expressions of dissatisfaction, frustration, or complaints from the investor.',
+    },
+  },
+  {
+    id: 'Empathy',
+    num: 6,
+    name: 'Empathy',
+    key: 'Empathy',
+    weight: 5,
+    group: 'Customer Service Skills',
+    groupWeight: '20%',
+    conditional: true,
+    conditionalInfo: {
+      whenEvaluated: 'Only when the investor expresses anxiety, worry about market drops, delays, or confusion.',
+      whenNA: 'On standard transactional inquiries (e.g. requesting a statement or drawdown link) where reassurance is not warranted.',
+      reason: 'Demonstrating empathy is judged specifically when the client displays vulnerability, distress, or confusion. For purely transactional interactions, this parameter drops cleanly to NA.',
+    },
+    summary:
+      'Judged only in gentler moments of confusion, worry about markets/drawdowns, anxiety, or apology. Specific acknowledgement fitting the moment. Otherwise NA.',
+    criteria: [
+      'Acknowledges investor concerns with genuine warmth and reassurance before launching into technical details.',
+      'Tailors empathetic acknowledgment to the specific situation (e.g. drawdown anxiety vs. onboarding delay) rather than stock sympathy lines.',
+    ],
+    standards: {
+      yes: 'Demonstrated genuine, tailored empathy acknowledging the investor\'s concern before guiding them to clarity.',
+      half: 'Acknowledged the concern, but used generic stock courtesy phrasing ("We understand your concern") without situation-specific warmth.',
+      no: 'Cold, purely robotic transaction that completely bypassed investor\'s stated anxiety or hesitation.',
+      na: 'Standard transactional or informational chat where emotional reassurance was not warranted.',
+    },
+  },
+  {
+    id: 'SimplifyingConcepts',
+    num: 7,
+    name: 'Simplifying Concepts',
+    key: 'SimplifyingConcepts',
+    weight: 5,
+    group: 'Customer Service Skills',
+    groupWeight: '20%',
+    conditional: true,
+    conditionalInfo: {
+      whenEvaluated: 'Only when complex financial concepts arise (hurdle rate, drawdown, pass-through taxation, TWRR vs XIRR, exit load, senior secured debt).',
+      whenNA: 'When the conversation does not involve complex financial terminology or technical structuring.',
+      reason: 'Agents should not force complex explanations or patronize investors when not needed. When no advanced financial concepts are discussed, this parameter is excluded as NA.',
+    },
+    summary:
+      'Judged only when complex terms arise (hurdle rate, high-water mark, drawdown, exit load, pass-through taxation, TWRR, XIRR, YTM, TDS, Record Date). Otherwise NA.',
+    criteria: [
+      'Demystifies complex terms (hurdle rate, high-water mark, drawdown, pass-through taxation, TWRR vs XIRR, exit load, TDS, senior secured structure).',
+      'Uses intuitive plain language, clear analogies, or quick numerical examples suited to client understanding.',
+      'Avoids patronizing experienced HNI investors while ensuring clear comprehension.',
+    ],
+    standards: {
+      yes: 'Complex financial mechanics were explained with crisp, intuitive language and concrete examples easy to digest on mobile.',
+      half: 'Explanation was technically accurate but somewhat dense, requiring extra effort from the investor to unpack.',
+      no: 'Overwhelmed client with unexplained technical jargon or gave confusing, contradictory explanations.',
+      na: 'No complex financial concepts or technical terms arose in this conversation.',
+    },
+  },
+
+  // ── GROUP 3: COMMUNICATION SKILLS (30%) ────────────────────────────────────
+  {
+    id: 'ReadabilityTone',
+    num: 10,
+    name: 'Readability & Professional Tone',
+    key: 'ReadabilityTone',
+    weight: 2,
+    group: 'Communication Skills',
+    groupWeight: '30%',
+    summary:
+      'Could the client easily read the messages on a phone, and was the tone respectful and professional for an HNI client (no solid unformatted text blocks, no raw internal jargon).',
+    criteria: [
+      'Messages are formatted cleanly with bullet points, line breaks, and bold emphasis so they are effortless to read on a mobile phone screen.',
+      'Maintains a polished, courteous, and professional tone suited to HNI wealth management.',
+      'Free of internal acronyms or raw ops jargon (e.g. "backend ticket #1024 dropped").',
+      'Note: Hinglish, Hindi typed in English script, and minor casual typos are NEVER penalized.',
+    ],
+    standards: {
+      yes: 'Messages were easy to read on mobile with clean paragraphs/spacing, respectful tone, and polished language.',
+      no: 'Sent massive unbroken text walls, used inappropriate slang or harsh tone, or exposed confusing internal raw system jargon.',
+      na: 'Insufficient agent text to evaluate readability and tone.',
+    },
+  },
+  {
+    id: 'GreetingClosing',
+    num: 11,
+    name: 'Greeting & Closing',
+    key: 'GreetingClosing',
+    weight: 2,
+    group: 'Communication Skills',
+    groupWeight: '30%',
+    summary:
+      'Did the RM open respectfully with Sir/Ma\'am, introduce self/Wint Wealth on first contact/new thread, and close the conversation properly upon resolution.',
+    criteria: [
+      'Opens respectfully with Sir/Ma\'am or personalized salutation.',
+      'Introduces self and Wint Wealth on first contact or brand-new thread.',
+      'In ongoing threads, polite acknowledgment ("Hi Sir", "Good morning Sir") meets the opening standard.',
+      'Concludes the conversation politely once the query is resolved, thanking the investor and offering ongoing availability.',
+    ],
+    standards: {
+      yes: 'Respectful opening with Sir/Ma\'am, proper brand introduction when appropriate, and polite conversational closing upon resolution.',
+      no: 'Lacked respectful salutation, jumped abruptly into messages without greeting, or abandoned chat abruptly without closing.',
+      na: 'Ongoing rapid back-and-forth exchange where formal re-greeting would be awkward.',
+    },
+  },
+];
+
+// 5 Dedicated WhatsApp Compliance Checks
+export const PCG_CHAT_COMPLIANCE_DEFINITIONS: ChatComplianceCheckItem[] = [
+  {
+    id: 'NoInvestmentAdvice',
+    num: 1,
+    name: 'No Investment Advice',
+    rule: 'We do not tell the client what to invest in beyond what SEBI permits.',
+    description:
+      'RMs and AMs act strictly within SEBI distribution and execution-only guidelines. Never recommend specific portfolio allocation or provide personalized advisory opinions without SEBI RIA licensure.',
+    triggerExample:
+      'Telling an investor "You should definitely allocate 25 Lakhs into this AIF tranche instead of equity" violates SEBI distribution boundaries.',
+  },
+  {
+    id: 'NoPromisedReturns',
+    num: 2,
+    name: 'No Promised / Guaranteed Returns',
+    rule: 'We do not say returns are guaranteed, assured, or risk-free.',
+    description:
+      'Market-linked debentures (MLDs), AIFs, and high-yield bonds carry market, credit, and liquidity risks. Never state or imply that capital or returns are 100% assured or risk-free.',
+    triggerExample:
+      'Stating "Your 13.5% return is guaranteed by Wint" triggers an immediate critical compliance failure.',
+  },
+  {
+    id: 'NoUnqualifiedPastPerformance',
+    num: 3,
+    name: 'No Unqualified Past Performance',
+    rule: 'Past returns are shared only with the mandatory disclaimer, and not selectively or deceptively.',
+    description:
+      'Whenever past track record, annualized yields, or historical tranche exits are quoted, the mandatory regulatory disclaimer ("Past performance is not indicative of future returns") must accompany the message.',
+    triggerExample:
+      'Sharing historical fund performance numbers while omitting the statutory SEBI disclaimer.',
+  },
+  {
+    id: 'NoPersonalOrInternalDocuments',
+    num: 4,
+    name: 'No Personal or Internal Documents on WhatsApp',
+    rule: 'No client statements, holding reports, KYC documents with PAN/Aadhaar/Bank details, or internal policies/tools screenshots sent by RM on WhatsApp.',
+    description:
+      'Client data privacy and security policy strictly forbids transmitting raw PAN cards, Aadhaar images, unmasked bank account statements, or internal tool/admin screenshots over WhatsApp chat.',
+    triggerExample:
+      'Agent sending a screenshot of internal admin CRM or an unmasked client bank passbook on WhatsApp.',
+  },
+  {
+    id: 'NoMisleadingMistakes',
+    num: 5,
+    name: 'No Misleading Mistakes',
+    rule: 'No factual error serious enough to push a client into a wrong money decision.',
+    description:
+      'Zero tolerance for severe factual misstatements on critical parameters such as lock-in duration, drawdown dates, minimum ticket size, tax deduction (TDS), or capital seniority.',
+    triggerExample:
+      'Informing an investor that an AIF has zero lock-in or that quarterly distributions are completely tax-exempt.',
+  },
+];
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 3. EMAIL QUALITY PARAMETERS (7 Parameters across 3 Groups)
+// ══════════════════════════════════════════════════════════════════════════════
+export const EMAIL_PARAMETER_DEFINITIONS: QualityParameterDefinition[] = [
+  // ── GROUP 1: PROCESS SKILLS (65%) ──────────────────────────────────────────
+  {
+    id: 'issue_resolution',
+    num: 1,
+    name: 'Issue Resolution',
+    key: 'issue_resolution',
+    weight: 25,
+    group: 'Process Skills',
+    groupWeight: '65%',
+    summary:
+      'Does the email address every question and request raised by the customer and either resolve the issue or properly move it forward with clear guidance.',
+    criteria: [
+      'Every single question and request is addressed, including any pending items left open from earlier emails in the thread.',
+      'If the agent says they will check or follow up, the reply explains what will happen next (concerned team or next check-in).',
+      'If customer shares a document, screenshot, or account update without a direct question, agent acknowledges it and takes next steps.',
+      'The customer is never left without guidance on what to do next.',
+    ],
+    standards: {
+      yes: 'Every question and request is addressed, and the issue is resolved or properly progressed (ticket raised, escalated, doc forwarded, or clear next step).',
+      half: 'The main issue is addressed, but a smaller question or request is missed or only partly answered, or the next step is unclear.',
+      no: 'A key question or request is missed, the reply does not address the customer\'s actual concern, or the issue is left unresolved without a clear next step.',
+      na: 'No customer issue to resolve (general announcement, routine update, survey, policy notification, or standard auto-closure notice).',
+    },
+  },
+  {
+    id: 'accuracy',
+    num: 2,
+    name: 'Accuracy',
+    key: 'accuracy',
+    weight: 25,
+    group: 'Process Skills',
+    groupWeight: '65%',
+    isTripwire: true,
+    summary:
+      'Whether everything the agent told the client is correct, compliant and safe, required disclaimers present, client details protected, and any attachment is correct.',
+    criteria: [
+      'Facts, dates, amounts, and process steps are 100% accurate against customer account data and Knowledge Base.',
+      'No guaranteed returns, predictions, or unauthorized personal investment advice.',
+      'Required statutory and SEBI disclaimers are present where applicable.',
+      'Only the client\'s own details are shared; zero data leakage of other investors.',
+      'Any attached document (statement, certificate, form) is actually attached, named in the body, and verified correct.',
+    ],
+    tripwireRules: [
+      'Promises or implies guaranteed or fixed returns on market-linked investments.',
+      'Shares another client\'s personal details, PAN, statement, or confidential account information.',
+      'Omits required statutory disclaimer on Tier A investment communications.',
+      'Attaches the wrong customer statement or sends an incorrect document.',
+    ],
+    standards: {
+      yes: 'All information is accurate, correct product named, no guarantees/predictions/advice, required disclaimer present, and attachments correct.',
+      half: 'Minor wording slip that does not change meaning, safe footer omission on Tier B reply, or attachment mentioned loosely.',
+      no: 'Wrong fact, date, amount, or step that could mislead; wrong product named; return guarantee; another client\'s data shared; or wrong attachment.',
+      na: 'Not applicable to this email context.',
+    },
+  },
+  {
+    id: 'expectation_setting',
+    num: 3,
+    name: 'Expectation Setting',
+    key: 'expectation_setting',
+    weight: 15,
+    group: 'Process Skills',
+    groupWeight: '65%',
+    summary:
+      'The agent answers the core query completely, states correct process and realistic TAT, provides personalized follow-up, and shares helpful educational points.',
+    criteria: [
+      'Answers the core query completely and states correct process and realistic turnaround time (TAT).',
+      'For repayment cases where specific TAT cannot be defined, communicates available information and next steps without committing to unrealistic timelines.',
+      'Follow-ups are personalized to the user\'s query rather than generic.',
+      'Corrects any past errors in the thread without waiting to be asked.',
+    ],
+    standards: {
+      yes: 'Complete answer, correct process, clear TAT wherever applicable, and personalized follow-up.',
+      half: 'Answer is correct, but process, TAT (where applicable), or follow-up is missing or generic.',
+      no: 'Core query unanswered, wrong process, or no expectation set.',
+      na: 'Resolved immediately with zero open operational workflows.',
+    },
+  },
+
+  // ── GROUP 2: CUSTOMER SERVICE SKILLS (20%) ────────────────────────────────
+  {
+    id: 'personalisation',
+    num: 4,
+    name: 'Personalisation',
+    key: 'personalisation',
+    weight: 10,
+    group: 'Customer Service Skills',
+    groupWeight: '20%',
+    summary:
+      'Is the email written for this client, not a template? Uses actual situation, references specific details, builds on earlier replies, and avoids asking for info already provided.',
+    criteria: [
+      'Written specifically for this client and situation rather than sounding like a raw copy-pasted template.',
+      'Refers to customer\'s actual bonds, amounts, dates, or account status.',
+      'Builds on earlier replies and avoids asking for information the client already provided.',
+    ],
+    standards: {
+      yes: 'Reflects client\'s actual case, references specific details (bond, amounts, dates, status), and asks for nothing already shared.',
+      half: 'Partly tailored but has template elements (mentions situation in general terms, leaves out available details).',
+      no: 'Reads like a robotic template or copy-paste reply; does not reflect actual situation; asks for info client already gave.',
+      na: 'First-time generic inquiry with zero account context.',
+    },
+  },
+  {
+    id: 'empathy',
+    num: 5,
+    name: 'Empathy',
+    key: 'empathy',
+    weight: 10,
+    group: 'Customer Service Skills',
+    groupWeight: '20%',
+    conditional: true,
+    summary:
+      'Understands customer feelings and stakes (urgency, frustration, money involved), takes ownership with warm, polite language, and calms irritated customers.',
+    criteria: [
+      'Understands customer feelings and stakes (urgency, frustration, money involved).',
+      'Takes ownership with warm, polite language, calming irritated or anxious customers.',
+      'Natural and professional tone, neither overly colloquial nor stiff and robotic.',
+    ],
+    standards: {
+      yes: 'Ownership and warmth are genuine and specific to this customer\'s situation with personalized empathetic phrasing.',
+      half: 'Polite and acknowledges customer, but acknowledgement is generic/templated, or warmth comes only from stock courtesy lines.',
+      no: 'Cold, mechanical, or dismissive where care was clearly needed, or ignores emotional concern raised.',
+      na: 'Customer is calm and has raised no worry, complaint, delay, or problem (status updates, confirmations, simple requests).',
+    },
+  },
+
+  // ── GROUP 3: COMMUNICATION SKILLS (15%) ────────────────────────────────────
+  {
+    id: 'sentences_simple_to_understand',
+    num: 6,
+    name: 'Sentences (Simple to Understand)',
+    key: 'sentences_simple_to_understand',
+    weight: 10,
+    group: 'Communication Skills',
+    groupWeight: '15%',
+    summary:
+      'Easy to read, short sentences without unexplained jargon, formatted with emphasis (bold/italics) where needed, error-free, and natural/non-robotic tone.',
+    criteria: [
+      'Sentences are short, clean, and easy to follow; technical jargon is avoided or demystified.',
+      'Well formatted: important details (amounts, dates, TAT, steps) are emphasized with bold or spacing for quick scanning.',
+      'Error-free: zero spelling mistakes, typos, or grammatical slips.',
+      'Conversational and human, not a stiff or robotic script.',
+    ],
+    standards: {
+      yes: 'All four checks pass: simple and clear, well formatted (key details emphasized), error-free, and sounds natural.',
+      half: 'Understandable, but dense, cluttered, or lacks emphasis on key details; or minor errors; or partly scripted/stiff.',
+      no: 'Confusing, jargon-heavy, hard to read; errors change meaning; or whole response sounds robotic.',
+      na: 'Insufficient text to evaluate sentence structure.',
+    },
+  },
+  {
+    id: 'opening_and_closing',
+    num: 7,
+    name: 'Opening & Closing Message',
+    key: 'opening_and_closing',
+    weight: 5,
+    group: 'Communication Skills',
+    groupWeight: '15%',
+    summary:
+      'Opening and closing messages are natural, personalised, and appropriate to the context of the thread and current stage of resolution.',
+    criteria: [
+      'Opening and closing messages are natural, personalized, and appropriate to the context and stage of resolution.',
+      'Avoids multiple stacked stock phrases or repetitive sympathy lines across consecutive emails.',
+    ],
+    standards: {
+      yes: 'Opening and closing are tied to the case, natural, and respectful.',
+      half: 'Contains one stock phrase, and personal touch is missing or very light.',
+      no: 'Multiple stock phrases, fully generic pair, repeated sympathy across consecutive emails, or awkward closing.',
+      na: 'Ongoing rapid exchange where formal re-opening is redundant.',
+    },
+  },
+];
+
+interface PcgQualityParametersViewProps {
+  initialChannel?: 'calls' | 'chats' | 'emails';
+}
+
+export default function PcgQualityParametersView({ initialChannel = 'calls' }: PcgQualityParametersViewProps = {}) {
+  const [selectedChannel, setSelectedChannel] = useState<'calls' | 'chats' | 'emails'>(initialChannel);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<'all' | 'Process Skills' | 'Communication Skills' | 'Customer Service Skills' | 'compliance'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Switch channel handler
+  const handleChannelChange = (channel: 'calls' | 'chats' | 'emails') => {
+    setSelectedChannel(channel);
+    setSelectedGroup('all');
+    setSearchQuery('');
+    setExpandedId(null);
+  };
+
+  // Select active parameters list based on channel
+  const currentParamsList = useMemo(() => {
+    if (selectedChannel === 'chats') return PCG_CHAT_PARAMETER_DEFINITIONS;
+    if (selectedChannel === 'emails') return EMAIL_PARAMETER_DEFINITIONS;
+    return PCG_PARAMETER_DEFINITIONS;
+  }, [selectedChannel]);
+
+  // Filtered parameters
   const filteredParams = useMemo(() => {
-    return PCG_PARAMETER_DEFINITIONS.filter((param) => {
+    return currentParamsList.filter((param) => {
       // Group filter
       if (selectedGroup === 'compliance') {
         if (!param.isTripwire) return false;
@@ -288,6 +849,7 @@ export default function PcgQualityParametersView() {
         const matchesCriteria = param.criteria.some((c) => c.toLowerCase().includes(q));
         const matchesStandards =
           param.standards.yes.toLowerCase().includes(q) ||
+          (param.standards.half?.toLowerCase().includes(q) ?? false) ||
           param.standards.no.toLowerCase().includes(q) ||
           param.standards.na.toLowerCase().includes(q);
         const matchesTripwires = param.tripwireRules?.some((t) => t.toLowerCase().includes(q)) ?? false;
@@ -297,7 +859,21 @@ export default function PcgQualityParametersView() {
 
       return true;
     });
-  }, [searchQuery, selectedGroup]);
+  }, [currentParamsList, searchQuery, selectedGroup]);
+
+  // Filtered compliance checks for Chat
+  const filteredChatCompliance = useMemo(() => {
+    if (selectedChannel !== 'chats') return [];
+    if (!searchQuery.trim()) return PCG_CHAT_COMPLIANCE_DEFINITIONS;
+    const q = searchQuery.toLowerCase().trim();
+    return PCG_CHAT_COMPLIANCE_DEFINITIONS.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.rule.toLowerCase().includes(q) ||
+        c.description.toLowerCase().includes(q) ||
+        c.triggerExample.toLowerCase().includes(q)
+    );
+  }, [selectedChannel, searchQuery]);
 
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -305,58 +881,304 @@ export default function PcgQualityParametersView() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* ── HEADER ───────────────────────────────────────────────────────────── */}
+      {/* ── HEADER & CHANNEL TOGGLES ────────────────────────────────────────── */}
       <div className="bg-white border border-[#E4E4E7] rounded-xl p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-[#18181B] tracking-tight">
               Quality Parameter Definitions
             </h1>
-          </div>
-        </div>
-
-        {/* ── SCORING LOGIC CALLOUT ───────────────────────────────────────────── */}
-        <div className="mt-5 pt-5 border-t border-[#F4F4F5] grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-3.5">
-            <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-zinc-800">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Rating Values
-            </div>
-            <p className="text-xs text-zinc-600 leading-relaxed">
-              <strong className="text-zinc-900">Yes:</strong> 100% weight earned.<br />
-              <strong className="text-zinc-900">No:</strong> 0% weight earned.<br />
-              <strong className="text-zinc-900">NA:</strong> Dynamically dropped from both earned & possible weight.
+            <p className="text-xs text-zinc-500 mt-1">
+              {selectedChannel === 'calls' && '11 Voice call evaluation parameters across 3 skill groups, covering client greeting, regulatory adherence, and relationship conduct.'}
+              {selectedChannel === 'chats' && '11 WhatsApp chat quality parameters + 5 compliance checks, covering query resolution, multi-session thread continuity, and SEBI compliance.'}
+              {selectedChannel === 'emails' && '7 Email support evaluation rubrics covering ticket resolution, technical accuracy, expectation setting, and professional communication.'}
             </p>
           </div>
 
-          <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-3.5">
-            <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-zinc-800">
-              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-              IQS Formula
-            </div>
-            <div className="text-xs text-zinc-600 leading-relaxed">
-              <div className="font-mono bg-white px-2 py-1 rounded border border-zinc-200 text-zinc-800 text-[11px] mb-1.5 inline-block">
-                IQS = (Earned Weights / Applicable Max Weights) × 100
+          {/* Channel Switcher Pills */}
+          <div className="inline-flex items-center p-1 bg-zinc-100 rounded-xl border border-zinc-200/80 self-start md:self-auto shrink-0">
+            {/* Calls Toggle */}
+            <button
+              onClick={() => handleChannelChange('calls')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                selectedChannel === 'calls'
+                  ? 'bg-white text-zinc-900 shadow-sm font-bold'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+              </svg>
+              <span>Calls</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${selectedChannel === 'calls' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-200/60 text-zinc-600'}`}>
+                11
+              </span>
+            </button>
+
+            {/* Chats Toggle */}
+            <button
+              onClick={() => handleChannelChange('chats')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                selectedChannel === 'chats'
+                  ? 'bg-white text-zinc-900 shadow-sm font-bold'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>Chats</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${selectedChannel === 'chats' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-200/60 text-zinc-600'}`}>
+                11
+              </span>
+            </button>
+
+            {/* Emails Toggle */}
+            <button
+              onClick={() => handleChannelChange('emails')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                selectedChannel === 'emails'
+                  ? 'bg-white text-zinc-900 shadow-sm font-bold'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect width="20" height="16" x="2" y="4" rx="2" />
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+              </svg>
+              <span>Emails</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                selectedChannel === 'emails'
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-zinc-200/60 text-zinc-600'
+              }`}>
+                Soon
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* ── SCORING LOGIC CALLOUTS (FOR CALLS & CHATS) ──────────────────────── */}
+        {selectedChannel !== 'emails' && (
+          <div className="mt-5 pt-5 border-t border-[#F4F4F5] grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Card 1: Rating Values */}
+            <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-3.5">
+              <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-zinc-800">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Rating Values
               </div>
-              <p className="text-[11px] text-zinc-500 leading-snug">
-                RM is never penalized for scenarios that did not occur on the call (NA dynamically drops from both numerator &amp; denominator).
-              </p>
+              {selectedChannel === 'calls' ? (
+                <p className="text-xs text-zinc-600 leading-relaxed">
+                  <strong className="text-zinc-900">Yes:</strong> 100% weight earned.<br />
+                  <strong className="text-zinc-900">No:</strong> 0% weight earned.<br />
+                  <strong className="text-zinc-900">NA:</strong> Dynamically dropped from both earned &amp; possible weight.
+                </p>
+              ) : (
+                <p className="text-xs text-zinc-600 leading-relaxed">
+                  <strong className="text-zinc-900">Yes:</strong> 100% weight earned (fully met).<br />
+                  <strong className="text-zinc-900">Half:</strong> 50% weight earned (one minor gap).<br />
+                  <strong className="text-zinc-900">No:</strong> 0% weight earned &bull; <strong className="text-zinc-900">NA:</strong> Excluded from denominator.
+                </p>
+              )}
             </div>
-          </div>
 
-          <div className="bg-red-50/60 border border-red-200 rounded-lg p-3.5">
-            <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-red-900">
-              <span className="w-2 h-2 rounded-full bg-red-600"></span>
-              Compliance Gate Rule
+            {/* Card 2: IQS Formula */}
+            <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-3.5">
+              <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-zinc-800">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                {selectedChannel === 'calls' ? 'IQS Formula' : 'Chat IQS Formula'}
+              </div>
+              <div className="text-xs text-zinc-600 leading-relaxed">
+                <div className="font-mono bg-white px-2 py-1 rounded border border-zinc-200 text-zinc-800 text-[11px] mb-1.5 inline-block">
+                  IQS = (Earned Weights / Applicable Max Weights) × 100
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-snug">
+                  {selectedChannel === 'calls'
+                    ? 'RM is never penalized for scenarios that did not occur on the call (NA dynamically drops from both numerator & denominator).'
+                    : 'Agent is never penalized for conditional scenarios that did not occur (e.g. Dissatisfaction or Recap drop cleanly from denominator).'}
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-red-700 leading-relaxed">
-              A failure on <strong className="text-red-950 font-semibold">Technically / Legally Correct</strong> triggers an automatic <strong className="text-red-950 font-semibold">GATE BREACH</strong> and Critical Fail on submit.
-            </p>
+
+            {/* Card 3: Compliance Rule */}
+            <div className="bg-red-50/60 border border-red-200 rounded-lg p-3.5">
+              <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-red-900">
+                <span className="w-2 h-2 rounded-full bg-red-600"></span>
+                {selectedChannel === 'calls' ? 'Compliance Gate Rule' : '5 WhatsApp Compliance Checks'}
+              </div>
+              {selectedChannel === 'calls' ? (
+                <p className="text-xs text-red-700 leading-relaxed">
+                  A failure on <strong className="text-red-950 font-semibold">Technically / Legally Correct</strong> triggers an automatic <strong className="text-red-950 font-semibold">GATE BREACH</strong> and Critical Fail on submit.
+                </p>
+              ) : (
+                <p className="text-xs text-red-700 leading-relaxed">
+                  Evaluated against 5 checks: No Investment Advice, No Promised Returns, No Unqualified Past Performance, No Docs on WhatsApp, and No Misleading Mistakes.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ── PRECEDING CHAT EVALUATION SUMMARY CALLOUT (FOR CHATS) ──────────── */}
+        {selectedChannel === 'chats' && (
+          <div className="mt-5 pt-5 border-t border-[#F4F4F5]">
+            <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-xl p-4 sm:p-5 shadow-2xs">
+              <div className="flex items-start gap-3.5">
+                <div className="w-8 h-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    <line x1="9" y1="10" x2="15" y2="10" />
+                    <line x1="12" y1="7" x2="12" y2="13" />
+                  </svg>
+                </div>
+                <div className="space-y-3 flex-1 min-w-0">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-bold text-zinc-900 tracking-tight">
+                        How Preceding Chats &amp; Session Summaries are Evaluated
+                      </h2>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-zinc-200/80 text-zinc-800 border border-zinc-300">
+                        Multi-Session &amp; AM Handoff Rule
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-600 mt-1 leading-relaxed">
+                      WhatsApp client relationships often span multiple sessions and may involve mid-thread handovers (e.g. from an RM to an Associate Manager / AM). The AI pipeline automatically summarizes preceding sessions to ensure fair and contextual evaluations:
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-0.5">
+                    {/* Pillar 1 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-zinc-100 text-zinc-800 flex items-center justify-center text-[10px] font-bold border border-zinc-200">1</span>
+                        Evaluated Strictly on Authored Messages
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        The active agent is graded <strong className="text-zinc-900 font-semibold">only on the messages they personally authored</strong>. When an RM transfers a chat to an AM, the AM is evaluated exclusively from the moment they take over.
+                      </p>
+                    </div>
+
+                    {/* Pillar 2 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-zinc-100 text-zinc-800 flex items-center justify-center text-[10px] font-bold border border-zinc-200">2</span>
+                        Zero Inherited Penalties
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        The current agent is <strong className="text-zinc-900 font-semibold">never penalized</strong> for the prior RM&apos;s delays, tone, speed, or errors. Preceding history and AI session summaries are passed to the evaluator strictly as background context.
+                      </p>
+                    </div>
+
+                    {/* Pillar 3 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-zinc-100 text-zinc-800 flex items-center justify-center text-[10px] font-bold border border-zinc-200">3</span>
+                        Context Awareness &amp; Thread Continuity
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        The agent is expected to <strong className="text-zinc-900 font-semibold">leverage prior context</strong> so the investor is not asked to repeat details. References to prior agreements (&ldquo;as discussed yesterday&rdquo;) are verified using the summary to award full marks.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── DUAL CHATS (CO-HANDLED) EVALUATION SUMMARY CALLOUT ──────────── */}
+            <div className="mt-3 bg-[#FAFAFA] border border-[#E4E4E7] rounded-xl p-4 sm:p-5 shadow-2xs">
+              <div className="flex items-start gap-3.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+                <div className="space-y-3 flex-1 min-w-0">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-bold text-zinc-900 tracking-tight">
+                        How Dual Chats (Co-Handled) are Evaluated
+                      </h2>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        Dual Chat Audit Rule
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-600 mt-1 leading-relaxed">
+                      When a WhatsApp conversation is handled collaboratively by two agents (e.g. an RM transfers to an AM, or two RMs co-handle), the evaluation applies both client-level scoring and individual accountability:
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-0.5">
+                    {/* Pillar 1 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-200">1</span>
+                        One Overall Chat Score
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        The interaction is graded as <strong className="text-zinc-900 font-semibold">one cohesive client experience</strong>. A single IQS score (0–100%) is generated for the thread reflecting whether the client&apos;s inquiries were smoothly resolved from start to finish.
+                      </p>
+                    </div>
+
+                    {/* Pillar 2 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-200">2</span>
+                        General Enquiries Attribute to Both
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        Handling client queries (<strong className="text-zinc-900 font-semibold">Query Resolution</strong>) is a shared responsibility. Both agents are held jointly accountable for ensuring all general enquiries and objections are completely addressed across the handoff.
+                      </p>
+                    </div>
+
+                    {/* Pillar 3 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-200">3</span>
+                        Compliance Breaches Attribute to Both
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        Regulatory compliance is a zero-tolerance standard. If a compliance gate breach occurs anywhere in the co-handled thread (e.g. promising returns or sending internal docs), the breach is <strong className="text-zinc-900 font-semibold">attributed to both agents</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* ── FILTER TABS & SEARCH BAR ─────────────────────────────────────────── */}
+      {/* ── COMING SOON VIEW FOR EMAILS ────────────────────────────────────── */}
+      {selectedChannel === 'emails' ? (
+        <div className="bg-white border border-[#E4E4E7] rounded-xl p-8 sm:p-12 text-center shadow-sm">
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center mx-auto shadow-2xs">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect width="20" height="16" x="2" y="4" rx="2" />
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+              </svg>
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
+              <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse"></span>
+              Coming Soon
+            </div>
+
+            <h2 className="text-xl font-bold text-[#18181B] tracking-tight">
+              PCG Email Quality Evaluation is Under Development
+            </h2>
+
+            <p className="text-xs text-zinc-600 leading-relaxed">
+              PCG email quality evaluation is currently under development. Quality parameters, scoring rubrics, and compliance frameworks for PCG investor email communications will be published here once released.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── FILTER TABS & SEARCH BAR ─────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Skill Group Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
@@ -368,8 +1190,9 @@ export default function PcgQualityParametersView() {
                 : 'bg-white text-zinc-600 hover:bg-zinc-100 border border-zinc-200'
             }`}
           >
-            All Groups (11)
+            All Parameters ({currentParamsList.length})
           </button>
+
           <button
             onClick={() => setSelectedGroup('Process Skills')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
@@ -380,6 +1203,7 @@ export default function PcgQualityParametersView() {
           >
             Process Skills (50%)
           </button>
+
           <button
             onClick={() => setSelectedGroup('Communication Skills')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
@@ -390,6 +1214,7 @@ export default function PcgQualityParametersView() {
           >
             Communication (30%)
           </button>
+
           <button
             onClick={() => setSelectedGroup('Customer Service Skills')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
@@ -400,6 +1225,8 @@ export default function PcgQualityParametersView() {
           >
             Customer Service (20%)
           </button>
+
+          {/* Compliance Pill */}
           <button
             onClick={() => setSelectedGroup('compliance')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -413,7 +1240,7 @@ export default function PcgQualityParametersView() {
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-            Compliance (1)
+            Compliance ({selectedChannel === 'chats' ? '5' : '1'})
           </button>
         </div>
 
@@ -451,8 +1278,53 @@ export default function PcgQualityParametersView() {
         </div>
       </div>
 
+      {/* ── CHAT COMPLIANCE CARDS (SHOWN WHEN CHAT + COMPLIANCE FILTER ACTIVE) ── */}
+      {selectedChannel === 'chats' && selectedGroup === 'compliance' && (
+        <div className="space-y-4">
+          <div className="bg-red-50/70 border border-red-200 rounded-xl p-4">
+            <h2 className="text-xs font-bold text-red-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              5 Mandatory WhatsApp Compliance Gate Rules
+            </h2>
+            <p className="text-xs text-red-800 leading-relaxed">
+              In addition to the 11 quality parameters, all WhatsApp conversations are continuously audited against these 5 non-negotiable regulatory and data privacy checks. A breach triggers an immediate human QA review.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {filteredChatCompliance.map((comp) => (
+              <div key={comp.id} className="bg-white border border-red-200/90 rounded-xl p-4 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-md bg-red-100 text-red-800 font-bold text-xs flex items-center justify-center shrink-0">
+                      C{comp.num}
+                    </span>
+                    <h3 className="text-sm font-semibold text-zinc-900">{comp.name}</h3>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-red-50/50 border border-red-100 rounded-lg">
+                  <p className="text-xs font-semibold text-red-950">&ldquo;{comp.rule}&rdquo;</p>
+                </div>
+
+                <p className="text-xs text-zinc-600 leading-relaxed">{comp.description}</p>
+
+                <div className="pt-2 border-t border-zinc-100">
+                  <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Example Violation:</span>
+                  <p className="text-[11px] text-red-700 italic mt-0.5">{comp.triggerExample}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── PARAMETERS LIST ──────────────────────────────────────────────────── */}
-      {filteredParams.length === 0 ? (
+      {filteredParams.length === 0 && (selectedChannel !== 'chats' || selectedGroup !== 'compliance') ? (
         <div className="bg-white border border-[#E4E4E7] rounded-xl p-12 text-center text-zinc-500">
           <p className="text-sm">No quality parameters match your search query &quot;{searchQuery}&quot;.</p>
           <button
@@ -498,6 +1370,15 @@ export default function PcgQualityParametersView() {
                         <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-100 text-zinc-700">
                           {param.group}
                         </span>
+                        {param.conditional && (
+                          <span
+                            title="Only evaluated when this specific scenario occurs in the chat. Otherwise marked NA without penalizing IQS."
+                            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-300 cursor-help flex items-center gap-1"
+                          >
+                            <span>Conditional</span>
+                            <span className="text-[9px] text-amber-600 font-mono">ⓘ</span>
+                          </span>
+                        )}
                         {param.isTripwire && (
                           <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide bg-red-100 text-red-800 border border-red-300 flex items-center gap-1">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -516,9 +1397,6 @@ export default function PcgQualityParametersView() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 pt-1 text-zinc-400">
-                    <span className="text-[11px] text-zinc-500 hidden sm:inline font-mono">
-                      key: {param.key}
-                    </span>
                     <svg
                       className={`transform transition-transform duration-200 ${isExpanded ? 'rotate-180 text-zinc-700' : ''}`}
                       width="16"
@@ -538,6 +1416,51 @@ export default function PcgQualityParametersView() {
                 {/* Parameter Expanded Details */}
                 {isExpanded && (
                   <div className="px-5 pb-6 pt-2 border-t border-[#F4F4F5] bg-[#FAFAFA]/40 space-y-5">
+                    {/* Conditional Parameter Callout */}
+                    {param.conditional && param.conditionalInfo && (
+                      <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-4 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 uppercase tracking-wider">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-700">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="8" x2="12" y2="12" />
+                              <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            Why is this Parameter Conditional?
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                            Evaluated only when scenario occurs
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                          <div className="bg-white/95 border border-amber-200/80 rounded-lg p-3 shadow-2xs">
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 uppercase tracking-wide mb-1">
+                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px] font-bold">✓</span>
+                              When is it evaluated?
+                            </div>
+                            <p className="text-xs text-zinc-800 leading-relaxed font-medium">
+                              {param.conditionalInfo.whenEvaluated}
+                            </p>
+                          </div>
+
+                          <div className="bg-white/95 border border-amber-200/80 rounded-lg p-3 shadow-2xs">
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-700 uppercase tracking-wide mb-1">
+                              <span className="w-3.5 h-3.5 rounded-full bg-zinc-100 text-zinc-600 flex items-center justify-center text-[9px] font-bold">—</span>
+                              When is it marked NA (Excluded)?
+                            </div>
+                            <p className="text-xs text-zinc-600 leading-relaxed">
+                              {param.conditionalInfo.whenNA}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-amber-200/60 flex items-start gap-1.5 text-xs text-amber-950 leading-relaxed">
+                          <span className="font-bold text-amber-900 shrink-0">Scoring Impact:</span>
+                          <span>{param.conditionalInfo.reason}</span>
+                        </div>
+                      </div>
+                    )}
                     {/* 1. Evaluation Criteria */}
                     <div>
                       <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
@@ -579,7 +1502,7 @@ export default function PcgQualityParametersView() {
                       </div>
                     )}
 
-                    {/* 2. Rating Standards: Yes / No / NA */}
+                    {/* 2. Rating Standards: Yes / (Half) / No / NA */}
                     <div>
                       <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -587,9 +1510,9 @@ export default function PcgQualityParametersView() {
                           <line x1="12" y1="16" x2="12" y2="12" />
                           <line x1="12" y1="8" x2="12.01" y2="8" />
                         </svg>
-                        System Rating Standards & Explanation Requirements
+                        System Rating Standards &amp; Explanation Requirements
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className={`grid grid-cols-1 ${param.standards.half ? 'sm:grid-cols-2 md:grid-cols-4' : 'md:grid-cols-3'} gap-3`}>
                         {/* Yes Standard */}
                         <div className="bg-white border border-emerald-200/90 rounded-lg p-3.5 shadow-2xs">
                           <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 mb-1.5">
@@ -600,6 +1523,19 @@ export default function PcgQualityParametersView() {
                             {param.standards.yes}
                           </p>
                         </div>
+
+                        {/* Half Standard if applicable */}
+                        {param.standards.half && (
+                          <div className="bg-white border border-amber-200/90 rounded-lg p-3.5 shadow-2xs">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 mb-1.5">
+                              <span className="w-4 h-4 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[10px]">½</span>
+                              Partial (&quot;Half&quot;)
+                            </div>
+                            <p className="text-xs text-zinc-600 leading-relaxed">
+                              {param.standards.half}
+                            </p>
+                          </div>
+                        )}
 
                         {/* No Standard */}
                         <div className="bg-white border border-rose-200/90 rounded-lg p-3.5 shadow-2xs">
@@ -631,6 +1567,8 @@ export default function PcgQualityParametersView() {
           })}
         </div>
       )}
-    </div>
-  );
+    </>
+  )}
+</div>
+);
 }

@@ -32,10 +32,40 @@ export interface GeneratedPcgScorecard {
     pickupRateText: string;
     connectRateText: string;
     complianceBreachesCount: number;
+
+    // Channel-specific breakdown
+    calls?: {
+      handled: number;
+      avgScore: number | null;
+      below85Count: number;
+      pickupRateText: string;
+      breachesCount: number;
+    };
+    chats?: {
+      handled: number;
+      avgScore: number | null;
+      below85Count: number;
+      firstResponseText: string;
+      breachesCount: number;
+    };
+    emails?: {
+      handled: number;
+      avgScore: number | null;
+      below85Count: number;
+      resolutionText: string;
+      breachesCount: number;
+    };
+    totalInteractions?: number;
+    blendedAvgScore?: number | null;
+    totalBelow85Count?: number;
+    totalComplianceBreaches?: number;
   };
   whatWentWell: string;
+  whatWentWellCalls?: string;
+  whatWentWellChats?: string;
   themes: Array<{
     pattern: string;
+    channel?: 'call' | 'chat' | 'email';
     associatedParameters: string[];
     whyItMatters: string;
     actionable: string;
@@ -45,12 +75,14 @@ export interface GeneratedPcgScorecard {
   }>;
   breaches: Array<{
     callId: string;
+    channel?: 'call' | 'chat' | 'email';
     score: number;
     flaggedContent: string;
     note: string;
   }>;
   evidence: Array<{
     callId: string;
+    channel?: 'call' | 'chat' | 'email';
     score: number;
     topic: string;
     summary: string;
@@ -74,8 +106,27 @@ const PCG_PARAM_NAMES: Record<string, string> = {
   Simplifying: 'Simplifying Answers',
 };
 
-export function extractPlainEnglishCallSummary(c: any, rmName: string): string {
+export function extractPlainEnglishCallSummary(c: any, rmName: string, callIndex?: number): string {
   const firstName = (rmName || 'RM').split(' ')[0];
+  const score = Number(c.human_override_score ?? c.iqs_score ?? 100);
+  const isBreach = c.compliance_tripwire === true || (c.compliance_reason && c.compliance_reason.trim() !== '');
+
+  // For high-scoring calls (> 75%) with no compliance breach, return a positive strength
+  if (score > 75 && !isBreach) {
+    if (score === 100) {
+      const stellarSummaries = [
+        `${firstName} delivered a stellar conversation with accurate product explanation and clear next steps.`,
+        `${firstName} exhibited flawless pitching structure, active listening, and agreed on prompt follow-up.`,
+        `${firstName} answered all customer questions thoroughly and established clear expectations.`,
+        `${firstName} demonstrated excellent call opening, rapport building, and professional closing etiquette.`,
+      ];
+      return stellarSummaries[(callIndex || 0) % stellarSummaries.length];
+    }
+    if (score >= 90) {
+      return `${firstName} maintained strong customer rapport, handled questions effectively, and adhered to compliance guidelines.`;
+    }
+    return `${firstName} maintained solid conversational flow and communicated investment options with clear disclaimers.`;
+  }
 
   // 1. If compliance breach reason exists, extract and polish the specific plain-English issue
   if (c.compliance_reason && typeof c.compliance_reason === 'string' && c.compliance_reason.trim()) {
@@ -171,6 +222,93 @@ export function extractPlainEnglishCallSummary(c: any, rmName: string): string {
   return `${firstName} missed key call structure points and follow-up timelines during the discussion.`;
 }
 
+export const PARAM_SIMPLE_EXPLANATIONS: Record<string, { whyItMatters: string; actionable: string }> = {
+  TechnicallyLegal: {
+    whyItMatters:
+      'Investors trust us with their life savings. Quoting wrong numbers or promising fixed returns breaks their trust and violates SEBI rules.',
+    actionable:
+      'Never say "fixed" or "guaranteed returns". Always explain it as an "expected annual yield" (coupon or XIRR), and mention that returns depend on the company issuing the bond.',
+  },
+  TechnicalLegal: {
+    whyItMatters:
+      'Investors trust us with their life savings. Quoting wrong numbers or promising fixed returns breaks their trust and violates SEBI rules.',
+    actionable:
+      'Never say "fixed" or "guaranteed returns". Always explain it as an "expected annual yield" (coupon or XIRR), and mention that returns depend on the company issuing the bond.',
+  },
+  CallOpening: {
+    whyItMatters:
+      'The first 15 seconds set the tone for the entire call. A polite and clear greeting helps the customer feel respected and comfortable talking.',
+    actionable:
+      'Greet the customer warmly ("Good morning/afternoon"), clearly say your name and that you are calling from Wint Wealth, and ask if they have 2 minutes to talk right now.',
+  },
+  CallClosing: {
+    whyItMatters:
+      'A clear ending ensures both you and the customer know exactly what happens next, leaving a strong, professional impression.',
+    actionable:
+      'Summarize agreed next steps, confirm how and when you will follow up (e.g. "I will share this on WhatsApp in 10 minutes"), thank them for their time, and end with a polite goodbye.',
+  },
+  AllQuestions: {
+    whyItMatters:
+      'Leaving customer questions unanswered creates doubt and makes them hesitate to invest.',
+    actionable:
+      'Answer every question directly. If you do not know the answer, do not guess—say: "Let me verify this with our product team and get back to you by [time]."',
+  },
+  Expectation: {
+    whyItMatters:
+      'When investors know what to expect and when, they feel confident and do not have to call back repeatedly for updates.',
+    actionable:
+      'Give clear timelines for every step—tell the investor exactly when to expect their WhatsApp summary, payment link, or allotment details.',
+  },
+  Process: {
+    whyItMatters:
+      'Asking customers for information they already shared makes us look unprepared and wastes their time.',
+    actionable:
+      'Take 30 seconds before dialing to check the customer’s profile, notes, and past investments in the CRM so you speak with full context.',
+  },
+  Grammar: {
+    whyItMatters:
+      'Clear, simple sentences help investors understand financial products without getting confused or overwhelmed.',
+    actionable:
+      'Speak in short, simple sentences. Pronounce fund and bond names clearly, and explain any financial terms in everyday language.',
+  },
+  VocabularyGrammar: {
+    whyItMatters:
+      'Clear, simple sentences help investors understand financial products without getting confused or overwhelmed.',
+    actionable:
+      'Speak in short, simple sentences. Pronounce fund and bond names properly, and explain any financial terms in everyday language.',
+  },
+  Fillers: {
+    whyItMatters:
+      'Frequent pauses, "umms", or long dead air make you sound unsure of yourself and reduce the investor’s confidence in your advice.',
+    actionable:
+      'Speak at a steady, calm pace. If you need a moment to search on your screen, let the customer know: "Please give me a moment while I pull up your account."',
+  },
+  FillersDeadAir: {
+    whyItMatters:
+      'Frequent pauses, "umms", or long dead air make you sound unsure of yourself and reduce the investor’s confidence in your advice.',
+    actionable:
+      'Speak at a steady, calm pace. If you need a moment to search on your screen, let the customer know: "Please give me a moment while I pull up your account."',
+  },
+  EnergyTone: {
+    whyItMatters:
+      'A warm, confident, and polite voice builds a real connection and reassures investors that their wealth is in safe hands.',
+    actionable:
+      'Stay energetic and attentive throughout the call. Avoid speaking in a flat, rushed voice—smiling while speaking naturally brings warmth to your voice.',
+  },
+  ActiveListening: {
+    whyItMatters:
+      'Investors want to feel heard and respected. Interrupting them or talking over them damages trust.',
+    actionable:
+      'Let the customer finish speaking completely before answering. Acknowledge what they said (e.g. "I understand your concern about liquidity...") before sharing your advice.',
+  },
+  Simplifying: {
+    whyItMatters:
+      'Complex bond terms like XIRR, seniority, and debentures can intimidate investors if they are not explained simply.',
+    actionable:
+      'Explain difficult financial terms using everyday examples. For instance, explain yield as "how much money you earn each year on the amount you invest."',
+  },
+};
+
 export async function generatePcgScorecard(input: PcgScorecardInput): Promise<GeneratedPcgScorecard> {
   const { rmName, weekStart, weekEnd } = input;
   const canonicalName = canonicalizePcgRmName(rmName);
@@ -188,6 +326,9 @@ export async function generatePcgScorecard(input: PcgScorecardInput): Promise<Ge
       r.start_time,
       r.duration_seconds,
       r.call_category,
+      r.call_nature,
+      e.is_evaluable,
+      e.verdict,
       COALESCE(NULLIF(e.rm_name, 'Unknown'), r.called_by, r.agent_name) AS effective_rm,
       COALESCE(e.tl_name, 'PCG Team') AS tl_name,
       e.iqs_score,
@@ -206,10 +347,17 @@ export async function generatePcgScorecard(input: PcgScorecardInput): Promise<Ge
     [startTimeIso, endTimeIso]
   );
 
+  // Excluded / Non-Client calls (personal, vendor, delivery, hiring, internal, etc.) are strictly excluded from client pickup rate and IQS
+  const isExcludedCall = (c: any) =>
+    c.is_evaluable === false ||
+    c.verdict === 'EXCLUDED_NON_CLIENT' ||
+    c.call_nature === 'non_client';
+
   // Filter for matching RM using canonical matching
   const rmCalls = calls.filter((c) => isSamePcgAgent(c.effective_rm, canonicalName));
+  const clientRmCalls = rmCalls.filter((c) => !isExcludedCall(c));
 
-  const totalCalls = rmCalls.length;
+  const totalCalls = clientRmCalls.length;
   const MINIMUM_CALLS_THRESHOLD = 5;
   if (totalCalls < MINIMUM_CALLS_THRESHOLD) {
     throw new Error(
@@ -217,8 +365,8 @@ export async function generatePcgScorecard(input: PcgScorecardInput): Promise<Ge
     );
   }
 
-  const answeredCalls = rmCalls.filter((c) => Number(c.duration_seconds || 0) > 0);
-  const evaluatedCalls = rmCalls.filter((c) => c.iqs_score != null || c.human_override_score != null);
+  const answeredCalls = clientRmCalls.filter((c) => Number(c.duration_seconds || 0) > 0);
+  const evaluatedCalls = clientRmCalls.filter((c) => c.iqs_score != null || c.human_override_score != null);
 
   const connectRate = totalCalls > 0 ? Math.round((answeredCalls.length / totalCalls) * 100) : 0;
   const pickupRateText = `${connectRate}% pickup rate (${answeredCalls.length} of ${totalCalls} calls connected)`;
@@ -285,93 +433,6 @@ export async function generatePcgScorecard(input: PcgScorecardInput): Promise<Ge
 
   // Construct 1-on-1 Coaching Themes (explained in simple, clear English)
   const themes: GeneratedPcgScorecard['themes'] = [];
-
-  const PARAM_SIMPLE_EXPLANATIONS: Record<string, { whyItMatters: string; actionable: string }> = {
-    TechnicallyLegal: {
-      whyItMatters:
-        'Investors trust us with their life savings. Quoting wrong numbers or promising fixed returns breaks their trust and violates SEBI rules.',
-      actionable:
-        'Never say "fixed" or "guaranteed returns". Always explain it as an "expected annual yield" (coupon or XIRR), and mention that returns depend on the company issuing the bond.',
-    },
-    TechnicalLegal: {
-      whyItMatters:
-        'Investors trust us with their life savings. Quoting wrong numbers or promising fixed returns breaks their trust and violates SEBI rules.',
-      actionable:
-        'Never say "fixed" or "guaranteed returns". Always explain it as an "expected annual yield" (coupon or XIRR), and mention that returns depend on the company issuing the bond.',
-    },
-    CallOpening: {
-      whyItMatters:
-        'The first 15 seconds set the tone for the entire call. A polite and clear greeting helps the customer feel respected and comfortable talking.',
-      actionable:
-        'Greet the customer warmly ("Good morning/afternoon"), clearly say your name and that you are calling from Wint Wealth, and ask if they have 2 minutes to talk right now.',
-    },
-    CallClosing: {
-      whyItMatters:
-        'A clear ending ensures both you and the customer know exactly what happens next, leaving a strong, professional impression.',
-      actionable:
-        'Summarize agreed next steps, confirm how and when you will follow up (e.g. "I will share this on WhatsApp in 10 minutes"), thank them for their time, and end with a polite goodbye.',
-    },
-    AllQuestions: {
-      whyItMatters:
-        'Leaving customer questions unanswered creates doubt and makes them hesitate to invest.',
-      actionable:
-        'Answer every question directly. If you do not know the answer, do not guess—say: "Let me verify this with our product team and get back to you by [time]."',
-    },
-    Expectation: {
-      whyItMatters:
-        'When investors know what to expect and when, they feel confident and do not have to call back repeatedly for updates.',
-      actionable:
-        'Give clear timelines for every step—tell the investor exactly when to expect their WhatsApp summary, payment link, or allotment details.',
-    },
-    Process: {
-      whyItMatters:
-        'Asking customers for information they already shared makes us look unprepared and wastes their time.',
-      actionable:
-        'Take 30 seconds before dialing to check the customer’s profile, notes, and past investments in the CRM so you speak with full context.',
-    },
-    Grammar: {
-      whyItMatters:
-        'Clear, simple sentences help investors understand financial products without getting confused or overwhelmed.',
-      actionable:
-        'Speak in short, simple sentences. Pronounce fund and bond names clearly, and explain any financial terms in everyday language.',
-    },
-    VocabularyGrammar: {
-      whyItMatters:
-        'Clear, simple sentences help investors understand financial products without getting confused or overwhelmed.',
-      actionable:
-        'Speak in short, simple sentences. Pronounce fund and bond names properly, and explain any financial terms in everyday language.',
-    },
-    Fillers: {
-      whyItMatters:
-        'Frequent pauses, "umms", or long dead air make you sound unsure of yourself and reduce the investor’s confidence in your advice.',
-      actionable:
-        'Speak at a steady, calm pace. If you need a moment to search on your screen, let the customer know: "Please give me a moment while I pull up your account."',
-    },
-    FillersDeadAir: {
-      whyItMatters:
-        'Frequent pauses, "umms", or long dead air make you sound unsure of yourself and reduce the investor’s confidence in your advice.',
-      actionable:
-        'Speak at a steady, calm pace. If you need a moment to search on your screen, let the customer know: "Please give me a moment while I pull up your account."',
-    },
-    EnergyTone: {
-      whyItMatters:
-        'A warm, confident, and polite voice builds a real connection and reassures investors that their wealth is in safe hands.',
-      actionable:
-        'Stay energetic and attentive throughout the call. Avoid speaking in a flat, rushed voice—smiling while speaking naturally brings warmth to your voice.',
-    },
-    ActiveListening: {
-      whyItMatters:
-        'Investors want to feel heard and respected. Interrupting them or talking over them damages trust.',
-      actionable:
-        'Let the customer finish speaking completely before answering. Acknowledge what they said (e.g. "I understand your concern about liquidity...") before sharing your advice.',
-    },
-    Simplifying: {
-      whyItMatters:
-        'Complex bond terms like XIRR, seniority, and debentures can intimidate investors if they are not explained simply.',
-      actionable:
-        'Explain difficult financial terms using everyday examples. For instance, explain yield as "how much money you earn each year on the amount you invest."',
-    },
-  };
 
   // Theme 1: Compliance & Regulatory Accuracy (if any breaches)
   if (breachCalls.length > 0) {
@@ -513,6 +574,358 @@ export async function generatePcgScorecard(input: PcgScorecardInput): Promise<Ge
     themes,
     breaches,
     evidence,
+  };
+}
+
+export async function generatePcgUnifiedScorecard(input: PcgScorecardInput): Promise<GeneratedPcgScorecard> {
+  const { rmName, weekStart, weekEnd } = input;
+  const canonicalName = canonicalizePcgRmName(rmName);
+
+  // Time window: inclusive of Monday 00:00:00 to Sunday 23:59:59 (IST / UTC safe)
+  const startTimeIso = `${weekStart}T00:00:00.000Z`;
+  const nextMonday = new Date(new Date(weekStart).getTime() + 7 * 86400000).toISOString().split('T')[0];
+  const endTimeIso = `${nextMonday}T00:00:00.000Z`;
+
+  // 1. Fetch Calls
+  const calls = await query<any>(
+    `SELECT 
+      r.id AS rec_id,
+      r.call_id,
+      r.start_time,
+      r.duration_seconds,
+      r.call_category,
+      r.call_nature,
+      e.is_evaluable,
+      e.verdict,
+      COALESCE(NULLIF(e.rm_name, 'Unknown'), r.called_by, r.agent_name) AS effective_rm,
+      COALESCE(e.tl_name, 'PCG Team') AS tl_name,
+      e.iqs_score,
+      e.human_override_score,
+      e.compliance_tripwire,
+      e.compliance_reason,
+      e.ai_coaching_tip,
+      e.parameters,
+      e.process_score,
+      e.communication_score,
+      e.customer_service_score
+    FROM pcg_call_recordings r
+    LEFT JOIN pcg_call_evaluations e ON (e.call_id = r.call_id OR e.call_id = r.id::text)
+    WHERE r.start_time >= $1 AND r.start_time < $2
+    ORDER BY r.start_time ASC`,
+    [startTimeIso, endTimeIso]
+  );
+  // Excluded / Non-Client calls (personal, vendor, delivery, hiring, internal, etc.) are strictly excluded from client pickup rate and IQS
+  const isExcludedCallUnified = (c: any) =>
+    c.is_evaluable === false ||
+    c.verdict === 'EXCLUDED_NON_CLIENT' ||
+    c.call_nature === 'non_client';
+
+  const rmCalls = calls.filter((c) => isSamePcgAgent(c.effective_rm, canonicalName));
+  const clientRmCalls = rmCalls.filter((c) => !isExcludedCallUnified(c));
+  const totalCalls = clientRmCalls.length;
+  const answeredCalls = clientRmCalls.filter((c) => Number(c.duration_seconds || 0) > 0);
+  const evaluatedCalls = clientRmCalls.filter((c) => c.iqs_score != null || c.human_override_score != null);
+  const callConnectRate = totalCalls > 0 ? Math.round((answeredCalls.length / totalCalls) * 100) : 0;
+  const callPickupRateText = totalCalls > 0
+    ? `${callConnectRate}% pickup rate (${answeredCalls.length} of ${totalCalls} calls connected)`
+    : '—';
+  const callScores = evaluatedCalls.map((c) => Number(c.human_override_score ?? c.iqs_score));
+  const callAvgScore = callScores.length > 0 ? Math.round(callScores.reduce((a, b) => a + b, 0) / callScores.length) : null;
+  const callBelow85 = callScores.filter((s) => s < 85).length;
+  const callBreachCalls = evaluatedCalls.filter((c) => {
+    if (c.compliance_tripwire === true) return true;
+    if (c.compliance_reason && c.compliance_reason.trim() !== '') return true;
+    if (Array.isArray(c.parameters)) {
+      const tl = c.parameters.find((p: any) => p.id === 'TechnicalLegal' || p.id === 'TechnicallyLegal');
+      if (tl && tl.status === 'No') return true;
+    }
+    return false;
+  });
+  const callBreachesCount = callBreachCalls.length;
+
+  // 2. Fetch Chats
+  const chats = await query<any>(
+    `SELECT 
+      id, conversation_id, customer_phone, customer_name, rm_name, tl_name,
+      iqs_score, process_score, communication_score, customer_service_score,
+      parameters, compliance_flags, compliance_tripwire, compliance_reason,
+      ai_coaching_tip, summary, first_response_time_seconds, chat_closed_at, scored_at
+    FROM pcg_chat_evaluations
+    WHERE is_evaluable = true
+      AND chat_closed_at >= $1 AND chat_closed_at < $2
+    ORDER BY chat_closed_at ASC`,
+    [startTimeIso, endTimeIso]
+  );
+  const rmChats = chats.filter((c) => isSamePcgAgent(c.rm_name, canonicalName));
+  const totalChats = rmChats.length;
+  const chatValidScores = rmChats.filter((c) => c.iqs_score != null);
+  const chatScores = chatValidScores.map((c) => Number(c.iqs_score));
+  const chatAvgScore = chatScores.length > 0 ? Math.round(chatScores.reduce((a, b) => a + b, 0) / chatScores.length) : null;
+  const chatBelow85 = chatScores.filter((s) => s < 85).length;
+  const frtChats = rmChats.filter((c) => c.first_response_time_seconds != null);
+  const avgFrt = frtChats.length > 0
+    ? Math.round(frtChats.reduce((a, b) => a + Number(b.first_response_time_seconds), 0) / frtChats.length)
+    : null;
+  const fmtFrtText = (sec: number | null) => {
+    if (sec == null) return '< 2m avg first response';
+    if (sec < 60) return `${sec}s avg initial response`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s > 0 ? `${m}m ${s}s avg initial response` : `${m}m avg initial response`;
+  };
+  const chatFrtText = totalChats > 0 ? fmtFrtText(avgFrt) : '—';
+  const chatBreachChats = rmChats.filter(
+    (c) => c.compliance_tripwire === true || (c.compliance_reason && c.compliance_reason.trim())
+  );
+  const chatBreachesCount = chatBreachChats.length;
+
+  // 3. Emails (when implemented)
+  const totalEmails = 0;
+  const emailAvgScore = null;
+  const emailBelow85 = 0;
+  const emailResolutionText = '—';
+  const emailBreachesCount = 0;
+
+  // 4. Combined Metrics
+  const totalInteractions = totalCalls + totalChats + totalEmails;
+  const totalBelow85Count = callBelow85 + chatBelow85 + emailBelow85;
+  const totalComplianceBreaches = callBreachesCount + chatBreachesCount + emailBreachesCount;
+  const allScores = [...callScores, ...chatScores];
+  const blendedAvgScore = allScores.length > 0
+    ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length)
+    : (callAvgScore ?? chatAvgScore ?? 0);
+
+  // 5. Team Lead
+  let assignedTl = input.tlName || rmCalls[0]?.tl_name || rmChats[0]?.tl_name || 'PCG Team';
+  if (!input.tlName) {
+    for (const [tl, members] of Object.entries(TL_TEAMS)) {
+      if (members.some((m) => isSamePcgAgent(m, canonicalName))) {
+        assignedTl = `Team ${tl}`;
+        break;
+      }
+    }
+  }
+
+  // 6. What Went Well (Separated by Calls and Chats)
+  const whatWentWellCalls = totalCalls > 0 && callAvgScore != null
+    ? `Demonstrated solid call discipline across ${totalCalls} calls (${answeredCalls.length} connected) with an average score of ${callAvgScore}%. Maintained clear investor rapport, structured pitching, and high conversational engagement.`
+    : `No evaluated calls recorded this period.`;
+
+  const whatWentWellChats = totalChats > 0 && chatAvgScore != null
+    ? `Maintained ${chatAvgScore}% resolution quality across ${totalChats} customer WhatsApp interaction${totalChats === 1 ? '' : 's'}. Demonstrated prompt responsiveness (${chatFrtText}) and full regulatory adherence.`
+    : `No evaluated WhatsApp chats recorded this period.`;
+
+  const whatWentWell = `${whatWentWellCalls} ${whatWentWellChats}`;
+
+  // 7. Themes (Coaching & 1-on-1 Discussion Points)
+  const themes: GeneratedPcgScorecard['themes'] = [];
+
+  // Call Breaches Theme
+  if (callBreachCalls.length > 0) {
+    themes.push({
+      pattern: 'Fixed Return Claims & Regulatory Disclosures',
+      channel: 'call',
+      associatedParameters: ['Technically / Legally Correct', 'Expectation Setting'],
+      whyItMatters: 'Promising fixed or guaranteed returns is against SEBI rules and misleads investors about the risks involved.',
+      actionable: 'Always explain returns as an "expected annual yield" (XIRR or coupon). Clearly explain that returns depend on the company issuing the bond, rather than saying "fixed returns" or "guaranteed".',
+      isBreach: true,
+      rankScore: 1,
+      backingCallIds: callBreachCalls.map((c) => c.call_id || String(c.rec_id)).slice(0, 4),
+    });
+  }
+
+  // Chat Breaches Theme
+  if (chatBreachChats.length > 0) {
+    themes.push({
+      pattern: 'WhatsApp Regulatory Compliance & Risk Caveats',
+      channel: 'chat',
+      associatedParameters: ['Accuracy (Technically / Legally Correct)'],
+      whyItMatters: 'Promising fixed or guaranteed returns in client chats violates SEBI regulations and misleads investors.',
+      actionable: 'Never state "fixed" or "guaranteed" returns on WhatsApp. Always frame returns as expected annual yield (XIRR/coupon) subject to issuer credit terms.',
+      isBreach: true,
+      rankScore: 1,
+      backingCallIds: chatBreachChats.map((c) => String(c.id)),
+    });
+  }
+
+  // Call Parameter Improvement Theme
+  if (evaluatedCalls.length > 0) {
+    const paramStats: Record<string, { earned: number; max: number }> = {};
+    evaluatedCalls.forEach((c) => {
+      if (Array.isArray(c.parameters)) {
+        c.parameters.forEach((p: any) => {
+          if (!p.id || p.status === 'NA' || p.status === 'N/A' || p.isApplicable === false) return;
+          const normKey = p.id === 'TechnicalLegal' ? 'TechnicallyLegal' : p.id;
+          if (!paramStats[normKey]) paramStats[normKey] = { earned: 0, max: 0 };
+          paramStats[normKey].earned += Number(p.earnedScore || (p.status === 'Yes' ? (p.maxScore || 10) : 0));
+          paramStats[normKey].max += Number(p.maxScore || 10);
+        });
+      }
+    });
+
+    const paramPercentages: Array<{ key: string; name: string; pct: number }> = [];
+    for (const [key, val] of Object.entries(paramStats)) {
+      if (val.max > 0) {
+        const pct = Math.round((val.earned / val.max) * 100);
+        paramPercentages.push({ key, name: PCG_PARAM_NAMES[key] || key, pct });
+      }
+    }
+    paramPercentages.sort((a, b) => a.pct - b.pct);
+    const callWeakest = paramPercentages[0];
+    if (callWeakest && callWeakest.pct < 85) {
+      const failingCalls = evaluatedCalls
+        .filter((c) => {
+          if (!Array.isArray(c.parameters)) return false;
+          const p = c.parameters.find((param: any) => param.id === callWeakest.key || param.name === callWeakest.name);
+          return p && (p.status === 'No' || (p.earnedScore && p.earnedScore < (p.maxScore || 10)));
+        })
+        .map((c) => c.call_id || String(c.rec_id))
+        .slice(0, 3);
+
+      const simple = PARAM_SIMPLE_EXPLANATIONS[callWeakest.key] || {
+        whyItMatters: `Clear and accurate communication in ${callWeakest.name} builds investor confidence and helps them make informed decisions.`,
+        actionable: `Focus on explaining ${callWeakest.name} clearly in simple words and confirm the investor understands before moving to the next topic.`,
+      };
+
+      themes.push({
+        pattern: `${callWeakest.name} Improvement (${callWeakest.pct}%)`,
+        channel: 'call',
+        associatedParameters: [callWeakest.name],
+        whyItMatters: simple.whyItMatters,
+        actionable: simple.actionable,
+        isBreach: false,
+        rankScore: 2,
+        backingCallIds: failingCalls.length > 0 ? failingCalls : rmCalls.slice(0, 2).map((c) => c.call_id || String(c.rec_id)),
+      });
+    }
+  }
+
+  // Chat Parameter Improvement Theme (if any chat < 85%)
+  if (rmChats.length > 0 && chatBelow85 > 0) {
+    themes.push({
+      pattern: 'Expectation & Follow-Through in WhatsApp Conversations',
+      channel: 'chat',
+      associatedParameters: ['Expectation & Follow-Through'],
+      whyItMatters: 'When investors know what to expect and when, they feel confident and do not have to repeatedly ask for updates.',
+      actionable: 'Give clear timelines for every step—tell the investor exactly when to expect their summary, payment link, or allotment details.',
+      isBreach: false,
+      rankScore: 3,
+      backingCallIds: rmChats.map((c) => String(c.id)),
+    });
+  }
+
+  if (themes.length === 0) {
+    themes.push({
+      pattern: 'Investor Relationship Deepening & Active Engagement',
+      channel: 'call',
+      associatedParameters: ['Active Listening & Empathy', 'Simplifying Answers'],
+      whyItMatters: 'Understanding what the customer is looking for helps you recommend the right investments for their financial goals.',
+      actionable: 'Ask open questions about their past investments—such as when their fixed deposits are maturing or how long they plan to invest.',
+      isBreach: false,
+      rankScore: 1,
+      backingCallIds: rmCalls.slice(0, 2).map((c) => c.call_id || String(c.rec_id)),
+    });
+  }
+
+  // 8. Breaches List
+  const breaches: GeneratedPcgScorecard['breaches'] = [
+    ...callBreachCalls.map((c) => ({
+      callId: c.call_id || String(c.rec_id),
+      channel: 'call' as const,
+      score: Number(c.human_override_score ?? c.iqs_score ?? 0),
+      flaggedContent: c.compliance_reason || 'Mentioned guaranteed/fixed return on market debt product without risk caveat.',
+      note: 'Requires TL review in weekly 1-on-1 coaching.',
+    })),
+    ...chatBreachChats.map((c) => ({
+      callId: String(c.id),
+      channel: 'chat' as const,
+      score: Number(c.iqs_score || 0),
+      flaggedContent: c.compliance_reason || 'Compliance tripwire detected in chat conversation.',
+      note: 'Regulatory & internal compliance rules prohibiting fixed return claims or non-compliant advice.',
+    })),
+  ];
+
+  // 9. Full Evidence List (Calls + Chats, sorted worst score first)
+  const callEvidence = evaluatedCalls.map((c, idx) => ({
+    callId: c.call_id || String(c.rec_id),
+    channel: 'call' as const,
+    score: Number(c.human_override_score ?? c.iqs_score ?? 0),
+    topic: c.call_category || '13% Pitching',
+    summary: c.ai_coaching_tip || extractPlainEnglishCallSummary(c, canonicalName, idx),
+  }));
+
+  const chatEvidence = rmChats.map((c) => {
+    const score = Number(c.iqs_score || 0);
+    let summary = c.summary || c.ai_coaching_tip;
+    if (!summary || summary.includes('Reviewed WhatsApp chat transcript')) {
+      if (score > 75) {
+        summary = `Maintained prompt client responsiveness, explained investment options with complete regulatory disclaimers, and confirmed next steps.`;
+      } else {
+        summary = `Missed prompt response timelines and did not set clear expectation for document dispatch.`;
+      }
+    }
+    return {
+      callId: String(c.id),
+      channel: 'chat' as const,
+      score,
+      topic: c.customer_name ? `${c.customer_name} (${c.customer_phone})` : c.customer_phone || 'WhatsApp Client',
+      summary,
+    };
+  });
+
+  const combinedEvidence = [...callEvidence, ...chatEvidence].sort((a, b) => a.score - b.score);
+
+  const reportId = `${canonicalName.toLowerCase().replace(/\s+/g, '-')}:${weekStart}`;
+
+  return {
+    id: reportId,
+    rmName: canonicalName,
+    tlName: assignedTl,
+    weekStart,
+    weekEnd,
+    status: 'published',
+    viewedAt: null,
+    generatedAt: new Date().toISOString(),
+    comments: [],
+    numbers: {
+      callsHandled: totalCalls,
+      averageScore: blendedAvgScore,
+      below85Count: totalBelow85Count,
+      pickupRateText: callPickupRateText,
+      connectRateText: callPickupRateText,
+      complianceBreachesCount: totalComplianceBreaches,
+      calls: {
+        handled: totalCalls,
+        avgScore: callAvgScore,
+        below85Count: callBelow85,
+        pickupRateText: callPickupRateText,
+        breachesCount: callBreachesCount,
+      },
+      chats: {
+        handled: totalChats,
+        avgScore: chatAvgScore,
+        below85Count: chatBelow85,
+        firstResponseText: chatFrtText,
+        breachesCount: chatBreachesCount,
+      },
+      emails: {
+        handled: totalEmails,
+        avgScore: emailAvgScore,
+        below85Count: emailBelow85,
+        resolutionText: emailResolutionText,
+        breachesCount: emailBreachesCount,
+      },
+      totalInteractions,
+      blendedAvgScore,
+      totalBelow85Count,
+      totalComplianceBreaches,
+    },
+    whatWentWell,
+    whatWentWellCalls,
+    whatWentWellChats,
+    themes,
+    breaches,
+    evidence: combinedEvidence,
   };
 }
 
