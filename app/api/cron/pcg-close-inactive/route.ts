@@ -35,6 +35,20 @@ export async function GET(req: NextRequest) {
   try {
     const result = await closeInactivePcgConversations(inactivityHours);
 
+    // Auto-evaluate 100% of newly closed PCG chats via gemini-3.5-flash bot pipeline
+    if (result.closed && result.closed.length > 0) {
+      try {
+        const { runPcgChatPipeline } = await import('@/lib/scoring/pcg-chat-pipeline');
+        for (const item of result.closed) {
+          runPcgChatPipeline(item).catch((e: any) =>
+            console.error('[pcg-close-inactive] Auto-eval error for closed chat:', e?.message || e)
+          );
+        }
+      } catch (pipeErr: any) {
+        console.warn('[pcg-close-inactive] Warning triggering auto-eval pipeline:', pipeErr?.message || pipeErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: `Successfully closed ${result.closedCount} PCG conversation(s) inactive for >= ${inactivityHours} hours.`,

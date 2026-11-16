@@ -16,7 +16,8 @@ import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
 import SecuritySection from '@/components/settings/SecuritySection';
 import PcgQualityParametersView from './PcgQualityParametersView';
 import PcgTlCallsView from './PcgTlCallsView';
-import PcgPeriodFilter from './PcgPeriodFilter';
+import PcgPeriodFilter, { type PcgPeriod } from './PcgPeriodFilter';
+import PcgChatQualityView from './PcgChatQualityView';
 
 // Type definitions
 interface CallParameter {
@@ -137,7 +138,52 @@ interface TeamLeadSummary {
   rms: string[];
 }
 
-export type PcgTab = 'calls' | 'tl_calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security' | 'parameter_definitions';
+export type PcgTab = 'calls' | 'chat_quality' | 'tl_calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security' | 'parameter_definitions';
+
+const PCG_FALLBACK_TL_TEAMS: Record<string, string[]> = {
+  Swetha: [
+    'Ankita Agarwal',
+    'Diya Sharma',
+    'Nishtha Veerwani',
+    'Sujal Dadwani',
+    'Suryansh Sharma',
+    'Vaishnavi N J',
+    'Vaishnavi Naghat',
+    'Vidisha Jaiswal',
+    'Vishyata Tulsani',
+    'Aditi Verma',
+    'Arshnoor Kaur',
+    'Bhavnit Singh',
+  ],
+  'Saiyam Rastogi': [
+    'Ayan Kumar Garg',
+    'Gaurav Nautiyal',
+    'Mahi Agarwal',
+    'Nandini',
+    'Rukmini Mundhara',
+    'Sahil Joshi',
+    'Shruti Sharma',
+    'Vishal Kumar Yadav',
+  ],
+  'Tanisha Mittal': [
+    'Antara Chakraborty',
+    'Deshna Dugar',
+    'Harshita Dhona',
+    'Keshvi Suresh Thacker',
+    'Maniyar Kriya Jignesh',
+    'Nischay Manish Jain',
+    'Samskrithi Rao N',
+  ],
+  'Dheeraj Bhojwani': [
+    'Ishaan Kapoor',
+    'Paritosh Ashiya',
+    'Ramita Kapoor',
+    'Sargun Singh',
+    'Shivam Kumar Baghel',
+    'Shrey Jain',
+    'Yaashvi Arora',
+  ],
+};
 
 export const getRunoCallUrl = (callId: string | null | undefined) => {
   if (!callId) return 'https://app-call.runo.in';
@@ -308,9 +354,18 @@ export default function PcgCallsClient() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
+      const personaParam = urlParams.get('persona');
+      if (personaParam === 'tl' || personaParam === 'agent' || personaParam === 'admin') {
+        setActivePersona(personaParam);
+      }
       const tabParam = urlParams.get('tab');
-      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security' || tabParam === 'parameter_definitions' || tabParam === 'tl_calls') {
-        if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'tl_calls')) {
+      if (tabParam === 'tl_calls') {
+        setActiveTab('calls');
+        setActiveCohortToggle('tl');
+      } else if (tabParam === 'tl_chats') {
+        setActiveTab('chat_quality');
+      } else if (tabParam === 'scorecard' || tabParam === 'chat_quality' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security' || tabParam === 'parameter_definitions') {
+        if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
           setActiveTab('calls');
         } else if (activePersona === 'agent' && tabParam === 'parameter_definitions') {
           setActiveTab('calls');
@@ -345,12 +400,26 @@ export default function PcgCallsClient() {
   const [loading, setLoading] = useState(true);
 
   const activeTlName = activePersona === 'tl'
-    ? (loggedInUserName || selectedTl)
+    ? (userRole === 'tl' ? (loggedInUserName || selectedTl) : (selectedTl && selectedTl !== 'all' ? selectedTl : teamLeads[0]?.tlName || 'Saiyam Rastogi'))
     : selectedTl;
 
   const currentTlTeam = useMemo(() => {
     if (!activeTlName) return teamLeads[0] || null;
-    return teamLeads.find((t) => t.tlName.toLowerCase() === activeTlName.toLowerCase()) || null;
+    const cleanTl = activeTlName.replace(/^Team\s+/i, '').trim().toLowerCase();
+    const found = teamLeads.find((t) => t.tlName.toLowerCase() === cleanTl || t.tlName.toLowerCase() === activeTlName.toLowerCase());
+    if (found) {
+      const fallback = PCG_FALLBACK_TL_TEAMS[found.tlName] || PCG_FALLBACK_TL_TEAMS[cleanTl] || [];
+      const combinedRms = Array.from(new Set([...found.rms, ...fallback])).sort((a, b) => a.localeCompare(b));
+      return { ...found, rms: combinedRms, teamSize: combinedRms.length };
+    }
+
+    // Fallback to static PCG_FALLBACK_TL_TEAMS so members are instantly available
+    for (const [tl, rms] of Object.entries(PCG_FALLBACK_TL_TEAMS)) {
+      if (tl.toLowerCase() === cleanTl) {
+        return { tlName: tl, teamSize: rms.length, rms };
+      }
+    }
+    return teamLeads[0] || null;
   }, [teamLeads, activeTlName]);
 
   const teamRms: string[] = useMemo(() => {
@@ -375,15 +444,9 @@ export default function PcgCallsClient() {
     | 'ai_coaching_insights'
   >('all');
 
-  // When switching to agent persona, ensure excluded categories are not active
-  useEffect(() => {
-    if (activePersona === 'agent' && ['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)) {
-      setSelectedCategory('all');
-    }
-  }, [activePersona, selectedCategory]);
   const [adminGridRmFilter, setAdminGridRmFilter] = useState<string>('all');
   const [adminBannerTlSelect, setAdminBannerTlSelect] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<'7d' | '30d' | 'custom'>('7d');
+  const [dateRange, setDateRange] = useState<PcgPeriod>('7d');
   const [customStartDate, setCustomStartDate] = useState(() => {
     const d = new Date(Date.now() - 7 * 86400000);
     return d.toISOString().split('T')[0];
@@ -391,8 +454,10 @@ export default function PcgCallsClient() {
   const [customEndDate, setCustomEndDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
   });
-  const [adminTlFilter, setAdminTlFilter] = useState<string>('all');
-  const [adminRmFilter, setAdminRmFilter] = useState<string>('all');
+  const [activeCohortToggle, setActiveCohortToggle] = useState<'rm' | 'tl' | 'team' | null>(null);
+  const [selectedRmName, setSelectedRmName] = useState<string>('all');
+  const [selectedTlName, setSelectedTlName] = useState<string>('all');
+  const [selectedTeamName, setSelectedTeamName] = useState<string>('all');
   const [minIqsFilter, setMinIqsFilter] = useState<string>('');
   const [maxIqsFilter, setMaxIqsFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'answered' | 'unanswered' | 'needs_attention'>('answered');
@@ -400,6 +465,7 @@ export default function PcgCallsClient() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCallsCount, setTotalCallsCount] = useState(0);
+  const [scorecardDefaultChannel, setScorecardDefaultChannel] = useState<'calls' | 'chats' | 'emails'>('calls');
 
   // Active call view state
   const [activeCallAudit, setActiveCallAudit] = useState<PCGCall | null>(null);
@@ -434,7 +500,7 @@ export default function PcgCallsClient() {
       fetchData();
     }, 250);
     return () => clearTimeout(handler);
-  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, adminTlFilter, adminRmFilter, searchQuery, minIqsFilter, maxIqsFilter, activePersona]);
+  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, activeCohortToggle, selectedRmName, selectedTlName, selectedTeamName, searchQuery, minIqsFilter, maxIqsFilter, activePersona]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -456,10 +522,24 @@ export default function PcgCallsClient() {
       } else if (activePersona === 'tl') {
         const tlQueryName = loggedInUserName || selectedTl;
         if (tlQueryName) p.set('tl_name', tlQueryName);
-        if (adminRmFilter !== 'all') p.set('rm_name', adminRmFilter);
+        if (selectedRmName !== 'all') p.set('rm_name', selectedRmName);
       } else if (activePersona === 'admin') {
-        if (adminTlFilter !== 'all') p.set('tl_name', adminTlFilter);
-        if (adminRmFilter !== 'all') p.set('rm_name', adminRmFilter);
+        if (activeCohortToggle === 'rm') {
+          p.set('caller_role', 'rm');
+          if (selectedRmName !== 'all') {
+            p.set('rm_name', selectedRmName);
+          }
+        } else if (activeCohortToggle === 'tl') {
+          p.set('caller_role', 'tl');
+          if (selectedTlName !== 'all') {
+            p.set('tl_name', selectedTlName);
+          }
+        } else if (activeCohortToggle === 'team') {
+          p.set('caller_role', 'team');
+          if (selectedTeamName !== 'all') {
+            p.set('tl_name', selectedTeamName);
+          }
+        }
       }
       if (searchQuery.trim()) {
         p.set('search', searchQuery.trim());
@@ -583,7 +663,8 @@ export default function PcgCallsClient() {
   const handleOpenCoachingChat = (opts: { rmName?: string; categoryKey?: '13_pitching' | 'upselling' | 'support' }) => {
     setSelectedCategory('all');
     if (opts.rmName) {
-      setAdminRmFilter(opts.rmName);
+      setSelectedRmName(opts.rmName);
+      setActiveCohortToggle('rm');
     }
     const match = calls.find(c => {
       const matchRm = !opts.rmName || c.rmName === opts.rmName;
@@ -848,8 +929,8 @@ export default function PcgCallsClient() {
     if (activePersona === 'tl' && teamRms.length > 0) {
       if (!teamRms.some((rm) => isSamePcgAgent(rm, call.rmName))) return false;
     }
-    // Agents should never see excluded calls in their evaluated calls table
-    if (activePersona === 'agent' || !['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)) {
+    // Any excluded calls should show under the excluded category; otherwise by default it should only show valid calls
+    if (!['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)) {
       if (call.isEvaluable === false || call.verdict === 'EXCLUDED_NON_CLIENT' || call.callNature === 'non_client') {
         return false;
       }
@@ -902,7 +983,7 @@ export default function PcgCallsClient() {
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  const handlePeriodChange = (range: '7d' | '30d' | 'custom', from: string, to: string) => {
+  const handlePeriodChange = (range: PcgPeriod, from: string, to: string) => {
     setDateRange(range);
     setCustomStartDate(from);
     setCustomEndDate(to);
@@ -929,6 +1010,13 @@ export default function PcgCallsClient() {
       return `${s.str} – ${e.str}`;
     };
 
+    if (dateRange === 'all') {
+      return {
+        full: 'All Time (Oct 13+)',
+        short: 'All Time',
+        datesOnly: 'Oct 13 onwards',
+      };
+    }
     if (dateRange === '7d') {
       const end = new Date();
       const start = new Date(Date.now() - 7 * 86400000);
@@ -1021,9 +1109,9 @@ export default function PcgCallsClient() {
       const combined = [...matchedRms, ...zeroCountRms];
       return combined.sort((a, b) => a.name.localeCompare(b.name));
     }
-    if (activePersona === 'admin' && adminTlFilter !== 'all') {
+    if (activePersona === 'admin' && activeCohortToggle === 'team' && selectedTeamName !== 'all') {
       const selectedAdminTeam = teamLeads.find(
-        (t) => t.tlName.toLowerCase() === adminTlFilter.toLowerCase()
+        (t) => t.tlName.toLowerCase() === selectedTeamName.toLowerCase()
       );
       if (selectedAdminTeam) {
         const set = new Set(selectedAdminTeam.rms.map((r: string) => r.toLowerCase()));
@@ -1033,7 +1121,7 @@ export default function PcgCallsClient() {
       }
     }
     return rms.length > 0 ? rms : allKnownRms.map((name: string) => ({ name, count: 0 }));
-  }, [activePersona, teamRms, rms, allKnownRms, adminTlFilter, teamLeads]);
+  }, [activePersona, teamRms, rms, allKnownRms, activeCohortToggle, selectedTeamName, teamLeads]);
 
   const renderDisputesTable = () => (
     <div className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-sm">
@@ -1349,8 +1437,7 @@ export default function PcgCallsClient() {
             W
           </div>
           <div>
-            <h1 className="text-base font-bold text-[#111111] leading-none">PCG Call Quality</h1>
-            <p className="text-xs text-[#71717A] mt-0.5">PCG Team Voice Call Performance &amp; Quality Analytics</p>
+            <h1 className="text-base font-bold text-[#111111] leading-none">PCG Analytics</h1>
           </div>
         </div>
 
@@ -1417,7 +1504,7 @@ export default function PcgCallsClient() {
       <div className="flex flex-1 min-h-[calc(var(--vh100)_-_65px)] bg-[#f5f3ee]">
         {/* Left Sidebar Panel (Replicated from CX TL with Call Quality & RM Scorecard) */}
         <aside
-          className="w-[220px] shrink-0 bg-[#f5f3ee] border-r border-[#e6e2d8] py-4 select-none"
+          className="w-[235px] shrink-0 bg-[#f5f3ee] border-r border-[#e6e2d8] py-4 select-none"
         >
           {/* Workspace switcher at the top of the sidebar (same spot as the CX sidebar) */}
           {(isSuperAdmin || platformDomain === 'both') && (
@@ -1498,30 +1585,27 @@ export default function PcgCallsClient() {
             <span className="flex-1">Call Quality</span>
           </button>
 
-          {/* 3b. TL Call Quality Navigation Link (For Admin) */}
-          {activePersona === 'admin' && (
-            <button
-              type="button"
-              onClick={() => handleTabChange('tl_calls')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'tl_calls'
-                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+          {/* 3c. Chat Quality Navigation Link */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('chat_quality')}
+            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'chat_quality'
+              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+              }`}
+          >
+            <span
+              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'chat_quality' ? 'text-[#18181b]' : 'text-[#71717a]'
                 }`}
             >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'tl_calls' ? 'text-[#18181b]' : 'text-[#71717a]'
-                  }`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-              </span>
-              <span className="flex-1">TL Call Quality</span>
-            </button>
-          )}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+            </span>
+            <span className="flex-1">Chat Quality</span>
+          </button>
+
+
 
           {/* 4. RM Scorecard Navigation Link */}
           <button
@@ -1603,43 +1687,43 @@ export default function PcgCallsClient() {
           <div className="mt-4 pt-3 border-t border-[#e6e2d8]">
             {/* Security Navigation Link (Agent and TL). Admins reach Security inside Settings, so it is not repeated for them. */}
             {activePersona !== 'admin' && (
-            <button
-              type="button"
-              onClick={() => handleTabChange('security')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'security'
-                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-                }`}
-            >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'security' ? 'text-[#18181b]' : 'text-[#71717a]'
+              <button
+                type="button"
+                onClick={() => handleTabChange('security')}
+                className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'security'
+                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
                   }`}
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </span>
-              <span className="flex-1">Security</span>
-            </button>
+                <span
+                  className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'security' ? 'text-[#18181b]' : 'text-[#71717a]'
+                    }`}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+                <span className="flex-1">Security</span>
+              </button>
             )}
 
             {/* Settings Link (Admin Only) */}
             {activePersona === 'admin' && (
-                <Link
-                  href="/settings?section=pcg-users"
-                  className="w-[calc(100%-24px)] mx-3 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]"
-                >
-                  <span className="inline-flex items-center justify-center shrink-0 text-[#71717a]">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                  </span>
-                  <span className="flex-1">Settings</span>
-                </Link>
-              )}
-            </div>
+              <Link
+                href="/settings?section=pcg-users"
+                className="w-[calc(100%-24px)] mx-3 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]"
+              >
+                <span className="inline-flex items-center justify-center shrink-0 text-[#71717a]">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </span>
+                <span className="flex-1">Settings</span>
+              </Link>
+            )}
+          </div>
         </aside>
 
         {/* Main Content Area */}
@@ -1652,6 +1736,16 @@ export default function PcgCallsClient() {
             <div>
               <PcgQualityParametersView />
             </div>
+          ) : activeTab === 'chat_quality' ? (
+            <div>
+              <PcgChatQualityView
+                activePersona={activePersona}
+                selectedRm={activePersona === 'agent' ? selectedRm : undefined}
+                selectedTl={activePersona === 'tl' ? activeTlName : undefined}
+                loggedInUserName={loggedInUserName}
+                teamRms={teamRms}
+              />
+            </div>
           ) : activeTab === 'scorecard' ? (
             <div>
               <PcgScorecardView
@@ -1661,8 +1755,11 @@ export default function PcgCallsClient() {
                 selectedTl={activeTlName}
                 onSelectTl={(tl) => setSelectedTl(tl)}
                 onOpenCallView={(cid) => handleOpenCallById(cid)}
+                onOpenChatView={() => handleTabChange('chat_quality')}
                 onSwitchToCallsTab={() => handleTabChange('calls')}
+                onSwitchToChatQuality={() => handleTabChange('chat_quality')}
                 allowedRms={activePersona === 'tl' ? teamRms : undefined}
+                defaultChannel={scorecardDefaultChannel}
               />
             </div>
           ) : activeTab === 'team_analytics' ? (
@@ -1686,8 +1783,9 @@ export default function PcgCallsClient() {
                   setSelectedRm(rm);
                   handleTabChange('member_analytics');
                 }}
-                onOpenScorecard={(rm) => {
+                onOpenScorecard={(rm, ch) => {
                   setSelectedRm(rm);
+                  if (ch) setScorecardDefaultChannel(ch);
                   handleTabChange('scorecard');
                 }}
                 rmScorecards={rmScorecards}
@@ -1705,7 +1803,7 @@ export default function PcgCallsClient() {
                 rmScorecards={rmScorecards}
                 teamLeads={teamLeads}
                 tlName={activeTlName}
-                dateRange={dateRange}
+                dateRange={dateRange === 'all' ? '30d' : dateRange}
                 onDateRangeChange={(range, from, to) => {
                   setDateRange(range);
                   if (from && to) {
@@ -1725,6 +1823,7 @@ export default function PcgCallsClient() {
                 onPeriodChange={handlePeriodChange}
               />
             </div>
+
           ) : (
             <div className="space-y-6">
               {/* Call Quality View Header / Switcher: Evaluated Calls / Disputes */}
@@ -1781,71 +1880,6 @@ export default function PcgCallsClient() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* ── 1. PERSONA CONTEXT HEADER (Only for Admin) ──────────────── */}
-                  {activePersona === 'admin' && (
-                    <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
-                            Executive Console
-                          </span>
-                          <h2 className="text-lg font-bold text-[#111111]">
-                            Organization PCG Analytics &amp; Administration
-                          </h2>
-                        </div>
-                        <p className="text-xs text-[#71717A] mt-1">
-                          Complete cross-team visibility across all RMs, Team Leads, and categories.
-                        </p>
-                      </div>
-
-                      {activePersona === 'admin' && (
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-[#71717A]">Team:</span>
-                            <select
-                              value={adminTlFilter}
-                              onChange={(e) => {
-                                setAdminTlFilter(e.target.value as any);
-                                setAdminRmFilter('all');
-                                setPage(1);
-                              }}
-                              className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
-                            >
-                              <option value="all">All Teams</option>
-                              {teamLeads.map((tl) => (
-                                <option key={tl.tlName} value={tl.tlName}>
-                                  Team {tl.tlName} ({tl.rms.length} RMs)
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-[#71717A]">RM:</span>
-                            <select
-                              value={adminRmFilter}
-                              onChange={(e) => { setAdminRmFilter(e.target.value); setPage(1); }}
-                              className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
-                            >
-                              <option value="all">All RMs ({rms.length})</option>
-                              {rms
-                                .filter((r) => {
-                                  if (adminTlFilter !== 'all') {
-                                    const selectedAdminTeam = teamLeads.find(t => t.tlName.toLowerCase() === adminTlFilter.toLowerCase());
-                                    return selectedAdminTeam ? selectedAdminTeam.rms.some(n => n.toLowerCase() === r.name.toLowerCase()) : true;
-                                  }
-                                  return true;
-                                })
-                                .map((r) => (
-                                  <option key={r.name} value={r.name}>{r.name} ({r.count})</option>
-                                ))}
-                            </select>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* ── 2. TOP METRIC CARDS ────────────────────────────────────────────── */}
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
@@ -1854,7 +1888,13 @@ export default function PcgCallsClient() {
                           ? 'My Call Quality Overview'
                           : activePersona === 'tl'
                             ? `Team ${activeTlName || 'Lead'} Performance Overview`
-                            : 'Organization Performance Overview'}
+                            : activeCohortToggle === 'rm'
+                              ? (selectedRmName !== 'all' ? `${selectedRmName} Performance Overview` : 'RM Performance Overview')
+                              : activeCohortToggle === 'tl'
+                                ? (selectedTlName !== 'all' ? `${selectedTlName} Performance Overview` : 'Team Leads Performance Overview')
+                                : activeCohortToggle === 'team'
+                                  ? (selectedTeamName !== 'all' ? `Team ${selectedTeamName} Performance Overview` : 'All Teams Performance Overview')
+                                  : 'Organization Performance Overview'}
                       </span>
                       <PcgPeriodFilter range={dateRange} start={customStartDate} end={customEndDate} onChange={handlePeriodChange} />
                     </div>
@@ -1864,7 +1904,17 @@ export default function PcgCallsClient() {
                       <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
                         <div className="flex items-center justify-between">
                           <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                            {activePersona === 'agent' ? 'My Quality Score' : activePersona === 'tl' ? 'Team Avg IQS' : 'Org Avg IQS'}
+                            {activePersona === 'agent'
+                              ? 'My Quality Score'
+                              : activePersona === 'tl'
+                                ? 'Team Avg IQS'
+                                : activeCohortToggle === 'rm'
+                                  ? 'Agent Avg IQS'
+                                  : activeCohortToggle === 'tl'
+                                    ? 'TL Avg IQS'
+                                    : activeCohortToggle === 'team'
+                                      ? 'Team Avg IQS'
+                                      : 'Org Avg IQS'}
                           </p>
                           <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
                             {activeDateInfo.short}
@@ -2428,36 +2478,32 @@ export default function PcgCallsClient() {
                             </span>
                           )}
                         </button>
-                        {activePersona !== 'agent' && (
-                          <>
-                            <div className="h-4 w-px bg-zinc-200 mx-1 hidden sm:block" />
-                            <button
-                              onClick={() => {
-                                setSelectedCategory('excluded');
-                                setMinIqsFilter('');
-                                setMaxIqsFilter('');
-                                setSearchQuery('');
-                                setPage(1);
-                              }}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)
-                                ? 'bg-amber-600 text-white shadow-sm font-bold'
-                                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-                                }`}
-                            >
-                              <span>Excluded Calls</span>
-                              {summary?.categoryCounts?.excluded != null && (
-                                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-900'}`}>
-                                  {summary.categoryCounts.excluded}
-                                </span>
-                              )}
-                            </button>
-                          </>
-                        )}
+                        <div className="h-4 w-px bg-zinc-200 mx-1 hidden sm:block" />
+                        <button
+                          onClick={() => {
+                            setSelectedCategory('excluded');
+                            setMinIqsFilter('');
+                            setMaxIqsFilter('');
+                            setSearchQuery('');
+                            setPage(1);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)
+                            ? 'bg-amber-600 text-white shadow-sm font-bold'
+                            : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                            }`}
+                        >
+                          <span>Excluded Calls</span>
+                          {summary?.categoryCounts?.excluded != null && (
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-900'}`}>
+                              {summary.categoryCounts.excluded}
+                            </span>
+                          )}
+                        </button>
                       </div>
                     </div>
 
-                    {/* Excluded Sub-Category Filter Bar (TL & Admin only) */}
-                    {activePersona !== 'agent' && ['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) && (
+                    {/* Excluded Sub-Category Filter Bar */}
+                    {['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) && (
                       <div className="pt-2 border-t border-zinc-100 flex flex-wrap items-center gap-1.5 animate-in fade-in duration-200">
                         <span className="text-[11px] text-zinc-500 font-medium mr-1">Filter Exclusion:</span>
                         <button
@@ -2515,31 +2561,23 @@ export default function PcgCallsClient() {
                                   ? 'Attention Queue (<85% IQS Calls)'
                                   : 'Evaluated Call Audits'}
                           </h3>
-                          <p className="text-xs text-[#71717A] mt-0.5">
-                            {['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)
-                              ? 'Calls identified as non-client (Hiring, Courier, Spam, Wrong Number, Personal) — filtered out before 11-parameter evaluation.'
-                              : `Showing ${displayedEvaluatedCalls.length} calls • Auto-categorised with separate quality parameters`}
-                          </p>
                         </div>
 
                         <div className="flex items-center gap-2.5 flex-wrap">
-                          {activePersona !== 'agent' && (
+                          {/* Team Member filter strictly for Team Lead view (hidden for Admin) */}
+                          {activePersona === 'tl' && (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-[#71717A] font-medium">{activePersona === 'tl' ? 'Team Member:' : 'Agent:'}</span>
+                              <span className="text-xs text-[#71717A] font-medium">Team Member:</span>
                               <select
                                 id="table-agent-filter"
-                                value={adminRmFilter}
+                                value={selectedRmName}
                                 onChange={(e) => {
-                                  setAdminRmFilter(e.target.value);
+                                  setSelectedRmName(e.target.value);
                                   setPage(1);
                                 }}
                                 className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs focus:border-[#111111] cursor-pointer"
                               >
-                                <option value="all">
-                                  {activePersona === 'tl'
-                                    ? `All Team Members (${availableRmsForTable.length})`
-                                    : `All Agents (${availableRmsForTable.length})`}
-                                </option>
+                                <option value="all">All Team Members</option>
                                 {availableRmsForTable.map((r: { name: string; count: number }) => (
                                   <option key={r.name} value={r.name}>
                                     {r.name}
@@ -2627,7 +2665,7 @@ export default function PcgCallsClient() {
 
                               <input
                                 type="text"
-                                placeholder={activePersona === 'agent' ? "Search Client Name..." : "Search Client or RM Name..."}
+                                placeholder={activePersona === 'agent' ? "Search Client Name..." : activeCohortToggle === 'tl' ? "Search Client or TL Name..." : "Search Client or RM Name..."}
                                 value={searchQuery}
                                 onChange={(e) => {
                                   setSearchQuery(e.target.value);
@@ -2649,7 +2687,7 @@ export default function PcgCallsClient() {
                           <table className="w-full text-left border-collapse text-xs">
                             <thead>
                               <tr className="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
-                                {activePersona !== 'agent' && <th className="py-3 px-4">RM Name</th>}
+                                {activePersona !== 'agent' && <th className="py-3 px-4">{activeCohortToggle === 'tl' ? 'Team Lead' : activeCohortToggle === 'rm' ? 'RM Name' : activeCohortToggle === 'team' ? 'Team / RM' : 'Caller / RM'}</th>}
                                 <th className="py-3 px-4">{['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) ? 'Caller / Contact' : 'Client Name'}</th>
                                 <th className="py-3 px-4">Call Category</th>
                                 <th className="py-3 px-4">{['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) ? 'Evaluation Status' : 'IQS Score'}</th>
@@ -2671,7 +2709,14 @@ export default function PcgCallsClient() {
                                     >
                                       {activePersona !== 'agent' && (
                                         <td className="py-3 px-4 font-semibold text-zinc-800">
-                                          {call.rmName}
+                                          <div className="flex items-center gap-1.5">
+                                            <span>{call.rmName}</span>
+                                            {['tanisha mittal', 'swetha', 'sravanthi', 'dheeraj bhojwani', 'saiyam rastogi'].some(t => t.toLowerCase() === call.rmName?.toLowerCase()) && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                                                TL
+                                              </span>
+                                            )}
+                                          </div>
                                         </td>
                                       )}
 
@@ -2682,8 +2727,8 @@ export default function PcgCallsClient() {
                                       <td className="py-3 px-4">
                                         <div className="flex flex-col gap-1 items-start">
                                           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold ${call.isEvaluable === false
-                                              ? 'bg-amber-50 text-amber-900 border border-amber-200'
-                                              : 'bg-zinc-100 text-zinc-800 border border-zinc-200'
+                                            ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                            : 'bg-zinc-100 text-zinc-800 border border-zinc-200'
                                             }`}>
                                             {call.isEvaluable === false && <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
                                             {call.category}

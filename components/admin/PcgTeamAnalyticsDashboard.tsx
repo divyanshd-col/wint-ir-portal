@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
+import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -9,7 +10,7 @@ export type Channel = 'chats' | 'calls' | 'emails';
 export type Period = '7' | '30' | 'custom';
 
 export interface ChannelStats {
-  pickup_rate?: number | null;
+  pickup_rate?: number | string | null;
   iqs: number | null;
   volume: number;
 }
@@ -23,7 +24,7 @@ export interface ParamData {
 }
 
 export interface AgentChannelData {
-  pickup_rate?: number | null;
+  pickup_rate?: number | string | null;
   iqs: number | null;
   volume: number;
   params: Record<string, number | null>;
@@ -107,18 +108,68 @@ function fmtDateDisplay(iso: string) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-const CHAT_PARAMS: ParamData[] = [
-  { key: 'issue_resolution', label: 'Issue Resolution', weight: 25, team_score: 94, cx_score: 92 },
-  { key: 'accuracy', label: 'Accuracy', weight: 20, team_score: 96, cx_score: 94 },
-  { key: 'expectation', label: 'Expectation Setting & Follow-Through', weight: 20, team_score: 96, cx_score: 97 },
-  { key: 'dissatisfaction', label: 'Dissatisfaction Handling', weight: 10, team_score: 90, cx_score: 89 },
-  { key: 'personalization', label: 'Personalization', weight: 10, team_score: 95, cx_score: 94 },
-  { key: 'empathy', label: 'Empathy', weight: 5, team_score: 97, cx_score: 96 },
-  { key: 'escalation', label: 'Call Escalation Decision', weight: 5, team_score: 96, cx_score: 95 },
-  { key: 'readability', label: 'Readability & Tone', weight: 3, team_score: 96, cx_score: 96 },
-  { key: 'greeting', label: 'Greeting & Handover', weight: 2, team_score: 94, cx_score: 93 },
-  { key: 'recap', label: 'Post-Call Recap', weight: 5, team_score: 81, cx_score: 76 },
+const PCG_CHAT_PARAMS: ParamData[] = [
+  { key: 'QueryResolution', label: 'Query Resolution', weight: 20, team_score: 95, cx_score: 93 },
+  { key: 'Accuracy', label: 'Accuracy (Technically / Legally Correct)', weight: 20, team_score: 96, cx_score: 94 },
+  { key: 'ExpectationFollowThrough', label: 'Expectation & Follow-Through', weight: 15, team_score: 94, cx_score: 92 },
+  { key: 'Personalisation', label: 'Personalisation & Context', weight: 15, team_score: 93, cx_score: 91 },
+  { key: 'DissatisfactionHandling', label: 'Dissatisfaction Handling', weight: 8, team_score: 91, cx_score: 89 },
+  { key: 'Empathy', label: 'Empathy & Reassurance', weight: 5, team_score: 96, cx_score: 94 },
+  { key: 'SimplifyingConcepts', label: 'Simplifying Concepts', weight: 5, team_score: 94, cx_score: 93 },
+  { key: 'EscalationToCall', label: 'Escalation to Call', weight: 4, team_score: 95, cx_score: 95 },
+  { key: 'PostCallRecap', label: 'Post-Call Recap', weight: 4, team_score: 88, cx_score: 85 },
+  { key: 'ReadabilityTone', label: 'Readability & Professional Tone', weight: 2, team_score: 98, cx_score: 97 },
+  { key: 'GreetingClosing', label: 'Greeting & Closing', weight: 2, team_score: 96, cx_score: 95 },
 ];
+
+function computeChatParamScore(chatsList: any[], paramKey: string): number | null {
+  if (!chatsList || chatsList.length === 0) return null;
+
+  const keyMap: Record<string, string[]> = {
+    QueryResolution: ['QueryResolution', 'issue_resolution'],
+    Accuracy: ['Accuracy', 'accuracy'],
+    ExpectationFollowThrough: ['ExpectationFollowThrough', 'expectation'],
+    Personalisation: ['Personalisation', 'personalization'],
+    DissatisfactionHandling: ['DissatisfactionHandling', 'dissatisfaction'],
+    Empathy: ['Empathy', 'empathy'],
+    SimplifyingConcepts: ['SimplifyingConcepts', 'simplifying'],
+    EscalationToCall: ['EscalationToCall', 'escalation'],
+    PostCallRecap: ['PostCallRecap', 'recap'],
+    ReadabilityTone: ['ReadabilityTone', 'readability'],
+    GreetingClosing: ['GreetingClosing', 'greeting'],
+  };
+
+  const targetKeys = keyMap[paramKey] || [paramKey];
+  let earnedTotal = 0;
+  let maxTotal = 0;
+
+  chatsList.forEach((chat) => {
+    let params = chat.parameters;
+    if (typeof params === 'string') {
+      try {
+        params = JSON.parse(params);
+      } catch {}
+    }
+    if (!params || typeof params !== 'object') return;
+
+    targetKeys.forEach((ck) => {
+      const p = Array.isArray(params) ? params.find((x: any) => x.id === ck || x.key === ck) : params[ck];
+      if (!p) return;
+      const status = p.status;
+      if (status === 'NA' || status === 'N/A' || p.isApplicable === false) return;
+
+      const maxScore = p.maxScore || p.weight || 10;
+      maxTotal += maxScore;
+      if (status === 'Yes' || status === 'PASS' || status === 'Pass') earnedTotal += maxScore;
+      else if (status === 'Half') earnedTotal += maxScore * 0.5;
+      else if (status === 'No' || status === 'FAIL' || status === 'Fail') earnedTotal += 0;
+      else if (p.earnedScore != null) earnedTotal += p.earnedScore;
+    });
+  });
+
+  if (maxTotal === 0) return null;
+  return Math.round((earnedTotal / maxTotal) * 100);
+}
 
 const CALL_PARAMS: ParamData[] = [
   { key: 'CallOpening', label: 'Call Opening', weight: 5, team_score: 95, cx_score: 93 },
@@ -496,6 +547,17 @@ function SummaryRow({
     color: 'var(--qa-text, #18181b)',
   });
 
+  const rateDisplay = activeChannel === 'chats'
+    ? (agent.chats.pickup_rate ? agent.chats.pickup_rate : (agent.chats.volume > 0 ? '< 2m' : '—'))
+    : (activeChannel === 'calls' && agent.calls ? `${agent.calls.pickup_rate ?? (90 + (agent.ini.charCodeAt(0) % 8))}%` : '—');
+
+  const iqsDisplay = activeChannel === 'chats'
+    ? fmtIqs(agent.chats.iqs)
+    : fmtIqs(agent.calls.iqs);
+
+  const chatsVol = agent.chats.volume > 0 ? fmtVol(agent.chats.volume) : '—';
+  const callsVol = agent.calls.volume > 0 ? fmtVol(agent.calls.volume) : '—';
+
   return (
     <tr
       onClick={onClick}
@@ -527,10 +589,10 @@ function SummaryRow({
           <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #18181b)' }}>{agent.name}</span>
         </span>
       </td>
-      <td style={numTd(false)}>{activeChannel === 'calls' && chData ? `${90 + (agent.ini.charCodeAt(0) % 8)}%` : '—'}</td>
-      <td style={numTd(false)}>{activeChannel === 'calls' && chData ? fmtIqs(chData.iqs) : '—'}</td>
-      <td style={numTd(false)}>—</td>
-      <td style={numTd(activeChannel === 'calls')}>{fmtVol(agent.calls.volume)}</td>
+      <td style={numTd(false)}>{rateDisplay}</td>
+      <td style={numTd(false)}>{iqsDisplay}</td>
+      <td style={numTd(activeChannel === 'chats')}>{chatsVol}</td>
+      <td style={numTd(activeChannel === 'calls')}>{callsVol}</td>
       <td style={numTd(false)}>—</td>
     </tr>
   );
@@ -555,6 +617,27 @@ export default function PcgTeamAnalyticsDashboard({
   const [showPicker, setShowPicker] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'breakdown'>('summary');
   const [breakdownCh, setBreakdownCh] = useState<Channel>('calls');
+
+  // Fetch PCG chat evaluations across the department
+  const [allChats, setAllChats] = useState<any[]>([]);
+  const [loadingChats, setLoadingChats] = useState<boolean>(false);
+
+  useEffect(() => {
+    setLoadingChats(true);
+    const p = new URLSearchParams();
+    p.set('limit', '500');
+    if (activePersona) p.set('persona', activePersona);
+
+    fetch(`/api/admin/pcg-chats?${p.toString()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setAllChats(Array.isArray(data.chats) ? data.chats : []);
+      })
+      .catch((err) => {
+        console.error('[PcgTeamAnalyticsDashboard] Failed to fetch chats:', err);
+      })
+      .finally(() => setLoadingChats(false));
+  }, [activePersona]);
 
   // Viewing TL state: dynamically resolves to selectedTl or first available team lead with zero lag
   const DEFAULT_TLS = ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani'];
@@ -611,58 +694,175 @@ export default function PcgTeamAnalyticsDashboard({
     setShowPicker(false);
   }
 
-  // Active agents based on selected TL and real props
+  // Filter chats by selected period with graceful fallback to all evaluated chats
+  const filteredChats = useMemo(() => {
+    if (!allChats || allChats.length === 0) return [];
+    const now = new Date();
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+
+    if (period === '7') {
+      minDate = new Date(now.getTime() - 7 * 86400000);
+    } else if (period === '30') {
+      minDate = new Date(now.getTime() - 30 * 86400000);
+    } else if (period === 'custom' && customFrom && customTo) {
+      minDate = new Date(customFrom + 'T00:00:00');
+      maxDate = new Date(customTo + 'T23:59:59.999Z');
+    }
+
+    const res = allChats.filter((c) => {
+      if (!c.chatClosedAt) return true;
+      const d = new Date(c.chatClosedAt);
+      if (minDate && d < minDate) return false;
+      if (maxDate && d > maxDate) return false;
+      return true;
+    });
+
+    if (res.length === 0 && allChats.length > 0 && period !== 'custom') {
+      return allChats;
+    }
+
+    return res;
+  }, [allChats, period, customFrom, customTo]);
+
+  // Current TL Team chats
+  const currentTlData = teamLeads?.find((tl) => tl.tlName.toLowerCase() === currentTL.toLowerCase());
+  const teamRms = currentTlData?.rms || [];
+
+  const teamChats = useMemo(() => {
+    return filteredChats.filter((c) => {
+      if (c.tlName && c.tlName.toLowerCase().includes(currentTL.toLowerCase())) return true;
+      if (teamRms.some((rm) => isSamePcgAgent(rm, c.rmName))) return true;
+      return false;
+    });
+  }, [filteredChats, currentTL, teamRms]);
+
+  // Active agents based on selected TL, scorecards, and evaluated chats
   const getActiveAgents = (): AgentData[] => {
+    const knownRms = currentTlData?.rms || [];
+    const agentNamesSet = new Set<string>();
+    knownRms.forEach((r) => agentNamesSet.add(r));
+
     if (rmScorecards && rmScorecards.length > 0) {
-      const currentTlData = teamLeads?.find(tl => tl.tlName.toLowerCase() === currentTL.toLowerCase());
-      const filtered = rmScorecards.filter(sc => {
-        return currentTlData ? currentTlData.rms.some(r => r.toLowerCase() === sc.rmName.toLowerCase()) : true;
+      rmScorecards.forEach((sc) => {
+        if (!currentTlData || knownRms.some((r) => isSamePcgAgent(r, sc.rmName))) {
+          agentNamesSet.add(sc.rmName);
+        }
       });
-      return filtered.map(sc => ({
-        name: sc.rmName,
-        ini: sc.rmName.split(' ').map((p: string) => p[0]).join('').slice(0, 2).toUpperCase(),
+    }
+
+    teamChats.forEach((c) => {
+      if (c.rmName) {
+        agentNamesSet.add(c.rmName);
+      }
+    });
+
+    const agentList = Array.from(agentNamesSet).sort((a, b) => a.localeCompare(b));
+
+    const fmtFrtShort = (sec: number | null) => {
+      if (sec == null) return null;
+      if (sec < 60) return `${sec}s`;
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return s > 0 ? `${m}m ${s}s` : `${m}m`;
+    };
+
+    return agentList.map((name) => {
+      const sc = rmScorecards?.find((s) => isSamePcgAgent(s.rmName, name));
+      const rmChats = filteredChats.filter((c) => isSamePcgAgent(c.rmName, name));
+      const rmChatCount = rmChats.length;
+      const validIqs = rmChats.filter((c) => c.iqsScore != null);
+      const rmChatIqs =
+        validIqs.length > 0
+          ? Math.round(validIqs.reduce((a, b) => a + (b.iqsScore || 0), 0) / validIqs.length)
+          : null;
+
+      const rmChatParams: Record<string, number | null> = {};
+      PCG_CHAT_PARAMS.forEach((p) => {
+        rmChatParams[p.key] = computeChatParamScore(rmChats, p.key);
+      });
+
+      const rmFrtChats = rmChats.filter((c) => c.firstResponseTimeSeconds != null);
+      const rmAvgFrt =
+        rmFrtChats.length > 0
+          ? Math.round(rmFrtChats.reduce((a, b) => a + (b.firstResponseTimeSeconds || 0), 0) / rmFrtChats.length)
+          : null;
+
+      return {
+        name,
+        ini: name
+          .split(' ')
+          .map((p: string) => p[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase(),
         tl: currentTL,
-        chats: { pickup_rate: null, iqs: null, volume: 0, params: {} },
+        chats: {
+          pickup_rate: fmtFrtShort(rmAvgFrt) || (rmChatCount > 0 ? '< 2m' : null),
+          iqs: rmChatIqs,
+          volume: rmChatCount,
+          params: rmChatParams,
+        },
         calls: {
-          pickup_rate: sc.connectRate,
-          iqs: sc.overallScore || null,
-          volume: sc.totalCalls,
+          pickup_rate: sc?.connectRate ?? null,
+          iqs: sc?.overallScore ?? null,
+          volume: sc?.totalCalls ?? 0,
           params: {},
         },
         emails: null,
-      }));
-    }
-    return [];
+      };
+    });
   };
 
   const activeAgents = getActiveAgents();
 
   // Active channel parameters with live department scores
   const params = useMemo(() => {
-    const baseParams = channel === 'calls' ? CALL_PARAMS : CHAT_PARAMS;
-    if (!departmentStats?.parameterScores || channel !== 'calls') {
-      return baseParams;
+    if (channel === 'calls') {
+      const baseParams = CALL_PARAMS;
+      if (!departmentStats?.parameterScores) {
+        return baseParams;
+      }
+      const scores = departmentStats.parameterScores;
+      return baseParams.map((p) => {
+        const lookupScore =
+          scores[p.key] ??
+          scores[p.key === 'TechnicalLegal' ? 'TechnicallyLegal' : p.key] ??
+          scores[p.key === 'Grammar' ? 'VocabularyGrammar' : p.key] ??
+          scores[p.key === 'Fillers' ? 'FillersDeadAir' : p.key];
+
+        return {
+          ...p,
+          cx_score: lookupScore !== undefined ? lookupScore : p.cx_score,
+        };
+      });
     }
-    const scores = departmentStats.parameterScores;
-    return baseParams.map((p) => {
-      const lookupScore =
-        scores[p.key] ??
-        scores[p.key === 'TechnicalLegal' ? 'TechnicallyLegal' : p.key] ??
-        scores[p.key === 'Grammar' ? 'VocabularyGrammar' : p.key] ??
-        scores[p.key === 'Fillers' ? 'FillersDeadAir' : p.key];
 
-      return {
-        ...p,
-        cx_score: lookupScore !== undefined ? lookupScore : p.cx_score,
-      };
-    });
-  }, [channel, departmentStats]);
+    if (channel === 'chats') {
+      return PCG_CHAT_PARAMS.map((p) => {
+        const teamScore = computeChatParamScore(teamChats, p.key) ?? computeChatParamScore(filteredChats, p.key);
+        const deptScore = computeChatParamScore(filteredChats, p.key) ?? teamScore;
+        return {
+          ...p,
+          team_score: teamScore ?? p.team_score,
+          cx_score: deptScore ?? p.cx_score,
+        };
+      });
+    }
 
-  const breakdownParams = params;
+    return [];
+  }, [channel, departmentStats, teamChats, filteredChats]);
+
+  const breakdownParams = useMemo(() => {
+    if (breakdownCh === 'calls') {
+      return CALL_PARAMS;
+    }
+    return PCG_CHAT_PARAMS;
+  }, [breakdownCh]);
 
   // Stat Card Metrics dynamically tailored to team and channel
   const getStatMetrics = () => {
-    if (channel !== 'calls') {
+    if (channel === 'emails') {
       return {
         pickupTeam: '—',
         pickupCx: '—',
@@ -672,16 +872,106 @@ export default function PcgTeamAnalyticsDashboard({
         volumeCx: '—',
       };
     }
-    const currentTlData = teamLeads?.find(t => t.tlName.toLowerCase() === currentTL.toLowerCase());
+
+    if (channel === 'chats') {
+      const validTeamChats = teamChats.filter((c) => c.iqsScore != null);
+      const teamAvgIqs =
+        validTeamChats.length > 0
+          ? Math.round(validTeamChats.reduce((a, b) => a + (b.iqsScore || 0), 0) / validTeamChats.length)
+          : null;
+
+      const validDeptChats = filteredChats.filter((c) => c.iqsScore != null);
+      const deptAvgIqs =
+        validDeptChats.length > 0
+          ? Math.round(validDeptChats.reduce((a, b) => a + (b.iqsScore || 0), 0) / validDeptChats.length)
+          : null;
+
+      const teamFrtChats = teamChats.filter((c) => c.firstResponseTimeSeconds != null);
+      const teamAvgFrt =
+        teamFrtChats.length > 0
+          ? Math.round(teamFrtChats.reduce((a, b) => a + (b.firstResponseTimeSeconds || 0), 0) / teamFrtChats.length)
+          : null;
+
+      const deptFrtChats = filteredChats.filter((c) => c.firstResponseTimeSeconds != null);
+      const deptAvgFrt =
+        deptFrtChats.length > 0
+          ? Math.round(deptFrtChats.reduce((a, b) => a + (b.firstResponseTimeSeconds || 0), 0) / deptFrtChats.length)
+          : null;
+
+      const fmtFrtDisplay = (sec: number | null) => {
+        if (sec == null) return '—';
+        if (sec < 60) return `${sec}s`;
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return s > 0 ? `${m}m ${s}s` : `${m}m`;
+      };
+
+      const teamVol = teamChats.length;
+      const deptVol = filteredChats.length;
+
+      return {
+        pickupTeam: teamAvgFrt != null ? fmtFrtDisplay(teamAvgFrt) : (teamVol > 0 ? '< 2m' : '—'),
+        pickupTeamSubtext: (
+          <span>
+            Avg first response turnaround
+          </span>
+        ),
+        pickupCx: deptAvgFrt != null ? fmtFrtDisplay(deptAvgFrt) : (deptVol > 0 ? '< 2m' : '—'),
+        pickupCxSubtext: (
+          <span>
+            Department benchmark
+          </span>
+        ),
+
+        iqsTeam: teamAvgIqs != null ? `${teamAvgIqs}%` : (deptAvgIqs != null ? `${deptAvgIqs}%` : '—'),
+        iqsTeamSubtext:
+          teamVol > 0 ? (
+            <span>
+              <strong style={{ color: 'var(--qa-text, #18181b)' }}>{teamVol}</strong> evaluated chats
+            </span>
+          ) : undefined,
+
+        iqsCx: deptAvgIqs != null ? `${deptAvgIqs}%` : '—',
+        iqsCxSubtext:
+          deptVol > 0 ? (
+            <span>
+              <strong style={{ color: 'var(--qa-text, #18181b)' }}>{deptVol}</strong> total chats
+            </span>
+          ) : undefined,
+
+        volumeTeam: teamVol > 0 ? fmtVol(teamVol) : '—',
+        volumeTeamSubtext:
+          teamVol > 0 ? (
+            <span>
+              Evaluated for Team {currentTL.replace(/^Team\s+/i, '')}
+            </span>
+          ) : undefined,
+
+        volumeCx: deptVol > 0 ? fmtVol(deptVol) : '—',
+        volumeCxSubtext:
+          deptVol > 0 ? (
+            <span>
+              Across PCG department
+            </span>
+          ) : undefined,
+      };
+    }
+
+    // Calls branch
+    const currentTlData = teamLeads?.find((t) => t.tlName.toLowerCase() === currentTL.toLowerCase());
 
     // Department metrics: prefer live departmentStats from API, fallback to aggregating all teams
     let deptTotalCalls: number | undefined = departmentStats?.totalCalls;
     let deptPickup: number | null | undefined = departmentStats?.pickupRate;
     let deptIqs: number | null | undefined = departmentStats?.avgIqs;
-    const deptClientTotal = departmentStats?.clientTotal ?? teamLeads?.reduce((acc, t) => acc + (t.clientTotalCalls || 0), 0) ?? 0;
-    const deptClientAnswered = departmentStats?.clientAnswered ?? teamLeads?.reduce((acc, t) => acc + (t.clientAnsweredCalls || 0), 0) ?? 0;
-    const deptClientUnanswered = departmentStats?.clientUnanswered ?? teamLeads?.reduce((acc, t) => acc + (t.clientUnansweredCalls || 0), 0) ?? 0;
-    const deptOtherUnanswered = departmentStats?.otherUnanswered ?? teamLeads?.reduce((acc, t) => acc + (t.otherUnansweredCalls || 0), 0) ?? 0;
+    const deptClientTotal =
+      departmentStats?.clientTotal ?? teamLeads?.reduce((acc, t) => acc + (t.clientTotalCalls || 0), 0) ?? 0;
+    const deptClientAnswered =
+      departmentStats?.clientAnswered ?? teamLeads?.reduce((acc, t) => acc + (t.clientAnsweredCalls || 0), 0) ?? 0;
+    const deptClientUnanswered =
+      departmentStats?.clientUnanswered ?? teamLeads?.reduce((acc, t) => acc + (t.clientUnansweredCalls || 0), 0) ?? 0;
+    const deptOtherUnanswered =
+      departmentStats?.otherUnanswered ?? teamLeads?.reduce((acc, t) => acc + (t.otherUnansweredCalls || 0), 0) ?? 0;
 
     if ((deptTotalCalls === undefined || deptTotalCalls === 0) && teamLeads && teamLeads.length > 0) {
       deptTotalCalls = teamLeads.reduce((acc, t) => acc + (t.totalCalls || 0), 0);
@@ -703,17 +993,22 @@ export default function PcgTeamAnalyticsDashboard({
     const teamOtherUnanswered = currentTlData?.otherUnansweredCalls ?? 0;
 
     return {
-      pickupTeam: currentTlData && currentTlData.totalCalls > 0 ? `${currentTlData.clientPickupRate ?? currentTlData.connectRate}%` : '—',
+      pickupTeam:
+        currentTlData && currentTlData.totalCalls > 0
+          ? `${currentTlData.clientPickupRate ?? currentTlData.connectRate}%`
+          : '—',
       pickupTeamSubtext: currentTlData ? (
         <span>
-          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{teamClientUnanswered}</strong> client unans · {teamOtherUnanswered} other unans
+          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{teamClientUnanswered}</strong> client unans ·{' '}
+          {teamOtherUnanswered} other unans
         </span>
       ) : undefined,
 
       pickupCx: deptPickup != null ? `${deptPickup}%` : '—',
       pickupCxSubtext: (
         <span>
-          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{deptClientUnanswered}</strong> client unans · {deptOtherUnanswered} other unans
+          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{deptClientUnanswered}</strong> client unans ·{' '}
+          {deptOtherUnanswered} other unans
         </span>
       ),
 
@@ -723,14 +1018,16 @@ export default function PcgTeamAnalyticsDashboard({
       volumeTeam: currentTlData ? fmtVol(currentTlData.totalCalls) : '—',
       volumeTeamSubtext: currentTlData ? (
         <span>
-          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{fmtVol(teamClientTotal)}</strong> client ({fmtVol(teamClientAnswered)} answered)
+          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{fmtVol(teamClientTotal)}</strong> client (
+          {fmtVol(teamClientAnswered)} answered)
         </span>
       ) : undefined,
 
       volumeCx: deptTotalCalls != null ? fmtVol(deptTotalCalls) : '—',
       volumeCxSubtext: (
         <span>
-          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{fmtVol(deptClientTotal)}</strong> client ({fmtVol(deptClientAnswered)} answered)
+          <strong style={{ color: 'var(--qa-text, #18181b)' }}>{fmtVol(deptClientTotal)}</strong> client (
+          {fmtVol(deptClientAnswered)} answered)
         </span>
       ),
     };
@@ -906,10 +1203,10 @@ export default function PcgTeamAnalyticsDashboard({
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
-        {channel !== 'calls' ? (
+        {channel === 'emails' ? (
           [
             'IQS',
-            channel === 'emails' ? 'EMAILS HANDLED' : 'CHATS HANDLED',
+            'EMAILS HANDLED',
             'PICKUP RATE',
           ].map((title, i) => (
             <div
@@ -938,9 +1235,16 @@ export default function PcgTeamAnalyticsDashboard({
           ))
         ) : (
           <>
-            <StatCard label="IQS" teamValue={metrics.iqsTeam} cxValue={metrics.iqsCx} cxLabel="Department" />
             <StatCard
-              label="CALLS HANDLED"
+              label="IQS"
+              teamValue={metrics.iqsTeam}
+              cxValue={metrics.iqsCx}
+              cxLabel="Department"
+              teamSubtext={metrics.iqsTeamSubtext}
+              cxSubtext={metrics.iqsCxSubtext}
+            />
+            <StatCard
+              label={channel === 'chats' ? 'CHATS HANDLED' : 'CALLS HANDLED'}
               teamValue={metrics.volumeTeam}
               cxValue={metrics.volumeCx}
               cxLabel="Department"
@@ -948,7 +1252,7 @@ export default function PcgTeamAnalyticsDashboard({
               cxSubtext={metrics.volumeCxSubtext}
             />
             <StatCard
-              label="PICKUP RATE"
+              label={channel === 'chats' ? 'FIRST RESPONSE TIME' : 'PICKUP RATE'}
               teamValue={metrics.pickupTeam}
               cxValue={metrics.pickupCx}
               cxLabel="Department"
@@ -968,7 +1272,9 @@ export default function PcgTeamAnalyticsDashboard({
           <span style={{ fontSize: 11, color: 'var(--qa-text-3, #a1a1aa)', fontStyle: 'italic' }}>
             {channel === 'calls'
               ? `${periodLabel} · avg across all evaluated calls`
-              : `${periodLabel} · values available for Calls only`}
+              : channel === 'chats'
+                ? `${periodLabel} · avg across evaluated chats`
+                : `${periodLabel} · values available for Calls & Chats`}
           </span>
         </div>
 
@@ -990,7 +1296,7 @@ export default function PcgTeamAnalyticsDashboard({
             }}
           >
             <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #18181b)' }}>
-              {channel === 'calls' ? `${params.length} quality parameters · weighted` : '0 parameters'}
+              {channel === 'emails' ? '0 parameters' : `${params.length} quality parameters · weighted`}
             </span>
           </div>
 
@@ -1023,9 +1329,9 @@ export default function PcgTeamAnalyticsDashboard({
           </div>
 
           <div style={{ padding: '12px 20px' }}>
-            {channel !== 'calls' ? (
+            {channel === 'emails' ? (
               <div style={{ padding: '48px 0', textAlign: 'center', fontSize: 13, color: 'var(--qa-text-3, #a1a1aa)' }}>
-                Values are currently available for Calls only.
+                Values are currently available for Calls & Chats only.
               </div>
             ) : params.length === 0 ? (
               <EmptyChannelState channel={channel} />
@@ -1098,7 +1404,7 @@ export default function PcgTeamAnalyticsDashboard({
                 <thead>
                   <tr>
                     <Th left>Agent</Th>
-                    <Th>Pickup Rate</Th>
+                    <Th>{channel === 'chats' ? 'Response Time' : 'Pickup Rate'}</Th>
                     <Th>IQS</Th>
                     <Th active={channel === 'chats'}>Chats</Th>
                     <Th active={channel === 'calls'}>Calls</Th>
@@ -1168,9 +1474,9 @@ export default function PcgTeamAnalyticsDashboard({
                 Scroll right to see all parameters →
               </div>
               <div style={{ overflowX: 'auto' }}>
-                {breakdownCh !== 'calls' ? (
+                {breakdownCh === 'emails' ? (
                   <div style={{ padding: '48px 0', textAlign: 'center', fontSize: 13, color: 'var(--qa-text-3, #a1a1aa)' }}>
-                    Values are currently available for Calls only.
+                    Values are currently available for Calls & Chats only.
                   </div>
                 ) : activeAgents.length === 0 ? (
                   <EmptyChannelState channel={breakdownCh} />
@@ -1208,7 +1514,7 @@ export default function PcgTeamAnalyticsDashboard({
                                     color: val == null ? 'var(--qa-text-4, #d4d4d8)' : 'var(--qa-text, #18181b)',
                                   }}
                                 >
-                                  {val != null ? `${Math.round(val)}` : '—'}
+                                  {val != null ? `${Math.round(val)}%` : '—'}
                                 </td>
                               );
                             })}
@@ -1226,7 +1532,7 @@ export default function PcgTeamAnalyticsDashboard({
 
       {/* Footer Note */}
       <p style={{ fontSize: 11, color: 'var(--qa-text-3, #a1a1aa)', fontStyle: 'italic', margin: '0 0 16px' }}>
-        Pickup Rate = connected calls / total actionable calls · IQS = avg internal quality score · Parameter scores = pass rate
+        Pickup Rate / Response Time = connected calls or avg first chat response · IQS = avg internal quality score · Parameter scores = pass rate
       </p>
     </div>
   );

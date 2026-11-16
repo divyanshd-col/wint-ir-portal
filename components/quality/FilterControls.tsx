@@ -7,7 +7,17 @@ const fmtShort = (iso: string) =>
   new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
 /** "Date range ▾" chip + calendar popover; the same control in every queue's filter bar. Empty strings mean no range. */
-export function DateRangeChip({ from, to, onChange }: { from: string; to: string; onChange: (from: string, to: string) => void }) {
+export function DateRangeChip({
+  from,
+  to,
+  onChange,
+  align = 'auto',
+}: {
+  from: string;
+  to: string;
+  onChange: (from: string, to: string) => void;
+  align?: 'left' | 'right' | 'auto';
+}) {
   const [open, setOpen] = useState(false);
   const active = Boolean(from && to);
   return (
@@ -18,7 +28,7 @@ export function DateRangeChip({ from, to, onChange }: { from: string; to: string
       </button>
       {open && (
         <DateRangePicker
-          align="left"
+          align={align}
           initialFrom={from}
           initialTo={to}
           onApply={(f, t) => { onChange(f, t); setOpen(false); }}

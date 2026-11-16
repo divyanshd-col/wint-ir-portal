@@ -126,6 +126,9 @@ export const TL_TEAMS: Record<string, string[]> = {
     'Vaishnavi Naghat',
     'Vidisha Jaiswal',
     'Vishyata Tulsani',
+    'Aditi Verma',
+    'Arshnoor Kaur',
+    'Bhavnit Singh',
   ],
   'Saiyam Rastogi': [
     'Ayan Kumar Garg',
@@ -552,8 +555,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   for (const tl of allTlNames) {
-    if ((!dynamicTlTeams[tl] || dynamicTlTeams[tl].length === 0) && TL_TEAMS[tl]) {
-      dynamicTlTeams[tl] = [...TL_TEAMS[tl]];
+    if (!dynamicTlTeams[tl]) dynamicTlTeams[tl] = [];
+    if (TL_TEAMS[tl]) {
+      for (const member of TL_TEAMS[tl]) {
+        const canonical = canonicalizePcgRmName(member).toLowerCase();
+        const exists = dynamicTlTeams[tl].some((m) => canonicalizePcgRmName(m).toLowerCase() === canonical);
+        if (!exists) {
+          dynamicTlTeams[tl].push(member);
+        }
+      }
     }
     if (dynamicTlTeams[tl]) {
       dynamicTlTeams[tl].sort((a, b) => a.localeCompare(b));
@@ -613,18 +623,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const tlFilter = searchParams.get('tl_name')?.trim();
   const callStatusFilter = searchParams.get('status')?.trim(); // 'all' | 'answered' | 'unanswered' | 'needs_attention'
   let categoryFilter = searchParams.get('category')?.trim() || 'all';
-
-  // Excluded calls category is strictly restricted to TLs and Admins (Agents only see evaluable calls)
-  if (personaParam === 'agent' && [
-    'excluded',
-    'hiring',
-    'telemarketing',
-    'delivery_logistics',
-    'wrong_number',
-    'internal_personal',
-  ].includes(categoryFilter)) {
-    categoryFilter = 'all';
-  }
 
   const searchFilter = searchParams.get('search')?.trim();
   const dateFrom = searchParams.get('date_from')?.trim();
@@ -694,6 +692,41 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       scopeWhereClauses.push(
         `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
       );
+    }
+  } else if (callerRoleParam === 'rm') {
+    // When querying for RM / Agent Call Quality
+    if (rmFilter && rmFilter !== 'all') {
+      const canonical = canonicalizePcgRmName(rmFilter);
+      const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
+      for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+        if (can.toLowerCase() === canonical.toLowerCase()) {
+          variations.push(telName.toLowerCase());
+        }
+      }
+      const uniqueVars = Array.from(new Set(variations));
+      scopeQueryParams.push(uniqueVars);
+      scopeWhereClauses.push(
+        `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
+      );
+    } else {
+      // All genuine RMs: exclude TL callers
+      const tlNamesSet = new Set<string>();
+      allTlNames.forEach((tl) => {
+        tlNamesSet.add(tl.toLowerCase().trim());
+        tlNamesSet.add(canonicalizePcgRmName(tl).toLowerCase().trim());
+        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (c.toLowerCase().trim() === tl.toLowerCase().trim() || telName.toLowerCase().trim() === tl.toLowerCase().trim()) {
+            tlNamesSet.add(telName.toLowerCase().trim());
+          }
+        }
+      });
+      const uniqueTls = Array.from(tlNamesSet);
+      if (uniqueTls.length > 0) {
+        scopeQueryParams.push(uniqueTls);
+        scopeWhereClauses.push(
+          `NOT (LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length}))`
+        );
+      }
     }
   } else {
     if (rmFilter && rmFilter !== 'all') {
@@ -800,9 +833,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
   }
 
-  // By default, the main evaluated audits table shows evaluable business calls.
-  // For agent persona, non-client/excluded calls are ALWAYS excluded.
-  if (personaParam === 'agent' || (!isExcludedCategory && categoryFilter !== 'all_with_excluded')) {
+  // By default, the main evaluated audits table shows evaluable client calls.
+  // If an excluded category is explicitly chosen (by agent, TL, or admin), show excluded calls for that filter.
+  if (!isExcludedCategory && categoryFilter !== 'all_with_excluded') {
     tableWhereClauses.push(`(e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client'))`);
   }
 
@@ -859,23 +892,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND NOT (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS unanswered_by_customer,
 
         -- Valid Client Calls (all hours)
-        COUNT(*) FILTER (WHERE r.call_nature != 'non_client')::int AS client_total_calls,
-        COUNT(*) FILTER (WHERE r.call_nature != 'non_client' AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
-        COUNT(*) FILTER (WHERE r.call_nature != 'non_client' AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
-        COUNT(*) FILTER (WHERE r.call_nature != 'non_client' AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
+        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')))::int AS client_total_calls,
+        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
+        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
+        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
         ROUND(
           (
-            COUNT(*) FILTER (WHERE r.call_nature != 'non_client' AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
-            / NULLIF(COUNT(*) FILTER (WHERE r.call_nature != 'non_client'), 0) * 100
+            COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))), 0) * 100
           ), 1
         )::float AS client_pickup_rate,
 
         -- Other category / unverified unanswered calls (spam, delivery, personal)
-        COUNT(*) FILTER (WHERE r.call_nature = 'non_client' AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
+        COUNT(*) FILTER (WHERE (r.call_nature = 'non_client' OR e.is_evaluable = false OR e.verdict = 'EXCLUDED_NON_CLIENT') AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
 
         -- Non-Working Hours & Weekend Client Calls (Outside Mon-Fri 10:00 AM - 7:00 PM IST)
         COUNT(*) FILTER (
-          WHERE r.call_nature != 'non_client'
+          WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client')
+          AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
           AND (
             EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
             OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
@@ -883,7 +917,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           )
         )::int AS off_hours_client_total,
         COUNT(*) FILTER (
-          WHERE r.call_nature != 'non_client'
+          WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client')
+          AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
           AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
           AND (
             EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
@@ -894,7 +929,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         ROUND(
           (
             COUNT(*) FILTER (
-              WHERE r.call_nature != 'non_client'
+              WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client')
+              AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
               AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
               AND (
                 EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
@@ -904,7 +940,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             )::numeric
             / NULLIF(
               COUNT(*) FILTER (
-                WHERE r.call_nature != 'non_client'
+                WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client')
+                AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
                 AND (
                   EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
                   OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
@@ -1009,20 +1046,21 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
 
         -- Client Calls Breakdown for RM
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client'))::int AS client_total_calls,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND r.call_nature = 'non_client' AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')))::int AS client_total_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature = 'non_client' OR e.is_evaluable = false OR e.verdict = 'EXCLUDED_NON_CLIENT') AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
         ROUND(
           (
-            COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
-            / NULLIF(COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client')), 0) * 100
+            COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))), 0) * 100
           ), 1
         )::float AS client_pickup_rate,
 
         -- Off-Hours & Weekend Client Calls
         COUNT(*) FILTER (
           WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client')
+          AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
           AND (
             EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
             OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
@@ -1031,6 +1069,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         )::int AS off_hours_client_total,
         COUNT(*) FILTER (
           WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client')
+          AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
           AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
           AND (
             EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
@@ -1081,14 +1120,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       SELECT
         COUNT(*)::int AS total_calls,
         COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
-        COUNT(*) FILTER (WHERE r.call_nature != 'non_client')::int AS client_total,
-        COUNT(*) FILTER (WHERE r.call_nature != 'non_client' AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered,
-        COUNT(*) FILTER (WHERE r.call_nature != 'non_client' AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered,
-        COUNT(*) FILTER (WHERE r.call_nature = 'non_client' AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered,
+        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')))::int AS client_total,
+        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered,
+        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered,
+        COUNT(*) FILTER (WHERE (r.call_nature = 'non_client' OR e.is_evaluable = false OR e.verdict = 'EXCLUDED_NON_CLIENT') AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered,
         ROUND(
           (
-            COUNT(*) FILTER (WHERE r.call_nature != 'non_client' AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
-            / NULLIF(COUNT(*) FILTER (WHERE r.call_nature != 'non_client'), 0) * 100
+            COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))), 0) * 100
           ), 1
         )::float AS client_pickup_rate,
         COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')))::int AS evaluated_calls,
@@ -1155,6 +1194,39 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         disputeWhereClauses.push(
           `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
         );
+      }
+    } else if (callerRoleParam === 'rm') {
+      if (rmFilter && rmFilter !== 'all') {
+        const canonical = canonicalizePcgRmName(rmFilter);
+        const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
+        for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (can.toLowerCase() === canonical.toLowerCase()) {
+            variations.push(telName.toLowerCase());
+          }
+        }
+        const uniqueVars = Array.from(new Set(variations));
+        disputeQueryParams.push(uniqueVars);
+        disputeWhereClauses.push(
+          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+        );
+      } else {
+        const tlNamesSet = new Set<string>();
+        allTlNames.forEach((tl) => {
+          tlNamesSet.add(tl.toLowerCase().trim());
+          tlNamesSet.add(canonicalizePcgRmName(tl).toLowerCase().trim());
+          for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+            if (c.toLowerCase().trim() === tl.toLowerCase().trim() || telName.toLowerCase().trim() === tl.toLowerCase().trim()) {
+              tlNamesSet.add(telName.toLowerCase().trim());
+            }
+          }
+        });
+        const uniqueTls = Array.from(tlNamesSet);
+        if (uniqueTls.length > 0) {
+          disputeQueryParams.push(uniqueTls);
+          disputeWhereClauses.push(
+            `NOT (LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length}))`
+          );
+        }
       }
     } else if (rmFilter && rmFilter !== 'all') {
       const canonical = canonicalizePcgRmName(rmFilter);
@@ -1660,12 +1732,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           pitching: sRow.pitching_count || 0,
           upselling: sRow.upselling_count || 0,
           support: sRow.support_count || 0,
-          excluded: personaParam === 'agent' ? 0 : (sRow.excluded_count || 0),
-          hiring: personaParam === 'agent' ? 0 : (sRow.hiring_count || 0),
-          telemarketing: personaParam === 'agent' ? 0 : (sRow.telemarketing_count || 0),
-          delivery: personaParam === 'agent' ? 0 : (sRow.delivery_count || 0),
-          wrongNumber: personaParam === 'agent' ? 0 : (sRow.wrong_number_count || 0),
-          internalPersonal: personaParam === 'agent' ? 0 : (sRow.internal_personal_count || 0),
+          excluded: sRow.excluded_count || 0,
+          hiring: sRow.hiring_count || 0,
+          telemarketing: sRow.telemarketing_count || 0,
+          delivery: sRow.delivery_count || 0,
+          wrongNumber: sRow.wrong_number_count || 0,
+          internalPersonal: sRow.internal_personal_count || 0,
           sopBreached: sRow.sop_breached_count || 0,
         },
         unansweredBreakdown: {

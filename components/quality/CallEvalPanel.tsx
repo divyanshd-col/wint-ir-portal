@@ -1201,6 +1201,7 @@ export default function CallEvalPanel({
                 ref={audioRef}
                 src={recordingUrl.startsWith('/') ? recordingUrl : `/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
                 controls
+                preload="metadata"
                 onPlay={() => {
                   if (audioRef.current) audioRef.current.playbackRate = playbackRate;
                 }}
