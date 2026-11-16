@@ -98,11 +98,7 @@ INSERT INTO persona_skills (persona_id, skill_id, assigned_by) VALUES
   ('quality','roster:view:access','system'),('agent','roster:view:access','system')
 ON CONFLICT (persona_id, skill_id) DO NOTHING;
 
--- ── initial pattern for everyone: Monday to Friday from 1 Jan 2026 ─────────
-INSERT INTO roster_assignments (user_id, pattern_id, effective_from, reason)
-SELECT u.user_id, 2, DATE '2026-01-01', 'Initial pattern'
-FROM users u WHERE u.role IN ('agent','tl') AND u.platform_domain <> 'pcg'  -- Wint CX team only
-ON CONFLICT DO NOTHING;
+-- (No starting pattern is seeded: roster types come from the rotating roster in 036 / the import script.)
 
 -- ── seed reporting lines by EXACT, unambiguous name match only ─────────────
 DO $$

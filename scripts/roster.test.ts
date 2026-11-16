@@ -5,23 +5,87 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMissingTable } from '../lib/roster-server';
 import { todayIST, toIstDate } from '../lib/ist';
-import { patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, ROSTER_START, canEditTarget, isCxDomain, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
+import { patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, cycleOf, ROSTER_START, canEditTarget, isCxDomain, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
 
 const P: Pattern[] = [
-  { id: 1, label: 'Sun-Thu', off_weekdays: [5, 6] },
-  { id: 2, label: 'Mon-Fri', off_weekdays: [6, 0] },
-  { id: 3, label: 'Tue-Sat', off_weekdays: [0, 1] },
+  { id: 1, label: 'Saturday and Sunday off', off_weekdays: [6, 0] },
+  { id: 2, label: 'Thursday and Friday off', off_weekdays: [4, 5] },
+  { id: 3, label: 'Tuesday and Wednesday off', off_weekdays: [2, 3] },
+  { id: 4, label: 'Monday and Sunday off', off_weekdays: [1, 0] },
+  { id: 5, label: 'Monday to Friday (fixed)', off_weekdays: [6, 0], rotates: false },
 ];
-const base: Assignment[] = [{ pattern_id: 2, effective_from: '2026-01-01' }];
+// Type 1 in the week of Mon 2 Nov 2026, so 9 Nov is Type 2, 16 Nov Type 3, 23 Nov Type 4, 30 Nov back to Type 1
+const base: Assignment[] = [{ pattern_id: 1, effective_from: '2026-11-02' }];
 
-test('patternOn - lookup across a change boundary uses the date, not today', () => {
-  const a = [...base, { pattern_id: 3, effective_from: '2026-11-08' }];
-  assert.equal(patternOn(a, '2026-11-07'), 2);
-  assert.equal(patternOn(a, '2026-11-08'), 3);
-  // Sat 7 Nov is a week-off on pattern 2; Mon 9 Nov is a week-off on pattern 3
-  assert.equal(cellKind(P, a, [], '2026-11-07'), 'off');
-  assert.equal(cellKind(P, a, [], '2026-11-09'), 'off');
-  assert.equal(cellKind(P, a, [], '2026-11-10'), 'work');
+test('rotation - everyone moves to the next type every Monday, Type 4 wraps to Type 1', () => {
+  const t = (d: string) => patternOn(base, d);
+  assert.deepEqual(['2026-11-02', '2026-11-08'].map(t), [1, 1]);   // Mon to Sun of the first week
+  assert.deepEqual(['2026-11-09', '2026-11-15'].map(t), [2, 2]);
+  assert.equal(t('2026-11-16'), 3);
+  assert.equal(t('2026-11-23'), 4);
+  assert.equal(t('2026-11-30'), 1);                                // 4-week cycle repeats
+  assert.equal(t('2027-01-25'), 1);                                // 12 weeks on
+  assert.equal(t('2026-10-31'), null);                             // before the anchor: no type known
+  assert.equal(patternOn([], '2026-11-10'), null);                 // nobody loaded yet
+});
+
+test('rotation - the four weeks match the roster in the mail', () => {
+  const week = (from: string) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((_, i) => cellKind(P, base, [], periodDays('week', from)[i]));
+  // Week 1 Type 1: Sat+Sun off
+  assert.deepEqual(week('2026-11-02'), ['work', 'work', 'work', 'work', 'work', 'off', 'off']);
+  // Week 2 Type 2: Thu+Fri off
+  assert.deepEqual(week('2026-11-09'), ['work', 'work', 'work', 'off', 'off', 'work', 'work']);
+  // Week 3 Type 3: Tue+Wed off
+  assert.deepEqual(week('2026-11-16'), ['work', 'off', 'off', 'work', 'work', 'work', 'work']);
+  // Week 4 Type 4: Mon+Sun off
+  assert.deepEqual(week('2026-11-23'), ['off', 'work', 'work', 'work', 'work', 'work', 'off']);
+});
+
+test('rotation - 2 offs a week, 8 per cycle, never more than 5 working days in a row, Sat+Sun off together once per 4 weeks', () => {
+  for (const start of [1, 2, 3, 4]) {
+    const a = [{ pattern_id: start, effective_from: '2026-11-02' }];
+    const days = periodDays('week', '2026-11-02').concat(...[7, 14, 21, 28, 35, 42].map(n => periodDays('week', shiftDays('2026-11-02', n))));
+    const kinds = days.map(d => cellKind(P, a, [], d));
+    for (let w = 0; w < 4; w++) assert.equal(kinds.slice(w * 7, w * 7 + 7).filter(k => k === 'off').length, 2, `type ${start} week ${w}`);
+    assert.equal(kinds.slice(0, 28).filter(k => k === 'off').length, 8);
+    let run = 0, max = 0; for (const k of kinds) { run = k === 'work' ? run + 1 : 0; max = Math.max(max, run); }
+    assert.ok(max <= 5, `type ${start} works ${max} days in a row`);
+    const sat = days.filter((_, i) => i % 7 === 5 && i < 28).map(d => cellKind(P, a, [], d));
+    const sun = days.filter((_, i) => i % 7 === 6 && i < 28).map(d => cellKind(P, a, [], d));
+    assert.equal(sat.filter((k, i) => k === 'off' && sun[i] === 'off').length, 1);
+  }
+});
+const shiftDays = (d: string, n: number) => shiftAnchor('day', d, 1) && new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+
+test('rotation - a new anchor re-sets the type from its Monday; earlier weeks keep the old rotation', () => {
+  const a = [...base, { pattern_id: 3, effective_from: '2026-12-07' }]; // old rotation would give Type 2 on 7 Dec
+  assert.equal(patternOn(base, '2026-12-07'), 2);
+  assert.equal(patternOn(a, '2026-12-06'), patternOn(base, '2026-12-06'));
+  assert.equal(patternOn(a, '2026-12-07'), 3);
+  assert.equal(patternOn(a, '2026-12-14'), 4);
+  assert.equal(patternOn(a, '2026-12-21'), 1);
+});
+
+test('fixed type (Mon-Fri team) never rotates', () => {
+  const fixed: Assignment[] = [{ pattern_id: 5, effective_from: '2026-11-02' }];
+  assert.equal(cycleOf(P), 4);
+  for (const d of ['2026-11-02', '2026-11-09', '2026-11-23', '2027-03-01']) assert.equal(patternOn(fixed, d, cycleOf(P)), 5);
+  // Sat/Sun off every single week, Mon-Fri working
+  for (const wk of ['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23']) {
+    assert.deepEqual(periodDays('week', wk).map(d => cellKind(P, fixed, [], d)), ['work', 'work', 'work', 'work', 'work', 'off', 'off']);
+  }
+});
+
+test('the sheet - Week 1 groups G1..G4 are Types 1..4 and move one type a week (G1 is Type 4 in Week 4, G4 is Type 3)', () => {
+  const g = (type: number) => [{ pattern_id: type, effective_from: '2026-11-02' }];
+  assert.equal(patternOn(g(1), '2026-11-23', 4), 4); // Harsh: Mon+Sun off in Week 4
+  assert.equal(patternOn(g(4), '2026-11-23', 4), 3); // Sundar: Tue+Wed off in Week 4
+  assert.equal(patternOn(g(2), '2026-11-23', 4), 1); // Yashika: Sat+Sun off in Week 4
+  assert.equal(patternOn(g(3), '2026-11-09', 4), 4); // Vedant in Week 2: Mon+Sun off
+});
+
+test('no roster type set - cells are none, not working', () => {
+  assert.equal(cellKind(P, [], [], '2026-11-10'), 'none');
 });
 
 test('todayIST - at 00:30 IST the UTC date is still yesterday', () => {
@@ -33,18 +97,19 @@ test('todayIST - at 00:30 IST the UTC date is still yesterday', () => {
 });
 
 test('cancel restores exactly; A to B to A nets to the original', () => {
-  const sched = [...base, { pattern_id: 3, effective_from: '2026-12-01' }];
+  const sched = [...base, { pattern_id: 3, effective_from: '2026-12-07' }];
   const cancelled = sched.map(a => a.pattern_id === 3 ? { ...a, cancelled_at: 'x' } : a);
-  for (const d of ['2026-11-30', '2026-12-01', '2027-01-15']) assert.equal(patternOn(cancelled, d), patternOn(base, d));
-  const aba = [...base, { pattern_id: 3, effective_from: '2026-12-01' }, { pattern_id: 2, effective_from: '2026-12-15' }];
-  assert.equal(patternOn(aba, '2026-12-10'), 3);
-  assert.equal(patternOn(aba, '2026-12-20'), 2);
+  for (const d of ['2026-12-06', '2026-12-07', '2027-01-15']) assert.equal(patternOn(cancelled, d), patternOn(base, d));
+  // Back onto the type the rotation would have given anyway: no visible difference from the original
+  const aba = [...base, { pattern_id: 3, effective_from: '2026-12-07' }, { pattern_id: patternOn(base, '2026-12-21')!, effective_from: '2026-12-21' }];
+  for (const d of ['2026-12-21', '2026-12-28', '2027-02-01']) assert.equal(patternOn(aba, d), patternOn(base, d));
 });
 
 test('extra day - shows on a week-off only, ignores reversed marks', () => {
+  // Sat 7 Nov: Type 1 week, Sat is off. Wed 4 Nov: working.
   assert.equal(cellKind(P, base, [{ day: '2026-11-07', half: 'full' }], '2026-11-07'), 'extra');
   assert.equal(cellKind(P, base, [{ day: '2026-11-07', half: 'full', reversed_at: 'x' }], '2026-11-07'), 'off');
-  assert.equal(cellKind(P, base, [{ day: '2026-11-05', half: 'full' }], '2026-11-05'), 'work');
+  assert.equal(cellKind(P, base, [{ day: '2026-11-04', half: 'full' }], '2026-11-04'), 'work');
 });
 
 test('validateExtraDay - duplicate rejected, re-mark allowed once reversed (hasActive false)', () => {
@@ -56,12 +121,13 @@ test('validateExtraDay - duplicate rejected, re-mark allowed once reversed (hasA
   assert.match(validateExtraDay({ ...ok, isWeekOff: false })!, /not a week-off/);
 });
 
-test('validateNewChange - second future change, past start, same pattern and empty reason are rejected', () => {
-  const ok = { today: '2026-11-04', start: '2026-11-05', reason: 'shift move', toPattern: 3, current: 2, hasFuture: false };
+test('validateNewChange - second future change, past start, non-Monday, no-op and empty reason are rejected', () => {
+  const ok = { today: '2026-11-04', start: '2026-11-09', reason: 'shift move', toPattern: 3, current: 2, hasFuture: false };
   assert.equal(validateNewChange(ok), null);
   assert.ok(validateNewChange({ ...ok, hasFuture: true }));
-  assert.ok(validateNewChange({ ...ok, start: '2026-11-04' }));
-  assert.ok(validateNewChange({ ...ok, toPattern: 2 }));
+  assert.ok(validateNewChange({ ...ok, start: '2026-11-02' }));
+  assert.match(validateNewChange({ ...ok, start: '2026-11-10' })!, /Monday/); // the rotation moves on Mondays
+  assert.match(validateNewChange({ ...ok, toPattern: 2 })!, /already the type/); // no-op against the rotation
   assert.ok(validateNewChange({ ...ok, reason: '  ' }));
 });
 

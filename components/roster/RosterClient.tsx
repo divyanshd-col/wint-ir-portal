@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { canGoPrev, shiftAnchor, type RosterView } from '@/lib/roster';
 import { CancelDialog, MarkExtraDialog, PatternDialog } from './Dialogs';
-import { Avatar, EmptyState, Switch, btnSecondary, dayNum, fmtDay, fmtMonth, fmtShort, wdOf, type Person, type RosterData, type Scheduled } from './ui';
+import { Avatar, EmptyState, Switch, btnSecondary, dayNum, fmtDay, fmtMonth, fmtShort, offShort, wdOf, type Person, type RosterData, type Scheduled } from './ui';
 
 type Tab = 'grid' | 'scheduled' | 'channels';
 type Dlg = { t: 'pattern'; p: Person; edit?: Scheduled } | { t: 'mark'; p: Person } | { t: 'cancel'; s: Scheduled } | null;
@@ -45,6 +45,7 @@ export default function RosterClient() {
   const step = (dir: -1 | 1) => { if (anchor) load(view, shiftAnchor(view, anchor, dir)); };
   const anyEdit = !!data?.people.some(p => p.canEdit);
   const pat = (id: number | null) => data?.patterns.find(p => p.id === id);
+  const tname = (id: number | null) => id === null ? '–' : pat(id)?.rotates === false ? 'Fixed' : `Type ${id}`;
 
   const setChannel = async (p: Person, ch: string, on: boolean) => {
     const channels = on ? [...p.channels, ch] : p.channels.filter(c => c !== ch);
@@ -113,7 +114,7 @@ export default function RosterClient() {
       body = (<>{toolbar}
         <div style={{ ...card, overflowX: 'auto' }}>
           <table className="roster-tbl" style={{ minWidth: isDay ? 640 : 760 }}>
-            <thead><tr><th style={{ width: 200 }}>Person</th><th style={{ width: 150 }}>Pattern</th>
+            <thead><tr><th style={{ width: 200 }}>Person</th><th style={{ width: 150 }}>Roster type</th>
               {data.days.map(d => <th key={d} className={`rc${d === data.today ? ' today' : ''}`}>{isDay ? 'Status' : <><div>{wdOf(d)}</div><div>{fmtShort(d)}</div></>}</th>)}
               {anyEdit && <th style={{ width: 200 }}>Actions</th>}</tr></thead>
             <tbody>{order.map(k => (
@@ -122,9 +123,9 @@ export default function RosterClient() {
                 {groups.get(k)!.map(p => (
                   <tr key={p.userId}>
                     <td><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Avatar name={p.name} /><div><div style={{ fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{p.role === 'tl' ? 'Team lead' : 'Agent'}</div></div></div></td>
-                    <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{p.pattern ? `Pattern ${p.pattern}` : '–'}<div style={{ color: 'var(--qa-text-3)' }}>{pat(p.pattern)?.label}</div></td>
-                    {p.cells.map((c, i) => { const d = data.days[i]; return <td key={d} className={`rc k-${c}${d === data.today ? ' today' : ''}${d < data.today ? ' past' : ''}`} title={`${fmtDay(d)}: ${label(c) || 'Not on the roster yet'}`}>{isDay ? label(c) : c === 'off' ? 'Off' : c === 'extra' ? 'Extra' : ''}</td>; })}
-                    {anyEdit && <td>{p.canEdit ? <div style={{ display: 'flex', gap: 6 }}><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'pattern', p })}>Change pattern</button><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'mark', p })}>Mark</button></div> : <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>–</span>}</td>}
+                    <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{p.pattern ? (pat(p.pattern)?.rotates === false ? 'Fixed' : `Type ${p.pattern}`) : 'Not set'}<div style={{ color: 'var(--qa-text-3)' }}>{offShort(pat(p.pattern))}</div></td>
+                    {p.cells.map((c, i) => { const d = data.days[i]; return <td key={d} className={`rc k-${c}${d === data.today ? ' today' : ''}${d < data.today ? ' past' : ''}`} title={`${fmtDay(d)}: ${label(c) || 'No roster type set'}`}>{isDay ? label(c) : c === 'off' ? 'Off' : c === 'extra' ? 'Extra' : ''}</td>; })}
+                    {anyEdit && <td>{p.canEdit ? <div style={{ display: 'flex', gap: 6 }}><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'pattern', p })}>Change type</button><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'mark', p })}>Mark</button></div> : <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>–</span>}</td>}
                   </tr>))}
               </React.Fragment>))}</tbody>
           </table>
@@ -132,11 +133,11 @@ export default function RosterClient() {
     }
   } else if (tab === 'scheduled') {
     body = data.scheduled.length === 0
-      ? <div style={card}><EmptyState title="No scheduled changes" body="Pattern changes you set for a future date show here until they start." /></div>
+      ? <div style={card}><EmptyState title="No scheduled changes" body="Roster type changes you set for a future Monday show here until they start." /></div>
       : (<div style={card}><table className="roster-tbl"><thead><tr><th>Person</th><th>Change</th><th>Starts</th><th>Set by</th>{anyEdit && <th style={{ width: 170 }} />}</tr></thead>
         <tbody>{data.scheduled.map(s => (
           <tr key={s.id}><td style={{ fontWeight: 600 }}>{s.name}</td>
-            <td>Pattern {s.from_pattern ?? '–'} → <b>Pattern {s.to_pattern}</b> · {pat(s.to_pattern)?.label}<div style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{s.reason}</div></td>
+            <td>{tname(s.from_pattern)} → <b>{tname(s.to_pattern)}</b> · {pat(s.to_pattern)?.label}<div style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{s.reason}</div></td>
             <td>{fmtDay(s.starts_on)}</td><td style={{ fontSize: 12 }}>{s.set_by ?? '–'}<div style={{ color: 'var(--qa-text-3)' }}>{new Date(s.set_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST</div></td>
             {anyEdit && <td>{s.canEdit && <div style={{ display: 'flex', gap: 6 }}><button type="button" style={btnSecondary} onClick={() => { const p = data.people.find(x => x.userId === s.user_id); if (p) setDlg({ t: 'pattern', p, edit: s }); }}>Edit</button><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'cancel', s })}>Cancel</button></div>}</td>}</tr>))}</tbody></table>
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: 12, color: 'var(--qa-text-3)' }}><span>Can be edited or cancelled until the start date</span><span>Past days never change</span></div></div>);
@@ -147,7 +148,7 @@ export default function RosterClient() {
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: 12, color: 'var(--qa-text-3)' }}><span>Channels are for information only. They aren’t used in any leave decision.</span><span>{anyEdit ? 'Changes save straight away and are logged' : 'View only'}</span></div></div>);
   }
 
-  const sub = !data ? '' : data.viewer.role === 'admin' ? 'Everyone’s weekly patterns and extra day marks.' : data.viewer.role === 'tl' ? 'Weekly patterns and extra day marks. You can change people who report to you.' : 'You can view the roster. Changes are made by team leads (own team) and admins.';
+  const sub = !data ? '' : data.viewer.role === 'admin' ? 'Everyone’s rotating roster and extra day marks. Everyone moves to the next type every Monday.' : data.viewer.role === 'tl' ? 'The rotating roster and extra day marks. You can change people who report to you.' : 'You can view the roster. Changes are made by team leads (own team) and admins.';
   return (
     <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 16 }}><h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text)', margin: 0 }}>Roster</h1>{sub && <div style={{ fontSize: 13, color: 'var(--qa-text-3)', marginTop: 2 }}>{sub}</div>}</div>

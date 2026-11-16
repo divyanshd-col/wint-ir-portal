@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-export interface Pattern { id: number; label: string; off_weekdays: number[] }
+export interface Pattern { id: number; label: string; off_weekdays: number[]; rotates?: boolean }
 export interface Person { userId: number; name: string; role: string; tlUserId: number | null; tlName: string | null; pattern: number | null; cells: ('work' | 'off' | 'extra' | 'none')[]; channels: string[]; canEdit: boolean }
 export interface Scheduled { id: number; user_id: number; name: string; from_pattern: number | null; to_pattern: number; starts_on: string; reason: string; set_by: string | null; set_at: string; updated_at: string; canEdit: boolean }
 export interface RosterData { today: string; view: 'day' | 'week' | 'month'; anchor: string; days: string[]; patterns: Pattern[]; people: Person[]; scheduled: Scheduled[]; viewer: { userId: number; role: string } }
@@ -15,6 +15,8 @@ export const fmtShort = (iso: string) => { const p = parts(iso); return `${p.d} 
 export const fmtMonth = (iso: string) => { const p = parts(iso); return `${['January','February','March','April','May','June','July','August','September','October','November','December'][['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(p.m)]} ${p.y}`; };
 export const dayNum = (iso: string) => parts(iso).d;
 export const wdOf = (iso: string) => parts(iso).wd;
+/** 'Sat, Sun off' */
+export const offShort = (p?: Pattern) => p ? `${p.off_weekdays.map(w => WD[w]).join(', ')} off` : '';
 export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?';
 
 export const inputCls = 'border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30';

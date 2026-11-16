@@ -1,19 +1,34 @@
 import { addDays, weekday } from '@/lib/ist';
 
-export interface Pattern { id: number; label: string; off_weekdays: number[] }
+export interface Pattern { id: number; label: string; off_weekdays: number[]; rotates?: boolean }
 export interface Assignment { id?: number; pattern_id: number; effective_from: string; cancelled_at?: string | null }
 export interface ExtraMark { day: string; half: 'full' | 'first' | 'second'; reversed_at?: string | null }
 export type CellKind = 'work' | 'off' | 'extra' | 'none'; // 'none' = before the roster starts
 export const CHANNELS = ['Chats', 'Calls', 'Emails', 'ORM'] as const;
 
-/** The pattern a person is on for one given date: latest non-cancelled row starting on/before it. */
-export function patternOn(assignments: Assignment[], date: string): number | null {
+/** Number of types in the rotation (Type 1 -> 2 -> 3 -> 4 -> back to 1). Types after those are fixed and never rotate. */
+export const ROTATION_TYPES = 4;
+export const cycleOf = (patterns: Pattern[]) => patterns.filter(p => p.rotates !== false).length || ROTATION_TYPES;
+
+/** Whole weeks between the Monday of `from` and the Monday of `to`. */
+const weeksBetween = (from: string, to: string) => Math.round((Date.parse(mondayOf(to)) - Date.parse(mondayOf(from))) / (7 * 86400000));
+
+/**
+ * The roster type a person is on for a given date. Each assignment row is an anchor: "this person is on type N
+ * in the week of effective_from". Everyone moves to the next type every Monday, wrapping after the last type,
+ * so the type for any later date is the anchor's type advanced by the weeks since. The latest non-cancelled
+ * anchor starting on or before the date wins. No anchor means no type is known (null).
+ */
+export function patternOn(assignments: Assignment[], date: string, cycle: number = ROTATION_TYPES): number | null {
   let best: Assignment | null = null;
   for (const a of assignments) {
     if (a.cancelled_at || a.effective_from > date) continue;
     if (!best || a.effective_from > best.effective_from) best = a;
   }
-  return best ? best.pattern_id : null;
+  if (!best) return null;
+  if (best.pattern_id > cycle) return best.pattern_id; // a fixed type (e.g. Mon-Fri): same every week
+  const weeks = weeksBetween(best.effective_from, date);
+  return ((((best.pattern_id - 1 + weeks) % cycle) + cycle) % cycle) + 1;
 }
 
 export function isOff(patterns: Pattern[], patternId: number | null, date: string): boolean {
@@ -22,7 +37,9 @@ export function isOff(patterns: Pattern[], patternId: number | null, date: strin
 }
 
 export function cellKind(patterns: Pattern[], assignments: Assignment[], marks: ExtraMark[], date: string): CellKind {
-  if (!isOff(patterns, patternOn(assignments, date), date)) return 'work';
+  const type = patternOn(assignments, date, cycleOf(patterns));
+  if (type === null) return 'none'; // no roster type set for this person yet
+  if (!isOff(patterns, type, date)) return 'work';
   return marks.some(m => m.day === date && !m.reversed_at) ? 'extra' : 'off';
 }
 
@@ -89,7 +106,8 @@ export function canEditTarget(actor: Actor, targetUserId: number, tlOfTarget: nu
 export function validateNewChange(a: { today: string; start: string; reason: string; toPattern: number; current: number | null; hasFuture: boolean }): string | null {
   if (!a.reason.trim()) return 'A reason is required.';
   if (a.start <= a.today) return 'The change must start tomorrow or later. Past days never change.';
-  if (a.toPattern === a.current) return 'Pick a different pattern from the current one.';
+  if (weekday(a.start) !== 1) return 'The rotation moves on Mondays, so a change must start on a Monday.';
+  if (a.toPattern === a.current) return 'That’s already the type they’ll be on that week. Pick a different one.';
   if (a.hasFuture) return 'This person already has a scheduled change. Edit or cancel it first.';
   return null;
 }

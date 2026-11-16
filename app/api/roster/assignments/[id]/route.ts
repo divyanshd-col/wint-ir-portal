@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { rosterActor, assertCanEdit, audit, withRosterErrors } from '@/lib/roster-server';
-import { todayIST, isIsoDate } from '@/lib/ist';
+import { todayIST, isIsoDate, weekday } from '@/lib/ist';
 
 async function load(id: number, today: string) {
   const r = await query<{ id: number; user_id: number; pattern_id: number; effective_from: string; updated_at: string }>(
@@ -22,7 +22,8 @@ const PATCH_ = async (req: NextRequest, ctx: { params: Promise<{ id: string }> }
   if (denied) return denied;
   const toPattern = Number(b.toPattern);
   if (!isIsoDate(b.start) || b.start <= today || !Number.isInteger(toPattern) || !String(b.reason ?? '').trim())
-    return NextResponse.json({ error: 'Pick a pattern, a start date from tomorrow, and give a reason.' }, { status: 400 });
+    return NextResponse.json({ error: 'Pick a roster type, a start date from tomorrow, and give a reason.' }, { status: 400 });
+  if (weekday(b.start) !== 1) return NextResponse.json({ error: 'The rotation moves on Mondays, so a change must start on a Monday.' }, { status: 400 });
   if (!b.expectedUpdatedAt || new Date(b.expectedUpdatedAt).getTime() !== new Date(row.updated_at).getTime())
     return NextResponse.json({ error: 'This change was edited by someone else. Reload and try again.' }, { status: 409 });
   try {

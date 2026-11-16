@@ -3,6 +3,7 @@ import { query } from '@/lib/cx/db';
 import { rosterActor, assertCanEdit, audit, withRosterErrors } from '@/lib/roster-server';
 import { todayIST, isIsoDate } from '@/lib/ist';
 import { patternOn, validateNewChange } from '@/lib/roster';
+import { weekday } from '@/lib/ist';
 
 const POST_ = async (req: NextRequest) => {
   const { actor, response } = await rosterActor('roster:manage:access');
@@ -13,13 +14,14 @@ const POST_ = async (req: NextRequest) => {
   const today = todayIST();
   const denied = await assertCanEdit(actor, userId, today);
   if (denied) return denied;
-  if (!(await query(`SELECT 1 FROM roster_patterns WHERE id = $1`, [toPattern]))[0]) return NextResponse.json({ error: 'Unknown pattern.' }, { status: 400 });
+  const types = await query<{ id: number; rotates: boolean }>(`SELECT id, rotates FROM roster_patterns`);
+  if (!types.some(t => t.id === toPattern)) return NextResponse.json({ error: 'Unknown roster type.' }, { status: 400 });
 
   const rows = await query<{ pattern_id: number; effective_from: string }>(
     `SELECT pattern_id, to_char(effective_from,'YYYY-MM-DD') AS effective_from FROM roster_assignments WHERE user_id = $1 AND cancelled_at IS NULL`, [userId]);
   const err = validateNewChange({
     today, start: b.start, reason: String(b.reason ?? ''), toPattern,
-    current: patternOn(rows, today), hasFuture: rows.some(r => r.effective_from > today),
+    current: patternOn(rows, b.start, types.filter(t => t.rotates).length), hasFuture: rows.some(r => r.effective_from > today),
   });
   if (err) return NextResponse.json({ error: err }, { status: 400 });
 

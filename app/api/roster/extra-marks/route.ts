@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { rosterActor, assertCanEdit, audit, withRosterErrors } from '@/lib/roster-server';
 import { todayIST, isIsoDate } from '@/lib/ist';
-import { isOff, patternOn, validateExtraDay, type Pattern } from '@/lib/roster';
+import { cycleOf, isOff, patternOn, validateExtraDay, type Pattern } from '@/lib/roster';
 
 const POST_ = async (req: NextRequest) => {
   const { actor, response } = await rosterActor('roster:manage:access');
@@ -14,11 +14,11 @@ const POST_ = async (req: NextRequest) => {
   const denied = await assertCanEdit(actor, userId, today);
   if (denied) return denied;
   const [patterns, assigns, dup] = await Promise.all([
-    query<Pattern>(`SELECT id, label, off_weekdays FROM roster_patterns`),
+    query<Pattern>(`SELECT id, label, off_weekdays, rotates FROM roster_patterns`),
     query<{ pattern_id: number; effective_from: string }>(`SELECT pattern_id, to_char(effective_from,'YYYY-MM-DD') AS effective_from FROM roster_assignments WHERE user_id=$1 AND cancelled_at IS NULL`, [userId]),
     query(`SELECT 1 FROM roster_extra_marks WHERE user_id=$1 AND day=$2 AND reversed_at IS NULL`, [userId, b.day]),
   ]);
-  const err = validateExtraDay({ today, day: b.day, isWeekOff: isOff(patterns, patternOn(assigns, b.day), b.day), hasActive: dup.length > 0, reason: String(b.reason ?? '') });
+  const err = validateExtraDay({ today, day: b.day, isWeekOff: isOff(patterns, patternOn(assigns, b.day, cycleOf(patterns)), b.day), hasActive: dup.length > 0, reason: String(b.reason ?? '') });
   if (err) return NextResponse.json({ error: err }, { status: 400 });
   try {
     await query(`INSERT INTO roster_extra_marks (user_id, day, half, reason, marked_by_user_id) VALUES ($1,$2,$3,$4,$5)`, [userId, b.day, half, String(b.reason).trim(), actor.userId]);
