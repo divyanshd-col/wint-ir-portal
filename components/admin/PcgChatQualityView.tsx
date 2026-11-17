@@ -355,15 +355,15 @@ export default function PcgChatQualityView({
           <button
             onClick={() => { setActiveSection('pending_evaluation'); setPage(1); setExpandedChatId(null); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'pending_evaluation'
-                ? 'bg-zinc-900 text-white font-bold shadow-sm'
-                : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-zinc-900 text-white font-bold shadow-sm'
+              : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
               }`}
           >
             <span>Pending Evaluation</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'pending_evaluation'
-                  ? 'bg-zinc-700 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                ? 'bg-zinc-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
             >
               {sectionCounts.pendingEvaluation}
@@ -374,15 +374,15 @@ export default function PcgChatQualityView({
           <button
             onClick={() => { setActiveSection('evaluated'); setPage(1); setExpandedChatId(null); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'evaluated'
-                ? 'bg-zinc-900 text-white font-bold shadow-sm'
-                : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-zinc-900 text-white font-bold shadow-sm'
+              : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
               }`}
           >
             <span>Evaluated Chats</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'evaluated'
-                  ? 'bg-zinc-700 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                ? 'bg-zinc-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
             >
               {sectionCounts.evaluated}
@@ -393,8 +393,8 @@ export default function PcgChatQualityView({
           <button
             onClick={() => { setActiveSection('disputes_pending'); setPage(1); setExpandedChatId(null); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'disputes_pending'
-                ? 'bg-zinc-900 text-white font-bold shadow-sm'
-                : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-zinc-900 text-white font-bold shadow-sm'
+              : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
               }`}
           >
             <span>Disputes Pending</span>
@@ -405,8 +405,8 @@ export default function PcgChatQualityView({
             ) : (
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'disputes_pending'
-                    ? 'bg-zinc-700 text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  ? 'bg-zinc-700 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}
               >
                 0
@@ -418,15 +418,15 @@ export default function PcgChatQualityView({
           <button
             onClick={() => { setActiveSection('disputes_reviewed'); setPage(1); setExpandedChatId(null); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'disputes_reviewed'
-                ? 'bg-zinc-900 text-white font-bold shadow-sm'
-                : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-zinc-900 text-white font-bold shadow-sm'
+              : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
               }`}
           >
             <span>Disputes Reviewed</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'disputes_reviewed'
-                  ? 'bg-zinc-700 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                ? 'bg-zinc-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
             >
               {sectionCounts.disputesReviewed}
@@ -442,15 +442,15 @@ export default function PcgChatQualityView({
           <button
             onClick={() => { setActiveSection('evaluated'); setPage(1); setExpandedChatId(null); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'evaluated'
-                ? 'bg-zinc-900 text-white font-bold shadow-sm'
-                : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-zinc-900 text-white font-bold shadow-sm'
+              : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
               }`}
           >
             <span>Evaluated Chats</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'evaluated'
-                  ? 'bg-zinc-700 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                ? 'bg-zinc-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
             >
               {sectionCounts.evaluated}
@@ -461,8 +461,8 @@ export default function PcgChatQualityView({
           <button
             onClick={() => { setActiveSection('disputes_pending'); setPage(1); setExpandedChatId(null); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'disputes_pending'
-                ? 'bg-zinc-900 text-white font-bold shadow-sm'
-                : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-zinc-900 text-white font-bold shadow-sm'
+              : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
               }`}
           >
             <span>Disputes Raised</span>
@@ -473,8 +473,8 @@ export default function PcgChatQualityView({
             ) : (
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'disputes_pending'
-                    ? 'bg-zinc-700 text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  ? 'bg-zinc-700 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}
               >
                 0
@@ -486,15 +486,15 @@ export default function PcgChatQualityView({
           <button
             onClick={() => { setActiveSection('disputes_reviewed'); setPage(1); setExpandedChatId(null); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'disputes_reviewed'
-                ? 'bg-zinc-900 text-white font-bold shadow-sm'
-                : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-zinc-900 text-white font-bold shadow-sm'
+              : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
               }`}
           >
             <span>Disputes Reviewed</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'disputes_reviewed'
-                  ? 'bg-zinc-700 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                ? 'bg-zinc-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
             >
               {sectionCounts.disputesReviewed}
@@ -510,18 +510,18 @@ export default function PcgChatQualityView({
             {activeCohortToggle === 'tl'
               ? (selectedTlName !== 'all' ? `${selectedTlName} Chat Quality Overview` : 'Team Lead Chat Quality Overview')
               : activeCohortToggle === 'rm'
-              ? (selectedRmName !== 'all' ? `${selectedRmName} Chat Quality Overview` : 'Relationship Manager Chat Quality Overview')
-              : activeCohortToggle === 'am'
-              ? (selectedAmName !== 'all' ? `${selectedAmName} Chat Quality Overview` : 'Associate Manager Chat Quality Overview')
-              : activeCohortToggle === 'team'
-              ? (selectedTeamName !== 'all' ? `Team ${selectedTeamName} Chat Quality Overview` : 'Team Chat Quality Overview')
-              : activeCohortToggle === 'dual'
-              ? 'Dual Chats Quality Overview'
-              : activePersona === 'agent'
-              ? 'My Chat Quality Overview'
-              : activePersona === 'tl'
-              ? 'Team Chat Quality Overview'
-              : 'Department Chat Quality Overview'}
+                ? (selectedRmName !== 'all' ? `${selectedRmName} Chat Quality Overview` : 'Relationship Manager Chat Quality Overview')
+                : activeCohortToggle === 'am'
+                  ? (selectedAmName !== 'all' ? `${selectedAmName} Chat Quality Overview` : 'Associate Manager Chat Quality Overview')
+                  : activeCohortToggle === 'team'
+                    ? (selectedTeamName !== 'all' ? `Team ${selectedTeamName} Chat Quality Overview` : 'Team Chat Quality Overview')
+                    : activeCohortToggle === 'dual'
+                      ? 'Dual Chats Quality Overview'
+                      : activePersona === 'agent'
+                        ? 'My Chat Quality Overview'
+                        : activePersona === 'tl'
+                          ? 'Team Chat Quality Overview'
+                          : 'Department Chat Quality Overview'}
           </span>
           <PcgPeriodFilter
             range={dateRange}
@@ -538,18 +538,18 @@ export default function PcgChatQualityView({
               {activeCohortToggle === 'tl'
                 ? (selectedTlName !== 'all' ? `${selectedTlName} Avg IQS` : 'Average TL Chat IQS')
                 : activeCohortToggle === 'rm'
-                ? (selectedRmName !== 'all' ? `${selectedRmName} Avg IQS` : 'RM Average Chat IQS')
-                : activeCohortToggle === 'am'
-                ? (selectedAmName !== 'all' ? `${selectedAmName} Avg IQS` : 'AM Average Chat IQS')
-                : activeCohortToggle === 'team'
-                ? (selectedTeamName !== 'all' ? `Team ${selectedTeamName} Avg IQS` : 'Team Average Chat IQS')
-                : activeCohortToggle === 'dual'
-                ? 'Dual Chats Avg IQS'
-                : activePersona === 'agent'
-                ? 'My Average Chat IQS'
-                : activePersona === 'tl'
-                ? 'Team Average Chat IQS'
-                : 'Average Chat IQS'}
+                  ? (selectedRmName !== 'all' ? `${selectedRmName} Avg IQS` : 'RM Average Chat IQS')
+                  : activeCohortToggle === 'am'
+                    ? (selectedAmName !== 'all' ? `${selectedAmName} Avg IQS` : 'AM Average Chat IQS')
+                    : activeCohortToggle === 'team'
+                      ? (selectedTeamName !== 'all' ? `Team ${selectedTeamName} Avg IQS` : 'Team Average Chat IQS')
+                      : activeCohortToggle === 'dual'
+                        ? 'Dual Chats Avg IQS'
+                        : activePersona === 'agent'
+                          ? 'My Average Chat IQS'
+                          : activePersona === 'tl'
+                            ? 'Team Average Chat IQS'
+                            : 'Average Chat IQS'}
             </span>
             <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               {summary.avgIqs != null ? `${summary.avgIqs}%` : '—'}
@@ -562,18 +562,18 @@ export default function PcgChatQualityView({
               {activeCohortToggle === 'tl'
                 ? 'TL Evaluated Closed Chats'
                 : activeCohortToggle === 'rm'
-                ? 'RM Evaluated Closed Chats'
-                : activeCohortToggle === 'am'
-                ? 'AM Evaluated Closed Chats'
-                : activeCohortToggle === 'team'
-                ? 'Team Evaluated Closed Chats'
-                : activeCohortToggle === 'dual'
-                ? 'Dual Evaluated Closed Chats'
-                : activePersona === 'agent'
-                ? 'My Evaluated Chats'
-                : activePersona === 'tl'
-                ? 'Team Evaluated Chats'
-                : 'Evaluated Closed Chats'}
+                  ? 'RM Evaluated Closed Chats'
+                  : activeCohortToggle === 'am'
+                    ? 'AM Evaluated Closed Chats'
+                    : activeCohortToggle === 'team'
+                      ? 'Team Evaluated Closed Chats'
+                      : activeCohortToggle === 'dual'
+                        ? 'Dual Evaluated Closed Chats'
+                        : activePersona === 'agent'
+                          ? 'My Evaluated Chats'
+                          : activePersona === 'tl'
+                            ? 'Team Evaluated Chats'
+                            : 'Evaluated Closed Chats'}
             </span>
             <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               {summary.totalCount}
@@ -618,33 +618,30 @@ export default function PcgChatQualityView({
               <button
                 type="button"
                 onClick={() => handleToggleCohort('rm')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  activeCohortToggle === 'rm'
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'rm'
                     ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                }`}
+                  }`}
               >
                 RMs
               </button>
               <button
                 type="button"
                 onClick={() => handleToggleCohort('am')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  activeCohortToggle === 'am'
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'am'
                     ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                }`}
+                  }`}
               >
                 AMs
               </button>
               <button
                 type="button"
                 onClick={() => handleToggleCohort('dual')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  activeCohortToggle === 'dual'
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'dual'
                     ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                }`}
+                  }`}
               >
                 Dual Chats
               </button>
@@ -715,11 +712,10 @@ export default function PcgChatQualityView({
               }
             }
           }}
-          className={`w-20 h-9 text-xs border rounded-lg px-2.5 py-1.5 outline-none shadow-2xs bg-white dark:bg-slate-950 text-zinc-900 dark:text-white placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-            minIqsFilter !== ''
+          className={`w-20 h-9 text-xs border rounded-lg px-2.5 py-1.5 outline-none shadow-2xs bg-white dark:bg-slate-950 text-zinc-900 dark:text-white placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${minIqsFilter !== ''
               ? 'border-emerald-500 ring-1 ring-emerald-500'
               : 'border-slate-300 dark:border-slate-700 focus:border-emerald-500'
-          }`}
+            }`}
         />
 
         {/* Max IQS Input */}
@@ -745,11 +741,10 @@ export default function PcgChatQualityView({
               }
             }
           }}
-          className={`w-20 h-9 text-xs border rounded-lg px-2.5 py-1.5 outline-none shadow-2xs bg-white dark:bg-slate-950 text-zinc-900 dark:text-white placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-            maxIqsFilter !== ''
+          className={`w-20 h-9 text-xs border rounded-lg px-2.5 py-1.5 outline-none shadow-2xs bg-white dark:bg-slate-950 text-zinc-900 dark:text-white placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${maxIqsFilter !== ''
               ? 'border-emerald-500 ring-1 ring-emerald-500'
               : 'border-slate-300 dark:border-slate-700 focus:border-emerald-500'
-          }`}
+            }`}
         />
 
         {(minIqsFilter !== '' || maxIqsFilter !== '') && (
@@ -881,12 +876,12 @@ export default function PcgChatQualityView({
                       {activeCohortToggle === 'tl'
                         ? 'Team Lead'
                         : activeCohortToggle === 'am'
-                        ? 'Associate Manager'
-                        : activeCohortToggle === 'team'
-                        ? 'Team / Member'
-                        : activeCohortToggle === 'rm'
-                        ? 'Relationship Manager'
-                        : 'Handler / RM'}
+                          ? 'Associate Manager'
+                          : activeCohortToggle === 'team'
+                            ? 'Team / Member'
+                            : activeCohortToggle === 'rm'
+                              ? 'Relationship Manager'
+                              : 'Handler / RM'}
                     </th>
                   )}
                   <th className="py-3 px-4">Category</th>
@@ -939,15 +934,7 @@ export default function PcgChatQualityView({
                   const isOverridden = chat.disputeStatus === 'overridden' || chat.disputeStatus === 'resolved' || Boolean(chat.tlOverrideNote);
 
                   const breachedGates = (chat.complianceFlags || []).filter((f: any) => f.status === 'FAIL');
-                  const breachedBy = chat.precedingRmName && chat.complianceTripwire ? (
-                    breachedGates.some((f: any) => f.failedBy === 'both') || (breachedGates.some((f: any) => f.failedBy === 'rm') && breachedGates.some((f: any) => f.failedBy === 'am'))
-                      ? 'Both'
-                      : breachedGates.some((f: any) => f.failedBy === 'rm')
-                      ? 'RM'
-                      : breachedGates.some((f: any) => f.failedBy === 'am')
-                      ? 'AM'
-                      : null
-                  ) : null;
+                  const breachedBy = chat.precedingRmName && chat.complianceTripwire ? 'Both' : null;
 
                   return (
                     <React.Fragment key={chat.id}>

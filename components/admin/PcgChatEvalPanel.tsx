@@ -6,6 +6,7 @@ import AutoTextarea from '@/components/quality/AutoTextarea';
 import { normalizeScore } from '@/lib/quality';
 import { PcgProductCategory, detectPcgChatCategories } from '@/lib/pcg/chat-category';
 import { isPcgAm } from '@/lib/pcg/canonical-names';
+import { resolveParameterAttribution } from '@/lib/pcg/attribution';
 
 export interface PcgChatEvaluation {
   id: string;
@@ -216,7 +217,8 @@ export default function PcgChatEvalPanel({
 
   // Only Team Leads can submit evaluation override; Admins and Agents view evaluations in read-only mode
   const canSubmitOverride = userRole === 'tl';
-  const isReadOnly = !canSubmitOverride;
+  const [isEditing, setIsEditing] = useState(false);
+  const isReadOnly = !canSubmitOverride || !isEditing;
   const canRaiseDispute = allowRaiseDispute ?? (userRole === 'agent');
 
   // Co-handled Chat State & Role Visibility
@@ -242,20 +244,34 @@ export default function PcgChatEvalPanel({
   const rmMistakes = useMemo(() => {
     if (!isCoHandled || !chat?.parameters) return [];
     return Object.values(chat.parameters).filter(p => {
-      if (p.rmStatus === 'No') return true;
-      if ((p.failedBy === 'rm' || p.failedBy === 'both') && (p.status === 'No' || p.status === 'Half')) return true;
-      return false;
+      const normStatus = (p.status || '').trim().toLowerCase();
+      const isParamFailed = normStatus === 'no' || normStatus === 'half' || normStatus === 'partial';
+      if (!isParamFailed) return false;
+
+      const attr = resolveParameterAttribution(p, chat.transcriptTurns, rmAgentName, amAgentName);
+      return attr === 'rm' || attr === 'both';
     });
-  }, [isCoHandled, chat?.parameters]);
+  }, [isCoHandled, chat?.parameters, chat?.transcriptTurns, rmAgentName, amAgentName]);
 
   const amMistakes = useMemo(() => {
     if (!isCoHandled || !chat?.parameters) return [];
     return Object.values(chat.parameters).filter(p => {
-      if (p.amStatus === 'No') return true;
-      if ((p.failedBy === 'am' || p.failedBy === 'both') && (p.status === 'No' || p.status === 'Half')) return true;
-      return false;
+      const normStatus = (p.status || '').trim().toLowerCase();
+      const isParamFailed = normStatus === 'no' || normStatus === 'half' || normStatus === 'partial';
+      if (!isParamFailed) return false;
+
+      const attr = resolveParameterAttribution(p, chat.transcriptTurns, rmAgentName, amAgentName);
+      return attr === 'am' || attr === 'both';
     });
-  }, [isCoHandled, chat?.parameters]);
+  }, [isCoHandled, chat?.parameters, chat?.transcriptTurns, rmAgentName, amAgentName]);
+
+  const totalChatMistakes = useMemo(() => {
+    if (!chat?.parameters) return 0;
+    return Object.values(chat.parameters).filter(p => {
+      const s = (p.status || '').trim().toLowerCase();
+      return s === 'no' || s === 'half' || s === 'partial';
+    }).length;
+  }, [chat?.parameters]);
 
   // Rich dispute state matching CallEvalPanel
   const [raisingDispute, setRaisingDispute] = useState(false);
@@ -281,16 +297,14 @@ export default function PcgChatEvalPanel({
 
   const rmComplianceBreaches = useMemo(() => {
     if (!isCoHandled) return [];
-    return complianceFlags.filter(
-      (f) => f.status === 'FAIL' && (f.failedBy === 'rm' || f.failedBy === 'both')
-    );
+    // In dual chats, compliance gate errors are attributed to BOTH RM and AM
+    return complianceFlags.filter((f) => f.status === 'FAIL');
   }, [isCoHandled, complianceFlags]);
 
   const amComplianceBreaches = useMemo(() => {
     if (!isCoHandled) return [];
-    return complianceFlags.filter(
-      (f) => f.status === 'FAIL' && (f.failedBy === 'am' || f.failedBy === 'both')
-    );
+    // In dual chats, compliance gate errors are attributed to BOTH RM and AM
+    return complianceFlags.filter((f) => f.status === 'FAIL');
   }, [isCoHandled, complianceFlags]);
   const [overrideNote, setOverrideNote] = useState<string>(chat?.tlOverrideNote || '');
   const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
@@ -634,6 +648,7 @@ export default function PcgChatEvalPanel({
       }
 
       setOverrideSuccess(true);
+      setIsEditing(false);
       if (onDisputeUpdate) {
         onDisputeUpdate({ close: true });
       }
@@ -965,7 +980,7 @@ export default function PcgChatEvalPanel({
                   }}
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    💬 Dispute Comments & Discussion
+                    Dispute Comments & Discussion
                   </span>
                   <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--qa-text-3)' }}>
                     {comments.length} comment{comments.length === 1 ? '' : 's'}
@@ -1652,30 +1667,49 @@ export default function PcgChatEvalPanel({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close evaluation"
-                title="Close"
-                style={{
-                  marginLeft: 'auto',
-                  flexShrink: 0,
-                  width: 28,
-                  height: 28,
-                  border: 0,
-                  background: 'none',
-                  color: 'var(--qa-text-3)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 18,
-                  lineHeight: 1,
-                  borderRadius: 6,
-                }}
-              >
-                ✕
-              </button>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {canSubmitOverride && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(!isEditing)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 6,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      background: isEditing ? '#f4f4f5' : 'var(--ink, #18181b)',
+                      color: isEditing ? '#18181b' : '#ffffff',
+                      border: '1px solid var(--qa-border, #e4e4e7)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isEditing ? 'Cancel Edit' : 'Edit Evaluation'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close evaluation"
+                  title="Close"
+                  style={{
+                    flexShrink: 0,
+                    width: 28,
+                    height: 28,
+                    border: 0,
+                    background: 'none',
+                    color: 'var(--qa-text-3)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 18,
+                    lineHeight: 1,
+                    borderRadius: 6,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1726,12 +1760,12 @@ export default function PcgChatEvalPanel({
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: 4,
-                          background: (rmMistakes.length + amMistakes.length) > 0 ? '#f4f4f5' : '#f0fdf4',
-                          color: (rmMistakes.length + amMistakes.length) > 0 ? '#18181b' : '#15803d',
-                          border: `1px solid ${(rmMistakes.length + amMistakes.length) > 0 ? '#e4e4e7' : '#bbf7d0'}`,
+                          background: totalChatMistakes > 0 ? '#f4f4f5' : '#f0fdf4',
+                          color: totalChatMistakes > 0 ? '#18181b' : '#15803d',
+                          border: `1px solid ${totalChatMistakes > 0 ? '#e4e4e7' : '#bbf7d0'}`,
                         }}
                       >
-                        {rmMistakes.length + amMistakes.length} {(rmMistakes.length + amMistakes.length) === 1 ? 'Mistake' : 'Mistakes'}
+                        {totalChatMistakes} {totalChatMistakes === 1 ? 'Mistake' : 'Mistakes'}
                         {(rmMistakes.length > 0 || amMistakes.length > 0) && (
                           <span style={{ fontSize: 11, fontWeight: 500, color: '#71717a', marginLeft: 4 }}>
                             (RM: {rmMistakes.length} · AM: {amMistakes.length})
@@ -1785,10 +1819,25 @@ export default function PcgChatEvalPanel({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        gap: 6,
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      RM ({rmAgentName})
+                      <span>RM ({rmAgentName})</span>
+                      {rmMistakes.length > 0 && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: agentViewTab === 'rm' ? 'rgba(255,255,255,0.2)' : '#fee2e2',
+                            color: agentViewTab === 'rm' ? '#ffffff' : '#b91c1c',
+                          }}
+                        >
+                          {rmMistakes.length}
+                        </span>
+                      )}
                     </button>
                   )}
 
@@ -1810,10 +1859,25 @@ export default function PcgChatEvalPanel({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        gap: 6,
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      AM ({amAgentName})
+                      <span>AM ({amAgentName})</span>
+                      {amMistakes.length > 0 && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: agentViewTab === 'am' ? 'rgba(255,255,255,0.2)' : '#fee2e2',
+                            color: agentViewTab === 'am' ? '#ffffff' : '#b91c1c',
+                          }}
+                        >
+                          {amMistakes.length}
+                        </span>
+                      )}
                     </button>
                   )}
                 </div>
@@ -1847,14 +1911,7 @@ export default function PcgChatEvalPanel({
                   <span className="eval-gtitle">Compliance Gates</span>
                   {currentTripwire && isCoHandled && (
                     <div style={{ fontSize: 11, color: 'var(--fail)', fontWeight: 600, marginTop: 2 }}>
-                      Breach caused by:{' '}
-                      {rmComplianceBreaches.length > 0 && amComplianceBreaches.length > 0
-                        ? `Both RM (${rmAgentName}) & AM (${amAgentName})`
-                        : rmComplianceBreaches.length > 0
-                        ? `RM (${rmAgentName})`
-                        : amComplianceBreaches.length > 0
-                        ? `AM (${amAgentName})`
-                        : 'Pending Attribution'}
+                      Breach attributed to: Both RM ({rmAgentName}) & AM ({amAgentName})
                     </div>
                   )}
                 </div>
@@ -1888,9 +1945,7 @@ export default function PcgChatEvalPanel({
                             ? `Breach by RM: ${rmAgentName}`
                             : g.failedBy === 'am'
                             ? `Breach by AM: ${amAgentName}`
-                            : g.failedBy === 'both'
-                            ? `Breach by Both: RM & AM`
-                            : 'Breached'}
+                            : 'Breach Attributed to Both: RM & AM'}
                         </span>
                       )}
                     </div>
@@ -2045,452 +2100,321 @@ export default function PcgChatEvalPanel({
               })}
             </div>
 
-            {/* 2. Parameters View (Overall, RM-only, or AM-only) */}
-            {agentViewTab === 'rm' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 6, borderBottom: '1px solid var(--qa-border)' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
-                    NO Parameters Received by RM ({rmAgentName})
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#e11d48', background: '#ffe4e6', padding: '1px 7px', borderRadius: 4, border: '1px solid #fecdd3' }}>
-                    {rmMistakes.length} Failed
-                  </span>
+            {/* RM Compliance Breaches (if any) */}
+            {isCoHandled && agentViewTab === 'rm' && rmComplianceBreaches.length > 0 && (
+              <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1.5px solid #f87171', borderRadius: 8, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#b91c1c' }}>
+                  Compliance Breach Attributed to RM ({rmAgentName})
                 </div>
-
-                {/* RM Compliance Breaches (if any) */}
-                {rmComplianceBreaches.length > 0 && (
-                  <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1.5px solid #f87171', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>⚠️ Compliance Breach Attributed to RM ({rmAgentName})</span>
-                    </div>
-                    {rmComplianceBreaches.map(b => (
-                      <div key={b.id} style={{ fontSize: 12, color: '#991b1b', lineHeight: 1.5 }}>
-                        <strong>{b.num}. {b.name}: </strong>{b.rmReasoning || b.reasoning}
-                        {(b.rmQuote || b.quote) && (
-                          <div style={{ fontStyle: 'italic', fontSize: 11, marginTop: 4, color: '#7f1d1d' }}>
-                            "{b.rmQuote || b.quote}"
-                          </div>
-                        )}
+                {rmComplianceBreaches.map(b => (
+                  <div key={b.id} style={{ fontSize: 12, color: '#991b1b', lineHeight: 1.5 }}>
+                    <strong>{b.num}. {b.name}: </strong>{b.rmReasoning || b.reasoning}
+                    {(b.rmQuote || b.quote) && (
+                      <div style={{ fontStyle: 'italic', fontSize: 11, marginTop: 4, color: '#7f1d1d' }}>
+                        "{b.rmQuote || b.quote}"
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-
-                {rmMistakes.length === 0 ? (
-                  <div style={{ padding: '24px 16px', textAlign: 'center', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>
-                      ✓ Zero Quality Mistakes for RM ({rmAgentName})
-                    </div>
-                    <div style={{ fontSize: 11.5, color: '#166534', marginTop: 4 }}>
-                      {rmComplianceBreaches.length > 0
-                        ? `No quality parameter mistakes were made by RM ${rmAgentName} (see compliance breach above).`
-                        : `No quality errors or missed parameters were attributed to RM ${rmAgentName} in this chat.`}
-                    </div>
-                  </div>
-                ) : (
-                  rmMistakes.map((p) => (
-                    <div
-                      key={p.id}
-                      style={{
-                        padding: '12px 14px',
-                        background: '#fef2f2',
-                        border: '1px solid #fecaca',
-                        borderRadius: 8,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--qa-text)' }}>
-                            {p.num}. {p.name}{' '}
-                            <span style={{ fontSize: 10.5, color: 'var(--qa-text-3)' }}>
-                              ({p.weight}%)
-                            </span>
-                          </span>
-                          <span
-                            style={{
-                              fontSize: 9.5,
-                              fontWeight: 700,
-                              padding: '1px 6px',
-                              borderRadius: 4,
-                              background: '#ffe4e6',
-                              color: '#e11d48',
-                              border: '1px solid #fecdd3',
-                            }}
-                          >
-                            Attributed to RM: {rmAgentName}
-                          </span>
-                        </div>
-                        <ScoreBadge score={p.rmStatus || p.status} />
-                      </div>
-
-                      {/* Reason shown automatically for NO parameter */}
-                      {(p.rmReasoning || p.reasoning) && (
-                        <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.6 }}>
-                          {p.rmReasoning || p.reasoning}
-                        </div>
-                      )}
-                      {(p.rmQuote || p.quote) && (
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            fontStyle: 'italic',
-                            color: 'var(--qa-text-3)',
-                            marginTop: 2,
-                            borderLeft: '2px solid #fca5a5',
-                            paddingLeft: 8,
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          "{p.rmQuote || p.quote}"
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            ) : agentViewTab === 'am' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 6, borderBottom: '1px solid var(--qa-border)' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
-                    NO Parameters Received by AM ({amAgentName})
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#e11d48', background: '#ffe4e6', padding: '1px 7px', borderRadius: 4, border: '1px solid #fecdd3' }}>
-                    {amMistakes.length} Failed
-                  </span>
-                </div>
-
-                {/* AM Compliance Breaches (if any) */}
-                {amComplianceBreaches.length > 0 && (
-                  <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1.5px solid #f87171', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>⚠️ Compliance Breach Attributed to AM ({amAgentName})</span>
-                    </div>
-                    {amComplianceBreaches.map(b => (
-                      <div key={b.id} style={{ fontSize: 12, color: '#991b1b', lineHeight: 1.5 }}>
-                        <strong>{b.num}. {b.name}: </strong>{b.amReasoning || b.reasoning}
-                        {(b.amQuote || b.quote) && (
-                          <div style={{ fontStyle: 'italic', fontSize: 11, marginTop: 4, color: '#7f1d1d' }}>
-                            "{b.amQuote || b.quote}"
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {amMistakes.length === 0 ? (
-                  <div style={{ padding: '24px 16px', textAlign: 'center', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>
-                      ✓ Zero Quality Mistakes for AM ({amAgentName})
-                    </div>
-                    <div style={{ fontSize: 11.5, color: '#166534', marginTop: 4 }}>
-                      {amComplianceBreaches.length > 0
-                        ? `No quality parameter mistakes were made by AM ${amAgentName} (see compliance breach above).`
-                        : `No quality errors or missed parameters were attributed to AM ${amAgentName} in this chat.`}
-                    </div>
-                  </div>
-                ) : (
-                  amMistakes.map((p) => (
-                    <div
-                      key={p.id}
-                      style={{
-                        padding: '12px 14px',
-                        background: '#fef2f2',
-                        border: '1px solid #fecaca',
-                        borderRadius: 8,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--qa-text)' }}>
-                            {p.num}. {p.name}{' '}
-                            <span style={{ fontSize: 10.5, color: 'var(--qa-text-3)' }}>
-                              ({p.weight}%)
-                            </span>
-                          </span>
-                          <span
-                            style={{
-                              fontSize: 9.5,
-                              fontWeight: 700,
-                              padding: '1px 6px',
-                              borderRadius: 4,
-                              background: '#ffe4e6',
-                              color: '#e11d48',
-                              border: '1px solid #fecdd3',
-                            }}
-                          >
-                            Attributed to AM: {amAgentName}
-                          </span>
-                        </div>
-                        <ScoreBadge score={p.amStatus || p.status} />
-                      </div>
-
-                      {/* Reason shown automatically for NO parameter */}
-                      {(p.amReasoning || p.reasoning) && (
-                        <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.6 }}>
-                          {p.amReasoning || p.reasoning}
-                        </div>
-                      )}
-                      {(p.amQuote || p.quote) && (
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            fontStyle: 'italic',
-                            color: 'var(--qa-text-3)',
-                            marginTop: 2,
-                            borderLeft: '2px solid #d8b4fe',
-                            paddingLeft: 8,
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          "{p.amQuote || p.quote}"
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            ) : (
-              /* Overall Chat Quality: 11 Parameters Grouped by Skill */
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
-                {PCG_CHAT_PARAM_GROUPS.map((grp) => {
-                  const items = grp.keys
-                    .map((k) => {
-                      const p = params[k] || chat.parameters?.[k];
-                      if (!p) return null;
-                      return {
-                        ...p,
-                        id: p.id || k,
-                      };
-                    })
-                    .filter(Boolean) as Array<any>;
-
-                  if (items.length === 0) return null;
-
-                  return (
-                    <div key={grp.group} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          paddingBottom: 4,
-                          borderBottom: '1px solid var(--qa-border)',
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                            color: 'var(--qa-text-2)',
-                          }}
-                        >
-                          {grp.group}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: 'var(--qa-text)',
-                            background: 'var(--qa-fill-light)',
-                            padding: '1px 6px',
-                            borderRadius: 4,
-                            border: '1px solid var(--qa-border)',
-                          }}
-                        >
-                          {grp.weight}
-                        </span>
-                      </div>
-
-                      {items.map((p) => {
-                        const meta = PCG_CHAT_PARAM_META[p.id];
-                        const options: Array<'Yes' | 'Half' | 'No' | 'NA'> =
-                          meta?.scoreType === 'Yes / Half / No'
-                            ? ['Yes', 'Half', 'No', 'NA']
-                            : ['Yes', 'No', 'NA'];
-
-                        const isNoOrHalf = p.status === 'No' || p.status === 'Half';
-                        const isExpanded = Boolean(expandedReasons[p.id]);
-
-                        return (
-                          <div
-                            key={p.id}
-                            style={{
-                              padding: '12px 14px',
-                              background:
-                                p.status === 'No'
-                                  ? '#fef2f2'
-                                  : 'var(--qa-gray-50)',
-                              border: `1px solid ${p.status === 'No'
-                                  ? '#fecaca'
-                                  : 'var(--qa-border-sub)'
-                                }`,
-                              borderRadius: 8,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 8,
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--qa-text)' }}>
-                                  {p.num}. {p.name}{' '}
-                                  <span style={{ fontSize: 10.5, color: 'var(--qa-text-3)' }}>
-                                    ({p.weight}%)
-                                  </span>
-                                </span>
-
-                                {/* Highlight who made what mistake in Overall view */}
-                                {isCoHandled && isNoOrHalf && (
-                                  <span
-                                    style={{
-                                      fontSize: 9.5,
-                                      fontWeight: 700,
-                                      padding: '1px 6px',
-                                      borderRadius: 4,
-                                      background: (p.failedBy === 'both' && p.id === 'QueryResolution') ? '#fef3c7' : '#ffe4e6',
-                                      color: (p.failedBy === 'both' && p.id === 'QueryResolution') ? '#b45309' : '#e11d48',
-                                      border: `1px solid ${(p.failedBy === 'both' && p.id === 'QueryResolution') ? '#fde68a' : '#fecdd3'}`,
-                                    }}
-                                  >
-                                    {p.failedBy === 'rm'
-                                      ? `Mistake by RM (${rmAgentName})`
-                                      : p.failedBy === 'am'
-                                        ? `Mistake by AM (${amAgentName})`
-                                        : p.id === 'QueryResolution'
-                                          ? 'Shared Resolution Gap'
-                                          : 'Mistake by Both RM & AM'}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                {/* Arrow toggle for Yes and NA parameters */}
-                                {isReadOnly && (p.status === 'Yes' || p.status === 'NA') && (p.reasoning || p.quote) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleReason(p.id)}
-                                    title={isExpanded ? 'Hide reason' : 'Show reason'}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 3,
-                                      padding: '2px 6px',
-                                      borderRadius: 4,
-                                      fontSize: 10.5,
-                                      fontWeight: 500,
-                                      color: 'var(--qa-text-3)',
-                                      background: 'var(--qa-card)',
-                                      border: '1px solid var(--qa-border)',
-                                      cursor: 'pointer',
-                                    }}
-                                  >
-                                    <span>{isExpanded ? 'Hide' : 'Reason'}</span>
-                                    <span style={{ fontSize: 9 }}>{isExpanded ? '▲' : '▼'}</span>
-                                  </button>
-                                )}
-
-                                {isReadOnly ? (
-                                  <ScoreBadge score={p.status} />
-                                ) : (
-                                  <div style={{ display: 'flex', gap: 4 }}>
-                                    {options.map((val) => (
-                                      <button
-                                        key={val}
-                                        type="button"
-                                        onClick={() => handleParamScoreChange(p.id, val)}
-                                        style={{
-                                          padding: '3px 10px',
-                                          borderRadius: 5,
-                                          fontSize: 11.5,
-                                          fontWeight: p.status === val ? 700 : 500,
-                                          border: '1px solid var(--qa-border)',
-                                          background: p.status === val ? 'var(--ink)' : 'var(--qa-card)',
-                                          color: p.status === val ? 'var(--ink-fg)' : 'var(--qa-text)',
-                                          cursor: 'pointer',
-                                        }}
-                                      >
-                                        {val === 'Half' ? 'Partial' : val}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Reasoning & Quote Display Rule:
-                                NO parameters: Shown automatically.
-                                Yes & NA parameters: Shown only when expanded via arrow toggle. */}
-                            {isReadOnly ? (
-                              <>
-                                {(isNoOrHalf || isExpanded) && (
-                                  <>
-                                    {p.reasoning && (
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.6 }}>
-                                        {p.reasoning}
-                                      </div>
-                                    )}
-                                    {p.quote && (
-                                      <div
-                                        style={{
-                                          fontSize: 11.5,
-                                          fontStyle: 'italic',
-                                          color: 'var(--qa-text-3)',
-                                          marginTop: 4,
-                                          borderLeft: '2px solid var(--qa-border)',
-                                          paddingLeft: 8,
-                                          lineHeight: 1.5,
-                                        }}
-                                      >
-                                        "{p.quote}"
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-                              </>
-                            ) : (
-                              <AutoTextarea
-                                value={p.reasoning || ''}
-                                onChange={(e) => handleParamReasoningChange(p.id, e.target.value)}
-                                placeholder={`Reasoning or transcript quote for ${p.name}…`}
-                                rows={2}
-                                style={{
-                                  width: '100%',
-                                  fontSize: 12,
-                                  lineHeight: 1.6,
-                                  border: '1px solid var(--qa-border)',
-                                  borderRadius: 6,
-                                  padding: '10px 12px',
-                                  outline: 'none',
-                                  fontFamily: 'inherit',
-                                  boxSizing: 'border-box',
-                                  background: 'var(--qa-card)',
-                                  color: 'var(--qa-text)',
-                                }}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                ))}
               </div>
             )}
+
+            {/* AM Compliance Breaches (if any) */}
+            {isCoHandled && agentViewTab === 'am' && amComplianceBreaches.length > 0 && (
+              <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1.5px solid #f87171', borderRadius: 8, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#b91c1c' }}>
+                  Compliance Breach Attributed to AM ({amAgentName})
+                </div>
+                {amComplianceBreaches.map(b => (
+                  <div key={b.id} style={{ fontSize: 12, color: '#991b1b', lineHeight: 1.5 }}>
+                    <strong>{b.num}. {b.name}: </strong>{b.amReasoning || b.reasoning}
+                    {(b.amQuote || b.quote) && (
+                      <div style={{ fontStyle: 'italic', fontSize: 11, marginTop: 4, color: '#7f1d1d' }}>
+                        "{b.amQuote || b.quote}"
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 2. 11 Parameters Grouped by Skill in Standard Template Format */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
+              {PCG_CHAT_PARAM_GROUPS.map((grp) => {
+                const items = grp.keys
+                  .map((k) => {
+                    const p = params[k] || chat.parameters?.[k];
+                    if (!p) return null;
+                    return {
+                      ...p,
+                      id: p.id || k,
+                    };
+                  })
+                  .filter(Boolean) as Array<any>;
+
+                if (items.length === 0) return null;
+
+                return (
+                  <div key={grp.group} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        paddingBottom: 4,
+                        borderBottom: '1px solid var(--qa-border)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          color: 'var(--qa-text-2)',
+                        }}
+                      >
+                        {grp.group}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: 'var(--qa-text)',
+                          background: 'var(--qa-fill-light)',
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          border: '1px solid var(--qa-border)',
+                        }}
+                      >
+                        {grp.weight}
+                      </span>
+                    </div>
+
+                    {items.map((p) => {
+                      const meta = PCG_CHAT_PARAM_META[p.id];
+                      const options: Array<'Yes' | 'Half' | 'No' | 'NA'> =
+                        meta?.scoreType === 'Yes / Half / No'
+                          ? ['Yes', 'Half', 'No', 'NA']
+                          : ['Yes', 'No', 'NA'];
+
+                      let rawStatus = p.status;
+                      let rawReasoning = p.reasoning;
+                      let rawQuote = p.quote;
+
+                      const paramAttr = isCoHandled
+                        ? resolveParameterAttribution(p, chat?.transcriptTurns, rmAgentName, amAgentName)
+                        : 'rm';
+
+                      if (isCoHandled && agentViewTab === 'rm') {
+                        if (p.id === 'QueryResolution' || paramAttr === 'both') {
+                          rawStatus = p.rmStatus || p.status;
+                          rawReasoning = p.rmReasoning || p.reasoning;
+                          rawQuote = p.rmQuote || p.quote;
+                        } else if (paramAttr === 'am') {
+                          rawStatus = p.rmStatus || 'NA';
+                          rawReasoning = p.rmReasoning || '';
+                          rawQuote = p.rmQuote || '';
+                        } else {
+                          rawStatus = p.rmStatus || p.status;
+                          rawReasoning = p.rmReasoning || p.reasoning;
+                          rawQuote = p.rmQuote || p.quote;
+                        }
+                      } else if (isCoHandled && agentViewTab === 'am') {
+                        if (p.id === 'QueryResolution' || paramAttr === 'both') {
+                          rawStatus = p.amStatus || p.status;
+                          rawReasoning = p.amReasoning || p.reasoning;
+                          rawQuote = p.amQuote || p.quote;
+                        } else if (paramAttr === 'rm') {
+                          rawStatus = p.amStatus || 'NA';
+                          rawReasoning = p.amReasoning || '';
+                          rawQuote = p.amQuote || '';
+                        } else {
+                          rawStatus = p.amStatus || p.status;
+                          rawReasoning = p.amReasoning || p.reasoning;
+                          rawQuote = p.amQuote || p.quote;
+                        }
+                      }
+
+                      const norm = normalizeScore(rawStatus ?? null);
+                      const activeStatus = norm.label;
+                      const isYesOrNa = activeStatus === 'Yes' || activeStatus === 'NA';
+                      const isNoOrHalf = activeStatus === 'No' || activeStatus === 'Half';
+                      const isExpanded = Boolean(expandedReasons[p.id]);
+
+                      return (
+                        <div
+                          key={p.id}
+                          style={{
+                            padding: '12px 14px',
+                            background:
+                              activeStatus === 'No'
+                                ? '#fef2f2'
+                                : 'var(--qa-gray-50)',
+                            border: `1px solid ${
+                              activeStatus === 'No'
+                                ? '#fecaca'
+                                : 'var(--qa-border-sub)'
+                            }`,
+                            borderRadius: 8,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                {p.num}. {p.name}{' '}
+                                <span style={{ fontSize: 10.5, color: 'var(--qa-text-3)' }}>
+                                  ({p.weight}%)
+                                </span>
+                              </span>
+
+                              {/* Highlight who made what mistake in Co-Handled view */}
+                              {isCoHandled && isNoOrHalf && (
+                                <span
+                                  style={{
+                                    fontSize: 9.5,
+                                    fontWeight: 700,
+                                    padding: '1px 6px',
+                                    borderRadius: 4,
+                                    background: (p.id === 'QueryResolution' || paramAttr === 'both') ? '#fef3c7' : '#ffe4e6',
+                                    color: (p.id === 'QueryResolution' || paramAttr === 'both') ? '#b45309' : '#e11d48',
+                                    border: `1px solid ${(p.id === 'QueryResolution' || paramAttr === 'both') ? '#fde68a' : '#fecdd3'}`,
+                                  }}
+                                >
+                                  {agentViewTab === 'rm'
+                                    ? (p.id === 'QueryResolution' || paramAttr === 'both' ? 'Shared Resolution Gap (RM & AM)' : `Attributed to RM (${rmAgentName})`)
+                                    : agentViewTab === 'am'
+                                      ? (p.id === 'QueryResolution' || paramAttr === 'both' ? 'Shared Resolution Gap (RM & AM)' : `Attributed to AM (${amAgentName})`)
+                                      : (p.id === 'QueryResolution' || paramAttr === 'both')
+                                        ? 'Shared Resolution Gap (RM & AM)'
+                                        : paramAttr === 'rm'
+                                          ? `Mistake by RM (${rmAgentName})`
+                                          : `Mistake by AM (${amAgentName})`}
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {/* Reason toggle: ONLY for Yes and NA parameters when reasoning or quote is present */}
+                              {isReadOnly && isYesOrNa && (rawReasoning || rawQuote) && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleReason(p.id)}
+                                  title={isExpanded ? 'Hide reason' : 'Show reason'}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    fontSize: 10.5,
+                                    fontWeight: 500,
+                                    color: 'var(--qa-text-3)',
+                                    background: 'var(--qa-card)',
+                                    border: '1px solid var(--qa-border)',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <span>{isExpanded ? 'Hide' : 'Reason'}</span>
+                                  <span style={{ fontSize: 9 }}>{isExpanded ? '▲' : '▼'}</span>
+                                </button>
+                              )}
+
+                              {isReadOnly ? (
+                                <ScoreBadge score={activeStatus} />
+                              ) : (
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  {options.map((val) => (
+                                    <button
+                                      key={val}
+                                      type="button"
+                                      onClick={() => handleParamScoreChange(p.id, val)}
+                                      style={{
+                                        padding: '3px 10px',
+                                        borderRadius: 5,
+                                        fontSize: 11.5,
+                                        fontWeight: p.status === val ? 700 : 500,
+                                        border: '1px solid var(--qa-border)',
+                                        background: p.status === val ? 'var(--ink)' : 'var(--qa-card)',
+                                        color: p.status === val ? 'var(--ink-fg)' : 'var(--qa-text)',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {val === 'Half' ? 'Partial' : val}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Reasoning & Quote Display Rule:
+                              Half & No parameters: Shown automatically.
+                              Yes & NA parameters: Shown ONLY when expanded via toggle. */}
+                          {isReadOnly ? (
+                            <>
+                              {(isNoOrHalf || isExpanded) && (
+                                <>
+                                  {rawReasoning && (
+                                    <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.6 }}>
+                                      {rawReasoning}
+                                    </div>
+                                  )}
+                                  {rawQuote && (
+                                    <div
+                                      style={{
+                                        fontSize: 11.5,
+                                        fontStyle: 'italic',
+                                        color: 'var(--qa-text-3)',
+                                        marginTop: 4,
+                                        borderLeft: '2px solid var(--qa-border)',
+                                        paddingLeft: 8,
+                                        lineHeight: 1.5,
+                                      }}
+                                    >
+                                      "{rawQuote}"
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <AutoTextarea
+                              value={p.reasoning || ''}
+                              onChange={(e) => handleParamReasoningChange(p.id, e.target.value)}
+                              placeholder={`Reasoning or transcript quote for ${p.name}…`}
+                              rows={2}
+                              style={{
+                                width: '100%',
+                                fontSize: 12,
+                                lineHeight: 1.6,
+                                border: '1px solid var(--qa-border)',
+                                borderRadius: 6,
+                                padding: '10px 12px',
+                                outline: 'none',
+                                fontFamily: 'inherit',
+                                boxSizing: 'border-box',
+                                background: 'var(--qa-card)',
+                                color: 'var(--qa-text)',
+                              }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
 
           </div>
 
