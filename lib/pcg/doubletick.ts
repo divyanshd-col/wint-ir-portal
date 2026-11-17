@@ -121,7 +121,7 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
     // 1. Detect Event Type, Direction & Speaker
     const isStatusUpdate = !!(item.status || item.statusTimestamp);
     let direction: 'inbound' | 'outbound' = 'inbound';
-    let speaker: 'Customer' | 'RM' = 'Customer';
+    let speaker: 'Customer' | 'RM' | 'AM' = 'Customer';
     let eventType: 'message_received' | 'status_update' = isStatusUpdate ? 'status_update' : 'message_received';
 
     if (item.Direction) {

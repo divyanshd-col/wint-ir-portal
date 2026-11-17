@@ -102,8 +102,10 @@ interface RmScorecard {
   clientTotalCalls?: number;
   clientAnsweredCalls?: number;
   clientUnansweredCalls?: number;
+  clientUnansweredByRm?: number;
   otherUnansweredCalls?: number;
   clientPickupRate?: number;
+  rmPickupRate?: number;
   offHoursClientTotal?: number;
   offHoursClientAnswered?: number;
   offHoursPickupRate?: number;
@@ -127,9 +129,11 @@ interface TeamLeadSummary {
   clientTotalCalls?: number;
   clientAnsweredCalls?: number;
   clientUnansweredCalls?: number;
+  clientUnansweredByRm?: number;
   otherUnansweredCalls?: number;
   connectRate: number;
   clientPickupRate?: number;
+  rmPickupRate?: number;
   offHoursClientTotal?: number;
   offHoursClientAnswered?: number;
   offHoursPickupRate?: number;
@@ -543,8 +547,8 @@ export default function PcgCallsClient() {
           const cLower = cleanTl.toLowerCase().trim();
           return tLower === cLower || cLower.includes(tLower) || tLower.includes(cLower);
         })?.tlName || (
-          ['swetha', 'swetha jayakumar'].some((s) => cleanTl.toLowerCase() === s) ? 'Swetha' : cleanTl
-        );
+            ['swetha', 'swetha jayakumar'].some((s) => cleanTl.toLowerCase() === s) ? 'Swetha' : cleanTl
+          );
         if (matchedTl) p.set('tl_name', matchedTl);
         if (selectedRmName !== 'all') p.set('rm_name', selectedRmName);
       } else if (activePersona === 'admin') {
@@ -967,11 +971,16 @@ export default function PcgCallsClient() {
   const rmTotalCallsCount = summary?.totalCalls ?? (currentRmScorecard?.totalCalls ?? 0);
   const rmAnsweredCallsCount = summary?.answeredCalls ?? (currentRmScorecard ? (currentRmScorecard.clientAnsweredCalls ?? Math.round((currentRmScorecard.connectRate / 100) * currentRmScorecard.totalCalls)) : 0);
   const rmUnansweredCallsCount = summary?.unansweredCalls ?? Math.max(0, rmTotalCallsCount - rmAnsweredCallsCount);
-  const rmUnansweredByAgentCount = summary?.unansweredByRm ?? 0;
-  const rmActionablePickupCalls = rmAnsweredCallsCount + rmUnansweredByAgentCount;
-  const rmPickupRate = rmActionablePickupCalls > 0
-    ? Math.round((rmAnsweredCallsCount / rmActionablePickupCalls) * 100)
-    : (rmTotalCallsCount > 0 ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100) : (currentRmScorecard?.connectRate ?? 0));
+  const rmClientTotalCalls = summary?.clientTotalCalls ?? currentRmScorecard?.clientTotalCalls ?? rmTotalCallsCount;
+  const rmClientAnsweredCalls = summary?.clientAnsweredCalls ?? currentRmScorecard?.clientAnsweredCalls ?? rmAnsweredCallsCount;
+  const rmClientUnansweredByRm = summary?.clientUnansweredByRm ?? currentRmScorecard?.clientUnansweredByRm ?? summary?.unansweredByRm ?? 0;
+  const rmOtherCallsCount = summary?.otherCategoryCalls ?? Math.max(0, rmTotalCallsCount - rmClientTotalCalls);
+
+  const rmActionablePickupCalls = rmClientAnsweredCalls + rmClientUnansweredByRm;
+  const rmCalculatedPickupRate = summary?.rmPickupRate ?? (rmActionablePickupCalls > 0
+    ? Math.round((rmClientAnsweredCalls / rmActionablePickupCalls) * 100)
+    : 100);
+  const rmPickupRate = rmCalculatedPickupRate;
   const rmConnectRate = rmTotalCallsCount > 0
     ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100)
     : (currentRmScorecard?.connectRate ?? 0);
@@ -1881,7 +1890,7 @@ export default function PcgCallsClient() {
                       <PcgPeriodFilter range={dateRange} start={customStartDate} end={customEndDate} onChange={handlePeriodChange} />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {/* Card 1: Quality Score / IQS */}
                       <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
                         <div className="flex items-center justify-between">
@@ -1916,32 +1925,11 @@ export default function PcgCallsClient() {
                         </p>
                       </div>
 
-                      {/* Card 2: Total Calls Attempted */}
+                      {/* Card 2: RM Pickup Rate */}
                       <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
                         <div className="flex items-center justify-between">
                           <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                            {activePersona === 'agent' ? 'My Total Calls' : 'Total Calls Attempted'}
-                          </p>
-                          <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
-                            {activeDateInfo.short}
-                          </span>
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                            {activePersona === 'agent' ? rmTotalCallsCount : (summary?.totalCalls ?? 0)}
-                          </span>
-                          <span className="text-xs text-[#71717A]">calls</span>
-                        </div>
-                        <p className="text-[11px] text-[#71717A] mt-1">
-                          {activePersona === 'agent' ? rmAnsweredCallsCount : (summary?.answeredCalls ?? 0)} connected · {activeDateInfo.datesOnly}
-                        </p>
-                      </div>
-
-                      {/* Card 3: Client Pickup Rate (Strictly Valid Investor Calls) */}
-                      <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                            Client Pickup Rate
+                            RM Pickup Rate
                           </p>
                           <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
                             {activeDateInfo.short}
@@ -1950,19 +1938,19 @@ export default function PcgCallsClient() {
                         <div className="flex items-baseline gap-2 mt-1">
                           <span className="text-2xl font-bold tabular-nums text-[#111111]">
                             {activePersona === 'agent'
-                              ? rmClientPickupRate
-                              : (summary?.clientPickupRate ?? 0)}%
+                              ? rmCalculatedPickupRate
+                              : (summary?.rmPickupRate ?? 100)}%
                           </span>
                           <span className="text-xs text-[#71717A]">pickup</span>
                         </div>
                         <p className="text-[11px] text-[#71717A] mt-1">
                           {activePersona === 'agent'
-                            ? `${rmClientUnansweredCalls} valid client unanswered · ${rmOtherUnansweredCalls} other category`
-                            : `${summary?.clientUnansweredCalls ?? 0} valid client unanswered · ${summary?.otherUnansweredCalls ?? 0} other category`}
+                            ? `${rmClientAnsweredCalls} valid client calls answered by RM · ${rmClientUnansweredByRm} valid client calls unanswered by RM`
+                            : `${summary?.clientAnsweredCalls ?? 0} valid client calls answered by RM · ${summary?.clientUnansweredByRm ?? 0} valid client calls unanswered by RM`}
                         </p>
                       </div>
 
-                      {/* Card 4: Off-Hours & Weekend Responsiveness */}
+                      {/* Card 3: Off-Hours & Weekend Responsiveness */}
                       <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
                         <div className="flex items-center justify-between">
                           <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
@@ -2029,7 +2017,7 @@ export default function PcgCallsClient() {
                               <tr className="bg-gray-50/60 border-b border-gray-100 text-[#6B6B6B] font-semibold">
                                 <th className="py-3 px-4 text-left">RM Name</th>
                                 <th className="py-3 px-4 text-right">Calls Handled</th>
-                                <th className="py-3 px-4 text-right">Client Pickup Rate</th>
+                                <th className="py-3 px-4 text-right">RM Pickup Rate</th>
                                 <th className="py-3 px-4 text-right">Off-Hours Resp.</th>
                                 <th className="py-3 px-4 text-right">Avg IQS</th>
                                 <th className="py-3 px-4 text-center">Compliance</th>
@@ -2053,9 +2041,9 @@ export default function PcgCallsClient() {
                                     </td>
                                     <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">{rm.totalCalls}</td>
                                     <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">
-                                      <span className="font-bold">{rm.clientPickupRate ?? rm.connectRate}%</span>
+                                      <span className="font-bold">{rm.rmPickupRate ?? 100}%</span>
                                       <span className="block text-[10px] text-gray-400">
-                                        {rm.clientUnansweredCalls ?? 0} unans.
+                                        {rm.clientAnsweredCalls ?? 0} ans.
                                       </span>
                                     </td>
                                     <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">
@@ -2158,8 +2146,8 @@ export default function PcgCallsClient() {
                                         <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.totalCalls}</span>
                                       </div>
                                       <div className="bg-white p-2 rounded-lg border border-zinc-100">
-                                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">Pickup Rate</span>
-                                        <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.clientPickupRate ?? tl.connectRate}%</span>
+                                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">RM Pickup</span>
+                                        <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.rmPickupRate ?? tl.clientPickupRate ?? tl.connectRate}%</span>
                                       </div>
                                       <div className="bg-white p-2 rounded-lg border border-zinc-100">
                                         <span className="text-[10px] uppercase font-bold text-zinc-400 block">Off-Hours</span>

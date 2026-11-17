@@ -23,8 +23,8 @@ interface WebhookItemMatch {
 async function main() {
   const isApply = process.argv.includes('--apply');
   console.log('========================================================================');
-  console.log(' 🔄 PCG Dual Chats Rehydration & Handoff Detection Script');
-  console.log(` 🚀 Mode: ${isApply ? 'APPLY (Writing changes to Neon DB)' : 'DRY RUN (Simulate only)'}`);
+  console.log(' PCG Dual Chats Rehydration & Handoff Detection Script');
+  console.log(` Mode: ${isApply ? 'APPLY (Writing changes to Neon DB)' : 'DRY RUN (Simulate only)'}`);
   console.log('========================================================================\n');
 
   // 1. Build Agent Phone Directory
@@ -312,8 +312,8 @@ async function main() {
   }
 
   console.log('========================================================================');
-  console.log(` 🎯 Total Evaluated Chats Analyzed:  ${evals.length}`);
-  console.log(` 🤝 Total Dual (Co-Handled) Chats:   ${dualChatsCount}`);
+  console.log(` Total Evaluated Chats Analyzed:  ${evals.length}`);
+  console.log(` Total Dual (Co-Handled) Chats:   ${dualChatsCount}`);
   console.log('========================================================================\n');
 
   console.log('All Identified Dual Chats:');
@@ -332,9 +332,9 @@ async function main() {
         process.stdout.write(`\rSaved ${completed} / ${updateQueue.length} records...`);
       }
     }
-    console.log('\n\n✅ Successfully updated database for all dual chats and transcripts!');
+    console.log('\n\nSuccessfully updated database for all dual chats and transcripts.');
   } else {
-    console.log('\n⚠️ This was a DRY RUN. Run with `--apply` to write updates to database.');
+    console.log('\nThis was a DRY RUN. Run with `--apply` to write updates to database.');
   }
 
   process.exit(0);
