@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
-import { isSamePcgAgent, canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
+import { isSamePcgAgent, canonicalizePcgRmName, isPcgAm } from '@/lib/pcg/canonical-names';
+import { resolveParameterAttribution } from '@/lib/pcg/attribution';
 
 export type Period = '7' | '30' | 'custom';
 
@@ -316,10 +317,40 @@ export default function PcgMemberAnalyticsDashboard({
       }
       if (!params || typeof params !== 'object') return;
 
+      const isCoHandled = Boolean(chat.precedingRmName);
+      const isAgentAm = isPcgAm(selectedRm);
+
       chatKeys.forEach(ck => {
         const p = Array.isArray(params) ? params.find((x: any) => x.id === ck) : params[ck];
         if (!p) return;
-        const status = p.status;
+
+        let status = p.status;
+        if (isCoHandled) {
+          const rmName = isAgentAm ? (chat.precedingRmName || '') : selectedRm;
+          const amName = isAgentAm ? selectedRm : (chat.precedingRmName || '');
+          const turns = Array.isArray(chat.transcriptTurns) ? chat.transcriptTurns : undefined;
+          const attr = resolveParameterAttribution(p, turns, rmName, amName);
+
+          if (ck === 'QueryResolution' || attr === 'both') {
+            // Query resolution error is attributed to both RM and AM
+            status = p.status;
+          } else if (isAgentAm) {
+            // Viewing AM: if mistake was made by RM, AM is not penalized
+            if (attr === 'rm') {
+              status = 'Yes';
+            } else {
+              status = p.amStatus || p.status;
+            }
+          } else {
+            // Viewing RM: if mistake was made by AM, RM is not penalized
+            if (attr === 'am') {
+              status = 'Yes';
+            } else {
+              status = p.rmStatus || p.status;
+            }
+          }
+        }
+
         if (status === 'NA' || status === 'N/A' || p.isApplicable === false) return;
 
         const maxScore = p.maxScore || p.weight || 10;

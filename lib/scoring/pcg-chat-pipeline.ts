@@ -4,6 +4,7 @@ import { getIQSGeminiKeys, geminiGenerate } from '@/lib/gemini';
 import { getPcgKbContextForScoring } from '@/lib/pcg/kb';
 import { resolvePcgRmByPhone } from '@/lib/pcg/rm-directory';
 import { canonicalizePcgRmName, isPcgAm } from '@/lib/pcg/canonical-names';
+import { resolveParameterAttribution } from '@/lib/pcg/attribution';
 import { detectPcgChatCategories, isPcgHiringOrRecruitmentChat } from '@/lib/pcg/chat-category';
 
 export interface PcgChatParameterDef {
@@ -673,10 +674,79 @@ Return ONLY a valid JSON object matching this schema:
       }
     }
 
-    const failedBy: 'rm' | 'am' | 'both' | null =
-      (status === 'No' || status === 'Half')
-        ? (aiItem.failedBy === 'rm' || aiItem.failedBy === 'am' || aiItem.failedBy === 'both' ? aiItem.failedBy : (isCoHandled ? 'am' : null))
-        : null;
+    let failedBy: 'rm' | 'am' | 'both' | null = null;
+    let rmStatus: 'Yes' | 'Half' | 'No' | 'NA' = 'NA';
+    let amStatus: 'Yes' | 'Half' | 'No' | 'NA' = 'NA';
+
+    if (isCoHandled) {
+      if (status === 'No' || status === 'Half') {
+        if (def.id === 'QueryResolution') {
+          // Query resolution error is ALWAYS attributed to both RM and AM in dual chats
+          failedBy = 'both';
+          rmStatus = status;
+          amStatus = status;
+        } else {
+          // Other 10 parameters: attribute individually to whichever agent made the mistake
+          const fbRaw = String(aiItem.failedBy || '').toLowerCase();
+          if (fbRaw === 'rm') {
+            failedBy = 'rm';
+            rmStatus = status;
+            amStatus = (aiItem.amStatus === 'Half' || aiItem.amStatus === 'No') ? aiItem.amStatus : (aiItem.amStatus || 'NA');
+          } else if (fbRaw === 'am') {
+            failedBy = 'am';
+            amStatus = status;
+            rmStatus = (aiItem.rmStatus === 'Half' || aiItem.rmStatus === 'No') ? aiItem.rmStatus : (aiItem.rmStatus || 'NA');
+          } else if (fbRaw === 'both') {
+            failedBy = 'both';
+            rmStatus = status;
+            amStatus = status;
+          } else {
+            // Fallback: check aiItem.rmStatus and aiItem.amStatus
+            if (aiItem.rmStatus === 'No' || aiItem.rmStatus === 'Half') {
+              if (aiItem.amStatus === 'No' || aiItem.amStatus === 'Half') {
+                failedBy = 'both';
+                rmStatus = status;
+                amStatus = status;
+              } else {
+                failedBy = 'rm';
+                rmStatus = status;
+                amStatus = aiItem.amStatus || 'NA';
+              }
+            } else if (aiItem.amStatus === 'No' || aiItem.amStatus === 'Half') {
+              failedBy = 'am';
+              amStatus = status;
+              rmStatus = aiItem.rmStatus || 'NA';
+            } else {
+              const primaryRm = isAmConversation ? (precedingRmName || 'RM') : rmName;
+              const closingAm = isAmConversation ? rmName : (precedingRmName || 'AM');
+              const resolvedAttr = resolveParameterAttribution(
+                { id: def.id, reasoning: aiItem.reasoning, quote: aiItem.quote, status },
+                turns,
+                primaryRm,
+                closingAm
+              );
+              failedBy = resolvedAttr;
+              if (resolvedAttr === 'rm') {
+                rmStatus = status;
+                amStatus = 'NA';
+              } else if (resolvedAttr === 'am') {
+                amStatus = status;
+                rmStatus = 'NA';
+              } else {
+                rmStatus = status;
+                amStatus = status;
+              }
+            }
+          }
+        }
+      } else if (status === 'Yes') {
+        rmStatus = 'Yes';
+        amStatus = 'Yes';
+      } else {
+        rmStatus = 'NA';
+        amStatus = 'NA';
+      }
+    }
 
     evaluatedParams[def.id] = {
       id: def.id,
@@ -691,12 +761,12 @@ Return ONLY a valid JSON object matching this schema:
       reasoning: aiItem.reasoning || '',
       cannotTellFlag,
       failedBy,
-      rmStatus: aiItem.rmStatus || (status === 'No' && failedBy === 'rm' ? 'No' : (status === 'Yes' ? 'Yes' : 'NA')),
-      amStatus: aiItem.amStatus || (status === 'No' && failedBy === 'am' ? 'No' : (status === 'Yes' ? 'Yes' : 'NA')),
-      rmReasoning: aiItem.rmReasoning || undefined,
-      amReasoning: aiItem.amReasoning || undefined,
-      rmQuote: aiItem.rmQuote || undefined,
-      amQuote: aiItem.amQuote || undefined,
+      rmStatus: isCoHandled ? rmStatus : (status === 'Yes' ? 'Yes' : status === 'No' ? 'No' : status === 'Half' ? 'Half' : 'NA'),
+      amStatus: isCoHandled ? amStatus : (status === 'Yes' ? 'Yes' : status === 'No' ? 'No' : status === 'Half' ? 'Half' : 'NA'),
+      rmReasoning: aiItem.rmReasoning || (failedBy === 'both' || failedBy === 'rm' ? aiItem.reasoning : undefined),
+      amReasoning: aiItem.amReasoning || (failedBy === 'both' || failedBy === 'am' ? aiItem.reasoning : undefined),
+      rmQuote: aiItem.rmQuote || (failedBy === 'both' || failedBy === 'rm' ? aiItem.quote : undefined),
+      amQuote: aiItem.amQuote || (failedBy === 'both' || failedBy === 'am' ? aiItem.quote : undefined),
     };
   }
 
@@ -711,21 +781,23 @@ Return ONLY a valid JSON object matching this schema:
     const status: 'PASS' | 'FAIL' | 'NA' = (st === 'FAIL' || st === 'FAILED') ? 'FAIL' : (st === 'PASS' || st === 'PASSED' ? 'PASS' : 'NA');
 
     let failedBy: 'rm' | 'am' | 'both' | null = null;
+    let rmStatus: 'PASS' | 'FAIL' | 'NA' = 'NA';
+    let amStatus: 'PASS' | 'FAIL' | 'NA' = 'NA';
+
     if (status === 'FAIL') {
       complianceTripwire = true;
       failureReasons.push(`${c.name}: ${aiCheck.reasoning || 'Breach identified.'} (Quote: "${aiCheck.quote || ''}")`);
 
       if (isCoHandled) {
-        const rawFb = String(aiCheck.failedBy || '').toLowerCase();
-        if (rawFb === 'rm') failedBy = 'rm';
-        else if (rawFb === 'am') failedBy = 'am';
-        else if (rawFb === 'both') failedBy = 'both';
-        else {
-          if (aiCheck.rmStatus === 'FAIL' && aiCheck.amStatus === 'FAIL') failedBy = 'both';
-          else if (aiCheck.rmStatus === 'FAIL') failedBy = 'rm';
-          else if (aiCheck.amStatus === 'FAIL') failedBy = 'am';
-          else failedBy = 'both';
-        }
+        // In dual chats, compliance breaches ALWAYS attribute to BOTH handlers
+        failedBy = 'both';
+        rmStatus = 'FAIL';
+        amStatus = 'FAIL';
+      }
+    } else if (status === 'PASS') {
+      if (isCoHandled) {
+        rmStatus = 'PASS';
+        amStatus = 'PASS';
       }
     }
 
@@ -737,12 +809,12 @@ Return ONLY a valid JSON object matching this schema:
       quote: aiCheck.quote || undefined,
       reasoning: aiCheck.reasoning || '',
       failedBy,
-      rmStatus: aiCheck.rmStatus || (status === 'FAIL' && failedBy === 'rm' ? 'FAIL' : (status === 'PASS' ? 'PASS' : 'NA')),
-      amStatus: aiCheck.amStatus || (status === 'FAIL' && failedBy === 'am' ? 'FAIL' : (status === 'PASS' ? 'PASS' : 'NA')),
-      rmReasoning: aiCheck.rmReasoning || undefined,
-      amReasoning: aiCheck.amReasoning || undefined,
-      rmQuote: aiCheck.rmQuote || undefined,
-      amQuote: aiCheck.amQuote || undefined,
+      rmStatus: isCoHandled ? rmStatus : (status === 'PASS' ? 'PASS' : status === 'FAIL' ? 'FAIL' : 'NA'),
+      amStatus: isCoHandled ? amStatus : (status === 'PASS' ? 'PASS' : status === 'FAIL' ? 'FAIL' : 'NA'),
+      rmReasoning: aiCheck.rmReasoning || aiCheck.reasoning || undefined,
+      amReasoning: aiCheck.amReasoning || aiCheck.reasoning || undefined,
+      rmQuote: aiCheck.rmQuote || aiCheck.quote || undefined,
+      amQuote: aiCheck.amQuote || aiCheck.quote || undefined,
     });
   }
 
@@ -764,10 +836,20 @@ Return ONLY a valid JSON object matching this schema:
   }
 
   const rmMistakesCount = isCoHandled
-    ? Object.values(evaluatedParams).filter(p => p.rmStatus === 'No' || p.failedBy === 'rm' || p.failedBy === 'both').length
+    ? Object.values(evaluatedParams).filter(p => {
+      const s = (p.status || '').trim().toLowerCase();
+      if (s !== 'no' && s !== 'half' && s !== 'partial') return false;
+      if (p.id === 'QueryResolution') return true;
+      return p.failedBy === 'rm' || p.failedBy === 'both' || p.rmStatus === 'No' || p.rmStatus === 'Half';
+    }).length
     : 0;
   const amMistakesCount = isCoHandled
-    ? Object.values(evaluatedParams).filter(p => p.amStatus === 'No' || p.failedBy === 'am' || p.failedBy === 'both').length
+    ? Object.values(evaluatedParams).filter(p => {
+      const s = (p.status || '').trim().toLowerCase();
+      if (s !== 'no' && s !== 'half' && s !== 'partial') return false;
+      if (p.id === 'QueryResolution') return true;
+      return p.failedBy === 'am' || p.failedBy === 'both' || p.amStatus === 'No' || p.amStatus === 'Half';
+    }).length
     : 0;
 
   return {

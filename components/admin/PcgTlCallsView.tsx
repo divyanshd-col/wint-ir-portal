@@ -46,7 +46,7 @@ export interface PCGCall {
   exclusionReason?: string | null;
   callNature?: string | null;
   verdict?: string | null;
-  gates: { status: 'PASS' | 'FAIL'; reason?: string; [key: string]: any };
+  gates: { status: 'PASS' | 'FAIL'; reason?: string;[key: string]: any };
   needsAttention: boolean;
   parameters: CallParameter[];
   aiCoachingTip: string | null;
@@ -187,7 +187,7 @@ export default function PcgTlCallsView({
   globalDateRange = '7d',
   globalCustomStartDate,
   globalCustomEndDate,
-  onPeriodChange = () => {},
+  onPeriodChange = () => { },
 }: PcgTlCallsViewProps) {
   // TL selection: 'all' or specific Team Lead
   const [selectedTl, setSelectedTl] = useState<string>('all');
@@ -379,7 +379,7 @@ export default function PcgTlCallsView({
           <PcgPeriodFilter range={dateRange} start={customStartDate} end={customEndDate} onChange={onPeriodChange} />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Card 1: Avg IQS */}
           <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
             <div className="flex items-center justify-between">
@@ -400,11 +400,11 @@ export default function PcgTlCallsView({
             </p>
           </div>
 
-          {/* Card 2: Total Calls Attempted */}
+          {/* Card 2: RM Pickup Rate */}
           <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                Total Calls Attempted
+                RM Pickup Rate
               </p>
               <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
                 {activeDateInfo.short}
@@ -412,37 +412,16 @@ export default function PcgTlCallsView({
             </div>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                {summary?.totalCalls ?? 0}
-              </span>
-              <span className="text-xs text-[#71717A]">calls</span>
-            </div>
-            <p className="text-[11px] text-[#71717A] mt-1">
-              {summary?.answeredCalls ?? 0} connected · {activeDateInfo.datesOnly}
-            </p>
-          </div>
-
-          {/* Card 3: Client Pickup Rate */}
-          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                Client Pickup Rate
-              </p>
-              <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
-                {activeDateInfo.short}
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                {summary?.clientPickupRate ?? 0}%
+                {summary?.rmPickupRate ?? 100}%
               </span>
               <span className="text-xs text-[#71717A]">pickup</span>
             </div>
             <p className="text-[11px] text-[#71717A] mt-1">
-              {summary?.clientUnansweredCalls ?? 0} valid client unanswered · {summary?.otherUnansweredCalls ?? 0} other category
+              {summary?.clientAnsweredCalls ?? 0} valid client calls answered by RM · {summary?.clientUnansweredByRm ?? 0} valid client calls unanswered by RM
             </p>
           </div>
 
-          {/* Card 4: Excluded Calls */}
+          {/* Card 3: Excluded Calls */}
           <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
@@ -474,11 +453,10 @@ export default function PcgTlCallsView({
                 setSelectedCategory('all');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                selectedCategory === 'all'
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${selectedCategory === 'all'
                   ? 'bg-[#111111] text-white shadow-sm'
                   : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-              }`}
+                }`}
             >
               All Valid Categories
             </button>
@@ -487,11 +465,10 @@ export default function PcgTlCallsView({
                 setSelectedCategory('13_pitching');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                selectedCategory === '13_pitching'
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${selectedCategory === '13_pitching'
                   ? 'bg-[#111111] text-white shadow-sm'
                   : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-              }`}
+                }`}
             >
               13% Club / Pitching {summary?.categoryCounts?.pitching ? `(${summary.categoryCounts.pitching})` : ''}
             </button>
@@ -500,11 +477,10 @@ export default function PcgTlCallsView({
                 setSelectedCategory('upselling');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                selectedCategory === 'upselling'
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${selectedCategory === 'upselling'
                   ? 'bg-[#111111] text-white shadow-sm'
                   : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-              }`}
+                }`}
             >
               Upselling Calls {summary?.categoryCounts?.upselling ? `(${summary.categoryCounts.upselling})` : ''}
             </button>
@@ -513,11 +489,10 @@ export default function PcgTlCallsView({
                 setSelectedCategory('support');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                selectedCategory === 'support'
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${selectedCategory === 'support'
                   ? 'bg-[#111111] text-white shadow-sm'
                   : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-              }`}
+                }`}
             >
               General / Support {summary?.categoryCounts?.support ? `(${summary.categoryCounts.support})` : ''}
             </button>
@@ -526,19 +501,17 @@ export default function PcgTlCallsView({
                 setSelectedCategory('sop_breached');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                selectedCategory === 'sop_breached'
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${selectedCategory === 'sop_breached'
                   ? 'bg-red-700 text-white shadow-sm font-bold'
                   : 'bg-red-50 text-red-800 hover:bg-red-100 border border-red-200'
-              }`}
+                }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${selectedCategory === 'sop_breached' ? 'bg-white' : 'bg-red-600'}`}></span>
               <span>SOP Breached</span>
               {summary?.categoryCounts?.sopBreached != null && summary.categoryCounts.sopBreached > 0 && (
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    selectedCategory === 'sop_breached' ? 'bg-red-900 text-white' : 'bg-red-200 text-red-900'
-                  }`}
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${selectedCategory === 'sop_breached' ? 'bg-red-900 text-white' : 'bg-red-200 text-red-900'
+                    }`}
                 >
                   {summary.categoryCounts.sopBreached}
                 </span>
@@ -555,18 +528,16 @@ export default function PcgTlCallsView({
                 setSearchQuery('');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                isExcludedView
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${isExcludedView
                   ? 'bg-amber-600 text-white shadow-sm font-bold'
                   : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-              }`}
+                }`}
             >
               <span>Excluded Calls</span>
               {summary?.categoryCounts?.excluded != null && (
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    isExcludedView ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-900'
-                  }`}
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${isExcludedView ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-900'
+                    }`}
                 >
                   {summary.categoryCounts.excluded}
                 </span>
@@ -584,9 +555,8 @@ export default function PcgTlCallsView({
                 setSelectedCategory('excluded');
                 setPage(1);
               }}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
-                selectedCategory === 'excluded' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-              }`}
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${selectedCategory === 'excluded' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                }`}
             >
               All Excluded ({summary?.categoryCounts?.excluded ?? 0})
             </button>
@@ -595,9 +565,8 @@ export default function PcgTlCallsView({
                 setSelectedCategory('hiring');
                 setPage(1);
               }}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
-                selectedCategory === 'hiring' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-              }`}
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${selectedCategory === 'hiring' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                }`}
             >
               Hiring / Interviews ({summary?.categoryCounts?.hiring ?? 0})
             </button>
@@ -606,9 +575,8 @@ export default function PcgTlCallsView({
                 setSelectedCategory('internal_personal');
                 setPage(1);
               }}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
-                selectedCategory === 'internal_personal' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-              }`}
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${selectedCategory === 'internal_personal' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                }`}
             >
               Internal / Colleague ({summary?.categoryCounts?.internalPersonal ?? 0})
             </button>
@@ -617,9 +585,8 @@ export default function PcgTlCallsView({
                 setSelectedCategory('delivery_logistics');
                 setPage(1);
               }}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
-                selectedCategory === 'delivery_logistics' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-              }`}
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${selectedCategory === 'delivery_logistics' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                }`}
             >
               Courier &amp; Delivery ({summary?.categoryCounts?.delivery ?? 0})
             </button>
@@ -628,9 +595,8 @@ export default function PcgTlCallsView({
                 setSelectedCategory('telemarketing');
                 setPage(1);
               }}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
-                selectedCategory === 'telemarketing' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-              }`}
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${selectedCategory === 'telemarketing' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                }`}
             >
               Telemarketing &amp; Spam ({summary?.categoryCounts?.telemarketing ?? 0})
             </button>
@@ -639,9 +605,8 @@ export default function PcgTlCallsView({
                 setSelectedCategory('wrong_number');
                 setPage(1);
               }}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
-                selectedCategory === 'wrong_number' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-              }`}
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${selectedCategory === 'wrong_number' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                }`}
             >
               Wrong Number ({summary?.categoryCounts?.wrongNumber ?? 0})
             </button>
@@ -684,9 +649,8 @@ export default function PcgTlCallsView({
                       }
                     }
                   }}
-                  className={`w-20 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                    minIqsFilter !== '' ? 'border-[#111111] ring-1 ring-[#111111]' : 'border-[#E4E4E7] focus:border-[#111111]'
-                  }`}
+                  className={`w-20 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${minIqsFilter !== '' ? 'border-[#111111] ring-1 ring-[#111111]' : 'border-[#E4E4E7] focus:border-[#111111]'
+                    }`}
                 />
 
                 <input
@@ -710,9 +674,8 @@ export default function PcgTlCallsView({
                       }
                     }
                   }}
-                  className={`w-20 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                    maxIqsFilter !== '' ? 'border-[#111111] ring-1 ring-[#111111]' : 'border-[#E4E4E7] focus:border-[#111111]'
-                  }`}
+                  className={`w-20 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${maxIqsFilter !== '' ? 'border-[#111111] ring-1 ring-[#111111]' : 'border-[#E4E4E7] focus:border-[#111111]'
+                    }`}
                 />
 
                 {(minIqsFilter !== '' || maxIqsFilter !== '') && (
@@ -772,9 +735,8 @@ export default function PcgTlCallsView({
                         onClick={() => {
                           setExpandedCallId(isExpanded ? null : call.id);
                         }}
-                        className={`hover:bg-zinc-50 transition-colors cursor-pointer ${
-                          call.needsAttention ? 'bg-zinc-50' : ''
-                        } ${isExpanded ? 'bg-zinc-50 font-medium' : ''}`}
+                        className={`hover:bg-zinc-50 transition-colors cursor-pointer ${call.needsAttention ? 'bg-zinc-50' : ''
+                          } ${isExpanded ? 'bg-zinc-50 font-medium' : ''}`}
                       >
                         {/* Caller / RM */}
                         <td className="py-3 px-4">
@@ -793,11 +755,10 @@ export default function PcgTlCallsView({
                         <td className="py-3 px-4">
                           <div className="flex flex-col gap-1 items-start">
                             <span
-                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold ${
-                                call.isEvaluable === false
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold ${call.isEvaluable === false
                                   ? 'bg-amber-50 text-amber-900 border border-amber-200'
                                   : 'bg-zinc-100 text-zinc-800 border border-zinc-200'
-                              }`}
+                                }`}
                             >
                               {call.isEvaluable === false && <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
                               {call.category}

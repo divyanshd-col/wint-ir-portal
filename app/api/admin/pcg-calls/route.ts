@@ -1079,6 +1079,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')))::int AS client_total_calls,
         COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
         COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
         COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature = 'non_client' OR e.is_evaluable = false OR e.verdict = 'EXCLUDED_NON_CLIENT') AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
         ROUND(
           (
@@ -1538,10 +1539,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       const clientTotalCalls = r.client_total_calls || 0;
       const clientAnsweredCalls = r.client_answered_calls || 0;
       const clientUnansweredCalls = r.client_unanswered_calls || 0;
+      const clientUnansweredByRm = r.client_unanswered_by_rm || 0;
       const otherUnansweredCalls = r.other_unanswered_calls || 0;
       const clientPickupRate = r.client_pickup_rate != null
         ? Math.round(r.client_pickup_rate)
         : (clientTotalCalls > 0 ? Math.round((clientAnsweredCalls / clientTotalCalls) * 100) : 0);
+      const rmPickupRate = (clientAnsweredCalls + clientUnansweredByRm) > 0
+        ? Math.round((clientAnsweredCalls / (clientAnsweredCalls + clientUnansweredByRm)) * 100)
+        : 100;
       const offHoursClientTotal = r.off_hours_client_total || 0;
       const offHoursClientAnswered = r.off_hours_client_answered || 0;
       const offHoursPickupRate = r.off_hours_pickup_rate != null
@@ -1595,6 +1600,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         const combinedClientTotal = (existing.clientTotalCalls || 0) + clientTotalCalls;
         const combinedClientAnswered = (existing.clientAnsweredCalls || 0) + clientAnsweredCalls;
         const combinedClientUnanswered = (existing.clientUnansweredCalls || 0) + clientUnansweredCalls;
+        const combinedClientUnansweredByRm = (existing.clientUnansweredByRm || 0) + clientUnansweredByRm;
         const combinedOtherUnanswered = (existing.otherUnansweredCalls || 0) + otherUnansweredCalls;
         const combinedOffHoursTotal = (existing.offHoursClientTotal || 0) + offHoursClientTotal;
         const combinedOffHoursAnswered = (existing.offHoursClientAnswered || 0) + offHoursClientAnswered;
@@ -1608,8 +1614,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         existing.clientTotalCalls = combinedClientTotal;
         existing.clientAnsweredCalls = combinedClientAnswered;
         existing.clientUnansweredCalls = combinedClientUnanswered;
+        existing.clientUnansweredByRm = combinedClientUnansweredByRm;
         existing.otherUnansweredCalls = combinedOtherUnanswered;
         existing.clientPickupRate = combinedClientTotal > 0 ? Math.round((combinedClientAnswered / combinedClientTotal) * 100) : 0;
+        existing.rmPickupRate = (combinedClientAnswered + combinedClientUnansweredByRm) > 0
+          ? Math.round((combinedClientAnswered / (combinedClientAnswered + combinedClientUnansweredByRm)) * 100)
+          : 100;
         existing.connectRate = existing.clientPickupRate;
         existing.offHoursClientTotal = combinedOffHoursTotal;
         existing.offHoursClientAnswered = combinedOffHoursAnswered;
@@ -1625,8 +1635,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           clientTotalCalls,
           clientAnsweredCalls,
           clientUnansweredCalls,
+          clientUnansweredByRm,
           otherUnansweredCalls,
           clientPickupRate,
+          rmPickupRate,
           connectRate: clientPickupRate,
           offHoursClientTotal,
           offHoursClientAnswered,
@@ -1660,8 +1672,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       const clientTotalCalls = tlRmScorecards.reduce((sum, sc) => sum + (sc.clientTotalCalls || 0), 0);
       const clientAnsweredCalls = tlRmScorecards.reduce((sum, sc) => sum + (sc.clientAnsweredCalls || 0), 0);
       const clientUnansweredCalls = tlRmScorecards.reduce((sum, sc) => sum + (sc.clientUnansweredCalls || 0), 0);
+      const clientUnansweredByRm = tlRmScorecards.reduce((sum, sc) => sum + (sc.clientUnansweredByRm || 0), 0);
       const otherUnansweredCalls = tlRmScorecards.reduce((sum, sc) => sum + (sc.otherUnansweredCalls || 0), 0);
       const clientPickupRate = clientTotalCalls > 0 ? Math.round((clientAnsweredCalls / clientTotalCalls) * 100) : 0;
+      const rmPickupRate = (clientAnsweredCalls + clientUnansweredByRm) > 0
+        ? Math.round((clientAnsweredCalls / (clientAnsweredCalls + clientUnansweredByRm)) * 100)
+        : 100;
       const offHoursClientTotal = tlRmScorecards.reduce((sum, sc) => sum + (sc.offHoursClientTotal || 0), 0);
       const offHoursClientAnswered = tlRmScorecards.reduce((sum, sc) => sum + (sc.offHoursClientAnswered || 0), 0);
       const offHoursPickupRate = offHoursClientTotal > 0 ? Math.round((offHoursClientAnswered / offHoursClientTotal) * 100) : 0;
@@ -1684,9 +1700,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         clientTotalCalls,
         clientAnsweredCalls,
         clientUnansweredCalls,
+        clientUnansweredByRm,
         otherUnansweredCalls,
         connectRate: clientPickupRate,
         clientPickupRate,
+        rmPickupRate,
         offHoursClientTotal,
         offHoursClientAnswered,
         offHoursPickupRate,
@@ -1759,6 +1777,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         clientUnansweredCalls: sRow.client_unanswered_calls || 0,
         clientUnansweredByRm: sRow.client_unanswered_by_rm || 0,
         otherUnansweredCalls: sRow.other_unanswered_calls || 0,
+        otherCategoryCalls: Math.max(0, (sRow.total_calls || 0) - (sRow.client_total_calls || 0)),
+        rmPickupRate: (() => {
+          const ans = sRow.client_answered_calls || 0;
+          const missed = sRow.client_unanswered_by_rm || 0;
+          return (ans + missed) > 0 ? Math.round((ans / (ans + missed)) * 100) : 100;
+        })(),
         clientPickupRate: sRow.client_pickup_rate != null
           ? Math.round(sRow.client_pickup_rate)
           : (sRow.client_total_calls > 0 ? Math.round((sRow.client_answered_calls / sRow.client_total_calls) * 100) : 0),
