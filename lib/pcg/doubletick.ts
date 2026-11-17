@@ -1,6 +1,6 @@
 import { query } from '@/lib/cx/db';
 import { resolvePcgRmByPhone } from '@/lib/pcg/rm-directory';
-import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
+import { canonicalizePcgRmName, isPcgAm } from '@/lib/pcg/canonical-names';
 
 export const PCG_INACTIVITY_HOURS = 48;
 export const PCG_INACTIVITY_MS = PCG_INACTIVITY_HOURS * 60 * 60 * 1000;
@@ -9,7 +9,7 @@ export interface DoubleTickTranscriptItem {
   message_id: string | null;
   event_type: 'message_received' | 'status_update';
   direction: 'inbound' | 'outbound';
-  speaker: 'Customer' | 'RM';
+  speaker: 'Customer' | 'RM' | 'AM';
   text: string | null;
   status: string | null; // 'SENT', 'DELIVERED', 'READ', 'FAILED', or null
   type: string;          // 'TEXT', 'IMAGE', 'AUDIO', 'DOCUMENT', 'template'
@@ -18,6 +18,11 @@ export interface DoubleTickTranscriptItem {
   timestamp: string;
   delivered_at?: string | null;
   read_at?: string | null;
+  agent_phone?: string | null;
+  agent_name?: string | null;
+  role?: string | null;
+  is_handoff?: boolean;
+  handoff_note?: string;
 }
 
 /**
@@ -153,15 +158,27 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
     const assignedRmId = item.assignedTo || item.sentBy || item.userId || null;
     let rmName = item['Sent By'] || item['Assigned Agent'] || null;
 
+    let agentPhone: string | null = null;
+    let agentName: string | null = null;
+    let agentRole: 'rm' | 'am' | 'tl' | null = null;
+
     // Check directory table if rmName is a phone number or null
     const candidatePhone = (rmName && /^\+?\d{8,15}$/.test(rmName)) ? rmName : (assignedRmId && /^\+?\d{8,15}$/.test(assignedRmId) ? assignedRmId : null);
     if (candidatePhone) {
+      agentPhone = String(candidatePhone).replace(/\D/g, '');
       const resolved = await resolvePcgRmByPhone(candidatePhone);
       if (resolved?.rm) {
-        rmName = resolved.rm;
+        rmName = canonicalizePcgRmName(resolved.rm);
+        agentName = rmName;
       }
     } else if (rmName) {
       rmName = canonicalizePcgRmName(rmName);
+      agentName = rmName;
+    }
+
+    if (direction === 'outbound' && agentName) {
+      agentRole = isPcgAm(agentName) ? 'am' : 'rm';
+      speaker = agentRole === 'am' ? 'AM' : 'RM';
     }
     const messageId = item.dtMessageId || item.messageId || item['Message ID'] || item.id || null;
     const status = item.status ? String(item.status).toUpperCase() : null;
@@ -213,6 +230,9 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
           timestamp: messageTime,
           delivered_at: status === 'DELIVERED' ? messageTime : null,
           read_at: status === 'READ' ? messageTime : null,
+          agent_phone: agentPhone,
+          agent_name: agentName,
+          role: agentRole,
         };
 
         const msgDate = new Date(messageTime);
@@ -226,8 +246,8 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
           `INSERT INTO pcg_conversations (
             customer_phone, waba_number, customer_name, customer_id, assigned_rm_id, rm_name,
             transcript, total_messages, last_message_text, last_event_type, last_direction,
-            last_status, last_message_at, raw_payload, status, closed_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13, $14, $15)`,
+            last_status, last_message_at, raw_payload, status, closed_at, is_am
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
           [
             customerPhone,
             wabaNumber,
@@ -244,6 +264,7 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
             JSON.stringify(item),
             initialStatus,
             initialClosedAt,
+            agentRole === 'am',
           ]
         );
       } else {
@@ -316,6 +337,9 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
               timestamp: messageTime,
               delivered_at: status === 'DELIVERED' ? messageTime : null,
               read_at: status === 'READ' ? messageTime : null,
+              agent_phone: agentPhone,
+              agent_name: agentName,
+              role: agentRole,
             };
 
             const isOld = !isNaN(curTime) && (Date.now() - curTime >= PCG_INACTIVITY_MS);
@@ -328,8 +352,8 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
               `INSERT INTO pcg_conversations (
                 customer_phone, waba_number, customer_name, customer_id, assigned_rm_id, rm_name,
                 transcript, total_messages, last_message_text, last_event_type, last_direction,
-                last_status, last_message_at, raw_payload, status, closed_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13, $14, $15)`,
+                last_status, last_message_at, raw_payload, status, closed_at, is_am
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
               [
                 customerPhone,
                 wabaNumber,
@@ -346,10 +370,24 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
                 JSON.stringify(item),
                 convStatus,
                 convClosedAt,
+                agentRole === 'am',
               ]
             );
           } else {
             // Within 48 hours -> Append to existing active session
+            let isHandoff = false;
+            let handoffNote: string | undefined = undefined;
+
+            if (direction === 'outbound' && agentRole === 'am' && agentName) {
+              const priorOutbounds = currentTranscript.filter(t => t.direction === 'outbound' || t.speaker === 'RM' || t.speaker === 'AM');
+              const hasPriorRm = priorOutbounds.some(t => t.role === 'rm' || (t.agent_name && !isPcgAm(t.agent_name)));
+              const hasPriorAmHandoff = priorOutbounds.some(t => t.is_handoff);
+              if (hasPriorRm && !hasPriorAmHandoff) {
+                isHandoff = true;
+                handoffNote = `Conversation handed off to AM (${agentName})`;
+              }
+            }
+
             const newTurn: DoubleTickTranscriptItem = {
               message_id: messageId,
               event_type: eventType,
@@ -363,6 +401,11 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
               timestamp: messageTime,
               delivered_at: status === 'DELIVERED' ? messageTime : null,
               read_at: status === 'READ' ? messageTime : null,
+              agent_phone: agentPhone,
+              agent_name: agentName,
+              role: agentRole,
+              is_handoff: isHandoff || undefined,
+              handoff_note: handoffNote,
             };
 
             currentTranscript.push(newTurn);
@@ -390,9 +433,10 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
                    rm_name = COALESCE($11, rm_name),
                    status = $12,
                    closed_at = $13,
+                   is_am = CASE WHEN $14 = true THEN true ELSE is_am END,
                    updated_at = NOW(),
-                   raw_payload = $14
-               WHERE id = $15`,
+                   raw_payload = $15
+               WHERE id = $16`,
               [
                 JSON.stringify(currentTranscript),
                 totalMessages,
@@ -407,6 +451,7 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
                 rmName,
                 convStatus,
                 convClosedAt,
+                agentRole === 'am',
                 JSON.stringify(item),
                 row.id,
               ]
