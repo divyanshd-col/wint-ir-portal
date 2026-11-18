@@ -55,7 +55,7 @@ export function PatternDialog({ person, patterns, today, edit, onClose, onDone }
       <PersonHead p={person} patterns={patterns} />
       <Field label="Type for the week they start">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {patterns.map(p => (
+          {patterns.filter(p => p.rotates !== false).map(p => (
             <label key={p.id} style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${to === p.id ? 'var(--accent)' : 'var(--qa-border)'}`, borderRadius: 8, padding: '10px 12px', fontSize: 14, color: 'var(--qa-text)', cursor: 'pointer' }}>
               <input type="radio" name="pat" checked={to === p.id} onChange={() => setTo(p.id)} />
               <b>{p.rotates === false ? 'Fixed' : `Type ${p.id}`}</b><span style={{ color: 'var(--qa-text-3)' }}>{p.label}{p.id === person.pattern ? ' · current' : ''}</span>
