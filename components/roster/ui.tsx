@@ -17,6 +17,8 @@ export const dayNum = (iso: string) => parts(iso).d;
 export const wdOf = (iso: string) => parts(iso).wd;
 /** 'Sat, Sun off' */
 export const offShort = (p?: Pattern) => p ? `${p.off_weekdays.map(w => WD[w]).join(', ')} off` : '';
+/** Roster page role label: agents and team leads, plus QA analysts and admins who are on the sheet. */
+export const roleLabel = (role: string) => role === 'tl' ? 'Team lead' : role === 'quality' ? 'QA analyst' : role === 'admin' ? 'Admin' : 'Agent';
 export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?';
 
 export const inputCls = 'border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30';

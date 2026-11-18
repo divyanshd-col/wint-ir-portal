@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { canGoPrev, shiftAnchor, type RosterView } from '@/lib/roster';
 import { CancelDialog, MarkExtraDialog, PatternDialog } from './Dialogs';
-import { Avatar, EmptyState, Switch, btnSecondary, dayNum, fmtDay, fmtMonth, fmtShort, offShort, wdOf, type Person, type RosterData, type Scheduled } from './ui';
+import { Avatar, EmptyState, Switch, btnSecondary, dayNum, roleLabel, fmtDay, fmtMonth, fmtShort, offShort, wdOf, type Person, type RosterData, type Scheduled } from './ui';
 
 type Tab = 'grid' | 'scheduled' | 'channels';
 type Dlg = { t: 'pattern'; p: Person; edit?: Scheduled } | { t: 'mark'; p: Person } | { t: 'cancel'; s: Scheduled } | null;
@@ -122,7 +122,7 @@ export default function RosterClient() {
                 <tr className="grp"><td colSpan={cols}>{k ? `${k}’s team` : 'No team lead assigned'} · {groups.get(k)!.length}</td></tr>
                 {groups.get(k)!.map(p => (
                   <tr key={p.userId}>
-                    <td><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Avatar name={p.name} /><div><div style={{ fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{p.role === 'tl' ? 'Team lead' : 'Agent'}</div></div></div></td>
+                    <td><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Avatar name={p.name} /><div><div style={{ fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{roleLabel(p.role)}</div></div></div></td>
                     <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{p.pattern ? (pat(p.pattern)?.rotates === false ? 'Fixed' : `Type ${p.pattern}`) : 'Not set'}<div style={{ color: 'var(--qa-text-3)' }}>{offShort(pat(p.pattern))}</div></td>
                     {p.cells.map((c, i) => { const d = data.days[i]; return <td key={d} className={`rc k-${c}${d === data.today ? ' today' : ''}${d < data.today ? ' past' : ''}`} title={`${fmtDay(d)}: ${label(c) || 'No roster type set'}`}>{isDay ? label(c) : c === 'off' ? 'Off' : c === 'extra' ? 'Extra' : ''}</td>; })}
                     {anyEdit && <td>{p.canEdit ? <div style={{ display: 'flex', gap: 6 }}><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'pattern', p })}>Change type</button><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'mark', p })}>Mark</button></div> : <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>–</span>}</td>}
@@ -143,7 +143,7 @@ export default function RosterClient() {
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: 12, color: 'var(--qa-text-3)' }}><span>Can be edited or cancelled until the start date</span><span>Past days never change</span></div></div>);
   } else {
     body = (<div style={card}><table className="roster-tbl"><thead><tr><th>Person</th><th style={{ width: 160 }}>Role</th>{CHANNELS.map(c => <th key={c} style={{ width: 90 }}>{c}</th>)}</tr></thead>
-      <tbody>{data.people.map(p => (<tr key={p.userId}><td style={{ fontWeight: 600 }}>{p.name}</td><td style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{p.role === 'tl' ? 'Team lead' : 'Agent'}</td>
+      <tbody>{data.people.map(p => (<tr key={p.userId}><td style={{ fontWeight: 600 }}>{p.name}</td><td style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{roleLabel(p.role)}</td>
         {CHANNELS.map(c => <td key={c}><Switch label={`${c} for ${p.name}`} on={p.channels.includes(c)} disabled={!p.canEdit} onChange={v => setChannel(p, c, v)} /></td>)}</tr>))}</tbody></table>
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: 12, color: 'var(--qa-text-3)' }}><span>Channels are for information only. They aren’t used in any leave decision.</span><span>{anyEdit ? 'Changes save straight away and are logged' : 'View only'}</span></div></div>);
   }

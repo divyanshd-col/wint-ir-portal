@@ -31,7 +31,7 @@ if (week && !isMonday(week)) { console.error(`--week ${week} is not a Monday.`);
 
 const rows = [], problems = [];
 readFileSync(file, 'utf-8').split(/\r?\n/).forEach((line, i) => {
-  if (!line.trim() || /^email\b/i.test(line.trim())) return;
+  if (!line.trim() || /^(email|name)\b/i.test(line.trim())) return;
   const [who, type, wk] = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
   const w = wk || week;
   if (!who || !['1', '2', '3', '4', '5'].includes(type)) return problems.push(`line ${i + 1}: need "email-or-name,type" with type 1-5 (got "${line}")`);
@@ -51,6 +51,7 @@ try {
   // Sheet names are often partial ("Harsh", "Suchinth K"): exact full name first, then a name that starts with it, then the same first name,
   // each only when exactly one person fits. Anything ambiguous is reported, never guessed.
   const find = who => {
+    // An explicit email can be anyone active on the CX side (QA analysts and admins on the sheet are not agents), names only agents/team leads.
     if (who.includes('@')) { const u = byEmail.get(who.toLowerCase()); return u ? { u } : { err: `no user with email ${who}` }; }
     const n = norm(who);
     const tries = [u => norm(u.name) === n, u => (norm(u.name) + ' ').startsWith(n + ' '), u => norm(u.name).split(' ')[0] === n.split(' ')[0] && n.split(' ').length === 1];
@@ -63,11 +64,10 @@ try {
     if (f.err) { problems.push(`line ${r.line}: ${f.err}`); continue; }
     const u = f.u;
     if (u.platform_domain === 'pcg') { problems.push(`line ${r.line}: ${u.email} is PCG, the roster is CX only`); continue; }
-    if (!['agent', 'tl'].includes(u.role)) { problems.push(`line ${r.line}: ${u.email} is ${u.role}, only agents and team leads are on the roster`); continue; }
     if (seen.has(u.user_id)) { problems.push(`line ${r.line}: ${u.name} is listed twice (also matched by an earlier line)`); continue; }
     seen.add(u.user_id); plan.push({ ...r, user: u });
   }
-  console.log('Matches (check these):'); plan.forEach(p => console.log(`  ${p.who.padEnd(24)} -> ${p.user.name} (${p.user.email})  Type ${p.type}`));
+  console.log('Matches (check these):'); plan.forEach(p => console.log(`  ${p.who.padEnd(24)} -> ${p.user.name} (${p.user.email}, ${p.user.role})  Type ${p.type}`));
   const notOnSheet = eligible.filter(u => !seen.has(u.user_id));
   if (notOnSheet.length) console.log(`\n${notOnSheet.length} active CX agents/team leads are not on this sheet: ${notOnSheet.map(u => u.name).join(', ')}`);
   const counts = [1, 2, 3, 4, 5].map(t => plan.filter(p => p.type === t).length);
