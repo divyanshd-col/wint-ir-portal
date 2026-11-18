@@ -1,5 +1,6 @@
 import { query } from '@/lib/cx/db';
 import { canonicalizePcgRmName, isSamePcgAgent } from '@/lib/pcg/canonical-names';
+import { isPcgExcludedInternalPhone } from '@/lib/pcg/excluded-numbers';
 import { TL_TEAMS } from '@/app/api/admin/pcg-calls/route';
 
 export interface PcgScorecardInput {
@@ -323,6 +324,7 @@ export async function generatePcgScorecard(input: PcgScorecardInput): Promise<Ge
     `SELECT 
       r.id AS rec_id,
       r.call_id,
+      r.phone_number,
       r.start_time,
       r.duration_seconds,
       r.call_category,
@@ -351,7 +353,8 @@ export async function generatePcgScorecard(input: PcgScorecardInput): Promise<Ge
   const isExcludedCall = (c: any) =>
     c.is_evaluable === false ||
     c.verdict === 'EXCLUDED_NON_CLIENT' ||
-    c.call_nature === 'non_client';
+    c.call_nature === 'non_client' ||
+    isPcgExcludedInternalPhone(c.phone_number);
 
   // Filter for matching RM using canonical matching
   const rmCalls = calls.filter((c) => isSamePcgAgent(c.effective_rm, canonicalName));
@@ -591,6 +594,7 @@ export async function generatePcgUnifiedScorecard(input: PcgScorecardInput): Pro
     `SELECT 
       r.id AS rec_id,
       r.call_id,
+      r.phone_number,
       r.start_time,
       r.duration_seconds,
       r.call_category,
@@ -618,7 +622,8 @@ export async function generatePcgUnifiedScorecard(input: PcgScorecardInput): Pro
   const isExcludedCallUnified = (c: any) =>
     c.is_evaluable === false ||
     c.verdict === 'EXCLUDED_NON_CLIENT' ||
-    c.call_nature === 'non_client';
+    c.call_nature === 'non_client' ||
+    isPcgExcludedInternalPhone(c.phone_number);
 
   const rmCalls = calls.filter((c) => isSamePcgAgent(c.effective_rm, canonicalName));
   const clientRmCalls = rmCalls.filter((c) => !isExcludedCallUnified(c));
@@ -656,7 +661,9 @@ export async function generatePcgUnifiedScorecard(input: PcgScorecardInput): Pro
     ORDER BY chat_closed_at ASC`,
     [startTimeIso, endTimeIso]
   );
-  const rmChats = chats.filter((c) => isSamePcgAgent(c.rm_name, canonicalName));
+  const rmChats = chats.filter(
+    (c) => isSamePcgAgent(c.rm_name, canonicalName) && !isPcgExcludedInternalPhone(c.customer_phone)
+  );
   const totalChats = rmChats.length;
   const chatValidScores = rmChats.filter((c) => c.iqs_score != null);
   const chatScores = chatValidScores.map((c) => Number(c.iqs_score));

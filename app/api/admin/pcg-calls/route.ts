@@ -6,6 +6,12 @@ import { readConfig } from '@/lib/config';
 import { listUsers } from '@/lib/users';
 import { canonicalizePcgRmName, PCG_RM_TELEPHONY_TO_CANONICAL } from '@/lib/pcg/canonical-names';
 import { resolvePcgAgentSync } from '@/lib/pcg/rm-directory';
+import { isPcgExcludedInternalPhone, pcgExcludedPhoneSql } from '@/lib/pcg/excluded-numbers';
+import {
+  normalizePcgCallParameters,
+  applyPanelOverridesToPcgParameters,
+  recalculatePcgCallScores,
+} from '@/lib/pcg/call-params';
 
 const ROUTE = 'admin/pcg-calls';
 
@@ -246,9 +252,12 @@ function mapRowToCall(r: any, customTeamMap?: Record<string, string>) {
   }
 
   // Determine call category & evaluability
-  const isEvaluable = r.is_evaluable !== false && r.verdict !== 'EXCLUDED_NON_CLIENT';
-  const exclusionReason = r.exclusion_reason || r.rec_exclusion_reason || null;
-  const callNature = r.call_nature || (isEvaluable ? 'client' : 'non_client');
+  const isInternalExcludedPhone = isPcgExcludedInternalPhone(r.phone_number);
+  const isEvaluable = !isInternalExcludedPhone && r.is_evaluable !== false && r.verdict !== 'EXCLUDED_NON_CLIENT';
+  const exclusionReason = isInternalExcludedPhone
+    ? (r.exclusion_reason || r.rec_exclusion_reason || 'Internal company number')
+    : (r.exclusion_reason || r.rec_exclusion_reason || null);
+  const callNature = isInternalExcludedPhone ? 'non_client' : (r.call_nature || (isEvaluable ? 'client' : 'non_client'));
 
   const rawCat = (r.eval_call_category || r.call_category || r.exclusion_reason || r.rec_exclusion_reason || '').toLowerCase();
   let categoryKey:
@@ -262,7 +271,10 @@ function mapRowToCall(r: any, customTeamMap?: Record<string, string>) {
     | 'internal_personal' = 'support';
   let category = 'General / Support';
 
-  if (rawCat.includes('hiring') || rawCat.includes('recruit') || rawCat.includes('interview')) {
+  if (isInternalExcludedPhone) {
+    categoryKey = 'internal_personal';
+    category = 'Internal / Personal';
+  } else if (rawCat.includes('hiring') || rawCat.includes('recruit') || rawCat.includes('interview')) {
     categoryKey = 'hiring';
     category = 'Hiring & Recruitment';
   } else if (rawCat.includes('delivery') || rawCat.includes('logistic') || rawCat.includes('courier') || rawCat.includes('parcel')) {
@@ -291,37 +303,8 @@ function mapRowToCall(r: any, customTeamMap?: Record<string, string>) {
     category = 'Excluded: Non-Client';
   }
 
-  // Parse parameters if available from evaluation
-  let parameters: any[] = [];
-  let rawParams = r.parameters;
-  if (typeof rawParams === 'string') {
-    try { rawParams = JSON.parse(rawParams); } catch { rawParams = []; }
-  }
-  if (rawParams && Array.isArray(rawParams)) {
-    parameters = rawParams.map((p: any) => {
-      const expl = p?.explanation || p?.reasoning || p?.quote || '';
-      return {
-        ...p,
-        quote: expl,
-        explanation: expl,
-        reasoning: expl,
-      };
-    });
-  } else if (rawParams && typeof rawParams === 'object') {
-    parameters = Object.entries(rawParams).map(([key, val]: [string, any]) => {
-      const expl = typeof val === 'object' ? (val?.explanation || val?.reasoning || val?.quote || '') : '';
-      return {
-        id: key,
-        name: val?.name || key,
-        maxScore: val?.maxScore || (key === 'TechnicallyLegal' || key === 'TechnicalLegal' ? 15 : 10),
-        earnedScore: val?.earnedScore ?? (val?.status === 'Yes' || val?.score === 'Yes' || val?.rating === 'Yes' ? (val?.maxScore || 10) : 0),
-        status: val?.status || val?.rating || val?.score || 'NA',
-        quote: expl,
-        explanation: expl,
-        reasoning: expl,
-      };
-    });
-  }
+  // Parse & normalize parameters (handles Array, named-key Object, and legacy numeric-key Object {"0": ...})
+  const parameters = normalizePcgCallParameters(r.parameters);
 
   // Parse transcript turns if available from evaluation
   let transcriptTurns: any[] = [];
@@ -413,7 +396,9 @@ function mapRowToCall(r: any, customTeamMap?: Record<string, string>) {
     isEvaluable,
     exclusionReason,
     callNature,
-    verdict: r.verdict || (isEvaluable ? (complianceTripwire ? 'COMPLIANCE_BREACH' : 'PASS') : 'EXCLUDED_NON_CLIENT'),
+    verdict: isInternalExcludedPhone
+      ? 'EXCLUDED_NON_CLIENT'
+      : (r.verdict || (isEvaluable ? (complianceTripwire ? 'COMPLIANCE_BREACH' : 'PASS') : 'EXCLUDED_NON_CLIENT')),
     gates,
     needsAttention: isEvaluable ? needsAttention : false,
     unansweredBy,
@@ -837,6 +822,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     'internal_personal',
   ].includes(categoryFilter || '');
 
+  const excludedPhoneSql = pcgExcludedPhoneSql('COALESCE(r.phone_number, e.customer_phone)');
+  const isExcludedCallSql = `(e.is_evaluable = false OR r.call_nature = 'non_client' OR e.verdict = 'EXCLUDED_NON_CLIENT' OR ${excludedPhoneSql})`;
+  const isValidClientCallSql = `((r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND NOT ${excludedPhoneSql})`;
+
   if (categoryFilter && categoryFilter !== 'all') {
     if (categoryFilter === 'coaching_available') {
       tableWhereClauses.push(`(e.ai_coaching_tip IS NOT NULL AND e.ai_coaching_tip != '')`);
@@ -849,7 +838,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     } else if (categoryFilter === 'sop_breached') {
       tableWhereClauses.push(`(e.sop_triggers IS NOT NULL AND jsonb_array_length(e.sop_triggers) > 0)`);
     } else if (categoryFilter === 'excluded') {
-      tableWhereClauses.push(`(e.is_evaluable = false OR r.call_nature = 'non_client' OR e.verdict = 'EXCLUDED_NON_CLIENT')`);
+      tableWhereClauses.push(isExcludedCallSql);
     } else if (categoryFilter === 'hiring') {
       tableWhereClauses.push(`(e.call_category = 'hiring' OR r.exclusion_reason ILIKE '%hiring%' OR r.call_category ILIKE '%hiring%')`);
     } else if (categoryFilter === 'telemarketing') {
@@ -859,14 +848,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     } else if (categoryFilter === 'wrong_number') {
       tableWhereClauses.push(`(e.call_category = 'wrong_number' OR r.exclusion_reason ILIKE '%wrong%' OR r.call_category ILIKE '%wrong%')`);
     } else if (categoryFilter === 'internal_personal') {
-      tableWhereClauses.push(`(e.call_category = 'internal_personal' OR r.exclusion_reason ILIKE '%internal%' OR r.exclusion_reason ILIKE '%personal%' OR r.call_category ILIKE '%internal%')`);
+      tableWhereClauses.push(`(e.call_category = 'internal_personal' OR r.exclusion_reason ILIKE '%internal%' OR r.exclusion_reason ILIKE '%personal%' OR r.call_category ILIKE '%internal%' OR ${excludedPhoneSql})`);
     }
   }
 
   // By default, the main evaluated audits table shows evaluable client calls.
   // If an excluded category is explicitly chosen (by agent, TL, or admin), show excluded calls for that filter.
   if (!isExcludedCategory && categoryFilter !== 'all_with_excluded') {
-    tableWhereClauses.push(`(e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client'))`);
+    tableWhereClauses.push(isValidClientCallSql);
   }
 
   if (searchFilter) {
@@ -916,30 +905,29 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       SELECT
         COUNT(*)::int AS total_calls,
         COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
-        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')))::int AS evaluated_calls,
+        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed') AND ${isValidClientCallSql})::int AS evaluated_calls,
         COUNT(*) FILTER (WHERE r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed')::int AS unanswered_calls,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS unanswered_by_rm,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND NOT (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS unanswered_by_customer,
 
         -- Valid Client Calls (all hours)
-        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')))::int AS client_total_calls,
-        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
-        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
-        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql})::int AS client_total_calls,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
         ROUND(
           (
-            COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
-            / NULLIF(COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))), 0) * 100
+            COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE ${isValidClientCallSql}), 0) * 100
           ), 1
         )::float AS client_pickup_rate,
 
         -- Other category / unverified unanswered calls (spam, delivery, personal)
-        COUNT(*) FILTER (WHERE (r.call_nature = 'non_client' OR e.is_evaluable = false OR e.verdict = 'EXCLUDED_NON_CLIENT') AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
+        COUNT(*) FILTER (WHERE ${isExcludedCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
 
         -- Non-Working Hours & Weekend Client Calls (Outside Mon-Fri 10:00 AM - 7:00 PM IST)
         COUNT(*) FILTER (
-          WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client')
-          AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
+          WHERE ${isValidClientCallSql}
           AND (
             EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
             OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
@@ -947,8 +935,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           )
         )::int AS off_hours_client_total,
         COUNT(*) FILTER (
-          WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client')
-          AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
+          WHERE ${isValidClientCallSql}
           AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
           AND (
             EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
@@ -959,8 +946,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         ROUND(
           (
             COUNT(*) FILTER (
-              WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client')
-              AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
+              WHERE ${isValidClientCallSql}
               AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
               AND (
                 EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
@@ -970,8 +956,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             )::numeric
             / NULLIF(
               COUNT(*) FILTER (
-                WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client')
-                AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
+                WHERE ${isValidClientCallSql}
                 AND (
                   EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
                   OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
@@ -983,23 +968,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         )::float AS off_hours_pickup_rate,
         COALESCE(SUM(r.duration_seconds), 0)::bigint AS total_duration_seconds,
         COUNT(DISTINCT COALESCE(NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM'))::int AS active_rms_count,
-        ROUND(AVG(CASE WHEN (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')) THEN e.iqs_score END), 1)::float AS avg_iqs,
-        COUNT(*) FILTER (WHERE e.compliance_tripwire = true)::int AS compliance_flags_count,
-        COUNT(*) FILTER (WHERE e.compliance_tripwire = true OR (e.iqs_score IS NOT NULL AND e.iqs_score < 85 AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))))::int AS needs_attention_count,
+        ROUND(AVG(CASE WHEN ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS avg_iqs,
+        COUNT(*) FILTER (WHERE e.compliance_tripwire = true AND NOT ${excludedPhoneSql})::int AS compliance_flags_count,
+        COUNT(*) FILTER (WHERE (e.compliance_tripwire = true OR (e.iqs_score IS NOT NULL AND e.iqs_score < 85)) AND ${isValidClientCallSql})::int AS needs_attention_count,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.tag ILIKE '%unanswered%' OR r.tag ILIKE '%ring%' OR r.tag ILIKE '%rang%'))::int AS customer_rang_out,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND r.tag ILIKE '%busy%')::int AS customer_busy,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND r.tag ILIKE '%drop%')::int AS rm_dropped_early,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%miss%'))::int AS rm_missed,
-        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%'))::int AS pitching_count,
-        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%'))::int AS upselling_count,
-        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')))::int AS support_count,
-        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.is_evaluable = false OR r.call_nature = 'non_client' OR e.verdict = 'EXCLUDED_NON_CLIENT'))::int AS excluded_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND ${isValidClientCallSql} AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%'))::int AS pitching_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND ${isValidClientCallSql} AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%'))::int AS upselling_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') AND ${isValidClientCallSql})::int AS support_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND ${isExcludedCallSql})::int AS excluded_count,
         COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'hiring' OR r.exclusion_reason ILIKE '%hiring%' OR r.call_category ILIKE '%hiring%'))::int AS hiring_count,
         COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'telemarketing' OR r.exclusion_reason ILIKE '%telemarket%' OR r.exclusion_reason ILIKE '%spam%' OR r.call_category ILIKE '%telemarket%'))::int AS telemarketing_count,
         COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'delivery_logistics' OR r.exclusion_reason ILIKE '%delivery%' OR r.exclusion_reason ILIKE '%courier%' OR r.call_category ILIKE '%delivery%'))::int AS delivery_count,
         COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'wrong_number' OR r.exclusion_reason ILIKE '%wrong%' OR r.call_category ILIKE '%wrong%'))::int AS wrong_number_count,
-        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'internal_personal' OR r.exclusion_reason ILIKE '%internal%' OR r.exclusion_reason ILIKE '%personal%' OR r.call_category ILIKE '%internal%'))::int AS internal_personal_count,
-        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.sop_triggers IS NOT NULL AND jsonb_array_length(e.sop_triggers) > 0))::int AS sop_breached_count
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'internal_personal' OR r.exclusion_reason ILIKE '%internal%' OR r.exclusion_reason ILIKE '%personal%' OR r.call_category ILIKE '%internal%' OR ${excludedPhoneSql}))::int AS internal_personal_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND NOT ${excludedPhoneSql} AND (e.sop_triggers IS NOT NULL AND jsonb_array_length(e.sop_triggers) > 0))::int AS sop_breached_count
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE ${summaryWhereSql}
@@ -1076,22 +1061,21 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
 
         -- Client Calls Breakdown for RM
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')))::int AS client_total_calls,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature = 'non_client' OR e.is_evaluable = false OR e.verdict = 'EXCLUDED_NON_CLIENT') AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql})::int AS client_total_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isExcludedCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
         ROUND(
           (
-            COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
-            / NULLIF(COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))), 0) * 100
+            COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}), 0) * 100
           ), 1
         )::float AS client_pickup_rate,
 
         -- Off-Hours & Weekend Client Calls
         COUNT(*) FILTER (
-          WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client')
-          AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
+          WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}
           AND (
             EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
             OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
@@ -1099,8 +1083,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           )
         )::int AS off_hours_client_total,
         COUNT(*) FILTER (
-          WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client')
-          AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))
+          WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}
           AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
           AND (
             EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
@@ -1111,7 +1094,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         ROUND(
           (
             COUNT(*) FILTER (
-              WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client')
+              WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}
               AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
               AND (
                 EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
@@ -1121,7 +1104,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             )::numeric
             / NULLIF(
               COUNT(*) FILTER (
-                WHERE r.start_time >= $2 AND r.start_time <= $3 AND (r.call_nature IS NULL OR r.call_nature != 'non_client')
+                WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}
                 AND (
                   EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
                   OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
@@ -1132,13 +1115,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           ), 1
         )::float AS off_hours_pickup_rate,
 
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')) THEN e.iqs_score END), 1)::float AS avg_iqs,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')) THEN e.iqs_score END), 1)::float AS current_iqs,
-        ROUND(AVG(CASE WHEN r.start_time >= $1 AND r.start_time < $2 AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')) THEN e.iqs_score END), 1)::float AS prev_iqs,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')) AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%') THEN e.iqs_score END), 1)::float AS pitch_score,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')) AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%') THEN e.iqs_score END), 1)::float AS upsell_score,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')) AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') THEN e.iqs_score END), 1)::float AS support_score,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND e.compliance_tripwire = true)::int AS compliance_flags
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS avg_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS current_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $1 AND r.start_time < $2 AND ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS prev_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%') THEN e.iqs_score END), 1)::float AS pitch_score,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%') THEN e.iqs_score END), 1)::float AS upsell_score,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') THEN e.iqs_score END), 1)::float AS support_score,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND e.compliance_tripwire = true AND NOT ${excludedPhoneSql})::int AS compliance_flags
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE r.start_time >= $1 AND r.start_time <= $3
@@ -1151,24 +1134,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       SELECT
         COUNT(*)::int AS total_calls,
         COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
-        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')))::int AS client_total,
-        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered,
-        COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered,
-        COUNT(*) FILTER (WHERE (r.call_nature = 'non_client' OR e.is_evaluable = false OR e.verdict = 'EXCLUDED_NON_CLIENT') AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql})::int AS client_total,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered,
+        COUNT(*) FILTER (WHERE ${isExcludedCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered,
         ROUND(
           (
-            COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
-            / NULLIF(COUNT(*) FILTER (WHERE (r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT'))), 0) * 100
+            COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE ${isValidClientCallSql}), 0) * 100
           ), 1
         )::float AS client_pickup_rate,
-        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')))::int AS evaluated_calls,
-        ROUND(AVG(CASE WHEN (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client')) THEN e.iqs_score END), 1)::float AS avg_iqs
+        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed') AND ${isValidClientCallSql})::int AS evaluated_calls,
+        ROUND(AVG(CASE WHEN ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS avg_iqs
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE r.start_time >= $1 AND r.start_time <= $2
     `;
 
-    // Query parameter performance per RM and department (skipping NA parameters)
+    // Query parameter performance per RM and department (skipping NA parameters; supports both array and object JSONB)
     const rmParamSql = `
       SELECT
         COALESCE(NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM') AS rm_name,
@@ -1177,14 +1160,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         SUM(CASE WHEN p->>'status' != 'NA' AND p->>'status' != 'N/A' THEN (p->>'maxScore')::numeric ELSE 0 END) AS max_sum
       FROM pcg_call_evaluations e
       JOIN pcg_call_recordings r ON r.call_id = e.call_id
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE
-          WHEN jsonb_typeof(e.parameters::jsonb) = 'array' THEN e.parameters::jsonb
-          ELSE '[]'::jsonb
-        END
-      ) AS p
+      CROSS JOIN LATERAL (
+        SELECT value AS p FROM jsonb_array_elements(
+          CASE WHEN jsonb_typeof(e.parameters::jsonb) = 'array' THEN e.parameters::jsonb ELSE '[]'::jsonb END
+        )
+        UNION ALL
+        SELECT value AS p FROM jsonb_each(
+          CASE WHEN jsonb_typeof(e.parameters::jsonb) = 'object' THEN e.parameters::jsonb ELSE '{}'::jsonb END
+        )
+      ) AS sub
       WHERE r.start_time >= $1 AND r.start_time <= $2
-        AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT') AND (r.call_nature IS NULL OR r.call_nature != 'non_client'))
+        AND p->>'id' IS NOT NULL
+        AND ${isValidClientCallSql}
       GROUP BY 1, 2
     `;
 
@@ -1860,7 +1847,21 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
     if (response) return response;
 
     const body = await req.json();
-    const { action, callId, reason, challengedParams, agentName, status, tlOverrideNote, newScore, parameters } = body;
+    const {
+      action,
+      callId,
+      reason,
+      challengedParams,
+      agentName,
+      status,
+      tlOverrideNote,
+      newScore,
+      parameters,
+      scores,
+      reasoning,
+      gates,
+      callGateResult,
+    } = body;
 
     if (!callId) {
       return NextResponse.json({ error: 'callId is required' }, { status: 400 });
@@ -1926,53 +1927,144 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
       });
     }
 
-    // 2. Action: Resolve Dispute (TL Approve / Reject)
-    if (action === 'resolve_dispute') {
+    // 2 & 3. Action: Resolve Dispute or Override Parameters (TL Review / Override)
+    if (action === 'resolve_dispute' || action === 'override_parameters') {
       const reviewer = (session?.user as any)?.name || 'Team Leader';
-      const finalStatus = status || 'resolved';
-      const note = tlOverrideNote || (status === 'resolved' ? 'Dispute reviewed and resolved by TL.' : 'Dispute reviewed by TL.');
+      const finalStatus = action === 'override_parameters' ? 'overridden' : (status || 'resolved');
+      const note =
+        tlOverrideNote ||
+        (action === 'override_parameters'
+          ? 'TL parameter score override.'
+          : status === 'resolved'
+            ? 'Dispute reviewed and resolved by TL.'
+            : 'Dispute reviewed by TL.');
 
-      await query(
-        `UPDATE pcg_call_evaluations
-         SET
-           dispute_status = $1,
-           tl_override_note = $2,
-           iqs_score = COALESCE($3, iqs_score),
-           reviewed_by = $4,
-           reviewed_at = NOW(),
-           updated_at = NOW()
-         WHERE call_id = $5
-            OR call_id LIKE '%' || $5
-            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $5 OR call_id LIKE '%' || $5 OR id::text = $5 LIMIT 1)`,
-        [finalStatus, note, newScore != null ? Number(newScore) : null, reviewer, callId]
+      // Fetch existing row so we can merge parameter reasoning & recalculate scores deterministically
+      const existingRows = await query<{
+        call_id: string;
+        parameters: any;
+        compliance_tripwire: boolean | null;
+        compliance_reason: string | null;
+        verdict: string | null;
+      }>(
+        `SELECT call_id, parameters, compliance_tripwire, compliance_reason, verdict
+         FROM pcg_call_evaluations
+         WHERE call_id = $1
+            OR call_id LIKE '%' || $1
+            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $1 OR call_id LIKE '%' || $1 OR id::text = $1 LIMIT 1)
+         LIMIT 1`,
+        [callId]
       );
+      const existingRow = existingRows[0];
+      const targetCallId = existingRow?.call_id || callId;
 
-      return NextResponse.json({ success: true, disputeStatus: finalStatus });
-    }
+      // Normalize & merge parameters whenever either `parameters` or `scores` is provided
+      let finalParametersJson: string | null = null;
+      let computedScores: ReturnType<typeof recalculatePcgCallScores> | null = null;
 
-    // 3. Action: Override Parameters (TL Manual Override)
-    if (action === 'override_parameters') {
-      const reviewer = (session?.user as any)?.name || 'Team Leader';
-      const note = tlOverrideNote || 'TL parameter score override.';
-      const score = newScore != null ? Number(newScore) : null;
+      if (scores && typeof scores === 'object' && Object.keys(scores).length > 0) {
+        const mergedParams = applyPanelOverridesToPcgParameters(
+          parameters ?? existingRow?.parameters,
+          scores,
+          reasoning
+        );
+        finalParametersJson = JSON.stringify(mergedParams);
+        computedScores = recalculatePcgCallScores(mergedParams);
+      } else if (parameters != null) {
+        const normalizedParams = normalizePcgCallParameters(parameters);
+        if (normalizedParams.length > 0) {
+          finalParametersJson = JSON.stringify(normalizedParams);
+          computedScores = recalculatePcgCallScores(normalizedParams);
+        }
+      }
+
+      // Compute compliance gate state if gates or callGateResult were submitted
+      let nextTripwire: boolean | null = null;
+      let nextComplianceReason: string | null = null;
+      let nextVerdict: string | null = null;
+      let updateGates = false;
+
+      if (gates && typeof gates === 'object') {
+        updateGates = true;
+        const gateEntries = [
+          { key: 'G1_no_advice', val: gates.G1_no_advice },
+          { key: 'G2_no_fabrication', val: gates.G2_no_fabrication },
+          { key: 'G3_identity_first', val: gates.G3_identity_first },
+        ];
+        const failedGates = gateEntries.filter((g) => {
+          const st = String(g.val?.status || '').toLowerCase();
+          return st === 'fail' || st === 'breach';
+        });
+        const gateResultFail = String(callGateResult || gates.call_gate_result || '').toUpperCase() === 'FAIL';
+        nextTripwire = failedGates.length > 0 || gateResultFail;
+        if (nextTripwire) {
+          const reasons = failedGates
+            .map((g) => String(g.val?.reasoning || '').trim())
+            .filter(Boolean);
+          nextComplianceReason =
+            reasons.join(' | ') || existingRow?.compliance_reason || 'Compliance gate breach marked by TL.';
+          nextVerdict = 'COMPLIANCE_BREACH';
+        } else {
+          nextComplianceReason = null;
+          nextVerdict = existingRow?.verdict === 'EXCLUDED_NON_CLIENT' ? 'EXCLUDED_NON_CLIENT' : 'PASS';
+        }
+      } else if (callGateResult) {
+        updateGates = true;
+        nextTripwire = String(callGateResult).toUpperCase() === 'FAIL';
+        nextComplianceReason = nextTripwire ? (existingRow?.compliance_reason || 'Compliance gate breach marked by TL.') : null;
+        nextVerdict = nextTripwire
+          ? 'COMPLIANCE_BREACH'
+          : (existingRow?.verdict === 'EXCLUDED_NON_CLIENT' ? 'EXCLUDED_NON_CLIENT' : 'PASS');
+      }
+
+      // Always prefer deterministically recalculated IQS from saved parameters so IQS can NEVER contradict parameters
+      const finalIqs = computedScores
+        ? computedScores.iqsScore
+        : (newScore != null && !Number.isNaN(Number(newScore)) ? Number(newScore) : null);
 
       await query(
         `UPDATE pcg_call_evaluations
          SET
            parameters = COALESCE($1::jsonb, parameters),
            iqs_score = COALESCE($2, iqs_score),
-           dispute_status = 'overridden',
-           tl_override_note = $3,
-           reviewed_by = $4,
+           applicable_weight = COALESCE($3, applicable_weight),
+           process_score = COALESCE($4, process_score),
+           communication_score = COALESCE($5, communication_score),
+           customer_service_score = COALESCE($6, customer_service_score),
+           compliance_tripwire = CASE WHEN $7::boolean THEN $8::boolean ELSE compliance_tripwire END,
+           compliance_reason = CASE WHEN $7::boolean THEN $9 ELSE compliance_reason END,
+           verdict = CASE WHEN $7::boolean THEN $10 ELSE verdict END,
+           dispute_status = $11,
+           tl_override_note = $12,
+           reviewed_by = $13,
            reviewed_at = NOW(),
            updated_at = NOW()
-         WHERE call_id = $5
-            OR call_id LIKE '%' || $5
-            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $5 OR call_id LIKE '%' || $5 OR id::text = $5 LIMIT 1)`,
-        [parameters ? JSON.stringify(parameters) : null, score, note, reviewer, callId]
+         WHERE call_id = $14`,
+        [
+          finalParametersJson,
+          finalIqs,
+          computedScores?.applicableWeight ?? null,
+          computedScores?.processScore ?? null,
+          computedScores?.communicationScore ?? null,
+          computedScores?.customerServiceScore ?? null,
+          updateGates,
+          nextTripwire,
+          nextComplianceReason,
+          nextVerdict,
+          finalStatus,
+          note,
+          reviewer,
+          targetCallId,
+        ]
       );
 
-      return NextResponse.json({ success: true, disputeStatus: 'overridden' });
+      return NextResponse.json({
+        success: true,
+        disputeStatus: finalStatus,
+        iqsScore: finalIqs,
+        parameters: finalParametersJson ? JSON.parse(finalParametersJson) : undefined,
+        complianceTripwire: updateGates ? nextTripwire : undefined,
+      });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

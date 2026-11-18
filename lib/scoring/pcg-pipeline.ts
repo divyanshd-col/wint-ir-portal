@@ -3,6 +3,14 @@ import { readConfig } from '@/lib/config';
 import { getIQSGeminiKeys, callGeminiForCall, geminiGenerate } from '@/lib/gemini';
 import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { getPcgKbContextForScoring } from '@/lib/pcg/kb';
+import { isPcgExcludedInternalPhone } from '@/lib/pcg/excluded-numbers';
+import {
+  runPyannoteForPcgBuffer,
+  buildPcgDiarizationPrompt,
+  verifyAndFixPcgSpeakerLabels,
+  type PcgTranscriptTurn,
+  type PyannoteTimelineResult,
+} from '@/lib/pcg/speaker-diarization';
 import { GoogleGenAI } from '@google/genai';
 import { log } from '@/lib/log';
 import { promptOrDefault } from '@/lib/prompt-overrides';
@@ -247,7 +255,213 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
   }
 }
 
-// ── Master System Prompt for PCG 11-Parameter Quality Evaluation ──────────────
+export interface PcgAudioTranscriptionOutput {
+  transcriptTurns: PcgTranscriptTurn[];
+  detectedLanguage: string;
+  deadAirCount: number;
+  interruptionCount: number;
+  usedPyannote: boolean;
+  pyannoteSpeakers: string[];
+  pyannoteSegmentCount: number;
+  speakerMap?: Record<string, string>;
+  speakerIdConfidence?: string;
+  speakerIdReasoning?: string;
+  verification: {
+    swapped: boolean;
+    method: 'deterministic' | 'llm_sanity_check' | 'none';
+    confidence: 'high' | 'medium' | 'low';
+    reason: string;
+  };
+}
+
+/**
+ * Downloads a PCG call recording, runs Pyannote `precision-2` acoustic diarization (with graceful
+ * Gemini-only fallback), transcribes + maps speakers using known RM name & call direction,
+ * recovers any truncated tail turns, and runs post-transcription speaker verification.
+ */
+export async function transcribeAndDiarizePcgAudio(opts: {
+  callId: string;
+  recordingUrl: string;
+  durationSeconds: number;
+  rmName: string;
+  callType?: string | null;
+  geminiKeys: string[];
+  pyannoteApiKey?: string;
+}): Promise<PcgAudioTranscriptionOutput> {
+  const { callId, recordingUrl, durationSeconds, rmName, callType, geminiKeys, pyannoteApiKey } = opts;
+  const apiKey = geminiKeys[0];
+
+  log.info(ROUTE, `Transcribing audio from S3 for PCG call ${callId}: ${recordingUrl}`);
+  const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(recordingUrl, apiKey);
+
+  const durationMins = Math.floor((durationSeconds || 0) / 60);
+  const durationSecs = ((durationSeconds || 0) % 60).toString().padStart(2, '0');
+  const formattedDuration = `${durationMins}:${durationSecs}`;
+
+  const ai = new GoogleGenAI({ apiKey });
+  try {
+    // Pass 1: Pyannote precision-2 acoustic speaker diarization (gracefully falls back to null on error/timeout)
+    const pyannoteTimeline: PyannoteTimelineResult | null = await runPyannoteForPcgBuffer(
+      buffer,
+      mimeType,
+      pyannoteApiKey,
+      callId
+    );
+
+    // Pass 2: Metadata-anchored Gemini transcription + speaker role mapping
+    const diarizationPrompt = buildPcgDiarizationPrompt({
+      formattedDuration,
+      durationSeconds: durationSeconds || 0,
+      rmName,
+      callType,
+      pyannoteTimeline,
+    });
+
+    const diarizationRaw = await callGeminiForCall(
+      geminiKeys,
+      [{
+        parts: [
+          { file_data: { mime_type: mimeType, file_uri: fileUri } },
+          { text: diarizationPrompt },
+        ]
+      }],
+      undefined,
+      180_000
+    );
+
+    const parsedDiarization = JSON.parse(diarizationRaw.replace(/```json/g, '').replace(/```/g, '').trim());
+    const detectedLanguage = parsedDiarization.detected_language || 'English';
+    const deadAirCount = parsedDiarization.dead_air_count || 0;
+    const interruptionCount = parsedDiarization.interruption_count || 0;
+    const speakerMap = parsedDiarization.speaker_map && typeof parsedDiarization.speaker_map === 'object'
+      ? parsedDiarization.speaker_map
+      : undefined;
+    const speakerIdConfidence = parsedDiarization.speaker_id_confidence || undefined;
+    const speakerIdReasoning = parsedDiarization.speaker_id_reasoning || undefined;
+
+    let transcriptTurns: PcgTranscriptTurn[] = (parsedDiarization.turns || []).map((t: any, idx: number) => ({
+      speaker: t.speaker === 'Customer' ? ('Customer' as const) : ('RM' as const),
+      text: t.text || '',
+      time: t.time || '00:00',
+      turnIndex: idx + 1,
+      ...(t.speaker_id ? { speakerId: String(t.speaker_id) } : {}),
+    }));
+
+    // ── Automated Tail Verification & Recovery Pass ─────────────────────────
+    const parseTsSecs = (ts: string): number => {
+      if (!ts) return 0;
+      const parts = ts.trim().split(':');
+      if (parts.length === 2) return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      if (parts.length === 3) return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
+      return 0;
+    };
+
+    const lastTurn = transcriptTurns[transcriptTurns.length - 1];
+    const lastTurnSecs = lastTurn ? parseTsSecs(lastTurn.time) : 0;
+    const callDurationSecs = durationSeconds || 0;
+    const missingTailSeconds = callDurationSecs - lastTurnSecs;
+
+    if (callDurationSecs > 45 && missingTailSeconds > 20) {
+      log.info(ROUTE, `Transcript stopped early at ${lastTurn?.time || '00:00'} (${lastTurnSecs}s), but call duration is ${formattedDuration} (${callDurationSecs}s). Missing ${missingTailSeconds}s. Running tail recovery pass...`);
+      try {
+        const recentAnchor = transcriptTurns
+          .slice(-3)
+          .map((t) => `Turn ${t.turnIndex} [${t.speaker} - ${t.time}]: ${t.text}`)
+          .join('\n');
+        const tailPyannote = pyannoteTimeline
+          ? pyannoteTimeline.mergedSegments
+              .filter((s) => s.end >= Math.max(0, lastTurnSecs - 2))
+              .map((s) => `[${Math.floor(s.start / 60).toString().padStart(2, '0')}:${Math.floor(s.start % 60).toString().padStart(2, '0')} - ${Math.floor(s.end / 60).toString().padStart(2, '0')}:${Math.floor(s.end % 60).toString().padStart(2, '0')}] ${s.speaker}${speakerMap?.[s.speaker] ? ` (${speakerMap[s.speaker]})` : ''}`)
+              .join('\n')
+          : '';
+
+        const tailPrompt = `The previous transcription of this phone call between Wint Wealth RM "${rmName}" and Investor ("Customer") ended early at timestamp ${lastTurn?.time || '00:00'}, but the call audio continues until ${formattedDuration} (${callDurationSecs} seconds).
+
+LAST TRANSCRIBED TURNS (keep speaker roles 100% consistent with these):
+${recentAnchor || '(none)'}
+${tailPyannote ? `\nREMAINING PYANNOTE SPEAKER TIMELINE:\n${tailPyannote}\n` : ''}
+The final instances of the call (closing pleasantries, wrap-up discussion, next steps, 'thank you', 'take care', 'okay bye', and call disconnect) were cut off and must be captured.
+
+Listen to the audio starting from ${lastTurn?.time || '00:00'} until the very end of the recording (${formattedDuration}).
+Transcribe ALL remaining turns of conversation until the call ends into fluent English, maintaining exact "RM" vs "Customer" speaker labels.
+
+Return valid JSON:
+{
+  "tail_turns": [
+    { "speaker": "RM" | "Customer", "time": "MM:SS", "text": "fluent English dialogue..." }
+  ]
+}`;
+
+        const tailRaw = await callGeminiForCall(
+          geminiKeys,
+          [{
+            parts: [
+              { file_data: { mime_type: mimeType, file_uri: fileUri } },
+              { text: tailPrompt },
+            ]
+          }],
+          undefined,
+          120_000
+        );
+
+        const parsedTail = JSON.parse(tailRaw.replace(/```json/g, '').replace(/```/g, '').trim());
+        const newTurns = parsedTail.tail_turns || parsedTail.turns || [];
+        if (Array.isArray(newTurns) && newTurns.length > 0) {
+          let nextIdx = transcriptTurns.length + 1;
+          for (const nt of newTurns) {
+            const ntSecs = parseTsSecs(nt.time);
+            if (ntSecs > lastTurnSecs || (ntSecs === lastTurnSecs && nt.text !== lastTurn?.text)) {
+              transcriptTurns.push({
+                speaker: nt.speaker === 'Customer' ? 'Customer' : 'RM',
+                text: nt.text || '',
+                time: nt.time || formattedDuration,
+                turnIndex: nextIdx++,
+              });
+            }
+          }
+          log.info(ROUTE, `Successfully recovered ${newTurns.length} closing turns. Transcript now has ${transcriptTurns.length} turns ending at ${transcriptTurns[transcriptTurns.length - 1]?.time}.`);
+        }
+      } catch (tailErr: any) {
+        log.warn(ROUTE, `Tail recovery pass encountered error: ${tailErr.message}. Keeping initial ${transcriptTurns.length} turns.`);
+      }
+    }
+
+    // Pass 3: Post-transcription speaker verification & deterministic/LLM auto-swap guard
+    const verification = await verifyAndFixPcgSpeakerLabels(transcriptTurns, {
+      rmName,
+      callType,
+      callId,
+      geminiKeys,
+      diarizationConfidence: speakerIdConfidence,
+    });
+    transcriptTurns = verification.turns;
+
+    return {
+      transcriptTurns,
+      detectedLanguage,
+      deadAirCount,
+      interruptionCount,
+      usedPyannote: Boolean(pyannoteTimeline),
+      pyannoteSpeakers: pyannoteTimeline?.speakerIds || [],
+      pyannoteSegmentCount: pyannoteTimeline?.mergedSegments.length || 0,
+      speakerMap,
+      speakerIdConfidence,
+      speakerIdReasoning,
+      verification: {
+        swapped: verification.swapped,
+        method: verification.method,
+        confidence: verification.confidence,
+        reason: verification.reason,
+      },
+    };
+  } finally {
+    // Always clean up Gemini File API upload to prevent remote storage leaks
+    try {
+      const fileNameMatch = fileUri.split('/files/')[1];
+      if (fileNameMatch) await ai.files.delete({ name: `files/${fileNameMatch}` });
+    } catch { }
+  }
+}
 import { PCG_QUALITY_SYSTEM_PROMPT, PCG_CLASSIFICATION_SYSTEM_PROMPT } from './prompts/pcg';
 export { PCG_QUALITY_SYSTEM_PROMPT, PCG_CLASSIFICATION_SYSTEM_PROMPT };
 
@@ -419,6 +633,71 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
     : (call.agent_name && call.agent_name.trim() && call.agent_name.toLowerCase() !== 'unknown' ? call.agent_name.trim() : 'Unassigned RM');
   const { rm: resolvedRm, tl: resolvedTl } = await resolvePcgAgentAsync(caller);
 
+  // Auto-exclude known internal company phone numbers immediately (0 LLM cost)
+  if (isPcgExcludedInternalPhone(call.phone_number)) {
+    const exclusionText = `Internal company number (${call.phone_number || 'configured internal number'})`;
+    log.info(ROUTE, `Call ${call.call_id} auto-excluded as internal_personal: ${exclusionText}`);
+
+    await query(`
+      INSERT INTO pcg_call_evaluations (
+        call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
+        iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
+        verdict, is_evaluable, exclusion_reason, parameters, transcript_turns, sop_triggers, compliance_tripwire, scored_at, updated_at
+      ) VALUES ($1, $2, $3, $4, 'internal_personal', $5, null, null, null, null, 0, 'EXCLUDED_NON_CLIENT', false, $6, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, false, NOW(), NOW())
+      ON CONFLICT (call_id) DO UPDATE SET
+        rm_name = EXCLUDED.rm_name,
+        tl_name = EXCLUDED.tl_name,
+        customer_phone = EXCLUDED.customer_phone,
+        call_category = 'internal_personal',
+        duration_seconds = EXCLUDED.duration_seconds,
+        iqs_score = null,
+        process_score = null,
+        communication_score = null,
+        customer_service_score = null,
+        applicable_weight = 0,
+        verdict = 'EXCLUDED_NON_CLIENT',
+        is_evaluable = false,
+        exclusion_reason = EXCLUDED.exclusion_reason,
+        parameters = '[]'::jsonb,
+        sop_triggers = '[]'::jsonb,
+        compliance_tripwire = false,
+        compliance_reason = null,
+        scored_at = NOW(),
+        updated_at = NOW()
+    `, [
+      call.call_id,
+      resolvedRm,
+      resolvedTl,
+      call.phone_number,
+      call.duration_seconds || 0,
+      exclusionText,
+    ]);
+
+    await query(`
+      UPDATE pcg_call_recordings
+      SET
+        call_nature = 'non_client',
+        exclusion_reason = $1,
+        call_category = 'internal_personal',
+        category_source = 'internal_number_rule'
+      WHERE call_id = $2
+    `, [exclusionText, call.call_id]);
+
+    return {
+      callId: call.call_id,
+      rmName: resolvedRm,
+      tlName: resolvedTl,
+      category: 'internal_personal',
+      isEvaluable: false,
+      verdict: 'EXCLUDED_NON_CLIENT',
+      exclusionReason: exclusionText,
+      iqs: null,
+      parameters: [],
+      transcriptTurns: [],
+      sopTriggers: [],
+    };
+  }
+
   // If call is unopened / zero duration, mark as NOT_SCOREABLE immediately
   if (!call.duration_seconds || call.duration_seconds < 15 || !call.recording_url) {
     log.info(ROUTE, `Call ${callId} has zero or negligible duration (<15s). Marking as NOT_SCOREABLE.`);
@@ -498,146 +777,26 @@ ${JSON.stringify(transcriptTurns, null, 2)}`;
       }
     }
   } else {
-    log.info(ROUTE, `Transcribing audio from S3 for PCG call ${call.call_id}: ${call.recording_url}`);
-    const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(call.recording_url, apiKey);
+    const pyannoteKey =
+      config.pyannoteApiKey ||
+      process.env.PYANNOTE_API_KEY ||
+      process.env.PYANNOTEAI_API_KEY ||
+      '';
 
-    const durationMins = Math.floor((call.duration_seconds || 0) / 60);
-    const durationSecs = ((call.duration_seconds || 0) % 60).toString().padStart(2, '0');
-    const formattedDuration = `${durationMins}:${durationSecs}`;
+    const audioOut = await transcribeAndDiarizePcgAudio({
+      callId: call.call_id,
+      recordingUrl: call.recording_url,
+      durationSeconds: call.duration_seconds || 0,
+      rmName: resolvedRm,
+      callType: call.call_type,
+      geminiKeys,
+      pyannoteApiKey: pyannoteKey,
+    });
 
-    const diarizationPrompt = `Listen carefully to this phone call between a Wint Wealth Relationship Manager (RM) and an investor (Customer).
-The total duration of this audio recording is exactly ${formattedDuration} (${call.duration_seconds || 0} seconds).
-
-Transcribe the entire call into chronological speaker dialogue turns from 00:00 to the very last second of the audio (${formattedDuration}).
-
-CRITICAL COMPLETION & END-OF-CALL REQUIREMENTS (ABSOLUTELY NO CUTTING OFF):
-- You MUST transcribe the entire conversation from beginning to the absolute end of the audio file.
-- ABSOLUTELY DO NOT STOP EARLY or truncate the transcript. Every second of audio up to ${formattedDuration} must be listened to and transcribed.
-- THE FINAL INSTANCES OF THE CALL ARE MANDATORY:
-  * Capture all closing statements, next-step summaries, customer confirmation, closing pleasantries, 'thank you', 'take care', 'okay bye', and disconnection sign-offs in full detail.
-  * Do not stop transcribing when the main discussion winds down. The final 30–60 seconds of wrap-up and farewell dialogue MUST appear in the transcript.
-  * If there is a brief silence or lookup pause near the end, continue listening until the call terminates.
-- The timestamp of your last transcript turn MUST be near the end of the call (${formattedDuration}).
-
-CRITICAL LANGUAGE & TRANSLATION REQUIREMENT:
-- Detect the primary spoken language (e.g. English, Hindi, Hinglish, Tamil, Telugu, Marathi, Gujarati, etc.).
-- TRANSLATE ALL NON-ENGLISH AND REGIONAL SPEECH DIRECTLY INTO FLUENT, NATURAL ENGLISH.
-- The returned transcript turns must be entirely in English so that quality evaluators, TLs, and managers can read and audit the dialogue clearly.
-- Preserve proper nouns, entity names, and financial terms accurately:
-  * Representative names and investor names (e.g., Sreeram, Nandini, Vishal, Sahil, Shruti, Gaurav, etc.)
-  * "Wint Wealth" or "Wint Wealth PCG" brand mentions
-  * Financial products, bond names, interest/yield rates, fixed deposit mentions, and specific numbers (e.g. "9 to 12%", "13% Club", "Senior Secured Bonds").
-- Identify whether each speaker is "RM" (the Wint Wealth representative) or "Customer" (the client/investor).
-- Provide the timestamp in "MM:SS" format for each turn.
-
-Return valid JSON matching:
-{
-  "detected_language": "English" | "Hindi" | "Hinglish" | "Tamil" | "Telugu" | "Marathi" | "Gujarati" | "Other",
-  "dead_air_count": number,
-  "interruption_count": number,
-  "turns": [
-    { "speaker": "RM" | "Customer", "time": "MM:SS", "text": "fluent English dialogue..." }
-  ]
-}`;
-
-    const ai = new GoogleGenAI({ apiKey });
-    try {
-      const diarizationRaw = await callGeminiForCall(
-        geminiKeys,
-        [{
-          parts: [
-            { file_data: { mime_type: mimeType, file_uri: fileUri } },
-            { text: diarizationPrompt },
-          ]
-        }],
-        undefined,
-        180_000
-      );
-
-      const parsedDiarization = JSON.parse(diarizationRaw.replace(/```json/g, '').replace(/```/g, '').trim());
-      detectedLanguage = parsedDiarization.detected_language || 'English';
-      deadAirCount = parsedDiarization.dead_air_count || 0;
-      interruptionCount = parsedDiarization.interruption_count || 0;
-
-      transcriptTurns = (parsedDiarization.turns || []).map((t: any, idx: number) => ({
-        speaker: t.speaker === 'Customer' ? ('Customer' as const) : ('RM' as const),
-        text: t.text || '',
-        time: t.time || '00:00',
-        turnIndex: idx + 1,
-      }));
-
-      // ── Automated Tail Verification & Recovery Pass ─────────────────────────
-      // If the transcript stopped prematurely (>20s before call duration ends),
-      // execute a targeted closing pass to capture the final instances of the call.
-      const parseTsSecs = (ts: string): number => {
-        if (!ts) return 0;
-        const parts = ts.trim().split(':');
-        if (parts.length === 2) return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-        if (parts.length === 3) return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
-        return 0;
-      };
-
-      const lastTurn = transcriptTurns[transcriptTurns.length - 1];
-      const lastTurnSecs = lastTurn ? parseTsSecs(lastTurn.time) : 0;
-      const callDurationSecs = call.duration_seconds || 0;
-      const missingTailSeconds = callDurationSecs - lastTurnSecs;
-
-      if (callDurationSecs > 45 && missingTailSeconds > 20) {
-        log.info(ROUTE, `Transcript stopped early at ${lastTurn?.time || '00:00'} (${lastTurnSecs}s), but call duration is ${formattedDuration} (${callDurationSecs}s). Missing ${missingTailSeconds}s. Running tail recovery pass to capture final instances...`);
-        try {
-          const tailPrompt = `The previous transcription of this phone call ended early at timestamp ${lastTurn?.time || '00:00'}, but the call audio continues until ${formattedDuration} (${callDurationSecs} seconds).
-The final instances of the call (closing pleasantries, wrap-up discussion, next steps, 'thank you', 'take care', 'okay bye', and call disconnect) were cut off and must be captured.
-
-Listen to the audio starting from ${lastTurn?.time || '00:00'} until the very end of the recording (${formattedDuration}).
-Transcribe ALL remaining turns of conversation until the call ends into fluent English.
-
-Return valid JSON:
-{
-  "tail_turns": [
-    { "speaker": "RM" | "Customer", "time": "MM:SS", "text": "fluent English dialogue..." }
-  ]
-}`;
-
-          const tailRaw = await callGeminiForCall(
-            geminiKeys,
-            [{
-              parts: [
-                { file_data: { mime_type: mimeType, file_uri: fileUri } },
-                { text: tailPrompt },
-              ]
-            }],
-            undefined,
-            120_000
-          );
-
-          const parsedTail = JSON.parse(tailRaw.replace(/```json/g, '').replace(/```/g, '').trim());
-          const newTurns = parsedTail.tail_turns || parsedTail.turns || [];
-          if (Array.isArray(newTurns) && newTurns.length > 0) {
-            let nextIdx = transcriptTurns.length + 1;
-            for (const nt of newTurns) {
-              const ntSecs = parseTsSecs(nt.time);
-              if (ntSecs > lastTurnSecs || (ntSecs === lastTurnSecs && nt.text !== lastTurn?.text)) {
-                transcriptTurns.push({
-                  speaker: nt.speaker === 'Customer' ? 'Customer' : 'RM',
-                  text: nt.text || '',
-                  time: nt.time || formattedDuration,
-                  turnIndex: nextIdx++,
-                });
-              }
-            }
-            log.info(ROUTE, `Successfully recovered ${newTurns.length} closing turns. Transcript now has ${transcriptTurns.length} turns ending at ${transcriptTurns[transcriptTurns.length - 1]?.time}.`);
-          }
-        } catch (tailErr: any) {
-          log.warn(ROUTE, `Tail recovery pass encountered error: ${tailErr.message}. Keeping initial ${transcriptTurns.length} turns.`);
-        }
-      }
-    } finally {
-      // Clean up Gemini File API upload
-      try {
-        const fileNameMatch = fileUri.split('/files/')[1];
-        if (fileNameMatch) await ai.files.delete({ name: `files/${fileNameMatch}` });
-      } catch { }
-    }
+    transcriptTurns = audioOut.transcriptTurns;
+    detectedLanguage = audioOut.detectedLanguage;
+    deadAirCount = audioOut.deadAirCount;
+    interruptionCount = audioOut.interruptionCount;
   }
 
   const transcriptText = transcriptTurns.map((t) => `Turn ${t.turnIndex} [${t.speaker} - ${t.time}]: ${t.text}`).join('\n');
