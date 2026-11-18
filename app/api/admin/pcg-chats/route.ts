@@ -6,6 +6,7 @@ import { query } from '@/lib/cx/db';
 import { canonicalizePcgRmName, isSamePcgAgent, PCG_AM_NAMES, isPcgAm } from '@/lib/pcg/canonical-names';
 import { getPcgRmsForTl } from '@/lib/pcg/rm-directory';
 import { detectPcgChatCategories } from '@/lib/pcg/chat-category';
+import { pcgExcludedPhoneSql } from '@/lib/pcg/excluded-numbers';
 
 const ROUTE = 'admin/pcg-chats';
 
@@ -418,13 +419,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     paramIdx++;
   }
 
-  // Exclude NA (unscoreable / unvoiced) and non-client excluded chats (e.g. hiring, candidate applications) by default
+  // Exclude NA (unscoreable / unvoiced) and non-client excluded chats (e.g. hiring, internal company numbers) by default
+  const excludedChatPhoneSql = pcgExcludedPhoneSql('customer_phone');
   const isNaFilter = categoryFilter === 'not_scoreable' || verdictFilter === 'NOT_SCOREABLE' || verdictFilter === 'not_scoreable' || verdictFilter === 'na' || categoryFilter === 'excluded';
 
   if (isNaFilter) {
-    conditions.push(`(verdict IN ('NOT_SCOREABLE', 'EXCLUDED_NON_CLIENT') OR is_evaluable = false OR iqs_score IS NULL)`);
+    conditions.push(`(verdict IN ('NOT_SCOREABLE', 'EXCLUDED_NON_CLIENT') OR is_evaluable = false OR iqs_score IS NULL OR ${excludedChatPhoneSql})`);
   } else {
-    conditions.push(`(verdict NOT IN ('NOT_SCOREABLE', 'EXCLUDED_NON_CLIENT') AND is_evaluable IS NOT FALSE AND iqs_score IS NOT NULL)`);
+    conditions.push(`(verdict NOT IN ('NOT_SCOREABLE', 'EXCLUDED_NON_CLIENT') AND is_evaluable IS NOT FALSE AND iqs_score IS NOT NULL AND NOT ${excludedChatPhoneSql})`);
   }
 
   // 1. Scope / Date Range conditions for overall summary & top banner KPI cards (independent of table pagination & table-only filters)

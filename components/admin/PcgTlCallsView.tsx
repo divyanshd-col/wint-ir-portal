@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import PcgPeriodFilter, { type PcgPeriod } from './PcgPeriodFilter';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
+import { formatPcgCallIqsScoresForPanel } from '@/lib/pcg/call-params';
 
 interface CallParameter {
   id: string;
@@ -74,88 +75,7 @@ export interface PcgTlCallsViewProps {
 
 // Helpers for CallEvalPanel formatting
 export const formatCallIqsScores = (call: PCGCall) => {
-  const scores: Record<string, string> = {
-    CallOpening: 'Yes',
-    CallClosing: 'Yes',
-    TechnicalLegal: 'Yes',
-    TechnicallyLegal: 'Yes',
-    AllQuestions: 'Yes',
-    Expectation: 'Yes',
-    Process: 'Yes',
-    Grammar: 'Yes',
-    VocabularyGrammar: 'Yes',
-    Fillers: 'Yes',
-    EnergyTone: 'Yes',
-    ActiveListening: 'Yes',
-    Simplifying: 'Yes',
-  };
-  const evidence: Record<string, string> = {};
-
-  if (Array.isArray(call.parameters) && call.parameters.length > 0) {
-    call.parameters.forEach((p, idx) => {
-      const pKey = p.id || `P${idx + 1}`;
-      const status = p.status || 'Yes';
-      const quote = (p as any).explanation || (p as any).reasoning || p.quote || '';
-
-      scores[pKey] = status;
-      if (quote) evidence[pKey] = quote;
-
-      if (pKey === 'TechnicallyLegal' || pKey === 'TechnicalLegal' || p.num === 3 || p.name?.includes('Technically')) {
-        scores['TechnicalLegal'] = status;
-        scores['TechnicallyLegal'] = status;
-        scores['P3'] = status;
-        if (quote) {
-          evidence['TechnicalLegal'] = quote;
-          evidence['TechnicallyLegal'] = quote;
-          evidence['P3'] = quote;
-        }
-      } else if (pKey === 'CallOpening' || p.num === 1) {
-        scores['CallOpening'] = status;
-        scores['P1'] = status;
-        if (quote) evidence['CallOpening'] = quote;
-      } else if (pKey === 'CallClosing' || p.num === 2) {
-        scores['CallClosing'] = status;
-        scores['P2'] = status;
-        if (quote) evidence['CallClosing'] = quote;
-      } else if (pKey === 'AllQuestions' || p.num === 4) {
-        scores['AllQuestions'] = status;
-        scores['P4'] = status;
-        if (quote) evidence['AllQuestions'] = quote;
-      } else if (pKey === 'Expectation' || p.num === 5) {
-        scores['Expectation'] = status;
-        scores['P5'] = status;
-        if (quote) evidence['Expectation'] = quote;
-      } else if (pKey === 'Process' || p.num === 6) {
-        scores['Process'] = status;
-        scores['P6'] = status;
-        if (quote) evidence['Process'] = quote;
-      } else if (pKey === 'VocabularyGrammar' || pKey === 'Grammar' || p.num === 7) {
-        scores['Grammar'] = status;
-        scores['VocabularyGrammar'] = status;
-        scores['P7'] = status;
-        if (quote) evidence['Grammar'] = quote;
-      } else if (pKey === 'FillersDeadAir' || pKey === 'Fillers' || p.num === 8) {
-        scores['Fillers'] = status;
-        scores['FillersDeadAir'] = status;
-        scores['P8'] = status;
-        if (quote) evidence['Fillers'] = quote;
-      } else if (pKey === 'EnergyTone' || p.num === 9) {
-        scores['EnergyTone'] = status;
-        scores['P9'] = status;
-        if (quote) evidence['EnergyTone'] = quote;
-      } else if (pKey === 'ActiveListening' || p.num === 10) {
-        scores['ActiveListening'] = status;
-        scores['P10'] = status;
-        if (quote) evidence['ActiveListening'] = quote;
-      } else if (pKey === 'Simplifying' || p.num === 11) {
-        scores['Simplifying'] = status;
-        scores['P11'] = status;
-        if (quote) evidence['Simplifying'] = quote;
-      }
-    });
-  }
-
-  return { scores, evidence };
+  return formatPcgCallIqsScoresForPanel(call.parameters);
 };
 
 export const formatCallSegments = (call: PCGCall) => {
