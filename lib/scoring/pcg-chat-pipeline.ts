@@ -6,6 +6,7 @@ import { resolvePcgRmByPhone } from '@/lib/pcg/rm-directory';
 import { canonicalizePcgRmName, isPcgAm } from '@/lib/pcg/canonical-names';
 import { resolveParameterAttribution } from '@/lib/pcg/attribution';
 import { detectPcgChatCategories, isPcgHiringOrRecruitmentChat } from '@/lib/pcg/chat-category';
+import { isPcgExcludedInternalPhone } from '@/lib/pcg/excluded-numbers';
 
 export interface PcgChatParameterDef {
   id: string;
@@ -394,6 +395,54 @@ CRITICAL SCORING RULES FOR CO-HANDLED CHAT:
      If ANY compliance gate breach occurs anywhere in the co-handled interaction (committed by either RM or AM), the breach attributes to BOTH handlers ("failedBy": "both", "rmStatus": "FAIL", "amStatus": "FAIL"). Both co-handlers share joint accountability for regulatory compliance. Explain the specific violating message in "rmReasoning" and "amReasoning".
 `;
     }
+  }
+
+  // Auto-exclude conversations involving configured internal company numbers without LLM cost
+  if (isPcgExcludedInternalPhone(conversation.customer_phone)) {
+    const emptyParams: Record<string, EvaluatedParameterResult> = {};
+    for (const p of PCG_CHAT_PARAMETERS) {
+      emptyParams[p.id] = {
+        id: p.id,
+        num: p.num,
+        name: p.name,
+        weight: p.weight,
+        group: p.group,
+        status: 'NA',
+        earnedScore: 0,
+        maxScore: p.weight,
+        reasoning: 'Internal company number — excluded from client quality scoring.',
+      };
+    }
+
+    const emptyCompliance: EvaluatedComplianceResult[] = PCG_CHAT_COMPLIANCE_CHECKS.map(c => ({
+      id: c.id,
+      num: c.num,
+      name: c.name,
+      status: 'NA',
+      reasoning: 'Internal company conversation — compliance gates not applicable.',
+    }));
+
+    return {
+      iqsScore: null,
+      processScore: null,
+      communicationScore: null,
+      customerServiceScore: null,
+      applicableWeight: 0,
+      verdict: 'EXCLUDED_NON_CLIENT',
+      isEvaluable: false,
+      exclusionReason: `Non-client interaction: Internal company number (${conversation.customer_phone})`,
+      parameters: emptyParams,
+      complianceFlags: emptyCompliance,
+      complianceTripwire: false,
+      complianceReason: null,
+      aiCoachingTip: 'Internal company conversations are excluded from client quality scoring.',
+      categories: ['General'],
+      rmName,
+      tlName,
+      isAm: isAmConversation,
+      precedingRmName,
+      isCoHandled,
+    };
   }
 
   // If no RM replies or no real dialogue, mark NOT_SCOREABLE without LLM cost

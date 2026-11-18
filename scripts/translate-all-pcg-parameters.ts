@@ -29,8 +29,7 @@ function areParametersNeedingTranslation(params: any): boolean {
   return false;
 }
 
-async function translateParameters(params: any, keys: string[]): Promise<any> {
-  const isArr = Array.isArray(params);
+async function translateParameters(params: any[], keys: string[]): Promise<any[]> {
   const prompt = `You are a QA Quality Auditor and Translation Specialist for Wint Wealth.
 The following QA evaluation parameter objects contain dialogue citations in Hindi, Hinglish, or regional speech in their "explanation", "reasoning", or "quote" fields (e.g., 'Theek hai, bhaiya', 'Pura HNI ka hi aaya', 'Aap Ahaan se baat kar sakte ho', 'Happy Dhanteras, bhai', etc.).
 
@@ -41,7 +40,7 @@ TASK:
 - Example: "Turn 48 [RM] ('Aap Ahaan se baat kar sakte ho is cheez ke liye')" -> "Turn 48 [RM] ('You can speak to Ahaan regarding this')"
 - Example: "Turn 3 [RM] ('Ha ha, Happy Dhanteras, bhai.')" -> "Turn 3 [RM] ('Ha ha, Happy Dhanteras, brother.')"
 - Keep all parameter IDs, names, maxScores, earnedScores, and statuses ('Yes', 'Half', 'No', 'NA') exactly unchanged.
-- Return ONLY the updated JSON matching the exact input structure.
+- Return ONLY the updated JSON array matching the input schema.
 
 Input Parameters JSON:
 ${JSON.stringify(params, null, 2)}`;
@@ -50,11 +49,23 @@ ${JSON.stringify(params, null, 2)}`;
   const cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
   const parsed = JSON.parse(cleaned);
 
-  if (isArr && (!Array.isArray(parsed) || parsed.length !== params.length)) {
-    throw new Error('Gemini returned invalid or mismatched parameter array');
+  const isArr = Array.isArray(params);
+  if (Array.isArray(parsed)) {
+    if (isArr && parsed.length !== params.length) {
+      throw new Error('Gemini returned mismatched parameter array length');
+    }
+    return parsed;
   }
 
-  return parsed;
+  if (parsed && typeof parsed === 'object') {
+    const asArr = Object.values(parsed);
+    if (isArr && asArr.length !== params.length) {
+      throw new Error('Gemini returned mismatched parameter object length');
+    }
+    return asArr;
+  }
+
+  throw new Error('Gemini returned invalid parameter payload');
 }
 
 async function main() {

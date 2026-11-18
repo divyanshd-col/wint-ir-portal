@@ -13,6 +13,11 @@ import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
 import { ThemeToggle, AccountMenu } from '@/components/shell/TopBar';
 import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
+import {
+  formatPcgCallIqsScoresForPanel,
+  applyPanelOverridesToPcgParameters,
+  recalculatePcgCallScores,
+} from '@/lib/pcg/call-params';
 import SecuritySection from '@/components/settings/SecuritySection';
 import PcgQualityParametersView from './PcgQualityParametersView';
 import PcgTlCallsView from './PcgTlCallsView';
@@ -200,87 +205,7 @@ export const formatCallId = (callId: string | null | undefined, fallbackId: stri
 };
 
 export const formatCallIqsScores = (call: PCGCall) => {
-  const scores: Record<string, string> = {
-    CallOpening: 'Yes',
-    CallClosing: 'Yes',
-    TechnicalLegal: 'Yes',
-    AllQuestions: 'Yes',
-    Expectation: 'Yes',
-    Process: 'Yes',
-    Grammar: 'Yes',
-    Fillers: 'Yes',
-    EnergyTone: 'Yes',
-    ActiveListening: 'Yes',
-    Simplifying: 'Yes',
-  };
-  const evidence: Record<string, string> = {};
-
-  if (Array.isArray(call.parameters) && call.parameters.length > 0) {
-    call.parameters.forEach((p, idx) => {
-      const pKey = p.id || `P${idx + 1}`;
-      const status = p.status || 'Yes';
-      const quote = (p as any).explanation || (p as any).reasoning || p.quote || '';
-
-      scores[pKey] = status;
-      if (quote) evidence[pKey] = quote;
-
-      // Map canonical parameter aliases so CallEvalPanel displays the real evaluation quote
-      if (pKey === 'TechnicallyLegal' || pKey === 'TechnicalLegal' || p.num === 3 || p.name?.includes('Technically')) {
-        scores['TechnicalLegal'] = status;
-        scores['TechnicallyLegal'] = status;
-        scores['P3'] = status;
-        if (quote) {
-          evidence['TechnicalLegal'] = quote;
-          evidence['TechnicallyLegal'] = quote;
-          evidence['P3'] = quote;
-        }
-      } else if (pKey === 'CallOpening' || p.num === 1) {
-        scores['CallOpening'] = status;
-        scores['P1'] = status;
-        if (quote) evidence['CallOpening'] = quote;
-      } else if (pKey === 'CallClosing' || p.num === 2) {
-        scores['CallClosing'] = status;
-        scores['P2'] = status;
-        if (quote) evidence['CallClosing'] = quote;
-      } else if (pKey === 'AllQuestions' || p.num === 4) {
-        scores['AllQuestions'] = status;
-        scores['P4'] = status;
-        if (quote) evidence['AllQuestions'] = quote;
-      } else if (pKey === 'Expectation' || p.num === 5) {
-        scores['Expectation'] = status;
-        scores['P5'] = status;
-        if (quote) evidence['Expectation'] = quote;
-      } else if (pKey === 'Process' || p.num === 6) {
-        scores['Process'] = status;
-        scores['P6'] = status;
-        if (quote) evidence['Process'] = quote;
-      } else if (pKey === 'VocabularyGrammar' || pKey === 'Grammar' || p.num === 7) {
-        scores['Grammar'] = status;
-        scores['VocabularyGrammar'] = status;
-        scores['P7'] = status;
-        if (quote) evidence['Grammar'] = quote;
-      } else if (pKey === 'FillersDeadAir' || pKey === 'Fillers' || p.num === 8) {
-        scores['Fillers'] = status;
-        scores['FillersDeadAir'] = status;
-        scores['P8'] = status;
-        if (quote) evidence['Fillers'] = quote;
-      } else if (pKey === 'EnergyTone' || p.num === 9) {
-        scores['EnergyTone'] = status;
-        scores['P9'] = status;
-        if (quote) evidence['EnergyTone'] = quote;
-      } else if (pKey === 'ActiveListening' || p.num === 10) {
-        scores['ActiveListening'] = status;
-        scores['P10'] = status;
-        if (quote) evidence['ActiveListening'] = quote;
-      } else if (pKey === 'Simplifying' || p.num === 11) {
-        scores['Simplifying'] = status;
-        scores['P11'] = status;
-        if (quote) evidence['Simplifying'] = quote;
-      }
-    });
-  }
-
-  return { scores, evidence };
+  return formatPcgCallIqsScoresForPanel(call.parameters);
 };
 
 export const formatCallSegments = (call: PCGCall) => {
@@ -863,65 +788,74 @@ export default function PcgCallsClient() {
     overrideData: {
       scores: Record<string, string>;
       reasoning: Record<string, string>;
+      gates?: any;
+      callGateResult?: string;
       note: string;
       iqsScore: number | null;
     }
   ) => {
-    const newIqs = overrideData.iqsScore != null ? overrideData.iqsScore : 88;
+    const existingCall =
+      calls.find(c => c.id === callId || c.callId === callId) ||
+      disputes.find(c => c.id === callId || c.callId === callId) ||
+      (activeCallAudit && (activeCallAudit.id === callId || activeCallAudit.callId === callId) ? activeCallAudit : undefined);
+
+    const updatedParams = applyPanelOverridesToPcgParameters(
+      existingCall?.parameters,
+      overrideData.scores,
+      overrideData.reasoning
+    );
+    const recalculated = recalculatePcgCallScores(updatedParams);
+    const newIqs = recalculated.iqsScore;
     const note = overrideData.note || 'TL score override from CallEvalPanel.';
 
-    try {
-      await fetch('/api/admin/pcg-calls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'resolve_dispute',
-          callId,
-          status: 'resolved',
-          newScore: newIqs,
-          tlOverrideNote: note,
-        }),
-      });
-    } catch (e) {
-      console.error('Failed to save panel override API:', e);
+    const res = await fetch('/api/admin/pcg-calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'resolve_dispute',
+        callId,
+        status: 'resolved',
+        newScore: newIqs,
+        parameters: updatedParams,
+        scores: overrideData.scores,
+        reasoning: overrideData.reasoning,
+        gates: overrideData.gates,
+        callGateResult: overrideData.callGateResult,
+        tlOverrideNote: note,
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to save evaluation override');
     }
 
-    const updatedCalls: PCGCall[] = calls.map(c => {
+    const applyUpdate = (c: PCGCall): PCGCall => {
       if (c.id === callId || c.callId === callId) {
-        const updatedParams: CallParameter[] = c.parameters.map(p => {
-          const newStatus = overrideData.scores[p.id];
-          if (newStatus) {
-            const earned = newStatus === 'Yes' ? p.maxScore : newStatus === 'Half' ? Math.round(p.maxScore / 2) : 0;
-            const validStatus: 'Yes' | 'Half' | 'No' = newStatus === 'Half' ? 'Half' : newStatus === 'No' ? 'No' : 'Yes';
-            return {
-              ...p,
-              status: validStatus,
-              earnedScore: earned,
-              quote: overrideData.reasoning[p.id] || p.explanation || p.quote,
-              explanation: overrideData.reasoning[p.id] || p.explanation || p.quote,
-              reasoning: overrideData.reasoning[p.id] || p.reasoning || p.quote,
-            };
-          }
-          return p;
-        });
-
-        const updatedCall: PCGCall = {
+        return {
           ...c,
           iqsScore: newIqs,
-          needsAttention: newIqs < 85,
+          needsAttention: newIqs < 85 || overrideData.callGateResult === 'FAIL',
           parameters: updatedParams,
+          gates: overrideData.gates
+            ? {
+                ...c.gates,
+                ...overrideData.gates,
+                status: overrideData.callGateResult === 'FAIL' ? 'FAIL' : 'PASS',
+              }
+            : c.gates,
           tlOverrideNote: note,
           disputeStatus: c.disputeStatus === 'pending' ? 'resolved' : 'overridden',
         };
-        return updatedCall;
       }
       return c;
-    });
+    };
 
+    const updatedCalls = calls.map(applyUpdate);
     setCalls(updatedCalls);
+    setDisputes(prev => prev.map(applyUpdate));
     if (activeCallAudit && (activeCallAudit.id === callId || activeCallAudit.callId === callId)) {
-      const updated = updatedCalls.find(c => c.id === callId || c.callId === callId);
-      if (updated) setActiveCallAudit(updated);
+      setActiveCallAudit(applyUpdate(activeCallAudit));
     }
     fetchData();
   };
@@ -1313,7 +1247,7 @@ export default function PcgCallsClient() {
                           onDone={() => setExpandedDisputeId(null)}
                           onClose={() => setExpandedDisputeId(null)}
                           onOverrideSubmit={async (overrideData) => {
-                            handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
+                            await await handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
                           }}
                         />
                       )}
@@ -2926,7 +2860,7 @@ export default function PcgCallsClient() {
                 onClose={handleCloseCallAudit}
                 onDisputeRaised={() => fetchData()}
                 onOverrideSubmit={async (overrideData) => {
-                  handleOverrideFromPanel(activeCallAudit.callId || activeCallAudit.id.toString(), overrideData);
+                  await handleOverrideFromPanel(activeCallAudit.callId || activeCallAudit.id.toString(), overrideData);
                 }}
                 onReevaluate={(cid, revisedIqs) => {
                   setCalls((prev) =>
