@@ -139,6 +139,9 @@ export const authOptions: NextAuthOptions = {
         try {
           const { getSkillsForPersona } = await import('./lib/skills');
           token.skills = await getSkillsForPersona(token.role as string);
+          // the page reads its permissions (which tabs to show) from here: without this the top bar only ever knew the role defaults,
+          // so a skill switched on in Settings > Skills (Roster, Leave) never showed its tab
+          session.user.skills = token.skills;
         } catch {
           session.user.skills = token.skills || [];
         }

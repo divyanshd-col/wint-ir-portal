@@ -79,6 +79,7 @@ export function AccountMenu({ name, email, role, roleLabel, showSettings }: { na
 }
 
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
+import NotificationBell from '@/components/shell/NotificationBell';
 
 export default function TopBar() {
   const pathname = usePathname() || '/';
@@ -121,6 +122,7 @@ export default function TopBar() {
               <WorkspaceSwitcher compact={true} />
             </div>
           )}
+          {status === 'authenticated' && (hasNavSkill(role, user?.skills, 'leave:use:access') || hasNavSkill(role, user?.skills, 'leave:approve:access')) && <NotificationBell />}
           <ThemeToggle />
           {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} showSettings={hasNavSkill(role, user?.skills, 'settings:manage:access')} />}
         </div>

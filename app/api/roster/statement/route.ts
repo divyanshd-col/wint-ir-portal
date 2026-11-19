@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { rosterActor, tlOf, withRosterErrors } from '@/lib/roster-server';
 import { leaveReady } from '@/lib/leave-server';
+import { statementFor } from '@/lib/leave-views';
 import { todayIST } from '@/lib/ist';
 import { canSeeBalance, isCxDomain } from '@/lib/roster';
 
@@ -17,14 +18,6 @@ const GET_ = async (req: NextRequest) => {
   if (!canSeeBalance(actor, userId, tl)) return NextResponse.json({ error: 'Forbidden. You can only see your own team’s balances.' }, { status: 403 });
   if (!(await leaveReady({ query }))) return NextResponse.json({ name: u[0].name, balance: 0, entries: [] });
 
-  const rows = await query<{ id: number; at: string; entry_type: string; description: string; leave_id: string | null; amount: string; running: string }>(
-    `SELECT id, to_char(entry_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI') AS at, entry_type, description, leave_id, amount,
-            SUM(amount) OVER (ORDER BY entry_at, id) AS running
-       FROM leave_ledger WHERE user_id = $1 ORDER BY entry_at DESC, id DESC LIMIT 300`, [userId]);
-  const bal = await query<{ b: string }>(`SELECT COALESCE(SUM(amount), 0) AS b FROM leave_ledger WHERE user_id = $1`, [userId]);
-  return NextResponse.json({
-    name: u[0].name, balance: Number(bal[0].b),
-    entries: rows.map(r => ({ id: r.id, at: r.at, type: r.entry_type, description: r.description, leaveId: r.leave_id, amount: Number(r.amount), balance: Number(r.running) })),
-  });
+  return NextResponse.json({ name: u[0].name, ...(await statementFor({ query }, userId)) });
 };
 export const GET = withRosterErrors(GET_);

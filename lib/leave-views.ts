@@ -62,7 +62,7 @@ export async function leaveMe(db: Db, userId: number) {
   const today = toIstDate(new Date());
   const type = patternOn(assigns, today, cycleOf(patterns));
   const pat = patterns.find(p => p.id === type);
-  const base = { ready, rulesMissing: missing, rulesReady: !!rules, negativeLimit: rules?.negativeLimit ?? -2, person: { name: person.name, role: person.role },
+  const base = { userId, ready, rulesMissing: missing, rulesReady: !!rules, negativeLimit: rules?.negativeLimit ?? -2, person: { name: person.name, role: person.role },
     roster: { type, label: pat?.label ?? null, offWeekdays: pat?.off_weekdays ?? [] }, today };
   if (!ready) return { ...base, balance: 0, held: 0, available: 0, upcoming: [], needsAction: [] };
   const balance = await balanceOf(db, userId);
@@ -72,7 +72,7 @@ export async function leaveMe(db: Db, userId: number) {
       WHERE user_id = $1 AND status = ANY($2::text[]) AND end_date >= $3 ORDER BY start_date LIMIT 5`, [userId, [...LIVE_STATUSES, 'In process', 'Pending for approval'], today]);
   const needsAction = await db.query(
     `SELECT leave_id, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date, reject_note, cancel_deadline FROM leave_requests WHERE user_id = $1 AND status = 'Auto-rejected' ORDER BY cancel_deadline`, [userId]);
-  return { ...base, balance, held: quarter(held), available: quarter(balance - held), upcoming, needsAction };
+  return { ...base, userId, balance, held: quarter(held), available: quarter(balance - held), upcoming, needsAction };
 }
 
 /** Requests waiting for this approver, or the ones they have decided. An admin sees everything, a TL their own team. */
@@ -119,6 +119,19 @@ export async function approvalsList(db: Db, viewer: Viewer, tab: 'waiting' | 'do
     out.push(item);
   }
   return out;
+}
+
+/** One person's statement, newest first, with a running balance. The caller checks who may see it. */
+export async function statementFor(db: Db, userId: number) {
+  const rows = await db.query<{ id: number; at: string; entry_type: string; description: string; leave_id: string | null; amount: string; running: string }>(
+    `SELECT id, to_char(entry_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI') AS at, entry_type, description, leave_id, amount,
+            SUM(amount) OVER (ORDER BY entry_at, id) AS running
+       FROM leave_ledger WHERE user_id = $1 ORDER BY entry_at DESC, id DESC LIMIT 300`, [userId]);
+  const held = Number((await db.query<{ h: string }>(`SELECT COALESCE(SUM(d.charge),0) AS h FROM leave_days d JOIN leave_requests q ON q.leave_id = d.leave_id WHERE q.user_id = $1 AND d.kind = 'leave' AND d.state <> 'cancelled' AND q.status = ANY($2::text[])`, [userId, HELD_STATUSES]))[0].h);
+  return {
+    balance: await balanceOf(db, userId), held: quarter(held),
+    entries: rows.map(r => ({ id: r.id, at: r.at, type: r.entry_type, description: r.description, leaveId: r.leave_id, amount: Number(r.amount), balance: Number(r.running) })),
+  };
 }
 
 export async function listNotifications(db: Db, userId: number) {

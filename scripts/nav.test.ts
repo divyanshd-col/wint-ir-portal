@@ -6,12 +6,12 @@ const labels = (role: string, skills?: string[]) => topTabs(role, skills).map((t
 
 test('admin sees four tabs, Chat first, Roster last (Settings moved to the account menu)', () => {
   assert.deepEqual(topTabs('admin', []).map((t) => [t.label, t.href]), [
-    ['Chat', '/chat'], ['MCP', '/analytics'], ['Quality', '/quality'], ['Roster', '/roster'],
+    ['Chat', '/chat'], ['MCP', '/analytics'], ['Quality', '/quality'], ['Roster', '/roster'], ['Leave', '/leave'],
   ]);
 });
 
-test('team lead: Chat, MCP, Quality, Roster', () => {
-  assert.deepEqual(labels('tl'), ['Chat', 'MCP', 'Quality', 'Roster']);
+test('team lead: Chat, MCP, Quality, Roster, Leave (to approve)', () => {
+  assert.deepEqual(labels('tl'), ['Chat', 'MCP', 'Quality', 'Roster', 'Leave']);
 });
 
 test('quality analyst gets Roster; agent does not (the Roster switch is off for agents)', () => {
@@ -19,6 +19,9 @@ test('quality analyst gets Roster; agent does not (the Roster switch is off for 
   assert.deepEqual(labels('agent'), ['Chat', 'Quality']);
   // switching it on for agents is just granting the skill
   assert.deepEqual(labels('agent', ['chat:access', 'quality:analytics:access', 'roster:view:access']), ['Chat', 'Quality', 'Roster']);
+  // the Leave tab works the same way: off until the agent persona is given leave:use:access
+  assert.deepEqual(labels('agent', ['chat:access', 'leave:use:access']), ['Chat', 'Leave']);
+  assert.deepEqual(labels('quality'), ['Chat', 'Quality', 'Roster']);
 });
 
 test('explicit skills override the role defaults', () => {
@@ -42,6 +45,7 @@ test('activeTab - Analytics group, Quality group, Chat, Settings (incl. Token Us
   assert.equal(activeTab('/tokens'), 'settings');
   assert.equal(activeTab('/kb-gaps'), null);
   assert.equal(activeTab('/roster'), 'roster'); // its own tab, not Quality
+  assert.equal(activeTab('/leave'), 'leave'); assert.equal(activeTab('/leave/requests'), 'leave');
   assert.equal(activeTab('/qualityx'), null); // segment match, not prefix match
 });
 

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { requireSkillCheck } from '@/lib/api-guard';
+import { getSkillsForPersona } from '@/lib/skills';
 import { withRosterErrors } from '@/lib/roster-server';
 import { isCxDomain } from '@/lib/roster';
 
 export type LeaveSkill = 'leave:use:access' | 'leave:approve:access';
-export interface LeaveActor { userId: number; role: string; name: string; email: string }
+export interface LeaveActor { userId: number; role: string; name: string; email: string; can: { use: boolean; approve: boolean } }
 
 /** Signed in, active, on the CX side, and holding one of the skills. Skills are what switch the leave pages on for a group. */
 export async function leaveActor(skill: LeaveSkill | LeaveSkill[]): Promise<{ actor: LeaveActor; response: null } | { actor: null; response: NextResponse }> {
@@ -15,7 +16,11 @@ export async function leaveActor(skill: LeaveSkill | LeaveSkill[]): Promise<{ ac
   const rows = await query<{ user_id: number; role: string; name: string; platform_domain: string }>(
     `SELECT user_id, role, name, platform_domain FROM users WHERE LOWER(email) = $1 AND status = 'active'`, [email]);
   if (!rows[0] || !isCxDomain(rows[0].platform_domain)) return { actor: null, response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  return { actor: { userId: rows[0].user_id, role: rows[0].role, name: rows[0].name, email }, response: null };
+  const user = session.user as { skills?: string[] };
+  // the session may carry no skills: then it is the persona's, like requireSkillCheck does
+  const skills = user.skills ?? await getSkillsForPersona(rows[0].role);
+  const has = (s: string) => rows[0].role === 'admin' || skills.includes(s);
+  return { actor: { userId: rows[0].user_id, role: rows[0].role, name: rows[0].name, email, can: { use: has('leave:use:access') && ['agent', 'tl', 'quality'].includes(rows[0].role), approve: has('leave:approve:access') && ['tl', 'admin'].includes(rows[0].role) } }, response: null };
 }
 
 export const MISSING = 'Leave tables are missing. Run migrations 038 and 039 on this database.';

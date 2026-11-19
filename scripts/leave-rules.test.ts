@@ -113,3 +113,21 @@ test('approver actions: TL approves only what stays at TL level; admin anything;
 test('11:59 pm IST deadline is a real instant', () => {
   assert.equal(endOfDayIST('2026-11-11').toISOString(), '2026-11-11T18:29:00.000Z');
 });
+
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+test('leave permissions: off for agents and QA by default, TLs approve, admins both; the migration agrees', () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const read = (p: string) => readFileSync(join(root, p), 'utf8');
+  for (const f of ['components/RoleShell.tsx', 'middleware.ts', 'lib/skills.ts', 'lib/nav.ts']) {
+    const s = read(f);
+    const agent = /agent: \[([^\]]*)\]/.exec(s)?.[1] ?? '', quality = /quality: \[([^\]]*)\]/.exec(s)?.[1] ?? '', tl = /tl: \[([^\]]*)\]/.exec(s)?.[1] ?? '';
+    assert.ok(!agent.includes('leave:') && !quality.includes('leave:'), `${f}: agents and QA have no leave pages until switched on`);
+    assert.ok(tl.includes('leave:approve:access') && !tl.includes('leave:use:access'), `${f}: a TL approves, and uses leave only once switched on`);
+  }
+  const mig = read('db/migrations/039_leave_requests.sql');
+  assert.match(mig, /\('admin', 'leave:use:access', 'system'\), \('admin', 'leave:approve:access', 'system'\)/);
+  assert.match(mig, /\('tl', 'leave:approve:access', 'system'\)/);
+  assert.ok(!/\('(agent|quality)', 'leave:/.test(mig));
+});

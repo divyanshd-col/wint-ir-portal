@@ -12,7 +12,12 @@ const POST_ = async (req: NextRequest) => {
   const b = await req.json().catch(() => ({}));
   const input: ApplyInput = { start: String(b.start ?? ''), startHalf: b.startHalf ?? 'full', end: String(b.end ?? b.start ?? ''), endHalf: b.endHalf ?? 'full' };
   await sweepDue(withTransaction, { query });
-  const p = await computeRequest({ query }, actor.userId, input, { appliedAt: new Date() });
+  let excludeLeaveId: string | undefined;
+  if (typeof b.excludeLeaveId === 'string') { // when editing: the request being edited must not clash with itself
+    const own = await query<{ leave_id: string }>(`SELECT leave_id FROM leave_requests WHERE leave_id = $1 AND user_id = $2`, [b.excludeLeaveId, actor.userId]);
+    excludeLeaveId = own[0]?.leave_id;
+  }
+  const p = await computeRequest({ query }, actor.userId, input, { appliedAt: new Date(), excludeLeaveId });
   return NextResponse.json({
     days: p.days, leave: p.leave, lop: p.lop, stretch: p.stretch, run: p.run, noticeNeeded: p.noticeNeeded, noticeGiven: p.noticeGiven,
     outcome: p.decision.outcome, deciderText: p.deciderText, why: p.why, balance: p.balance, held: p.held, available: p.available, balanceAfter: p.balanceAfter,
