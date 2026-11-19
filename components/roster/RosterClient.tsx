@@ -2,11 +2,11 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { canGoPrev, shiftAnchor, type RosterView } from '@/lib/roster';
-import { CancelDialog, MarkExtraDialog, PatternDialog } from './Dialogs';
+import { CancelDialog, MarkExtraDialog, PatternDialog, TeamLeadDialog } from './Dialogs';
 import { Avatar, EmptyState, Switch, btnSecondary, dayNum, roleLabel, fmtDay, fmtMonth, fmtShort, offShort, wdOf, type Person, type RosterData, type Scheduled } from './ui';
 
-type Tab = 'grid' | 'scheduled' | 'channels';
-type Dlg = { t: 'pattern'; p: Person; edit?: Scheduled } | { t: 'mark'; p: Person } | { t: 'cancel'; s: Scheduled } | null;
+type Tab = 'grid' | 'scheduled' | 'channels' | 'teams';
+type Dlg = { t: 'pattern'; p: Person; edit?: Scheduled } | { t: 'mark'; p: Person } | { t: 'cancel'; s: Scheduled } | { t: 'tl'; p: Person; tl: Person } | null;
 const CHANNELS = ['Chats', 'Calls', 'Emails', 'ORM'];
 const card: React.CSSProperties = { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 12, overflow: 'hidden' };
 
@@ -20,7 +20,6 @@ export default function RosterClient() {
   const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async (v: RosterView, a: string | null) => {
-    setError(null);
     try {
       const r = await fetch(`/api/roster?view=${v}${a ? `&date=${a}` : ''}`);
       if (!r.ok) {
@@ -29,13 +28,13 @@ export default function RosterClient() {
         return;
       }
       const d: RosterData = await r.json();
-      setData(d); setAnchor(d.anchor); setView(d.view);
+      setError(null); setData(d); setAnchor(d.anchor); setView(d.view);
     } catch { setError('Couldn’t reach the server. Try again in a moment.'); }
   }, []);
   useEffect(() => {
     let v: RosterView = 'week';
     try { const saved = localStorage.getItem('wint_roster_view'); if (saved === 'day' || saved === 'week' || saved === 'month') v = saved; } catch { /* storage blocked: week */ }
-    load(v, null);
+    queueMicrotask(() => { void load(v, null); }); // first load after mount
   }, [load]);
   const reload = () => load(view, anchor);
   const changeView = (v: RosterView) => { try { localStorage.setItem('wint_roster_view', v); } catch { /* ignore */ } load(v, anchor); };
@@ -141,6 +140,14 @@ export default function RosterClient() {
             <td>{fmtDay(s.starts_on)}</td><td style={{ fontSize: 12 }}>{s.set_by ?? '–'}<div style={{ color: 'var(--qa-text-3)' }}>{new Date(s.set_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST</div></td>
             {anyEdit && <td>{s.canEdit && <div style={{ display: 'flex', gap: 6 }}><button type="button" style={btnSecondary} onClick={() => { const p = data.people.find(x => x.userId === s.user_id); if (p) setDlg({ t: 'pattern', p, edit: s }); }}>Edit</button><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'cancel', s })}>Cancel</button></div>}</td>}</tr>))}</tbody></table>
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: 12, color: 'var(--qa-text-3)' }}><span>Can be edited or cancelled until the start date</span><span>Past days never change</span></div></div>);
+  } else if (tab === 'teams') {
+    const tls = data.people.filter(p => p.role === 'tl');
+    const agents = data.people.filter(p => p.role === 'agent');
+    body = (<div style={card}><table className="roster-tbl"><thead><tr><th>Person</th><th style={{ width: 160 }}>Role</th><th style={{ width: 260 }}>Team lead</th></tr></thead>
+      <tbody>{agents.map(p => (<tr key={p.userId}><td style={{ fontWeight: 600 }}>{p.name}</td><td style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{roleLabel(p.role)}</td>
+        <td><select className="border border-gray-200 rounded-xl px-3 py-1.5 text-sm text-gray-700 bg-white" aria-label={`Team lead for ${p.name}`} value={p.tlUserId ?? ''} onChange={e => { const tl = tls.find(t => t.userId === Number(e.target.value)); if (tl) setDlg({ t: 'tl', p, tl }); }}>
+          {p.tlUserId === null && <option value="" disabled>Not set</option>}{tls.map(t => <option key={t.userId} value={t.userId}>{t.name}</option>)}</select></td></tr>))}</tbody></table>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: 12, color: 'var(--qa-text-3)' }}><span>Each agent reports to one team lead. A team lead can change the roster of their own team only.</span><span>Changes apply from today and are logged</span></div></div>);
   } else {
     body = (<div style={card}><table className="roster-tbl"><thead><tr><th>Person</th><th style={{ width: 160 }}>Role</th>{CHANNELS.map(c => <th key={c} style={{ width: 90 }}>{c}</th>)}</tr></thead>
       <tbody>{data.people.map(p => (<tr key={p.userId}><td style={{ fontWeight: 600 }}>{p.name}</td><td style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{roleLabel(p.role)}</td>
@@ -152,10 +159,11 @@ export default function RosterClient() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 16 }}><h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text)', margin: 0 }}>Roster</h1>{sub && <div style={{ fontSize: 13, color: 'var(--qa-text-3)', marginTop: 2 }}>{sub}</div>}</div>
-      {data && !error && <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>{tabBtn('grid', 'Calendar')}{tabBtn('scheduled', 'Scheduled changes', data.scheduled.length)}{tabBtn('channels', 'Work channels')}</div>}
+      {data && !error && <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>{tabBtn('grid', 'Calendar')}{tabBtn('scheduled', 'Scheduled changes', data.scheduled.length)}{tabBtn('channels', 'Work channels')}{data.viewer.role === 'admin' && tabBtn('teams', 'Team leads')}</div>}
       {body}
       {data && dlg?.t === 'pattern' && <PatternDialog key={dlg.p.userId + (dlg.edit?.id ?? 0)} person={dlg.p} patterns={data.patterns} today={data.today} edit={dlg.edit} onClose={() => setDlg(null)} onDone={done} />}
       {data && dlg?.t === 'mark' && <MarkExtraDialog person={dlg.p} patterns={data.patterns} days={data.days} today={data.today} onClose={() => setDlg(null)} onDone={done} />}
+      {dlg?.t === 'tl' && <TeamLeadDialog person={dlg.p} tl={dlg.tl} onClose={() => setDlg(null)} onDone={done} />}
       {dlg?.t === 'cancel' && <CancelDialog s={dlg.s} onClose={() => setDlg(null)} onDone={done} />}
       {toast && <div role="status" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--qa-text)', color: 'var(--qa-on-text)', padding: '10px 16px', borderRadius: 10, fontSize: 13, zIndex: 60 }}>{toast}</div>}
     </div>

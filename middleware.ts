@@ -64,7 +64,6 @@ export async function middleware(req: NextRequest) {
       'quality:chat_eval:access', 'quality:call_eval:access',
     ],
     agent: [
-      'roster:view:access',
       'chat:access', 'quality:analytics:access', 'agent:my_analytics:access',
       'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access',
     ],

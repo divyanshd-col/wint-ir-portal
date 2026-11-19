@@ -95,7 +95,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO persona_skills (persona_id, skill_id, assigned_by) VALUES
   ('admin','roster:view:access','system'),('admin','roster:manage:access','system'),
   ('tl','roster:view:access','system'),('tl','roster:manage:access','system'),
-  ('quality','roster:view:access','system'),('agent','roster:view:access','system')
+  ('quality','roster:view:access','system')
 ON CONFLICT (persona_id, skill_id) DO NOTHING;
 
 -- (No starting pattern is seeded: roster types come from the rotating roster in 036 / the import script.)

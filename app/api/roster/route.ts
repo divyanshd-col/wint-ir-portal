@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { rosterActor, withRosterErrors } from '@/lib/roster-server';
-import { todayIST, addDays, isIsoDate } from '@/lib/ist';
+import { todayIST, isIsoDate } from '@/lib/ist';
 import { cycleOf, clampAnchor, periodDays, isRosterView, cellKind, patternOn, ROSTER_START, type Assignment, type CellKind, type ExtraMark, type Pattern } from '@/lib/roster';
 
 const GET_ = async (req: NextRequest) => {

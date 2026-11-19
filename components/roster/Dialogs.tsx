@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Avatar, Banner, Field, Modal, btnPrimary, btnSecondary, fmtDay, inputCls, offShort, type Pattern, type Person, type Scheduled } from './ui';
+import { extraDayNote, ROSTER_START } from '@/lib/roster';
+import { Avatar, Banner, Field, Modal, btnPrimary, btnSecondary, fmtDay, inputCls, type Pattern, type Person, type Scheduled } from './ui';
 
-const addDay = (iso: string, n: number) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
 async function send(url: string, method: string, body: unknown): Promise<string | null> {
   try {
@@ -96,14 +96,15 @@ export function CancelDialog({ s, onClose, onDone }: { s: Scheduled; onClose: ()
   );
 }
 
-/** Week-offs in the current month, up to today, that the person can be marked as having worked. */
+/** Mark a week-off as worked. Today or any earlier week-off since the roster started. An earlier month is added in this month with a note. */
 export function MarkExtraDialog({ person, patterns, days, today, onClose, onDone }: { person: Person; patterns: Pattern[]; days: string[]; today: string; onClose: () => void; onDone: (msg: string) => void }) {
-  const opts = days.filter(d => d <= today && d.slice(0, 7) === today.slice(0, 7)).filter(d => person.cells[days.indexOf(d)] === 'off').reverse();
-  const [day, setDay] = useState(opts[0] ?? '');
+  const visibleOff = days.filter((d, i) => d <= today && person.cells[i] === 'off');
+  const [day, setDay] = useState(visibleOff[visibleOff.length - 1] ?? today);
   const [half, setHalf] = useState('full');
   const [reason, setReason] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const note = day ? extraDayNote(day, today) : null;
   const go = async () => {
     setBusy(true);
     const e = await send('/api/roster/extra-marks', 'POST', { userId: person.userId, day, half, reason });
@@ -114,15 +115,37 @@ export function MarkExtraDialog({ person, patterns, days, today, onClose, onDone
   return (
     <Modal title="Mark extra day worked" onClose={onClose}>
       <PersonHead p={person} patterns={patterns} />
-      {opts.length === 0 ? <Banner kind="info">No week-off to mark in the days on screen. Switch to Week view and open the week you need.</Banner> : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Field label="Week-off they worked" help="Today or past week-offs this month."><select className={inputCls} value={day} onChange={e => setDay(e.target.value)}>{opts.map(d => <option key={d} value={d}>{fmtDay(d)}</option>)}</select></Field>
-          <Field label="Full day or which half"><select className={inputCls} value={half} onChange={e => setHalf(e.target.value)}><option value="full">Full day</option><option value="first">First half</option><option value="second">Second half</option></select></Field>
-        </div>)}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <Field label="Week-off they worked" help="Today or an earlier week-off, from 1 Nov 2026."><input type="date" className={inputCls} min={ROSTER_START} max={today} value={day} onChange={e => setDay(e.target.value)} /></Field>
+        <Field label="Full day or which half"><select className={inputCls} value={half} onChange={e => setHalf(e.target.value)}><option value="full">Full day</option><option value="first">First half</option><option value="second">Second half</option></select></Field>
+      </div>
+      {note && <Banner kind="info">This day is from an earlier month, so it is added in this month with a note of the original date.</Banner>}
       <Banner kind="info">The week-off stays a week-off and gets an Extra mark. Credit to the balance isn’t applied yet.</Banner>
       <Field label="Reason" help={reason.trim() ? null : 'Required.'}><textarea className={inputCls} placeholder="For example: called in for the weekend backlog" value={reason} onChange={e => setReason(e.target.value)} /></Field>
       {err && <Banner kind="error">{err}</Banner>}
       <Actions onClose={onClose}><button type="button" style={{ ...btnPrimary, opacity: reason.trim() && day && !busy ? 1 : .5 }} disabled={!reason.trim() || !day || busy} onClick={go}>Mark extra day</button></Actions>
+    </Modal>
+  );
+}
+
+/** Change the one team lead an agent reports to (admins). */
+export function TeamLeadDialog({ person, tl, onClose, onDone }: { person: Person; tl: Person; onClose: () => void; onDone: (msg: string) => void }) {
+  const [reason, setReason] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    const e = await send('/api/roster/reporting-lines', 'POST', { userId: person.userId, tlUserId: tl.userId, reason });
+    setBusy(false);
+    if (e) return setErr(e);
+    onDone(`${person.name.split(' ')[0]} now reports to ${tl.name}.`);
+  };
+  return (
+    <Modal title="Change team lead" onClose={onClose}>
+      <div style={{ fontSize: 14, color: 'var(--qa-text)' }}>{person.name}: {person.tlName ? `from ${person.tlName} ` : ''}to <b>{tl.name}</b>, from today. Team leads can change the roster of the people who report to them.</div>
+      <Field label="Reason" help={reason.trim() ? null : 'Required.'}><textarea className={inputCls} placeholder="Write your reason" value={reason} onChange={e => setReason(e.target.value)} /></Field>
+      {err && <Banner kind="error">{err}</Banner>}
+      <Actions onClose={onClose}><button type="button" style={{ ...btnPrimary, opacity: reason.trim() && !busy ? 1 : .5 }} disabled={!reason.trim() || busy} onClick={go}>Change team lead</button></Actions>
     </Modal>
   );
 }

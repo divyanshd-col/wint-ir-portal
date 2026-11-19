@@ -14,9 +14,11 @@ test('team lead: Chat, MCP, Quality, Roster', () => {
   assert.deepEqual(labels('tl'), ['Chat', 'MCP', 'Quality', 'Roster']);
 });
 
-test('quality analyst and agent: no Analytics (no analytics access), but Roster', () => {
+test('quality analyst gets Roster; agent does not (the Roster switch is off for agents)', () => {
   assert.deepEqual(labels('quality'), ['Chat', 'Quality', 'Roster']);
-  assert.deepEqual(labels('agent'), ['Chat', 'Quality', 'Roster']);
+  assert.deepEqual(labels('agent'), ['Chat', 'Quality']);
+  // switching it on for agents is just granting the skill
+  assert.deepEqual(labels('agent', ['chat:access', 'quality:analytics:access', 'roster:view:access']), ['Chat', 'Quality', 'Roster']);
 });
 
 test('explicit skills override the role defaults', () => {

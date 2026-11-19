@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { rosterActor, assertCanEdit, audit, withRosterErrors } from '@/lib/roster-server';
 import { todayIST, isIsoDate } from '@/lib/ist';
-import { cycleOf, isOff, patternOn, validateExtraDay, type Pattern } from '@/lib/roster';
+import { cycleOf, extraDayNote, isOff, patternOn, validateExtraDay, type Pattern } from '@/lib/roster';
 
 const POST_ = async (req: NextRequest) => {
   const { actor, response } = await rosterActor('roster:manage:access');
@@ -21,7 +21,7 @@ const POST_ = async (req: NextRequest) => {
   const err = validateExtraDay({ today, day: b.day, isWeekOff: isOff(patterns, patternOn(assigns, b.day, cycleOf(patterns)), b.day), hasActive: dup.length > 0, reason: String(b.reason ?? '') });
   if (err) return NextResponse.json({ error: err }, { status: 400 });
   try {
-    await query(`INSERT INTO roster_extra_marks (user_id, day, half, reason, marked_by_user_id) VALUES ($1,$2,$3,$4,$5)`, [userId, b.day, half, String(b.reason).trim(), actor.userId]);
+    await query(`INSERT INTO roster_extra_marks (user_id, day, half, reason, marked_by_user_id) VALUES ($1,$2,$3,$4,$5)`, [userId, b.day, half, [String(b.reason).trim(), extraDayNote(b.day, today)].filter(Boolean).join(' · '), actor.userId]);
   } catch (e) {
     if ((e as { code?: string })?.code === '23505') return NextResponse.json({ error: 'This person already has an extra day on that date.' }, { status: 409 });
     throw e;

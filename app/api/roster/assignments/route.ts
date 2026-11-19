@@ -3,7 +3,6 @@ import { query } from '@/lib/cx/db';
 import { rosterActor, assertCanEdit, audit, withRosterErrors } from '@/lib/roster-server';
 import { todayIST, isIsoDate } from '@/lib/ist';
 import { patternOn, validateNewChange } from '@/lib/roster';
-import { weekday } from '@/lib/ist';
 
 const POST_ = async (req: NextRequest) => {
   const { actor, response } = await rosterActor('roster:manage:access');

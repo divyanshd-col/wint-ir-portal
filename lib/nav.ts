@@ -7,7 +7,7 @@ export interface NavTab { key: TabKey; label: string; href: string }
 const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
   tl: ['chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access', 'quality:analytics:access', 'roster:view:access', 'roster:manage:access'],
   quality: ['chat:access', 'cx_dashboard:access', 'quality:analytics:access', 'roster:view:access'],
-  agent: ['chat:access', 'quality:analytics:access', 'roster:view:access'],
+  agent: ['chat:access', 'quality:analytics:access'], // Roster is off for agents for now: grant roster:view:access to the agent persona in Settings > Skills to open it
 };
 
 export function hasNavSkill(role: string | undefined, skills: string[] | undefined, req: string): boolean {

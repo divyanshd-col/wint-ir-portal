@@ -43,7 +43,6 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
     'quality:analytics:access', 'quality:chat_eval:access', 'quality:call_eval:access',
   ],
   agent: [
-    'roster:view:access',
     'quality:analytics:access', 'agent:my_analytics:access', 'agent:my_chats:access',
     'agent:my_calls:access', 'agent:reports:access',
   ],

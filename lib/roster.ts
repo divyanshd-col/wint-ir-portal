@@ -111,11 +111,29 @@ export function validateNewChange(a: { today: string; start: string; reason: str
   if (a.hasFuture) return 'This person already has a scheduled change. Edit or cancel it first.';
   return null;
 }
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const monthName = (iso: string) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+
+/** A day from an earlier month is added in the current month, with a note of the original date. Null for this month. */
+export function extraDayNote(day: string, today: string): string | null {
+  return day.slice(0, 7) === today.slice(0, 7) ? null : `Worked on ${day}, added in ${monthName(today)}`;
+}
+
 export function validateExtraDay(a: { today: string; day: string; isWeekOff: boolean; hasActive: boolean; reason: string }): string | null {
   if (!a.reason.trim()) return 'A reason is required.';
   if (a.day > a.today) return 'Only today or past week-offs can be marked.';
-  if (a.day.slice(0, 7) !== a.today.slice(0, 7)) return 'Only week-offs in the current month can be marked.';
+  if (a.day < ROSTER_START) return 'The roster starts on 1 Nov 2026, so earlier days can’t be marked.';
   if (!a.isWeekOff) return 'That day is not a week-off for this person.';
   if (a.hasActive) return 'This person already has an extra day on that date.';
+  return null;
+}
+
+/** Changing who someone reports to: admins only, agents only, to an active team lead, never your own record. */
+export function validateReportingLine(a: { actorUserId: number; userId: number; tlUserId: number; reason: string; personRole: string; tlRole: string }): string | null {
+  if (!a.reason.trim()) return 'A reason is required.';
+  if (a.actorUserId === a.userId) return 'Nobody changes their own team lead.';
+  if (a.personRole !== 'agent') return 'Only agents report to a team lead.';
+  if (a.tlRole !== 'tl') return 'Pick a team lead.';
+  if (a.userId === a.tlUserId) return 'Nobody can be their own team lead.';
   return null;
 }

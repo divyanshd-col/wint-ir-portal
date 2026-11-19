@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMissingTable } from '../lib/roster-server';
 import { todayIST, toIstDate } from '../lib/ist';
-import { patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, cycleOf, ROSTER_START, canEditTarget, isCxDomain, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
+import { extraDayNote, validateReportingLine, patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, cycleOf, ROSTER_START, canEditTarget, isCxDomain, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
 
 const P: Pattern[] = [
   { id: 1, label: 'Saturday and Sunday off', off_weekdays: [6, 0] },
@@ -116,7 +116,8 @@ test('validateExtraDay - duplicate rejected, re-mark allowed once reversed (hasA
   const ok = { today: '2026-11-10', day: '2026-11-08', isWeekOff: true, hasActive: false, reason: 'weekend backlog' };
   assert.equal(validateExtraDay(ok), null);
   assert.match(validateExtraDay({ ...ok, hasActive: true })!, /already has/);
-  assert.match(validateExtraDay({ ...ok, day: '2026-10-31' })!, /current month/);
+  assert.match(validateExtraDay({ ...ok, day: '2026-10-31' })!, /roster starts/);                  // before launch
+  assert.equal(validateExtraDay({ ...ok, today: '2026-12-02', day: '2026-11-08' }), null);           // an earlier month is fine
   assert.match(validateExtraDay({ ...ok, day: '2026-11-11' })!, /today or past/i);
   assert.match(validateExtraDay({ ...ok, isWeekOff: false })!, /not a week-off/);
 });
@@ -178,11 +179,14 @@ test('roster skills - defaults agree in all copies and the migration grants them
     assert.ok(s.includes("'roster:manage:access'"), `${f} grants manage to admin/tl`);
     const quality = /quality: \[([^\]]*)\]/.exec(s)?.[1] ?? '';
     const agent = /agent: \[([^\]]*)\]/.exec(s)?.[1] ?? '';
-    assert.ok(!quality.includes('roster:manage') && !agent.includes('roster:manage'), `${f}: quality/agent are view-only`);
-    assert.ok(quality.includes('roster:view') && agent.includes('roster:view'), `${f}: quality/agent can view`);
+    assert.ok(!quality.includes('roster:manage') && !agent.includes('roster:manage'), `${f}: quality/agent never manage`);
+    assert.ok(quality.includes('roster:view'), `${f}: quality can view`);
+    assert.ok(!agent.includes('roster:view'), `${f}: the Roster is off for agents (a switch in Settings > Skills)`);
   }
   const mig = read('db/migrations/035_roster.sql');
-  for (const k of ["('quality','roster:view:access'", "('agent','roster:view:access'", "('tl','roster:manage:access'", "('admin','roster:manage:access'"]) assert.ok(mig.includes(k), k);
+  for (const k of ["('quality','roster:view:access'", "('tl','roster:manage:access'", "('admin','roster:manage:access'"]) assert.ok(mig.includes(k), k);
+  assert.ok(!mig.includes("('agent','roster:view:access'"), '035 no longer grants agents the roster');
+  assert.match(read('db/migrations/037_roster_agents_off.sql'), /DELETE FROM persona_skills WHERE persona_id = 'agent' AND skill_id = 'roster:view:access'/);
 });
 
 test('isMissingTable - only Postgres undefined_table (42P01) counts', () => {
@@ -197,4 +201,20 @@ test('roster is CX only - PCG-only users are out, cx and both are in', () => {
   assert.equal(isCxDomain('both'), true);
   assert.equal(isCxDomain('pcg'), false);
   assert.equal(isCxDomain(undefined), true); // older rows default to cx
+});
+
+test('extra day from an earlier month is added in the current month with a note of the original date', () => {
+  assert.equal(extraDayNote('2026-11-08', '2026-11-20'), null);
+  assert.equal(extraDayNote('2026-11-08', '2026-12-02'), 'Worked on 2026-11-08, added in December 2026');
+  assert.equal(extraDayNote('2026-12-28', '2027-01-03'), 'Worked on 2026-12-28, added in January 2027');
+});
+
+test('team lead change - admin rules: reason, never your own record, agents only, real team lead', () => {
+  const ok = { actorUserId: 1, userId: 2, tlUserId: 3, reason: 'moved teams', personRole: 'agent', tlRole: 'tl' };
+  assert.equal(validateReportingLine(ok), null);
+  assert.ok(validateReportingLine({ ...ok, reason: ' ' }));
+  assert.match(validateReportingLine({ ...ok, userId: 1 })!, /own team lead/);
+  assert.match(validateReportingLine({ ...ok, personRole: 'tl' })!, /Only agents/);
+  assert.match(validateReportingLine({ ...ok, tlRole: 'agent' })!, /Pick a team lead/);
+  assert.ok(validateReportingLine({ ...ok, tlUserId: 2 }));
 });
