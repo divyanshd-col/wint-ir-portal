@@ -147,9 +147,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const userRole = sessionUser?.role;
   const isAgentPersona = personaParam === 'agent' || userRole === 'agent';
   const isTlPersona = personaParam === 'tl' || userRole === 'tl';
-  const effectiveTl = isTlPersona
-    ? (tlFilter && tlFilter !== 'all' ? tlFilter : sessionUser?.name || sessionUser?.email || 'Swetha')
-    : (tlFilter && tlFilter !== 'all' ? tlFilter : null);
+  const effectiveTl = (userRole === 'tl')
+    ? (sessionUser?.name || sessionUser?.email)
+    : (isTlPersona
+      ? (tlFilter && tlFilter !== 'all' ? tlFilter : sessionUser?.name || sessionUser?.email || 'Swetha')
+      : (tlFilter && tlFilter !== 'all' ? tlFilter : null));
 
   let mappedMembers: string[] = [];
   if (effectiveTl && effectiveTl !== 'all') {
@@ -402,6 +404,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       )`);
       params.push(mappedMembers, cleanTl, `Team ${cleanTl}`);
       paramIdx += 3;
+    } else if (isTlPersona && personaParam !== 'admin') {
+      conditions.push(`1 = 0`);
     }
   }
 
