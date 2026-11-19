@@ -1,11 +1,11 @@
--- Migration 036: rotating roster. Four types; everyone moves to the next type every Monday.
+-- Migration 036: rotating roster. Four types, everyone moves to the next type every Monday.
 -- Type 1: Sat+Sun off · Type 2: Thu+Fri off · Type 3: Tue+Wed off · Type 4: Mon+Sun off.
--- A roster_assignments row is an anchor: "on type N in the week of effective_from"; later weeks follow the rotation.
+-- A roster_assignments row is an anchor: "on type N in the week of effective_from", later weeks follow the rotation.
 -- Safe to run more than once: the old-pattern clean-up only happens the first time, so re-running never wipes a loaded roster.
 
 -- First run only (the rotates column does not exist yet): the old fixed patterns (Sun-Thu / Mon-Fri / Tue-Sat)
 -- mean nothing under the rotation, so retire them. Load the real roster with the import files afterwards.
-DO $mig$
+DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'roster_patterns' AND column_name = 'rotates') THEN
     UPDATE roster_assignments
@@ -13,9 +13,9 @@ BEGIN
      WHERE cancelled_at IS NULL;
   END IF;
 END
-$mig$;
+$$;
 
--- rotates = false marks a fixed type that never moves. None are used today; the column stays so one can be added later.
+-- rotates = false marks a fixed type that never moves. None are used today, the column stays so one can be added later.
 ALTER TABLE roster_patterns ADD COLUMN IF NOT EXISTS rotates BOOLEAN NOT NULL DEFAULT TRUE;
 
 INSERT INTO roster_patterns (id, label, off_weekdays, rotates) VALUES
