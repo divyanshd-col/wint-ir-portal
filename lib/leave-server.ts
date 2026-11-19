@@ -13,6 +13,36 @@ export async function leaveReady(db: Db): Promise<boolean> {
   return !!r[0]?.ok;
 }
 
+/** True once migration 039 is in (requests can wait, be held and be decided). */
+export async function waitingSupported(db: Db): Promise<boolean> {
+  const r = await db.query<{ ok: boolean }>(`SELECT to_regclass('public.leave_events') IS NOT NULL AS ok`);
+  return !!r[0]?.ok;
+}
+
+/** Statuses whose days are held while a request waits. */
+export const HELD = ['In process', 'Pending for approval', 'Auto-rejected'];
+
+/**
+ * How many OTHER people of this role are off, per `${day}|${half}` (a full day counts in both halves). `waiting` adds requests
+ * still waiting for a decision, which also count towards the limit; a full-day rejection holds no spot until someone approves it.
+ * `before` is used when a request is decided: requests are decided in the order they were made, so one made later does not count yet.
+ */
+export async function offCounts(db: Db, role: 'agent' | 'tl', days: string[], excludeUserId: number, waiting: boolean, before?: { appliedAt: string; leaveId: string }): Promise<Record<string, number>> {
+  if (!days.length) return {};
+  const statuses = waiting ? [...LIVE_STATUSES, ...HELD] : [...LIVE_STATUSES];
+  const rows = await db.query<{ user_id: number; day: string; half: string }>(
+    `SELECT DISTINCT r.user_id, to_char(d.day,'YYYY-MM-DD') AS day, d.half
+       FROM leave_days d JOIN leave_requests r ON r.leave_id = d.leave_id JOIN users u ON u.user_id = r.user_id
+      WHERE d.day = ANY($1::date[]) AND d.state <> 'cancelled' AND r.status = ANY($2::text[]) ${waiting ? `AND (r.holds_spot OR r.status <> 'Auto-rejected')` : ''}
+        ${before ? `AND (r.status = ANY($7::text[]) OR (r.applied_at, r.leave_id) < ($5::timestamptz, $6::text))` : ''}
+        AND r.user_id <> $3 AND u.status = 'active' AND u.role = $4`, before ? [days, statuses, excludeUserId, role, before.appliedAt, before.leaveId, [...LIVE_STATUSES]] : [days, statuses, excludeUserId, role]);
+  const people = new Map<string, Set<number>>();
+  for (const r of rows) for (const half of (r.half === 'full' ? ['first', 'second'] : [r.half])) {
+    const k = `${r.day}|${half}`; (people.get(k) ?? people.set(k, new Set()).get(k)!).add(r.user_id);
+  }
+  return Object.fromEntries([...people].map(([k, s]) => [k, s.size]));
+}
+
 export async function balanceOf(db: Db, userId: number): Promise<number> {
   const r = await db.query<{ b: string }>(`SELECT COALESCE(SUM(amount), 0) AS b FROM leave_ledger WHERE user_id = $1`, [userId]);
   return Number(r[0]?.b ?? 0);
@@ -35,6 +65,7 @@ export interface Plan {
   warnings: LimitWarning[];
   fingerprint: string;
   balance: number;
+  liveIds: string[];
 }
 
 /** The scheduled change a mutation targets, and who it belongs to (checked before permissions). */
@@ -83,19 +114,25 @@ export async function planMutation(db: Db, userId: number, m: Mutation, today: s
 
   if (!(await leaveReady(db))) {
     const empty: Reconciled = { changes: [], net: 0, lopDays: 0, key: '[]' };
-    return { from, rows: all, reconciled: empty, warnings: [], fingerprint: hash(empty.key), balance: 0 };
+    return { from, rows: all, reconciled: empty, warnings: [], fingerprint: hash(empty.key), balance: 0, liveIds: [] };
   }
 
-  const statuses = [...LIVE_STATUSES];
+  // approved leave and (once requests can wait) requests still waiting are all recalculated; waiting ones only move held days
+  const waiting = await waitingSupported(db);
+  const statuses = waiting ? [...LIVE_STATUSES, ...HELD] : [...LIVE_STATUSES];
   const reqs = await db.query<LeaveRequest>(
     `SELECT leave_id, user_id, type, status, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date, start_half, end_half
        FROM leave_requests WHERE user_id = $1 AND status = ANY($2::text[]) AND end_date >= $3`, [userId, statuses, from]);
   const lines = reqs.length ? (await db.query<LeaveLine & { charge: string }>(
     `SELECT leave_id, to_char(day,'YYYY-MM-DD') AS day, kind, half, state, charge FROM leave_days WHERE leave_id = ANY($1::text[])`, [reqs.map(r => r.leave_id)])).map(l => ({ ...l, charge: Number(l.charge) })) : [];
-  const balance = await balanceOf(db, userId);
+  const ledger = await balanceOf(db, userId);
+  const held = waiting ? Number((await db.query<{ h: string }>(
+    `SELECT COALESCE(SUM(d.charge), 0) AS h FROM leave_days d JOIN leave_requests q ON q.leave_id = d.leave_id WHERE q.user_id = $1 AND d.kind = 'leave' AND d.state <> 'cancelled' AND q.status = ANY($2::text[])`, [userId, HELD]))[0].h) : 0;
+  const balance = ledger - held; // what can still be used
+  const liveIds = reqs.filter(r => (LIVE_STATUSES as readonly string[]).includes(r.status)).map(r => r.leave_id);
   const reconciled = reconcileLeave({ requests: reqs, lines, assignments: next, patterns, from, balance, negativeLimit: await negativeLimit(db), fmtDay: fmtDayLong });
   const warnings = await dailyLimitWarnings(db, userId, reconciled.changes);
-  return { from, rows: all, reconciled, warnings, fingerprint: hash(reconciled.key), balance };
+  return { from, rows: all, reconciled, warnings, fingerprint: hash(reconciled.key), balance, liveIds };
 }
 
 const hash = (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 16);
@@ -109,18 +146,7 @@ async function dailyLimitWarnings(db: Db, userId: number, changes: Change[]): Pr
   if (!role) return []; // limits are off for QA and admins
   const lim = await db.query<{ weekday: number; half: string; max_off: number }>(`SELECT weekday, half, max_off FROM limits_by_role WHERE role = $1`, [role]);
   const limitMap = new Map(lim.map(l => [`${l.weekday}|${l.half}`, l.max_off]));
-  const rows = await db.query<{ user_id: number; day: string; half: string }>(
-    `SELECT DISTINCT d.leave_id, r.user_id, to_char(d.day,'YYYY-MM-DD') AS day, d.half
-       FROM leave_days d JOIN leave_requests r ON r.leave_id = d.leave_id JOIN users u ON u.user_id = r.user_id
-      WHERE d.day = ANY($1::date[]) AND d.state <> 'cancelled' AND r.status = ANY($2::text[]) AND r.user_id <> $3
-        AND u.status = 'active' AND (CASE WHEN u.role = 'tl' THEN 'tl' WHEN u.role = 'agent' THEN 'agent' END) = $4`,
-    [days, [...LIVE_STATUSES], userId, role]);
-  const people = new Map<string, Set<number>>();
-  for (const r of rows) for (const half of (r.half === 'full' ? ['first', 'second'] : [r.half])) {
-    const k = `${r.day}|${half}`; (people.get(k) ?? people.set(k, new Set()).get(k)!).add(r.user_id);
-  }
-  const counts: Record<string, number> = {};
-  for (const [k, set] of people) counts[k] = set.size;
+  const counts = await offCounts(db, role, days, userId, await waitingSupported(db));
   return limitWarnings(changes, counts, (day, half) => limitMap.get(`${weekday(day)}|${half}`) ?? null);
 }
 
@@ -140,7 +166,7 @@ export async function applyReconciled(tx: Db, actorId: number, userId: number, p
              state = 'upcoming'`, [c.leave_id, c.day, kind, c.half, amt]);
       }
     }
-    if (c.leave > 0) {
+    if (c.leave > 0 && plan.liveIds.includes(c.leave_id)) { // a waiting request only moves held days, the ledger moves when it is approved
       await tx.query(
         `INSERT INTO leave_ledger (user_id, entry_type, amount, leave_id, description, created_by_user_id) VALUES ($1, 'Pattern change recalculation', $2, $3, $4, $5)`,
         [userId, c.action === 'give_back' ? c.leave : -c.leave, c.leave_id, `${label}. ${c.text}.`, actorId]);

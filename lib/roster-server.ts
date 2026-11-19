@@ -47,7 +47,7 @@ export function isMissingTable(err: unknown): boolean {
 }
 
 /** Wrap a route handler so DB failures return a clear JSON error instead of an opaque 500. */
-export function withRosterErrors<A extends unknown[]>(fn: (...args: A) => Promise<NextResponse>) {
+export function withRosterErrors<A extends unknown[]>(fn: (...args: A) => Promise<NextResponse>, missing = 'Roster tables are missing. Run migration 035 on this database.') {
   return async (...args: A): Promise<NextResponse> => {
     try {
       return await fn(...args);
@@ -55,7 +55,7 @@ export function withRosterErrors<A extends unknown[]>(fn: (...args: A) => Promis
       if (err instanceof HttpError) return NextResponse.json({ error: err.message }, { status: err.status });
       console.error('[roster]', (err as Error)?.message);
       if (isMissingTable(err)) {
-        return NextResponse.json({ error: 'Roster tables are missing. Run migration 035 on this database.' }, { status: 503 });
+        return NextResponse.json({ error: missing }, { status: 503 });
       }
       return NextResponse.json({ error: 'Something went wrong loading the roster.' }, { status: 500 });
     }
