@@ -453,7 +453,7 @@ export default function PcgCallsClient() {
       fetchData();
     }, 250);
     return () => clearTimeout(handler);
-  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, activeCohortToggle, selectedRmName, selectedTlName, selectedTeamName, searchQuery, minIqsFilter, maxIqsFilter, activePersona]);
+  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, activeCohortToggle, selectedRmName, selectedTlName, selectedTeamName, searchQuery, minIqsFilter, maxIqsFilter, activePersona, loggedInUserName]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -473,7 +473,7 @@ export default function PcgCallsClient() {
       if (activePersona === 'agent' && selectedRm) {
         p.set('rm_name', selectedRm);
       } else if (activePersona === 'tl') {
-        const rawTl = loggedInUserName || selectedTl;
+        const rawTl = loggedInUserName || selectedTl || (session?.user as any)?.name || '';
         const cleanTl = rawTl.replace(/^Team\s+/i, '').trim();
         const matchedTl = teamLeads.find((t) => {
           const tLower = t.tlName.toLowerCase().trim();
@@ -894,8 +894,45 @@ export default function PcgCallsClient() {
         map.set(c.id, c);
       }
     });
-    return Array.from(map.values());
-  }, [disputes, calls]);
+    let list = Array.from(map.values());
+
+    if (activePersona === 'tl') {
+      if (teamRms.length > 0) {
+        list = list.filter(c => teamRms.some(m => isSamePcgAgent(m, c.rmName)));
+      } else {
+        // Guard against showing un-scoped company-wide disputes while team mappings are loading
+        list = [];
+      }
+      if (selectedRmName && selectedRmName !== 'all') {
+        list = list.filter(c => isSamePcgAgent(selectedRmName, c.rmName));
+      }
+    } else if (activePersona === 'agent') {
+      const agentTarget = selectedRm || loggedInUserName;
+      if (agentTarget) {
+        list = list.filter(c => isSamePcgAgent(agentTarget, c.rmName));
+      }
+    } else if (activePersona === 'admin') {
+      if (activeCohortToggle === 'tl') {
+        if (selectedTlName && selectedTlName !== 'all') {
+          list = list.filter(c => isSamePcgAgent(selectedTlName, c.rmName));
+        }
+      } else if (activeCohortToggle === 'rm') {
+        if (selectedRmName && selectedRmName !== 'all') {
+          list = list.filter(c => isSamePcgAgent(selectedRmName, c.rmName));
+        }
+      } else if (activeCohortToggle === 'team') {
+        if (selectedTeamName && selectedTeamName !== 'all') {
+          const matchedLead = teamLeads.find(t => isSamePcgAgent(t.tlName, selectedTeamName));
+          const leadRms = matchedLead?.rms || [];
+          if (leadRms.length > 0) {
+            list = list.filter(c => leadRms.some(m => isSamePcgAgent(m, c.rmName)));
+          }
+        }
+      }
+    }
+
+    return list;
+  }, [disputes, calls, activePersona, teamRms, selectedRmName, selectedRm, loggedInUserName, activeCohortToggle, selectedTlName, selectedTeamName, teamLeads]);
 
   const disputeRaisedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'pending');
   const disputeReviewedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'resolved' || c.disputeStatus === 'overridden');

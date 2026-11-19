@@ -4,8 +4,8 @@ import { withLogging } from '@/lib/log';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { listUsers } from '@/lib/users';
-import { canonicalizePcgRmName, PCG_RM_TELEPHONY_TO_CANONICAL } from '@/lib/pcg/canonical-names';
-import { resolvePcgAgentSync } from '@/lib/pcg/rm-directory';
+import { canonicalizePcgRmName, isSamePcgAgent, PCG_RM_TELEPHONY_TO_CANONICAL } from '@/lib/pcg/canonical-names';
+import { resolvePcgAgentSync, getPcgRmsForTl } from '@/lib/pcg/rm-directory';
 import { isPcgExcludedInternalPhone, pcgExcludedPhoneSql } from '@/lib/pcg/excluded-numbers';
 import {
   normalizePcgCallParameters,
@@ -422,9 +422,11 @@ export const HIDE_DATA_FOR_NOW = false;
 
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
+  let sessionUser: any = null;
   try {
-    const { response } = await requireRole(['admin', 'tl', 'agent', 'quality']);
+    const { response, session } = await requireRole(['admin', 'tl', 'agent', 'quality']);
     if (response) return response;
+    sessionUser = session?.user;
   } catch {
     // Permitted in local development
   }
@@ -626,12 +628,75 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     });
   }
 
+  const userRole = sessionUser?.role;
+  const loggedInName = sessionUser?.name || '';
+  const loggedInEmail = sessionUser?.email || '';
+
   const personaParam = searchParams.get('persona')?.trim();
-  const callerRoleParam = searchParams.get('caller_role')?.trim(); // 'tl' | 'rm'
+  const callerRoleParam = searchParams.get('caller_role')?.trim(); // 'tl' | 'rm' | 'team'
   const rmFilter = searchParams.get('rm_name')?.trim();
   const tlFilter = searchParams.get('tl_name')?.trim();
   const callStatusFilter = searchParams.get('status')?.trim(); // 'all' | 'answered' | 'unanswered' | 'needs_attention'
   let categoryFilter = searchParams.get('category')?.trim() || 'all';
+
+  const isAgentPersona = userRole === 'agent' || personaParam === 'agent';
+  const isTlPersona = userRole === 'tl' || personaParam === 'tl';
+
+  // Strict TL Scoping:
+  // If the authenticated user is a TL, they MUST strictly be restricted to their own identity.
+  // Query parameters cannot override their TL identity.
+  let effectiveTl: string | null = null;
+  if (userRole === 'tl') {
+    effectiveTl = loggedInName || loggedInEmail || null;
+  } else if (isTlPersona) {
+    // Admin simulating TL view
+    effectiveTl = (tlFilter && tlFilter !== 'all') ? tlFilter : (allTlNames[0] || 'Swetha');
+  } else if (tlFilter && tlFilter !== 'all') {
+    effectiveTl = tlFilter;
+  }
+
+  // Strict Agent Scoping:
+  // If the authenticated user is an agent, they MUST strictly be restricted to their own identity.
+  let effectiveRm: string | null = null;
+  if (userRole === 'agent') {
+    effectiveRm = loggedInName || loggedInEmail || null;
+  } else if (isAgentPersona) {
+    effectiveRm = (rmFilter && rmFilter !== 'all') ? rmFilter : (loggedInName || null);
+  } else if (rmFilter && rmFilter !== 'all') {
+    effectiveRm = rmFilter;
+  }
+
+  // Resolve mapped members for effective TL
+  let mappedTeamMembers: string[] = [];
+  if (effectiveTl && effectiveTl !== 'all') {
+    mappedTeamMembers = await getPcgRmsForTl(effectiveTl);
+  }
+
+  const teamMemberSet = new Set<string>();
+  mappedTeamMembers.forEach((m) => {
+    const lower = m.toLowerCase().trim();
+    teamMemberSet.add(lower);
+    const can = canonicalizePcgRmName(m).toLowerCase().trim();
+    teamMemberSet.add(can);
+    for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+      if (c.toLowerCase().trim() === can || telName.toLowerCase().trim() === lower) {
+        teamMemberSet.add(telName.toLowerCase().trim());
+      }
+    }
+  });
+
+  // Exclude all TL names and Admin names from team member list
+  allTlNames.forEach((tl) => {
+    teamMemberSet.delete(tl.toLowerCase().trim());
+    teamMemberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+  });
+  Object.keys(TL_TEAMS).forEach((tl) => {
+    teamMemberSet.delete(tl.toLowerCase().trim());
+    teamMemberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+  });
+  ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => teamMemberSet.delete(n));
+
+  const allTeamMembers = Array.from(teamMemberSet);
 
   const searchFilter = searchParams.get('search')?.trim();
   const dateFrom = searchParams.get('date_from')?.trim();
@@ -657,8 +722,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000);
     startDate = thirtyDaysAgo < PCG_DATA_START ? PCG_DATA_START : thirtyDaysAgo;
   }
-
-
 
   const startDateIso = startDate.toISOString();
   const endDateIso = endDate.toISOString();
@@ -702,116 +765,27 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
       );
     }
-  } else if (callerRoleParam === 'rm') {
-    // When querying for RM / Agent Call Quality
-    if (rmFilter && rmFilter !== 'all') {
-      const canonical = canonicalizePcgRmName(rmFilter);
-      const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
-      for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-        if (can.toLowerCase() === canonical.toLowerCase()) {
-          variations.push(telName.toLowerCase());
-        }
-      }
-      const uniqueVars = Array.from(new Set(variations));
-      scopeQueryParams.push(uniqueVars);
-      scopeWhereClauses.push(
-        `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
-      );
-    } else {
-      // All genuine RMs: exclude TL callers
-      const tlNamesSet = new Set<string>();
-      allTlNames.forEach((tl) => {
-        tlNamesSet.add(tl.toLowerCase().trim());
-        tlNamesSet.add(canonicalizePcgRmName(tl).toLowerCase().trim());
-        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-          if (c.toLowerCase().trim() === tl.toLowerCase().trim() || telName.toLowerCase().trim() === tl.toLowerCase().trim()) {
-            tlNamesSet.add(telName.toLowerCase().trim());
+  } else if (effectiveTl && effectiveTl !== 'all') {
+    // Scoped to a specific TL team (either authenticated TL or Admin viewing a TL team)
+    if (effectiveRm && effectiveRm !== 'all') {
+      const canonicalReq = canonicalizePcgRmName(effectiveRm);
+      const isMember = mappedTeamMembers.some((m) => isSamePcgAgent(m, canonicalReq));
+      if (isMember || userRole === 'admin') {
+        const variations = [effectiveRm.toLowerCase(), canonicalReq.toLowerCase()];
+        for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (can.toLowerCase() === canonicalReq.toLowerCase()) {
+            variations.push(telName.toLowerCase());
           }
         }
-      });
-      const uniqueTls = Array.from(tlNamesSet);
-      if (uniqueTls.length > 0) {
-        scopeQueryParams.push(uniqueTls);
+        const uniqueVars = Array.from(new Set(variations));
+        scopeQueryParams.push(uniqueVars);
         scopeWhereClauses.push(
-          `NOT (LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length}))`
+          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
         );
+      } else {
+        scopeWhereClauses.push(`1 = 0`);
       }
-    }
-  } else {
-    if (rmFilter && rmFilter !== 'all') {
-      const canonical = canonicalizePcgRmName(rmFilter);
-      const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
-      for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-        if (can.toLowerCase() === canonical.toLowerCase()) {
-          variations.push(telName.toLowerCase());
-        }
-      }
-      const uniqueVars = Array.from(new Set(variations));
-      scopeQueryParams.push(uniqueVars);
-      scopeWhereClauses.push(
-        `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
-      );
-    }
-
-    if (tlFilter && tlFilter !== 'all') {
-      const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
-      const matchedTlKey = allTlNames.find((t) => {
-        const tLower = t.toLowerCase().trim();
-        return (
-          tLower === cleanTl ||
-          cleanTl.includes(tLower) ||
-          tLower.includes(cleanTl) ||
-          canonicalizePcgRmName(t).toLowerCase() === canonicalizePcgRmName(cleanTl).toLowerCase()
-        );
-      });
-      const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
-      const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => {
-          const tlLower = tl.toLowerCase().trim();
-          return tlLower === cleanTl || cleanTl.includes(tlLower) || tlLower.includes(cleanTl);
-        })
-        .map(([rm]) => rm.toLowerCase());
-      const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
-
-      const memberSet = new Set<string>();
-      [...mappedRms, ...directRms, ...fallbackRms].forEach((m) => {
-        const lower = m.toLowerCase().trim();
-        memberSet.add(lower);
-        const can = canonicalizePcgRmName(m).toLowerCase().trim();
-        memberSet.add(can);
-        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-          if (c.toLowerCase().trim() === can) {
-            memberSet.add(telName.toLowerCase().trim());
-          }
-        }
-      });
-
-      // Exclude other TLs and Admins so other TLs/Admins are NEVER included in a TL's team calls
-      allTlNames.forEach((tl) => {
-        memberSet.delete(tl.toLowerCase().trim());
-        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-      });
-      Object.keys(TL_TEAMS).forEach((tl) => {
-        memberSet.delete(tl.toLowerCase().trim());
-        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-      });
-      ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
-
-      // Purge any members who are explicitly assigned to a different TL in User Management
-      for (const [rmClean, assignedTl] of Object.entries(customTeamMap)) {
-        if (assignedTl && assignedTl.toLowerCase().trim() !== cleanTl) {
-          memberSet.delete(rmClean.toLowerCase().trim());
-          memberSet.delete(canonicalizePcgRmName(rmClean).toLowerCase().trim());
-          for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-            if (c.toLowerCase().trim() === canonicalizePcgRmName(rmClean).toLowerCase().trim() || telName.toLowerCase().trim() === rmClean.toLowerCase().trim()) {
-              memberSet.delete(telName.toLowerCase().trim());
-            }
-          }
-        }
-      }
-
-      const allTeamMembers = Array.from(memberSet);
-
+    } else {
       if (allTeamMembers.length > 0) {
         scopeQueryParams.push(allTeamMembers);
         scopeWhereClauses.push(
@@ -820,6 +794,39 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       } else {
         scopeWhereClauses.push(`1 = 0`);
       }
+    }
+  } else if (effectiveRm && effectiveRm !== 'all') {
+    // Specific agent scope (either authenticated agent or Admin viewing an agent)
+    const canonical = canonicalizePcgRmName(effectiveRm);
+    const variations = [effectiveRm.toLowerCase(), canonical.toLowerCase()];
+    for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+      if (can.toLowerCase() === canonical.toLowerCase()) {
+        variations.push(telName.toLowerCase());
+      }
+    }
+    const uniqueVars = Array.from(new Set(variations));
+    scopeQueryParams.push(uniqueVars);
+    scopeWhereClauses.push(
+      `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
+    );
+  } else if (callerRoleParam === 'rm') {
+    // Admin viewing all genuine RMs: exclude TL callers
+    const tlNamesSet = new Set<string>();
+    allTlNames.forEach((tl) => {
+      tlNamesSet.add(tl.toLowerCase().trim());
+      tlNamesSet.add(canonicalizePcgRmName(tl).toLowerCase().trim());
+      for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+        if (c.toLowerCase().trim() === tl.toLowerCase().trim() || telName.toLowerCase().trim() === tl.toLowerCase().trim()) {
+          tlNamesSet.add(telName.toLowerCase().trim());
+        }
+      }
+    });
+    const uniqueTls = Array.from(tlNamesSet);
+    if (uniqueTls.length > 0) {
+      scopeQueryParams.push(uniqueTls);
+      scopeWhereClauses.push(
+        `NOT (LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length}))`
+      );
     }
   }
 
@@ -1231,42 +1238,40 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
         );
       }
-    } else if (callerRoleParam === 'rm') {
-      if (rmFilter && rmFilter !== 'all') {
-        const canonical = canonicalizePcgRmName(rmFilter);
-        const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
-        for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-          if (can.toLowerCase() === canonical.toLowerCase()) {
-            variations.push(telName.toLowerCase());
-          }
-        }
-        const uniqueVars = Array.from(new Set(variations));
-        disputeQueryParams.push(uniqueVars);
-        disputeWhereClauses.push(
-          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
-        );
-      } else {
-        const tlNamesSet = new Set<string>();
-        allTlNames.forEach((tl) => {
-          tlNamesSet.add(tl.toLowerCase().trim());
-          tlNamesSet.add(canonicalizePcgRmName(tl).toLowerCase().trim());
-          for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-            if (c.toLowerCase().trim() === tl.toLowerCase().trim() || telName.toLowerCase().trim() === tl.toLowerCase().trim()) {
-              tlNamesSet.add(telName.toLowerCase().trim());
+    } else if (effectiveTl && effectiveTl !== 'all') {
+      // Scoped to a specific TL team (either authenticated TL or Admin viewing a TL team)
+      if (effectiveRm && effectiveRm !== 'all') {
+        const canonicalReq = canonicalizePcgRmName(effectiveRm);
+        const isMember = mappedTeamMembers.some((m) => isSamePcgAgent(m, canonicalReq));
+        if (isMember || userRole === 'admin') {
+          const variations = [effectiveRm.toLowerCase(), canonicalReq.toLowerCase()];
+          for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+            if (can.toLowerCase() === canonicalReq.toLowerCase()) {
+              variations.push(telName.toLowerCase());
             }
           }
-        });
-        const uniqueTls = Array.from(tlNamesSet);
-        if (uniqueTls.length > 0) {
-          disputeQueryParams.push(uniqueTls);
+          const uniqueVars = Array.from(new Set(variations));
+          disputeQueryParams.push(uniqueVars);
           disputeWhereClauses.push(
-            `NOT (LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length}))`
+            `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
           );
+        } else {
+          disputeWhereClauses.push(`1 = 0`);
+        }
+      } else {
+        if (allTeamMembers.length > 0) {
+          disputeQueryParams.push(allTeamMembers);
+          disputeWhereClauses.push(
+            `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+          );
+        } else {
+          disputeWhereClauses.push(`1 = 0`);
         }
       }
-    } else if (rmFilter && rmFilter !== 'all') {
-      const canonical = canonicalizePcgRmName(rmFilter);
-      const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
+    } else if (effectiveRm && effectiveRm !== 'all') {
+      // Specific agent scope (either authenticated agent or Admin viewing an agent)
+      const canonical = canonicalizePcgRmName(effectiveRm);
+      const variations = [effectiveRm.toLowerCase(), canonical.toLowerCase()];
       for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
         if (can.toLowerCase() === canonical.toLowerCase()) {
           variations.push(telName.toLowerCase());
@@ -1277,72 +1282,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       disputeWhereClauses.push(
         `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
       );
-    } else if (tlFilter && tlFilter !== 'all') {
-      const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
-      const matchedTlKey = allTlNames.find((t) => {
-        const tLower = t.toLowerCase().trim();
-        return (
-          tLower === cleanTl ||
-          cleanTl.includes(tLower) ||
-          tLower.includes(cleanTl) ||
-          canonicalizePcgRmName(t).toLowerCase() === canonicalizePcgRmName(cleanTl).toLowerCase()
-        );
-      });
-      const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
-      const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => {
-          const tlLower = tl.toLowerCase().trim();
-          return tlLower === cleanTl || cleanTl.includes(tlLower) || tlLower.includes(cleanTl);
-        })
-        .map(([rm]) => rm.toLowerCase());
-      const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
-
-      const memberSet = new Set<string>();
-      [...mappedRms, ...directRms, ...fallbackRms].forEach((m) => {
-        const lower = m.toLowerCase().trim();
-        memberSet.add(lower);
-        const can = canonicalizePcgRmName(m).toLowerCase().trim();
-        memberSet.add(can);
-        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-          if (c.toLowerCase().trim() === can) {
-            memberSet.add(telName.toLowerCase().trim());
-          }
-        }
-      });
-
-      // Exclude other TLs and Admins
+    } else if (callerRoleParam === 'rm') {
+      // Admin viewing all genuine RMs: exclude TL callers
+      const tlNamesSet = new Set<string>();
       allTlNames.forEach((tl) => {
-        memberSet.delete(tl.toLowerCase().trim());
-        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-      });
-      Object.keys(TL_TEAMS).forEach((tl) => {
-        memberSet.delete(tl.toLowerCase().trim());
-        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-      });
-      ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
-
-      // Purge any members who are explicitly assigned to a different TL in User Management
-      for (const [rmClean, assignedTl] of Object.entries(customTeamMap)) {
-        if (assignedTl && assignedTl.toLowerCase().trim() !== cleanTl) {
-          memberSet.delete(rmClean.toLowerCase().trim());
-          memberSet.delete(canonicalizePcgRmName(rmClean).toLowerCase().trim());
-          for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-            if (c.toLowerCase().trim() === canonicalizePcgRmName(rmClean).toLowerCase().trim() || telName.toLowerCase().trim() === rmClean.toLowerCase().trim()) {
-              memberSet.delete(telName.toLowerCase().trim());
-            }
+        tlNamesSet.add(tl.toLowerCase().trim());
+        tlNamesSet.add(canonicalizePcgRmName(tl).toLowerCase().trim());
+        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (c.toLowerCase().trim() === tl.toLowerCase().trim() || telName.toLowerCase().trim() === tl.toLowerCase().trim()) {
+            tlNamesSet.add(telName.toLowerCase().trim());
           }
         }
-      }
-
-      const allTeamMembers = Array.from(memberSet);
-
-      if (allTeamMembers.length > 0) {
-        disputeQueryParams.push(allTeamMembers);
+      });
+      const uniqueTls = Array.from(tlNamesSet);
+      if (uniqueTls.length > 0) {
+        disputeQueryParams.push(uniqueTls);
         disputeWhereClauses.push(
-          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+          `NOT (LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length}))`
         );
-      } else {
-        disputeWhereClauses.push(`1 = 0`);
       }
     }
 
@@ -1766,7 +1723,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
 
-    const defaultTl = teamLeads[0]?.tlName || allTlNames[0] || 'Swetha';
+    const defaultTl = (effectiveTl && effectiveTl !== 'all')
+      ? (teamLeads.find(t => isSamePcgAgent(t.tlName, effectiveTl || ''))?.tlName || effectiveTl)
+      : (teamLeads[0]?.tlName || allTlNames[0] || 'Swetha');
 
     return NextResponse.json({
       success: true,
@@ -1777,7 +1736,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       totalPages: Math.max(1, Math.ceil(total / limit)),
       rms,
       rmScorecards,
-      teamLeads,
+      teamLeads: userRole === 'tl'
+        ? teamLeads.filter(t => isSamePcgAgent(t.tlName, effectiveTl || ''))
+        : teamLeads,
       tlTeams: dynamicTlTeams,
       teamAssignments: customTeamMap,
       departmentStats,
@@ -1973,12 +1934,13 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
       // Fetch existing row so we can merge parameter reasoning & recalculate scores deterministically
       const existingRows = await query<{
         call_id: string;
+        rm_name: string | null;
         parameters: any;
         compliance_tripwire: boolean | null;
         compliance_reason: string | null;
         verdict: string | null;
       }>(
-        `SELECT call_id, parameters, compliance_tripwire, compliance_reason, verdict
+        `SELECT call_id, rm_name, parameters, compliance_tripwire, compliance_reason, verdict
          FROM pcg_call_evaluations
          WHERE call_id = $1
             OR call_id LIKE '%' || $1
@@ -1988,6 +1950,20 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
       );
       const existingRow = existingRows[0];
       const targetCallId = existingRow?.call_id || callId;
+
+      // Strict TL Authorization: TLs can only review disputes for agents mapped to their own team
+      if ((session?.user as any)?.role === 'tl') {
+        const callerTl = (session?.user as any)?.name || (session?.user as any)?.email;
+        const allowedRms = await getPcgRmsForTl(callerTl);
+        const evalRm = existingRow?.rm_name || '';
+        const isAllowed = allowedRms.some((m) => isSamePcgAgent(m, evalRm)) || isSamePcgAgent(callerTl, evalRm);
+        if (!isAllowed) {
+          return NextResponse.json(
+            { error: 'Forbidden: You can only review disputes for agents in your assigned team.' },
+            { status: 403 }
+          );
+        }
+      }
 
       // Normalize & merge parameters whenever either `parameters` or `scores` is provided
       let finalParametersJson: string | null = null;

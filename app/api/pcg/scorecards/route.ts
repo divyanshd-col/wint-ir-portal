@@ -6,6 +6,7 @@ import { isSamePcgAgent, canonicalizePcgRmName } from '@/lib/pcg/canonical-names
 import { readConfig } from '@/lib/config';
 import { listUsers } from '@/lib/users';
 import { TL_TEAMS } from '@/app/api/admin/pcg-calls/route';
+import { getPcgRmsForTl } from '@/lib/pcg/rm-directory';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -31,17 +32,8 @@ export async function GET(req: NextRequest) {
   try {
     // Find mapped RMs for this TL
     const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
-    const cleanTl = userName.replace(/^Team\s+/i, '').trim().toLowerCase();
-    const directRms = Object.entries(customTeamMap)
-      .filter(([_, tl]) => (tl || '').toLowerCase().trim() === cleanTl)
-      .map(([rm]) => rm.toLowerCase());
-    const fallbackRms = (TL_TEAMS[userName] || TL_TEAMS[cleanTl] || [])
-      .filter((r) => {
-        const customTl = customTeamMap[r.toLowerCase().trim()] || customTeamMap[canonicalizePcgRmName(r).toLowerCase().trim()];
-        return !customTl || customTl.toLowerCase().trim() === cleanTl;
-      })
-      .map((r) => r.toLowerCase());
-    const allRms = Array.from(new Set([...directRms, ...fallbackRms]));
+    const mappedRms = await getPcgRmsForTl(userName);
+    const allRms = mappedRms.map((r) => r.toLowerCase());
 
     // Unified scorecards flow (Calls + Chats + Emails)
     let whereClauses: string[] = ["status = 'published'"];
@@ -63,6 +55,8 @@ export async function GET(req: NextRequest) {
       if (allRms.length > 0) {
         params.push(allRms);
         whereClauses.push(`LOWER(rm_name) = ANY($${params.length})`);
+      } else {
+        whereClauses.push(`1 = 0`);
       }
     } else if (role === 'admin' && rmFilter && rmFilter !== 'all') {
       params.push(canonicalizePcgRmName(rmFilter));
@@ -195,18 +189,8 @@ export async function GET(req: NextRequest) {
 
     // Include mapped RMs from config & TL_TEAMS
     if (role === 'tl') {
-      const cleanTl = userName.replace(/^Team\s+/i, '').trim().toLowerCase();
-      const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => (tl || '').toLowerCase().trim() === cleanTl)
-        .map(([rm]) => canonicalizePcgRmName(rm));
-      const fallbackRms = (TL_TEAMS[userName] || TL_TEAMS[cleanTl] || [])
-        .filter((r) => {
-          const customTl = customTeamMap[r.toLowerCase().trim()] || customTeamMap[canonicalizePcgRmName(r).toLowerCase().trim()];
-          return !customTl || customTl.toLowerCase().trim() === cleanTl;
-        })
-        .map((r) => canonicalizePcgRmName(r));
       agentSet.clear();
-      [...directRms, ...fallbackRms].forEach((rm) => agentSet.add(rm));
+      mappedRms.forEach((rm) => agentSet.add(rm));
     } else if (role === 'admin') {
       Object.keys(customTeamMap).forEach((rm) => agentSet.add(canonicalizePcgRmName(rm)));
       Object.values(TL_TEAMS).forEach((members) => {
