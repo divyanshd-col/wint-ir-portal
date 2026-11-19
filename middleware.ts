@@ -46,6 +46,7 @@ export async function middleware(req: NextRequest) {
   const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
     admin: [
       'roster:view:access', 'roster:manage:access',
+      'leave:use:access', 'leave:approve:access',
       'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
       'quality:analytics:access', 'quality:chat_eval:access', 'quality:call_eval:access',
       'tl:team_analytics:access', 'tl:member_analytics:access', 'tl:quality_chats:access',
@@ -54,6 +55,7 @@ export async function middleware(req: NextRequest) {
     ],
     tl: [
       'roster:view:access', 'roster:manage:access',
+      'leave:approve:access',
       'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
       'quality:analytics:access', 'tl:member_analytics:access',
       'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
@@ -98,7 +100,8 @@ export async function middleware(req: NextRequest) {
       pathname.startsWith('/cx') ||
       pathname.startsWith('/tl') ||
       pathname.startsWith('/agent') ||
-      pathname.startsWith('/roster') // roster is for the CX team only
+      pathname.startsWith('/roster') ||
+      pathname.startsWith('/leave') // roster and leave are for the CX team only
     ) {
       return NextResponse.redirect(new URL('/admin/pcg-calls', req.url));
     }
@@ -168,6 +171,13 @@ export async function middleware(req: NextRequest) {
   // Roster
   if (pathname === '/roster' || pathname.startsWith('/roster/')) {
     if (!checkSkill('roster:view:access')) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
+  // Leave: needs the skill to use it or to approve
+  if (pathname === '/leave' || pathname.startsWith('/leave/')) {
+    if (!checkSkill(['leave:use:access', 'leave:approve:access'])) {
       return NextResponse.redirect(new URL('/', req.url));
     }
   }
