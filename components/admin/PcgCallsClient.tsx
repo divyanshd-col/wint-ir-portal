@@ -192,6 +192,14 @@ const PCG_FALLBACK_TL_TEAMS: Record<string, string[]> = {
     'Shrey Jain',
     'Yaashvi Arora',
   ],
+  Sravanthi: [
+    'Anurag Negi',
+    'Mahek Bihani',
+    'Mishra Richa Santoshkumar',
+    'Shreya Premkumar Mundada',
+    'Sreeram',
+    'Vidyul Kapoor',
+  ],
 };
 
 export const getRunoCallUrl = (callId: string | null | undefined) => {

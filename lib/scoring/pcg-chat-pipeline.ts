@@ -2,7 +2,7 @@ import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { getIQSGeminiKeys, geminiGenerate } from '@/lib/gemini';
 import { getPcgKbContextForScoring } from '@/lib/pcg/kb';
-import { resolvePcgRmByPhone } from '@/lib/pcg/rm-directory';
+import { resolvePcgRmByPhone, resolvePcgAgentSync } from '@/lib/pcg/rm-directory';
 import { canonicalizePcgRmName, isPcgAm } from '@/lib/pcg/canonical-names';
 import { resolveParameterAttribution } from '@/lib/pcg/attribution';
 import { detectPcgChatCategories, isPcgHiringOrRecruitmentChat } from '@/lib/pcg/chat-category';
@@ -302,6 +302,10 @@ export async function evaluatePcgChatConversation(
   const rmTurns = turns.filter(t => t.speaker === 'RM' || t.speaker === 'AM' || t.direction === 'outbound');
   const customerTurns = turns.filter(t => t.speaker === 'Customer' || t.direction === 'inbound');
 
+  // Load config & custom dynamic assignments
+  const config = await readConfig().catch(() => ({}));
+  const customTeamMap = (config as any)?.pcgTeamAssignments || {};
+
   // Resolve RM Name and Team Lead
   let rmName = conversation.rm_name || '';
   let tlName = 'Team Admin';
@@ -309,7 +313,7 @@ export async function evaluatePcgChatConversation(
   if (!rmName || /^\+?\d{8,15}$/.test(rmName)) {
     // 1. Try resolving by assigned_rm_id if it matches a directory phone
     if (conversation.assigned_rm_id) {
-      const resolved = await resolvePcgRmByPhone(conversation.assigned_rm_id);
+      const resolved = await resolvePcgRmByPhone(conversation.assigned_rm_id, customTeamMap);
       if (resolved?.rm) {
         rmName = resolved.rm;
         tlName = resolved.tl;
@@ -318,7 +322,7 @@ export async function evaluatePcgChatConversation(
 
     // 2. If not resolved, fall back to waba_number (the RM's dedicated WhatsApp line)
     if (!rmName && conversation.waba_number) {
-      const resolved = await resolvePcgRmByPhone(conversation.waba_number);
+      const resolved = await resolvePcgRmByPhone(conversation.waba_number, customTeamMap);
       if (resolved?.rm) {
         rmName = resolved.rm;
         tlName = resolved.tl;
@@ -327,7 +331,7 @@ export async function evaluatePcgChatConversation(
 
     // 3. Fall back to rmName if passed as a raw phone number
     if (!rmName && conversation.rm_name) {
-      const resolved = await resolvePcgRmByPhone(conversation.rm_name);
+      const resolved = await resolvePcgRmByPhone(conversation.rm_name, customTeamMap);
       if (resolved?.rm) {
         rmName = resolved.rm;
         tlName = resolved.tl;
@@ -337,6 +341,10 @@ export async function evaluatePcgChatConversation(
 
   if (rmName) {
     rmName = canonicalizePcgRmName(rmName);
+    const agentRes = resolvePcgAgentSync(rmName, customTeamMap);
+    if (agentRes.tl && agentRes.tl !== 'PCG Team') {
+      tlName = agentRes.tl;
+    }
   } else {
     rmName = 'Unassigned RM';
   }
@@ -573,7 +581,6 @@ CRITICAL SCORING RULES FOR CO-HANDLED CHAT:
   }
 
   // Load Gemini Keys
-  const config = await readConfig().catch(() => ({}));
   const geminiKeys = getIQSGeminiKeys(config);
   if (!geminiKeys || geminiKeys.length === 0) {
     throw new Error('No Gemini API keys found in configuration for PCG chat evaluation.');

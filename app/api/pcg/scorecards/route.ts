@@ -33,9 +33,14 @@ export async function GET(req: NextRequest) {
     const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
     const cleanTl = userName.replace(/^Team\s+/i, '').trim().toLowerCase();
     const directRms = Object.entries(customTeamMap)
-      .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
+      .filter(([_, tl]) => (tl || '').toLowerCase().trim() === cleanTl)
       .map(([rm]) => rm.toLowerCase());
-    const fallbackRms = (TL_TEAMS[userName] || TL_TEAMS[cleanTl] || []).map((r) => r.toLowerCase());
+    const fallbackRms = (TL_TEAMS[userName] || TL_TEAMS[cleanTl] || [])
+      .filter((r) => {
+        const customTl = customTeamMap[r.toLowerCase().trim()] || customTeamMap[canonicalizePcgRmName(r).toLowerCase().trim()];
+        return !customTl || customTl.toLowerCase().trim() === cleanTl;
+      })
+      .map((r) => r.toLowerCase());
     const allRms = Array.from(new Set([...directRms, ...fallbackRms]));
 
     // Unified scorecards flow (Calls + Chats + Emails)
@@ -45,7 +50,7 @@ export async function GET(req: NextRequest) {
     // Strictly exclude Team Leads and Admins from appearing in scorecards
     const nonRmList = [
       'gokul', 'gokul_admin', 'aahan thaker', 'aahan', 'unknown', 'unknown rm', 'test-pcg-admin', 'test-cx-tl',
-      'dheeraj', 'dheeraj bhojwani', 'swetha', 'swetha jayakumar', 'saiyam', 'saiyam rastogi', 'tanisha', 'tanisha mittal'
+      'dheeraj', 'dheeraj bhojwani', 'swetha', 'swetha jayakumar', 'saiyam', 'saiyam rastogi', 'tanisha', 'tanisha mittal', 'sravanthi'
     ];
     params.push(nonRmList);
     whereClauses.push(`LOWER(rm_name) != ALL($${params.length})`);
@@ -192,9 +197,14 @@ export async function GET(req: NextRequest) {
     if (role === 'tl') {
       const cleanTl = userName.replace(/^Team\s+/i, '').trim().toLowerCase();
       const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
+        .filter(([_, tl]) => (tl || '').toLowerCase().trim() === cleanTl)
         .map(([rm]) => canonicalizePcgRmName(rm));
-      const fallbackRms = (TL_TEAMS[userName] || TL_TEAMS[cleanTl] || []).map((r) => canonicalizePcgRmName(r));
+      const fallbackRms = (TL_TEAMS[userName] || TL_TEAMS[cleanTl] || [])
+        .filter((r) => {
+          const customTl = customTeamMap[r.toLowerCase().trim()] || customTeamMap[canonicalizePcgRmName(r).toLowerCase().trim()];
+          return !customTl || customTl.toLowerCase().trim() === cleanTl;
+        })
+        .map((r) => canonicalizePcgRmName(r));
       agentSet.clear();
       [...directRms, ...fallbackRms].forEach((rm) => agentSet.add(rm));
     } else if (role === 'admin') {
