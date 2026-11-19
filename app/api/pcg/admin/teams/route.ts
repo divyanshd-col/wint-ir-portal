@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePcgAdmin } from '@/lib/pcg/auth';
 import { listUsers } from '@/lib/users';
 import { readConfig, writeConfig } from '@/lib/config';
+import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
 
 export async function GET(req: NextRequest) {
   const { session, response } = await requirePcgAdmin();
@@ -66,10 +67,27 @@ export async function PATCH(req: NextRequest) {
 
     for (const [rm, tl] of Object.entries(updates)) {
       const key = rm.toLowerCase().trim();
+      const canonicalKey = canonicalizePcgRmName(rm).toLowerCase().trim();
       if (!tl || tl === 'Unassigned') {
         delete currentMap[key];
+        delete currentMap[canonicalKey];
       } else {
         currentMap[key] = tl;
+        currentMap[canonicalKey] = tl;
+      }
+
+      // Sync to pcg_rm_directory in Postgres
+      try {
+        const { query } = await import('@/lib/cx/db');
+        const tlDisplay = (!tl || tl === 'Unassigned') ? 'PCG Team' : (tl.startsWith('Team ') ? tl : `Team ${tl}`);
+        await query(
+          `UPDATE pcg_rm_directory 
+           SET tl_name = $1, updated_at = NOW() 
+           WHERE LOWER(TRIM(rm_name)) = $2 OR LOWER(TRIM(rm_name)) = $3`,
+          [tlDisplay, key, canonicalKey]
+        );
+      } catch (dbErr) {
+        console.warn('[pcg/admin/teams] could not sync pcg_rm_directory table:', dbErr);
       }
     }
 

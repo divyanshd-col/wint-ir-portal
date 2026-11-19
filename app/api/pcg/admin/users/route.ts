@@ -17,6 +17,7 @@ import {
 import { sendInviteEmail, mailerConfigured } from '@/lib/mailer';
 import { isAllowedEmail, normalizeEmail, normalizeName } from '@/lib/identity';
 import { readConfig, writeConfig } from '@/lib/config';
+import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
 const VALID_ROLES: UserRole[] = ['agent', 'admin', 'quality', 'tl'];
 const DORMANT_DAYS = 60;
 
@@ -229,13 +230,31 @@ export async function PATCH(req: NextRequest) {
     try {
       const config = await readConfig();
       const currentMap = { ...(config.pcgTeamAssignments || {}) };
-      const rmKey = (body.name || target.name).toLowerCase().trim();
+      const rmName = body.name || target.name;
+      const rmKey = rmName.toLowerCase().trim();
+      const canonicalKey = canonicalizePcgRmName(rmName).toLowerCase().trim();
       if (!body.tlName || body.tlName === 'Unassigned') {
         delete currentMap[rmKey];
+        delete currentMap[canonicalKey];
       } else {
         currentMap[rmKey] = body.tlName;
+        currentMap[canonicalKey] = body.tlName;
       }
       await writeConfig({ ...config, pcgTeamAssignments: currentMap });
+
+      // Keep Neon DB pcg_rm_directory aligned
+      try {
+        const { query } = await import('@/lib/cx/db');
+        const tlDisplay = (!body.tlName || body.tlName === 'Unassigned') ? 'PCG Team' : (body.tlName.startsWith('Team ') ? body.tlName : `Team ${body.tlName}`);
+        await query(
+          `UPDATE pcg_rm_directory 
+           SET tl_name = $1, updated_at = NOW() 
+           WHERE LOWER(TRIM(rm_name)) = $2 OR LOWER(TRIM(rm_name)) = $3 OR LOWER(TRIM(email)) = $4`,
+          [tlDisplay, rmKey, canonicalKey, (target.email || '').toLowerCase().trim()]
+        );
+      } catch (dbErr) {
+        console.warn('[pcg/admin/users] could not sync pcg_rm_directory table:', dbErr);
+      }
     } catch (err: any) {
       console.warn('[pcg/admin/users] could not update team assignment:', err?.message);
     }
