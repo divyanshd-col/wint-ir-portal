@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { rosterActor, withRosterErrors } from '@/lib/roster-server';
 import { todayIST, isIsoDate } from '@/lib/ist';
-import { cycleOf, clampAnchor, periodDays, isRosterView, cellKind, patternOn, ROSTER_START, type Assignment, type CellKind, type ExtraMark, type Pattern } from '@/lib/roster';
+import { leaveReady } from '@/lib/leave-server';
+import { LIVE_STATUSES, leaveByDay, type LeaveLine } from '@/lib/leave';
+import { cycleOf, canSeeBalance, clampAnchor, periodDays, isRosterView, cellKind, patternOn, ROSTER_START, type Assignment, type CellKind, type ExtraMark, type Pattern } from '@/lib/roster';
 
 const GET_ = async (req: NextRequest) => {
   const { actor, response } = await rosterActor('roster:view:access');
@@ -29,6 +31,16 @@ const GET_ = async (req: NextRequest) => {
     query<{ user_id: number; channel: string }>(`SELECT user_id, channel FROM work_channels`),
   ]);
 
+  // leave, holidays and balances (empty until migration 038 is applied)
+  const hasLeave = await leaveReady({ query });
+  const leaveRows = hasLeave ? await query<LeaveLine & { user_id: number; charge: string }>(
+    `SELECT r.user_id, d.leave_id, to_char(d.day,'YYYY-MM-DD') AS day, d.kind, d.half, d.state, d.charge
+       FROM leave_days d JOIN leave_requests r ON r.leave_id = d.leave_id
+      WHERE d.day BETWEEN $1 AND $2 AND d.state <> 'cancelled' AND r.status = ANY($3::text[])`, [start, last, [...LIVE_STATUSES]]) : [];
+  const holidayRows = hasLeave ? await query<{ day: string; name: string }>(`SELECT to_char(day,'YYYY-MM-DD') AS day, name FROM holidays WHERE day BETWEEN $1 AND $2`, [start, last]) : [];
+  const balances = hasLeave ? new Map((await query<{ user_id: number; b: string }>(`SELECT user_id, SUM(amount) AS b FROM leave_ledger GROUP BY user_id`)).map(r => [r.user_id, Number(r.b)])) : new Map<number, number>();
+  const holidaySet = new Set(holidayRows.map(h => h.day));
+
   const tlByUser = new Map(lines.map(l => [l.user_id, l.tl_user_id]));
   const nameById = new Map(people.map(p => [p.user_id, p.name]));
   const canEdit = (uid: number) => actor.role === 'admin' || (actor.role === 'tl' && uid !== actor.userId && tlByUser.get(uid) === actor.userId);
@@ -36,13 +48,15 @@ const GET_ = async (req: NextRequest) => {
   const rows = people.map(p => {
     const a = assigns.filter(x => x.user_id === p.user_id);
     const m = marks.filter(x => x.user_id === p.user_id);
+    const ctx = { leave: leaveByDay(leaveRows.filter(l => l.user_id === p.user_id).map(l => ({ ...l, charge: Number(l.charge) }))), holidays: holidaySet };
     return {
       userId: p.user_id, name: p.name, role: p.role, tlUserId: tlByUser.get(p.user_id) ?? null,
       tlName: nameById.get(tlByUser.get(p.user_id) ?? -1) ?? null,
       pattern: patternOn(a, view === 'month' ? anchor : days[0], cycleOf(patterns)), // the type for the period on screen
-      cells: days.map((d): CellKind => d < ROSTER_START ? 'none' : cellKind(patterns, a, m, d)),
+      cells: days.map((d): CellKind => d < ROSTER_START ? 'none' : cellKind(patterns, a, m, d, ctx)),
       channels: channels.filter(c => c.user_id === p.user_id).map(c => c.channel),
       canEdit: canEdit(p.user_id),
+      balance: hasLeave && canSeeBalance(actor, p.user_id, tlByUser.get(p.user_id) ?? null) && balances.has(p.user_id) ? balances.get(p.user_id)! : null, // no ledger yet = no balance loaded
     };
   });
   const scheduledOut = (scheduled as { id: number; user_id: number; starts_on: string }[]).map(s => {
@@ -50,6 +64,6 @@ const GET_ = async (req: NextRequest) => {
     const cur = patternOn(assigns.filter(x => x.user_id === s.user_id && x.id !== s.id), s.starts_on, cycleOf(patterns));
     return { ...s, from_pattern: cur, name: nameById.get(s.user_id) ?? '', canEdit: canEdit(s.user_id) };
   });
-  return NextResponse.json({ today, view, anchor, days, patterns, people: rows, scheduled: scheduledOut, viewer: actor });
+  return NextResponse.json({ today, view, anchor, days, patterns, people: rows, scheduled: scheduledOut, holidays: holidayRows, leaveReady: hasLeave, viewer: actor });
 }
 export const GET = withRosterErrors(GET_);

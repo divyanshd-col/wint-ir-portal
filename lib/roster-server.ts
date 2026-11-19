@@ -30,8 +30,14 @@ export async function assertCanEdit(actor: Actor, targetUserId: number, today: s
   return ok ? null : NextResponse.json({ error: 'Forbidden. You can only change people who report to you.' }, { status: 403 });
 }
 
-export async function audit(actorId: number, action: string, targetId: number | null, detail: unknown) {
-  await query(`INSERT INTO hrms_audit (actor_user_id, action, target_user_id, detail) VALUES ($1,$2,$3,$4)`,
+/** Throw from inside a transaction to roll it back and answer with this status. */
+export class HttpError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+type Db = { query<T = any>(sql: string, params?: any[]): Promise<T[]> }; // eslint-disable-line @typescript-eslint/no-explicit-any
+export async function audit(actorId: number, action: string, targetId: number | null, detail: unknown, db: Db = { query }) {
+  await db.query(`INSERT INTO hrms_audit (actor_user_id, action, target_user_id, detail) VALUES ($1,$2,$3,$4)`,
     [actorId, action, targetId, JSON.stringify(detail)]);
 }
 
@@ -46,6 +52,7 @@ export function withRosterErrors<A extends unknown[]>(fn: (...args: A) => Promis
     try {
       return await fn(...args);
     } catch (err) {
+      if (err instanceof HttpError) return NextResponse.json({ error: err.message }, { status: err.status });
       console.error('[roster]', (err as Error)?.message);
       if (isMissingTable(err)) {
         return NextResponse.json({ error: 'Roster tables are missing. Run migration 035 on this database.' }, { status: 503 });

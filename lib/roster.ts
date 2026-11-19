@@ -3,7 +3,7 @@ import { addDays, weekday } from '@/lib/ist';
 export interface Pattern { id: number; label: string; off_weekdays: number[]; rotates?: boolean }
 export interface Assignment { id?: number; pattern_id: number; effective_from: string; cancelled_at?: string | null }
 export interface ExtraMark { day: string; half: 'full' | 'first' | 'second'; reversed_at?: string | null }
-export type CellKind = 'work' | 'off' | 'extra' | 'none'; // 'none' = before the roster starts
+export type CellKind = 'work' | 'off' | 'extra' | 'none' | 'leave' | 'leave-half' | 'lop' | 'lop-half' | 'hol'; // 'none' = no roster type or before the roster starts
 export const CHANNELS = ['Chats', 'Calls', 'Emails', 'ORM'] as const;
 
 /** Number of types in the rotation (Type 1 -> 2 -> 3 -> 4 -> back to 1). Types after those are fixed and never rotate. */
@@ -36,11 +36,20 @@ export function isOff(patterns: Pattern[], patternId: number | null, date: strin
   return !!p && p.off_weekdays.includes(weekday(date));
 }
 
-export function cellKind(patterns: Pattern[], assignments: Assignment[], marks: ExtraMark[], date: string): CellKind {
+export interface CellContext { leave?: Map<string, { leave: number; lop: number }>; holidays?: Set<string> }
+
+/** One day on the grid: week-off (or extra) first, then leave / LOP, then a holiday, then working. */
+export function cellKind(patterns: Pattern[], assignments: Assignment[], marks: ExtraMark[], date: string, ctx: CellContext = {}): CellKind {
   const type = patternOn(assignments, date, cycleOf(patterns));
   if (type === null) return 'none'; // no roster type set for this person yet
-  if (!isOff(patterns, type, date)) return 'work';
-  return marks.some(m => m.day === date && !m.reversed_at) ? 'extra' : 'off';
+  if (isOff(patterns, type, date)) return marks.some(m => m.day === date && !m.reversed_at) ? 'extra' : 'off';
+  const l = ctx.leave?.get(date);
+  if (l && (l.leave > 0 || l.lop > 0)) {
+    const total = l.leave + l.lop;
+    if (l.lop > 0) return total >= 1 ? 'lop' : 'lop-half';
+    return total >= 1 ? 'leave' : 'leave-half';
+  }
+  return ctx.holidays?.has(date) ? 'hol' : 'work';
 }
 
 /** Monday on or before `date`. */
@@ -95,6 +104,12 @@ export function canGoPrev(view: RosterView, anchor: string): boolean {
 export const isCxDomain = (platformDomain: string | null | undefined) => platformDomain !== 'pcg';
 
 export interface Actor { userId: number; role: string }
+
+/** Balances and statements: admins see everyone, a TL sees their own team, anyone sees their own. */
+export function canSeeBalance(actor: Actor, targetUserId: number, tlOfTarget: number | null): boolean {
+  if (actor.role === 'admin' || actor.userId === targetUserId) return true;
+  return actor.role === 'tl' && tlOfTarget === actor.userId;
+}
 /** Who may change a target. Admin: anyone. TL: only members reporting to them by user id, never themselves. */
 export function canEditTarget(actor: Actor, targetUserId: number, tlOfTarget: number | null): boolean {
   if (actor.role === 'admin') return true;

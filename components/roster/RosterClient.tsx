@@ -2,11 +2,12 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { canGoPrev, shiftAnchor, type RosterView } from '@/lib/roster';
-import { CancelDialog, MarkExtraDialog, PatternDialog, TeamLeadDialog } from './Dialogs';
+import { fmtQ } from '@/lib/leave';
+import { CancelDialog, MarkExtraDialog, PatternDialog, StatementDialog, TeamLeadDialog } from './Dialogs';
 import { Avatar, EmptyState, Switch, btnSecondary, dayNum, roleLabel, fmtDay, fmtMonth, fmtShort, offShort, wdOf, type Person, type RosterData, type Scheduled } from './ui';
 
 type Tab = 'grid' | 'scheduled' | 'channels' | 'teams';
-type Dlg = { t: 'pattern'; p: Person; edit?: Scheduled } | { t: 'mark'; p: Person } | { t: 'cancel'; s: Scheduled } | { t: 'tl'; p: Person; tl: Person } | null;
+type Dlg = { t: 'pattern'; p: Person; edit?: Scheduled } | { t: 'mark'; p: Person } | { t: 'cancel'; s: Scheduled } | { t: 'tl'; p: Person; tl: Person } | { t: 'statement'; p: Person } | null;
 const CHANNELS = ['Chats', 'Calls', 'Emails', 'ORM'];
 const card: React.CSSProperties = { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 12, overflow: 'hidden' };
 
@@ -77,27 +78,29 @@ export default function RosterClient() {
           <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--qa-text)', marginLeft: 4 }}>{title}</span>
         </div>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="roster-legend"><span>Working</span><span><i className="k-off" />Week-off</span><span><i className="k-extra" />Extra day worked</span></div>
+          <div className="roster-legend"><span>Working</span><span><i className="k-off" />Week-off</span><span><i className="k-extra" />Extra day worked</span>{data.leaveReady && <><span><i className="k-leave" />Leave</span><span><i className="k-lop" />LOP</span><span><i className="k-hol" />Holiday</span></>}</div>
           <div role="group" aria-label="Calendar view" style={{ display: 'inline-flex', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>{seg('day', 'Day')}{seg('week', 'Week')}{seg('month', 'Month')}</div>
         </div>
       </div>);
 
     if (data.view === 'month') {
-      const byDay = (i: number) => ({ off: data.people.filter(p => p.cells[i] === 'off'), extra: data.people.filter(p => p.cells[i] === 'extra') });
+      const isLeave = (c: string) => c === 'leave' || c === 'leave-half' || c === 'lop' || c === 'lop-half';
+      const byDay = (i: number) => ({ off: data.people.filter(p => p.cells[i] === 'off'), extra: data.people.filter(p => p.cells[i] === 'extra'), leave: data.people.filter(p => isLeave(p.cells[i])) });
       const first = data.anchor.slice(0, 7);
       body = (<>{toolbar}
         <div style={card}>
           <div className="roster-month">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => <div key={w} className="roster-month-h">{w}</div>)}
             {data.days.map((d, i) => {
-              const { off, extra } = byDay(i);
+              const { off, extra, leave } = byDay(i);
+              const holiday = data.holidays.find(h => h.day === d)?.name;
               const inMonth = d.slice(0, 7) === first;
               const none = data.people.every(p => p.cells[i] === 'none');
-              const chips = [...extra.map(p => ({ p, k: 'extra' })), ...off.map(p => ({ p, k: 'off' }))];
+              const chips = [...extra.map(p => ({ p, k: 'extra' })), ...leave.map(p => ({ p, k: 'leave' })), ...off.map(p => ({ p, k: 'off' }))];
               return (
-                <button key={d} type="button" disabled={none} className={`roster-month-c${inMonth ? '' : ' out'}${d === data.today ? ' today' : ''}`} onClick={() => load('day', d)} aria-label={`${fmtDay(d)}: ${off.length} week-off, ${extra.length} extra day`}>
-                  <span className="n">{dayNum(d)}</span>
-                  {!none && chips.slice(0, 3).map(({ p, k }) => <span key={p.userId} className={`chip k-${k}`}>{p.name.split(' ')[0]}{k === 'extra' ? ' (extra)' : ''}</span>)}
+                <button key={d} type="button" disabled={none} className={`roster-month-c${inMonth ? '' : ' out'}${d === data.today ? ' today' : ''}`} onClick={() => load('day', d)} aria-label={`${fmtDay(d)}: ${off.length} week-off, ${leave.length} on leave, ${extra.length} extra day${holiday ? `, ${holiday}` : ''}`}>
+                  <span className="n">{dayNum(d)}</span>{holiday && !none && <span className="hol">{holiday}</span>}
+                  {!none && chips.slice(0, 3).map(({ p, k }) => <span key={p.userId} className={`chip k-${k}`}>{p.name.split(' ')[0]}{k === 'extra' ? ' (extra)' : k === 'leave' ? ' (leave)' : ''}</span>)}
                   {!none && chips.length > 3 && <span className="more">+{chips.length - 3} more</span>}
                 </button>);
             })}
@@ -108,13 +111,17 @@ export default function RosterClient() {
       const groups = new Map<string, Person[]>();
       for (const p of data.people) { const k = p.tlName ?? ''; groups.set(k, [...(groups.get(k) ?? []), p]); }
       const order = [...groups.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)));
-      const cols = 2 + data.days.length + (anyEdit ? 1 : 0);
-      const label = (c: string) => c === 'off' ? 'Week-off' : c === 'extra' ? 'Extra day worked' : c === 'none' ? '' : 'Working';
+      const showBalance = data.people.some(p => p.balance !== null);
+      const cols = 2 + data.days.length + (showBalance ? 1 : 0) + (anyEdit ? 1 : 0);
+      const hol = (d: string) => data.holidays.find(h => h.day === d)?.name;
+      const label = (c: string, d: string) => ({ off: 'Week-off', extra: 'Extra day worked', none: '', leave: 'Leave', 'leave-half': 'Half-day leave', lop: 'LOP', 'lop-half': 'Half-day LOP', hol: `Holiday${hol(d) ? `: ${hol(d)}` : ''}`, work: 'Working' } as Record<string, string>)[c] ?? '';
+      const short = (c: string) => ({ off: 'Off', extra: 'Extra', leave: 'Leave', 'leave-half': '½ L', lop: 'LOP', 'lop-half': '½ LOP', hol: 'Hol' } as Record<string, string>)[c] ?? '';
       body = (<>{toolbar}
         <div style={{ ...card, overflowX: 'auto' }}>
           <table className="roster-tbl" style={{ minWidth: isDay ? 640 : 760 }}>
             <thead><tr><th style={{ width: 200 }}>Person</th><th style={{ width: 150 }}>Roster type</th>
               {data.days.map(d => <th key={d} className={`rc${d === data.today ? ' today' : ''}`}>{isDay ? 'Status' : <><div>{wdOf(d)}</div><div>{fmtShort(d)}</div></>}</th>)}
+              {showBalance && <th style={{ width: 90, textAlign: 'right' }}>Balance</th>}
               {anyEdit && <th style={{ width: 200 }}>Actions</th>}</tr></thead>
             <tbody>{order.map(k => (
               <React.Fragment key={k || 'none'}>
@@ -123,7 +130,8 @@ export default function RosterClient() {
                   <tr key={p.userId}>
                     <td><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Avatar name={p.name} /><div><div style={{ fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{roleLabel(p.role)}</div></div></div></td>
                     <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{p.pattern ? (pat(p.pattern)?.rotates === false ? 'Fixed' : `Type ${p.pattern}`) : 'Not set'}<div style={{ color: 'var(--qa-text-3)' }}>{offShort(pat(p.pattern))}</div></td>
-                    {p.cells.map((c, i) => { const d = data.days[i]; return <td key={d} className={`rc k-${c}${d === data.today ? ' today' : ''}${d < data.today ? ' past' : ''}`} title={`${fmtDay(d)}: ${label(c) || 'No roster type set'}`}>{isDay ? label(c) : c === 'off' ? 'Off' : c === 'extra' ? 'Extra' : ''}</td>; })}
+                    {p.cells.map((c, i) => { const d = data.days[i]; return <td key={d} className={`rc k-${c}${d === data.today ? ' today' : ''}${d < data.today ? ' past' : ''}`} title={`${fmtDay(d)}: ${label(c, d) || 'No roster type set'}`}>{isDay ? label(c, d) : short(c)}</td>; })}
+                    {showBalance && <td style={{ textAlign: 'right' }}>{p.balance === null ? <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>–</span> : <button type="button" title="Open statement" onClick={() => setDlg({ t: 'statement', p })} style={{ border: 0, background: 'transparent', cursor: 'pointer', fontWeight: 600, fontSize: 13, textDecoration: 'underline', textDecorationStyle: 'dotted', color: p.balance < 0 ? 'var(--fail)' : 'var(--qa-text)' }}>{fmtQ(p.balance)}</button>}</td>}
                     {anyEdit && <td>{p.canEdit ? <div style={{ display: 'flex', gap: 6 }}><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'pattern', p })}>Change type</button><button type="button" style={btnSecondary} onClick={() => setDlg({ t: 'mark', p })}>Mark</button></div> : <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>–</span>}</td>}
                   </tr>))}
               </React.Fragment>))}</tbody>
@@ -163,6 +171,7 @@ export default function RosterClient() {
       {body}
       {data && dlg?.t === 'pattern' && <PatternDialog key={dlg.p.userId + (dlg.edit?.id ?? 0)} person={dlg.p} patterns={data.patterns} today={data.today} edit={dlg.edit} onClose={() => setDlg(null)} onDone={done} />}
       {data && dlg?.t === 'mark' && <MarkExtraDialog person={dlg.p} patterns={data.patterns} days={data.days} today={data.today} onClose={() => setDlg(null)} onDone={done} />}
+      {dlg?.t === 'statement' && <StatementDialog person={dlg.p} onClose={() => setDlg(null)} />}
       {dlg?.t === 'tl' && <TeamLeadDialog person={dlg.p} tl={dlg.tl} onClose={() => setDlg(null)} onDone={done} />}
       {dlg?.t === 'cancel' && <CancelDialog s={dlg.s} onClose={() => setDlg(null)} onDone={done} />}
       {toast && <div role="status" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--qa-text)', color: 'var(--qa-on-text)', padding: '10px 16px', borderRadius: 10, fontSize: 13, zIndex: 60 }}>{toast}</div>}

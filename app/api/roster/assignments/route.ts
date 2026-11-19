@@ -1,37 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/cx/db';
-import { rosterActor, assertCanEdit, audit, withRosterErrors } from '@/lib/roster-server';
+import { withTransaction } from '@/lib/cx/db';
+import { rosterActor, assertCanEdit, audit, HttpError, withRosterErrors } from '@/lib/roster-server';
+import { applyReconciled, planMutation } from '@/lib/leave-server';
+import { fmtDayLong } from '@/lib/leave';
 import { todayIST, isIsoDate } from '@/lib/ist';
-import { patternOn, validateNewChange } from '@/lib/roster';
 
+/** Schedule a roster type change. Body: { userId, toPattern, start, reason, expectedFingerprint } */
 const POST_ = async (req: NextRequest) => {
   const { actor, response } = await rosterActor('roster:manage:access');
   if (response) return response;
   const b = await req.json().catch(() => ({}));
   const userId = Number(b.userId), toPattern = Number(b.toPattern);
   if (!Number.isInteger(userId) || !Number.isInteger(toPattern) || !isIsoDate(b.start)) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
+  if (typeof b.expectedFingerprint !== 'string') return NextResponse.json({ error: 'Preview the change first.' }, { status: 400 });
   const today = todayIST();
   const denied = await assertCanEdit(actor, userId, today);
   if (denied) return denied;
-  const types = await query<{ id: number; rotates: boolean }>(`SELECT id, rotates FROM roster_patterns`);
-  if (!types.some(t => t.id === toPattern)) return NextResponse.json({ error: 'Unknown roster type.' }, { status: 400 });
+  const reason = String(b.reason ?? '').trim();
 
-  const rows = await query<{ pattern_id: number; effective_from: string }>(
-    `SELECT pattern_id, to_char(effective_from,'YYYY-MM-DD') AS effective_from FROM roster_assignments WHERE user_id = $1 AND cancelled_at IS NULL`, [userId]);
-  const err = validateNewChange({
-    today, start: b.start, reason: String(b.reason ?? ''), toPattern,
-    current: patternOn(rows, b.start, types.filter(t => t.rotates).length), hasFuture: rows.some(r => r.effective_from > today),
+  const id = await withTransaction(async tx => {
+    await tx.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [userId]); // one person's changes are applied one after another
+    const plan = await planMutation(tx, userId, { kind: 'create', toPattern, start: b.start, reason }, today, true);
+    if (plan.fingerprint !== b.expectedFingerprint) throw new HttpError(409, 'Leave changed since you previewed, review again.');
+    let newId: number;
+    try {
+      const ins = await tx.query<{ id: number }>(`INSERT INTO roster_assignments (user_id, pattern_id, effective_from, reason, set_by_user_id) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+        [userId, toPattern, b.start, reason, actor.userId]);
+      newId = ins[0].id;
+    } catch (e) {
+      if ((e as { code?: string })?.code === '23505') throw new HttpError(409, 'A change already exists for that date.');
+      throw e;
+    }
+    await applyReconciled(tx, actor.userId, userId, plan, `Pattern change: Type ${toPattern} from ${fmtDayLong(b.start)}`);
+    await audit(actor.userId, 'roster_pattern_scheduled', userId, { toPattern, start: b.start, reason, leaveChanges: plan.reconciled.changes.length, net: plan.reconciled.net }, tx);
+    return newId;
   });
-  if (err) return NextResponse.json({ error: err }, { status: 400 });
-
-  try {
-    const ins = await query(`INSERT INTO roster_assignments (user_id, pattern_id, effective_from, reason, set_by_user_id) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [userId, toPattern, b.start, String(b.reason).trim(), actor.userId]);
-    await audit(actor.userId, 'roster_pattern_scheduled', userId, { toPattern, start: b.start, reason: b.reason });
-    return NextResponse.json({ id: ins[0].id });
-  } catch (e) {
-    if ((e as { code?: string })?.code === '23505') return NextResponse.json({ error: 'A change already exists for that date.' }, { status: 409 });
-    throw e;
-  }
-}
+  return NextResponse.json({ id });
+};
 export const POST = withRosterErrors(POST_);

@@ -2,10 +2,11 @@
 
 import React from 'react';
 
+export type CellKind = 'work' | 'off' | 'extra' | 'none' | 'leave' | 'leave-half' | 'lop' | 'lop-half' | 'hol';
 export interface Pattern { id: number; label: string; off_weekdays: number[]; rotates?: boolean }
-export interface Person { userId: number; name: string; role: string; tlUserId: number | null; tlName: string | null; pattern: number | null; cells: ('work' | 'off' | 'extra' | 'none')[]; channels: string[]; canEdit: boolean }
+export interface Person { userId: number; name: string; role: string; tlUserId: number | null; tlName: string | null; pattern: number | null; cells: CellKind[]; balance: number | null; channels: string[]; canEdit: boolean }
 export interface Scheduled { id: number; user_id: number; name: string; from_pattern: number | null; to_pattern: number; starts_on: string; reason: string; set_by: string | null; set_at: string; updated_at: string; canEdit: boolean }
-export interface RosterData { today: string; view: 'day' | 'week' | 'month'; anchor: string; days: string[]; patterns: Pattern[]; people: Person[]; scheduled: Scheduled[]; viewer: { userId: number; role: string } }
+export interface RosterData { today: string; view: 'day' | 'week' | 'month'; anchor: string; days: string[]; patterns: Pattern[]; people: Person[]; scheduled: Scheduled[]; holidays: { day: string; name: string }[]; leaveReady: boolean; viewer: { userId: number; role: string } }
 
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
