@@ -92,10 +92,6 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   'suryansh sharma': { rm: 'Suryansh Sharma', tl: 'Team Swetha' },
   'ankita agarwal': { rm: 'Ankita Agarwal', tl: 'Team Swetha' },
   'vishyata tulsani': { rm: 'Vishyata Tulsani', tl: 'Team Swetha' },
-  'shreya premkumar mundada': { rm: 'Shreya Premkumar Mundada', tl: 'Team Swetha' },
-  'shreya mundada': { rm: 'Shreya Premkumar Mundada', tl: 'Team Swetha' },
-  'mishra richa santoshkumar': { rm: 'Mishra Richa Santoshkumar', tl: 'Team Swetha' },
-  'richa mishra': { rm: 'Mishra Richa Santoshkumar', tl: 'Team Swetha' },
   'swetha': { rm: 'Swetha', tl: 'Team Swetha' },
 
   // Team Saiyam Rastogi
@@ -116,6 +112,11 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   // Team Sravanthi
   'anurag negi': { rm: 'Anurag Negi', tl: 'Team Sravanthi' },
   'mahek bihani': { rm: 'Mahek Bihani', tl: 'Team Sravanthi' },
+  'mishra richa santoshkumar': { rm: 'Mishra Richa Santoshkumar', tl: 'Team Sravanthi' },
+  'richa mishra': { rm: 'Mishra Richa Santoshkumar', tl: 'Team Sravanthi' },
+  'shreya premkumar mundada': { rm: 'Shreya Premkumar Mundada', tl: 'Team Sravanthi' },
+  'shreya mundada': { rm: 'Shreya Premkumar Mundada', tl: 'Team Sravanthi' },
+  'sreeram': { rm: 'Sreeram', tl: 'Team Sravanthi' },
   'sravanthi': { rm: 'Sravanthi', tl: 'Team Sravanthi' },
   'vidyul kapoor': { rm: 'Vidyul Kapoor', tl: 'Team Sravanthi' },
 
@@ -124,8 +125,6 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   'aahan': { rm: 'Aahan Thaker', tl: 'Team Admin' },
   'aahan pcg': { rm: 'Aahan Thaker', tl: 'Team Admin' },
   'dhanush': { rm: 'Dhanush', tl: 'Team Admin' },
-  'sreeram': { rm: 'Sreeram', tl: 'Team Admin' },
-  'sreeram v': { rm: 'Sreeram', tl: 'Team Admin' },
   'pranav sharma': { rm: 'Pranav Sharma', tl: 'Team Admin' },
   'aboli jawkhedkar': { rm: 'Aboli Jawkhedkar', tl: 'Team Admin' },
 };
@@ -631,7 +630,9 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
   const caller = (call.called_by && call.called_by.trim() && call.called_by.toLowerCase() !== 'unknown')
     ? call.called_by.trim()
     : (call.agent_name && call.agent_name.trim() && call.agent_name.toLowerCase() !== 'unknown' ? call.agent_name.trim() : 'Unassigned RM');
-  const { rm: resolvedRm, tl: resolvedTl } = await resolvePcgAgentAsync(caller);
+  const config = await readConfig();
+  const customTeamMap = config.pcgTeamAssignments || {};
+  const { rm: resolvedRm, tl: resolvedTl } = await resolvePcgAgentAsync(caller, customTeamMap);
 
   // Auto-exclude known internal company phone numbers immediately (0 LLM cost)
   if (isPcgExcludedInternalPhone(call.phone_number)) {
@@ -720,7 +721,6 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
   }
 
   // 2. Fetch Gemini API configuration
-  const config = await readConfig();
   const geminiKeys = getIQSGeminiKeys(config);
   if (!geminiKeys.length) {
     throw new Error('No Gemini API key configured for IQS scoring');

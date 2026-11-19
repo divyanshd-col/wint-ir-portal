@@ -126,9 +126,7 @@ export const TL_TEAMS: Record<string, string[]> = {
   Swetha: [
     'Ankita Agarwal',
     'Diya Sharma',
-    'Mishra Richa Santoshkumar',
     'Nishtha Veerwani',
-    'Shreya Premkumar Mundada',
     'Sujal Dadwani',
     'Suryansh Sharma',
     'Vaishnavi N J',
@@ -170,12 +168,14 @@ export const TL_TEAMS: Record<string, string[]> = {
   Sravanthi: [
     'Anurag Negi',
     'Mahek Bihani',
+    'Mishra Richa Santoshkumar',
+    'Shreya Premkumar Mundada',
+    'Sreeram',
     'Vidyul Kapoor',
   ],
   Admin: [
     'Aboli Jawkhedkar',
     'Pranav Sharma',
-    'Sreeram',
   ],
 };
 
@@ -563,6 +563,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     if (TL_TEAMS[tl]) {
       for (const member of TL_TEAMS[tl]) {
         const canonical = canonicalizePcgRmName(member).toLowerCase();
+        // If explicitly reassigned to another TL in User Management, skip pulling into the old team
+        const customAssignedTl = customTeamMap[canonical] || customTeamMap[member.toLowerCase().trim()];
+        if (customAssignedTl && customAssignedTl.toLowerCase().trim() !== tl.toLowerCase().trim()) {
+          continue;
+        }
         const exists = dynamicTlTeams[tl].some((m) => canonicalizePcgRmName(m).toLowerCase() === canonical);
         if (!exists) {
           dynamicTlTeams[tl].push(member);
@@ -791,6 +796,19 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
       });
       ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
+
+      // Purge any members who are explicitly assigned to a different TL in User Management
+      for (const [rmClean, assignedTl] of Object.entries(customTeamMap)) {
+        if (assignedTl && assignedTl.toLowerCase().trim() !== cleanTl) {
+          memberSet.delete(rmClean.toLowerCase().trim());
+          memberSet.delete(canonicalizePcgRmName(rmClean).toLowerCase().trim());
+          for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+            if (c.toLowerCase().trim() === canonicalizePcgRmName(rmClean).toLowerCase().trim() || telName.toLowerCase().trim() === rmClean.toLowerCase().trim()) {
+              memberSet.delete(telName.toLowerCase().trim());
+            }
+          }
+        }
+      }
 
       const allTeamMembers = Array.from(memberSet);
 
@@ -1302,6 +1320,19 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
       });
       ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
+
+      // Purge any members who are explicitly assigned to a different TL in User Management
+      for (const [rmClean, assignedTl] of Object.entries(customTeamMap)) {
+        if (assignedTl && assignedTl.toLowerCase().trim() !== cleanTl) {
+          memberSet.delete(rmClean.toLowerCase().trim());
+          memberSet.delete(canonicalizePcgRmName(rmClean).toLowerCase().trim());
+          for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+            if (c.toLowerCase().trim() === canonicalizePcgRmName(rmClean).toLowerCase().trim() || telName.toLowerCase().trim() === rmClean.toLowerCase().trim()) {
+              memberSet.delete(telName.toLowerCase().trim());
+            }
+          }
+        }
+      }
 
       const allTeamMembers = Array.from(memberSet);
 

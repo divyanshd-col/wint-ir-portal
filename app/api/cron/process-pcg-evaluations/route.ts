@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
+import { readConfig } from '@/lib/config';
 import { runPcgCallPipeline, resolvePcgAgent, resolvePcgAgentAsync, PCG_QUALITY_PARAMETERS } from '@/lib/scoring/pcg-pipeline';
 import { isPcgExcludedInternalPhone } from '@/lib/pcg/excluded-numbers';
 
@@ -7,6 +8,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max duration on Vercel
 
 async function syncShortCalls(fromDate: string, minDuration: number) {
+  const config = await readConfig().catch(() => null);
+  const customTeamMap = config?.pcgTeamAssignments || {};
+
   const shortCalls = await query<any>(`
     SELECT r.call_id, r.called_by, r.user_phone, r.agent_name, r.duration_seconds, r.phone_number
     FROM pcg_call_recordings r
@@ -27,7 +31,7 @@ async function syncShortCalls(fromDate: string, minDuration: number) {
   const emptyParamsJson = JSON.stringify(emptyParams);
 
   for (const c of shortCalls) {
-    const { rm, tl } = await resolvePcgAgentAsync(c.called_by || c.agent_name || c);
+    const { rm, tl } = await resolvePcgAgentAsync(c.called_by || c.agent_name || c, customTeamMap);
     if (isPcgExcludedInternalPhone(c.phone_number)) {
       const exclusionText = `Internal company number (${c.phone_number || 'configured internal number'})`;
       await query(`
