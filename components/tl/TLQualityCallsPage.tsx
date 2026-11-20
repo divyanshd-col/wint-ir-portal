@@ -10,6 +10,7 @@ import { DateRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import UISelect from '@/components/quality/UISelect';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
+import { isJunkDisposition } from '@/lib/quality';
 import * as T from '@/components/quality/tableStyles';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
@@ -24,7 +25,7 @@ const TD_MONO: CSSProperties = T.tdMono;
 const TD_NUM: CSSProperties = T.tdNum;
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   return <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111111)' }}>{score}</span>;
 }
 
@@ -535,7 +536,7 @@ export default function TLQualityCallsPage() {
                             )}
                           </td>
                           <td style={TD_NUM}>
-                            <IQSBadge score={call.iqs} />
+                            <IQSBadge score={isJunkDisposition(call.disposition, call.subDisposition) ? null : call.iqs} />
                           </td>
                           <td style={{ ...TD_BASE, textAlign: 'right' }}>
                             <button

@@ -237,8 +237,12 @@ function resolveParamData(raw: any, pKey: string, aliasMap: Record<string, strin
 
 export function calculateCallIqs(
   paramState: Record<string, { score: string; reasoning?: string }>,
-  weights: Record<string, number> = CALL_IQS_WEIGHTS
+  weights: Record<string, number> = CALL_IQS_WEIGHTS,
+  disposition?: string | null
 ): number | null {
+  if (disposition && disposition.toLowerCase().includes('junk')) {
+    return null;
+  }
   let earned = 0;
   let applicable = 0;
   for (const [param, weight] of Object.entries(weights)) {
@@ -451,14 +455,20 @@ export default function CallEvalPanel({
   const [paramState, setParamState] = useState<Record<string, { score: string; reasoning: string }>>({});
   const [hasUserEditedParams, setHasUserEditedParams] = useState(false);
 
+  const isJunkCall = Boolean(
+    (disposition && disposition.toLowerCase().includes('junk')) ||
+    (dispute?.disposition && dispute.disposition.toLowerCase().includes('junk'))
+  );
+
   const displayedIqs = useMemo(() => {
+    if (isJunkCall) return null;
     if (hasUserEditedParams) {
-      return calculateCallIqs(paramState, activeWeights);
+      return calculateCallIqs(paramState, activeWeights, disposition);
     }
     return currentIqs != null && !isNaN(currentIqs)
       ? currentIqs
       : (iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
-  }, [hasUserEditedParams, paramState, currentIqs, iqsScore, activeWeights]);
+  }, [isJunkCall, hasUserEditedParams, paramState, currentIqs, iqsScore, activeWeights, disposition]);
 
   // Compliance Gates state
   const [gateState, setGateState] = useState<Record<string, GateParamState>>(() => {

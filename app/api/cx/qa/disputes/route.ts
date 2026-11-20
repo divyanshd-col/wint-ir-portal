@@ -7,7 +7,7 @@ import { query } from '@/lib/cx/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
-import { computeIqsFromRawParams } from '@/lib/quality';
+import { computeIqsFromRawParams, isJunkDisposition } from '@/lib/quality';
 import { extractDurationFromTranscript } from '@/lib/call-quality';
 
 const ROUTE = 'cx/qa/disputes';
@@ -154,11 +154,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     contact_id: number | null;
     started_at: string | null;
     conversation_type: string | null;
+    tags?: any;
   }[] = chatIds.length > 0 ? await query<{
     chat_id: string;
     agent_id: number | null;
     agent_name: string | null;
     closed_at: string;
+    tags?: any;
     disposition: string;
     sub_disposition: string | null;
     iqs_score: string | null;
@@ -174,6 +176,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }>(
     `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name,
             c.closed_at,
+            c.tags,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
             i.iqs_score, i.call_iqs_score, i.parameters,
@@ -393,33 +396,44 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     let iqsScore: number | null = null;
     let callIqsScore: number | null = null;
 
-    if (params.__scores) {
-      botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
-      iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
-      callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
-    }
+    const isJunk = isJunkDisposition(effectiveDisposition) ||
+      isJunkDisposition(callDb?.disposition, callDb?.sub_disposition) ||
+      isJunkDisposition(db?.disposition, db?.sub_disposition) ||
+      isJunkDisposition(db?.tags);
 
-    if (callDb?.iqs_percent != null && isCall) {
-      callIqsScore = parseFloat(callDb.iqs_percent);
-      if (iqsScore === null) iqsScore = callIqsScore;
-    }
-
-    if (iqsScore === null && !isBot && !callDb) {
-      iqsScore = computeIqsFromRawParams(params, false);
-      if (iqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
-        iqsScore = parseFloat(db.iqs_score);
-      }
-    }
-    if (botIqsScore === null && !callDb) {
-      botIqsScore = computeIqsFromRawParams(params, true);
-    }
-    if (botIqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
-      if (isBot || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
-        botIqsScore = parseFloat(db.iqs_score);
-      }
-    }
-    if (isBot) {
+    if (isJunk) {
+      botIqsScore = null;
       iqsScore = null;
+      callIqsScore = null;
+    } else {
+      if (params.__scores) {
+        botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
+        iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
+        callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
+      }
+
+      if (callDb?.iqs_percent != null && isCall) {
+        callIqsScore = parseFloat(callDb.iqs_percent);
+        if (iqsScore === null) iqsScore = callIqsScore;
+      }
+
+      if (iqsScore === null && !isBot && !callDb) {
+        iqsScore = computeIqsFromRawParams(params, false, effectiveDisposition);
+        if (iqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
+          iqsScore = parseFloat(db.iqs_score);
+        }
+      }
+      if (botIqsScore === null && !callDb) {
+        botIqsScore = computeIqsFromRawParams(params, true, effectiveDisposition);
+      }
+      if (botIqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
+        if (isBot || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+          botIqsScore = parseFloat(db.iqs_score);
+        }
+      }
+      if (isBot) {
+        iqsScore = null;
+      }
     }
 
     const submitterRole = raisedByLabel(flag.agentEmail);

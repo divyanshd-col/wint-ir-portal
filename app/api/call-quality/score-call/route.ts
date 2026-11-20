@@ -121,7 +121,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   let result: any;
   try {
-    result = parseCallScoringResponse(raw);
+    result = parseCallScoringResponse(raw, callDisposition, chatDisposition);
   } catch (err: any) {
     return NextResponse.json({ error: `Parse error: ${err.message}` }, { status: 502 });
   }

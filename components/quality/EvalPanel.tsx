@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
+  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, isJunkDisposition,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
   V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification, formatParamLabel,
 } from '@/lib/quality';
@@ -326,14 +326,16 @@ export default function EvalPanel({
     (dispute?.challengedParams ?? []).map(d => [d.param, { note: d.note }])
   );
 
+  const isJunk = isJunkDisposition(disposition);
   const liveIqs = (() => {
+    if (isJunk) return null;
     const scores: Record<string, ParamScore> = {};
     for (const [key, s] of Object.entries(currentParamState)) {
       scores[key] = scoreToParamScore(s.score);
     }
     // currentParamState is keyed by the active generation's PARAM_ORDER (v4 or V3),
     // so pass isV4 to select the matching weight set. The bot tab uses BOT_WEIGHTS.
-    return calculateIQS(scores, activeTab === 'bot', isV4);
+    return calculateIQS(scores, activeTab === 'bot', isV4, disposition);
   })();
 
 const COMPLIANCE_GATES_LIST = [

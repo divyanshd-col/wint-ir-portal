@@ -4,7 +4,7 @@ import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
-import { computeIqsFromRawParams } from '@/lib/quality';
+import { computeIqsFromRawParams, isJunkDisposition } from '@/lib/quality';
 import { reviewThreshold } from '@/lib/quality-thresholds';
 
 const ROUTE = 'cx/qa/chats-to-review';
@@ -446,22 +446,30 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       || r.agent_name === 'Robylon Automation'
       || (r.agent_id !== null && [15, 447, 784].includes(Number(r.agent_id)));
 
-    if (iqsScore === null && !isBotOnly) {
-      iqsScore = computeIqsFromRawParams(params, false);
-      if (iqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
-        iqsScore = parseFloat(r.iqs_score);
-      }
-    }
-    if (botIqsScore === null) {
-      botIqsScore = computeIqsFromRawParams(params, true);
-    }
-    if (botIqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
-      if (r.conversation_type === 'bot' || isBotOnly || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
-        botIqsScore = parseFloat(r.iqs_score);
-      }
-    }
-    if (isBotOnly) {
+    const isJunk = isJunkDisposition(r.disposition, r.sub_disposition);
+
+    if (isJunk) {
       iqsScore = null;
+      botIqsScore = null;
+      callIqsScore = null;
+    } else {
+      if (iqsScore === null && !isBotOnly) {
+        iqsScore = computeIqsFromRawParams(params, false, r.disposition, r.sub_disposition);
+        if (iqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
+          iqsScore = parseFloat(r.iqs_score);
+        }
+      }
+      if (botIqsScore === null) {
+        botIqsScore = computeIqsFromRawParams(params, true, r.disposition, r.sub_disposition);
+      }
+      if (botIqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
+        if (r.conversation_type === 'bot' || isBotOnly || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+          botIqsScore = parseFloat(r.iqs_score);
+        }
+      }
+      if (isBotOnly) {
+        iqsScore = null;
+      }
     }
 
     return {

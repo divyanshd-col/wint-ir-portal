@@ -7,6 +7,7 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { useSort, sortRows, SortTh } from './sort';
 import DropdownSearch, { matchesSearch } from '@/components/shell/DropdownSearch';
 import * as T from './tableStyles';
+import { isJunkDisposition } from '@/lib/quality';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -94,9 +95,13 @@ const CallEvalRow = React.memo(function CallEvalRow({
           )}
         </td>
         <td style={tdNum}>
-          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-            {call.iqsScore ?? '—'}
-          </span>
+          {(!isJunkDisposition(call.disposition) && call.iqsScore !== null) ? (
+            <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+              {call.iqsScore}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
+          )}
         </td>
         <td style={td}>{call.reviewedBy || 'System'}</td>
         <td style={tdAct}>

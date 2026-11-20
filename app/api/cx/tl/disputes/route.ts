@@ -7,7 +7,7 @@ import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
-import { computeIqsFromRawParams } from '@/lib/quality';
+import { computeIqsFromRawParams, isJunkDisposition } from '@/lib/quality';
 import { getDefinedDispositions } from '@/lib/qa-topics';
 
 const ROUTE = 'cx/tl/disputes';
@@ -115,10 +115,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     iqs_score: string; parameters: any;
     csat_score: string | null; mobile_number: string | null;
     conversation_type: string | null;
+    tags?: any;
   }[] = [];
   if (chatIds.length > 0) {
     dbRows = await query(
       `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name, c.closed_at,
+              c.tags,
               c.tags->>'disposition'     AS disposition,
               c.tags->>'sub_disposition' AS sub_disposition,
               i.iqs_score, i.parameters, c.csat_score,
@@ -206,39 +208,50 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     let iqsScore: number | null = null;
     let callIqsScore: number | null = null;
 
-    if (params.__scores) {
-      botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
-      iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
-      callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
-    }
+    const isJunk = isJunkDisposition(flag.disposition) ||
+      isJunkDisposition(callDb?.disposition, callDb?.sub_disposition) ||
+      isJunkDisposition(db?.disposition, db?.sub_disposition) ||
+      isJunkDisposition(db?.tags);
 
-    if (callDb?.iqs_percent != null && isCall) {
-      callIqsScore = parseFloat(callDb.iqs_percent);
-      if (iqsScore === null) iqsScore = callIqsScore;
-    }
-
-    const isBot = db ? (
-      db.agent_name === 'Robylon AI'
-      || db.conversation_type === 'bot'
-      || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)))
-    ) : false;
-
-    if (iqsScore === null && !isBot && !callDb) {
-      iqsScore = computeIqsFromRawParams(params, false);
-      if (iqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
-        iqsScore = parseFloat(db.iqs_score);
-      }
-    }
-    if (botIqsScore === null && !callDb) {
-      botIqsScore = computeIqsFromRawParams(params, true);
-    }
-    if (botIqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
-      if (isBot || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
-        botIqsScore = parseFloat(db.iqs_score);
-      }
-    }
-    if (isBot) {
+    if (isJunk) {
+      botIqsScore = null;
       iqsScore = null;
+      callIqsScore = null;
+    } else {
+      if (params.__scores) {
+        botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
+        iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
+        callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
+      }
+
+      if (callDb?.iqs_percent != null && isCall) {
+        callIqsScore = parseFloat(callDb.iqs_percent);
+        if (iqsScore === null) iqsScore = callIqsScore;
+      }
+
+      const isBot = db ? (
+        db.agent_name === 'Robylon AI'
+        || db.conversation_type === 'bot'
+        || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)))
+      ) : false;
+
+      if (iqsScore === null && !isBot && !callDb) {
+        iqsScore = computeIqsFromRawParams(params, false, flag.disposition || db?.disposition);
+        if (iqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
+          iqsScore = parseFloat(db.iqs_score);
+        }
+      }
+      if (botIqsScore === null && !callDb) {
+        botIqsScore = computeIqsFromRawParams(params, true, flag.disposition || db?.disposition);
+      }
+      if (botIqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
+        if (isBot || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+          botIqsScore = parseFloat(db.iqs_score);
+        }
+      }
+      if (isBot) {
+        iqsScore = null;
+      }
     }
 
     const roleTag = raisedByLabel(flag);

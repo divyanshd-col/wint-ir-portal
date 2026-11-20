@@ -10,6 +10,7 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import UISelect from '@/components/quality/UISelect';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 import * as T from '@/components/quality/tableStyles';
+import { isJunkDisposition } from '@/lib/quality';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -23,7 +24,7 @@ const TD_MONO: CSSProperties = T.tdMono;
 const TD_NUM: CSSProperties = T.tdNum;
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   const bg = score >= 85 ? '#f0fdf4' : score >= 70 ? '#fefce8' : '#fef2f2';
   const color = score >= 85 ? '#166534' : score >= 70 ? '#854d0e' : '#991b1b';
   const border = score >= 85 ? '#bbf7d0' : score >= 70 ? '#fef08a' : '#fecaca';
@@ -573,7 +574,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             )}
                           </td>
                           <td style={TD_NUM}>
-                            <IQSBadge score={call.iqs} />
+                            <IQSBadge score={isJunkDisposition(call.disposition, call.subDisposition) ? null : call.iqs} />
                           </td>
                           <td style={{ ...TD_BASE, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                             {pendingDispute ? (

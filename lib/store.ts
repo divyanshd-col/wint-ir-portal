@@ -263,6 +263,8 @@ export interface IQSFlag {
   reviewedAt?: string;
   reviewNote?: string;
   originalScore?: number | null;
+  disposition?: string;
+  subDisposition?: string;
 }
 
 export interface IQSFlagComment {
