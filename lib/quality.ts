@@ -375,12 +375,60 @@ export function analyzeConversationTiming(
 // every key would miss and the old `?? 'Yes'` default silently returned 100.
 // Skipping instead surfaces the mismatch as an obviously-wrong low score.
 // Pass the correct isV4 flag at every call site so the weight set matches the scores.
-export function isJunkDisposition(disposition?: string | null): boolean {
-  if (!disposition) return false;
-  return disposition.toLowerCase().trim().includes('junk');
+export function hasJunkTag(tagsOrDispo?: any, subDispo?: any): boolean {
+  if (tagsOrDispo === null || tagsOrDispo === undefined) {
+    return subDispo !== undefined && subDispo !== null ? hasJunkTag(subDispo) : false;
+  }
+  if (typeof tagsOrDispo === 'string') {
+    const trimmed = tagsOrDispo.trim();
+    if (trimmed.toLowerCase().includes('junk')) return true;
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (hasJunkTag(parsed)) return true;
+      } catch {}
+    }
+  } else if (Array.isArray(tagsOrDispo)) {
+    if (tagsOrDispo.some(item => hasJunkTag(item))) return true;
+  } else if (typeof tagsOrDispo === 'object') {
+    if (tagsOrDispo.disposition && hasJunkTag(tagsOrDispo.disposition)) return true;
+    if (tagsOrDispo.sub_disposition && hasJunkTag(tagsOrDispo.sub_disposition)) return true;
+    if (tagsOrDispo.subDisposition && hasJunkTag(tagsOrDispo.subDisposition)) return true;
+    if (tagsOrDispo.call_disposition && hasJunkTag(tagsOrDispo.call_disposition)) return true;
+    if (tagsOrDispo.call_sub_disposition && hasJunkTag(tagsOrDispo.call_sub_disposition)) return true;
+    if (tagsOrDispo.tag && hasJunkTag(tagsOrDispo.tag)) return true;
+    if (tagsOrDispo.tags && hasJunkTag(tagsOrDispo.tags)) return true;
+    if (tagsOrDispo.intent_l1 && hasJunkTag(tagsOrDispo.intent_l1)) return true;
+    if (tagsOrDispo.intent_l2 && hasJunkTag(tagsOrDispo.intent_l2)) return true;
+    if (tagsOrDispo.name && hasJunkTag(tagsOrDispo.name)) return true;
+    if (tagsOrDispo.l1 && hasJunkTag(tagsOrDispo.l1)) return true;
+    if (tagsOrDispo.l2 && hasJunkTag(tagsOrDispo.l2)) return true;
+    if (tagsOrDispo.category && hasJunkTag(tagsOrDispo.category)) return true;
+    for (const v of Object.values(tagsOrDispo)) {
+      if (typeof v === 'string' && v.toLowerCase().includes('junk')) return true;
+      if (typeof v === 'object' && v !== null && hasJunkTag(v)) return true;
+    }
+  }
+  if (subDispo !== undefined && subDispo !== null) {
+    return hasJunkTag(subDispo);
+  }
+  return false;
 }
 
-export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, isV4 = true): number | null {
+export function isJunkDisposition(disposition?: any, subDisposition?: any): boolean {
+  return hasJunkTag(disposition, subDisposition);
+}
+
+export function calculateIQS(
+  scores: Record<string, ParamScore>,
+  isBot?: boolean,
+  isV4 = true,
+  disposition?: any,
+  subDisposition?: any,
+): number | null {
+  if (isJunkDisposition(disposition, subDisposition)) {
+    return null;
+  }
   const activeWeights = isBot ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(activeWeights)) {
@@ -541,8 +589,18 @@ export function extractPooledParams(paramsArray: any[]): Record<string, { yes: n
 }
 
 
-export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
+export function computeIqsFromRawParams(
+  paramsObj: any,
+  isBot = false,
+  disposition?: any,
+  subDisposition?: any,
+): number | null {
+  if (isJunkDisposition(disposition, subDisposition)) return null;
   if (!paramsObj || typeof paramsObj !== 'object') return null;
+  if (isJunkDisposition(paramsObj.__disposition, paramsObj.__sub_disposition) || isJunkDisposition(paramsObj.tags)) return null;
+  if (paramsObj.__scores?.agent_iqs === null && !isBot && (paramsObj.__scores?.bot_iqs === null || paramsObj.__scores?.bot_iqs === undefined)) {
+    return null;
+  }
 
   const BOT_ONLY_KEYS = [
     'correct_escalation', 'no_repetition', 'expectation_setting', 'clarity',
@@ -613,7 +671,7 @@ export function computeIqsFromRawParams(paramsObj: any, isBot = false): number |
   }
 
   if (!hasValidParam) return null;
-  return calculateIQS(scores, isBot, isV4);
+  return calculateIQS(scores, isBot, isV4, disposition, subDisposition);
 }
 
 // ── Scoring system prompt ────────────────────────────────────────────────────

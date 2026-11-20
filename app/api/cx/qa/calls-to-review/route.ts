@@ -5,6 +5,7 @@ import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
 import { extractDurationFromTranscript } from '@/lib/call-quality';
 import { reviewThreshold } from '@/lib/quality-thresholds';
+import { isJunkDisposition } from '@/lib/quality';
 
 const ROUTE = 'cx/qa/calls-to-review';
 
@@ -224,6 +225,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             ce.iqs_percent, ce.verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
             cr.duration_seconds, cr.transcript, cr.language, cr.interruption_count, cr.dead_air_count,
             ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores,
+            c.tags AS chat_tags,
             COALESCE(ct_cr.phone, ct_c.phone, c.phone_number) AS mobile_number
      FROM call_evaluations ce
      JOIN call_recordings cr ON cr.id = ce.call_id
@@ -249,12 +251,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         ).catch(() => {});
       }
     }
+    const isJunk = isJunkDisposition(r.call_disposition, r.call_sub_disposition) || isJunkDisposition(r.chat_tags);
     return {
       callId:                 r.call_id,
       chatId:                 r.chat_id,
       agentName:              r.agent_name,
-      iqsScore:               r.iqs_percent ? Math.round(parseFloat(r.iqs_percent)) : null,
-      verdict:                r.verdict,
+      iqsScore:               isJunk ? null : (r.iqs_percent ? Math.round(parseFloat(r.iqs_percent)) : null),
+      verdict:                isJunk ? 'NOT_SCOREABLE' : r.verdict,
       calledAt:               r.called_at,
       disposition:            r.call_disposition,
       subDisposition:         r.call_sub_disposition,

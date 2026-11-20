@@ -146,6 +146,89 @@ async function main() {
     console.log(`\n✅ Successfully updated ${botChatRows.rows.length} bot chats to NIL (NULL)!`);
   }
 
+  // 4. Find all junk chats and junk calls that have ANY non-null IQS score
+  const junkChats = await pool.query(`
+    SELECT s.chat_id, s.iqs_score, s.bot_iqs_score, s.call_iqs_score, c.tags
+    FROM iqs_scores s
+    JOIN conversations c ON c.id = s.chat_id
+    WHERE c.tags::text ILIKE '%junk%'
+      AND (s.iqs_score IS NOT NULL OR s.bot_iqs_score IS NOT NULL OR s.call_iqs_score IS NOT NULL)
+  `);
+  console.log(`\nFound ${junkChats.rows.length} junk chats with non-null IQS score:`);
+  for (const r of junkChats.rows.slice(0, 10)) {
+    console.log(`  - Chat ${r.chat_id} | iqs: ${r.iqs_score} | bot: ${r.bot_iqs_score} | call: ${r.call_iqs_score}`);
+  }
+  if (junkChats.rows.length > 10) {
+    console.log(`  ... and ${junkChats.rows.length - 10} more`);
+  }
+
+  const junkCalls = await pool.query(`
+    SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.verdict, cr.call_disposition, cr.call_sub_disposition, c.tags as chat_tags
+    FROM call_evaluations ce
+    JOIN call_recordings cr ON cr.id = ce.call_id
+    LEFT JOIN conversations c ON c.id = cr.chat_id
+    WHERE (
+      cr.call_disposition ILIKE '%junk%'
+      OR cr.call_sub_disposition ILIKE '%junk%'
+      OR c.tags::text ILIKE '%junk%'
+    )
+    AND (ce.iqs_percent IS NOT NULL OR ce.verdict IS DISTINCT FROM 'NOT_SCOREABLE')
+  `);
+  console.log(`\nFound ${junkCalls.rows.length} junk calls with non-null IQS or scoreable verdict:`);
+  for (const r of junkCalls.rows.slice(0, 10)) {
+    console.log(`  - Call ${r.call_id} | iqs_percent: ${r.iqs_percent} | verdict: ${r.verdict}`);
+  }
+  if (junkCalls.rows.length > 10) {
+    console.log(`  ... and ${junkCalls.rows.length - 10} more`);
+  }
+
+  if (isApply) {
+    if (junkChats.rows.length > 0) {
+      await pool.query(`
+        UPDATE iqs_scores s
+        SET iqs_score = NULL,
+            bot_iqs_score = NULL,
+            call_iqs_score = NULL
+        FROM conversations c
+        WHERE s.chat_id = c.id
+          AND c.tags::text ILIKE '%junk%'
+          AND (s.iqs_score IS NOT NULL OR s.bot_iqs_score IS NOT NULL OR s.call_iqs_score IS NOT NULL)
+      `);
+      console.log(`\n✅ Successfully marked ${junkChats.rows.length} junk chats as NIL (NULL)!`);
+    }
+
+    if (junkCalls.rows.length > 0) {
+      await pool.query(`
+        UPDATE call_evaluations ce
+        SET iqs_percent = NULL,
+            applicable_weight = 0,
+            verdict = 'NOT_SCOREABLE'
+        FROM call_recordings cr
+        LEFT JOIN conversations c ON c.id = cr.chat_id
+        WHERE ce.call_id = cr.id
+          AND (
+            cr.call_disposition ILIKE '%junk%'
+            OR cr.call_sub_disposition ILIKE '%junk%'
+            OR c.tags::text ILIKE '%junk%'
+          )
+          AND (ce.iqs_percent IS NOT NULL OR ce.verdict IS DISTINCT FROM 'NOT_SCOREABLE')
+      `);
+
+      await pool.query(`
+        UPDATE iqs_scores s
+        SET call_iqs_score = NULL
+        FROM call_recordings cr
+        WHERE s.chat_id = cr.chat_id
+          AND (
+            cr.call_disposition ILIKE '%junk%'
+            OR cr.call_sub_disposition ILIKE '%junk%'
+          )
+          AND s.call_iqs_score IS NOT NULL
+      `);
+      console.log(`\n✅ Successfully marked ${junkCalls.rows.length} junk calls as NIL (NULL)!`);
+    }
+  }
+
   console.log('\n=== DONE ===\n');
   await pool.end();
 }

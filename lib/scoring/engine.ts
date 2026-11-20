@@ -7,7 +7,7 @@ import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { fireQualityAlert, fireBotQualityAlert } from '@/lib/quality-alert';
 import {
   getSystemPrompt, buildScoringPrompt, parseScoringResponse,
-  analyzeConversationTiming,
+  analyzeConversationTiming, isJunkDisposition,
 } from '@/lib/quality';
 import { buildScoringPrompt as buildScoringPromptV4, parseAndScore } from '@/lib/scoring/prompt_v4';
 import type { TimedMessage, ParamScore } from '@/lib/quality';
@@ -160,13 +160,13 @@ export async function scoreLinkedCallsForChat(
       });
 
       const isJunkChat = Boolean(
-        (disposition && disposition.toLowerCase().includes('junk')) ||
-        (subDisposition && subDisposition.toLowerCase().includes('junk'))
+        isJunkDisposition(disposition, subDisposition) ||
+        isJunkDisposition(call.call_disposition, call.call_sub_disposition)
       );
 
       await updateCallIQSScore({ chatId, callIqsScore: isJunkChat ? null : parsed.iqs, callParameters: parameters, callModelVersion: 'gemini-3.5-flash' });
       await updateCallRecordingStatus(call.id, 'scored');
-      console.log(`[scoring-engine] Scored combined chat+call for ${chatId} → IQS ${parsed.iqs}`);
+      console.log(`[scoring-engine] Scored combined chat+call for ${chatId} → IQS ${isJunkChat ? 'NIL' : parsed.iqs}`);
 
       try {
         const { runCallPipeline } = await import('@/lib/scoring/call-pipeline');
@@ -364,8 +364,11 @@ export async function executeScoring(
     Object.values(parameters).every(p => p.score === null);
 
   const isJunk = Boolean(
-    (disposition && disposition.toLowerCase().includes('junk')) ||
-    (subDisposition && subDisposition.toLowerCase().includes('junk'))
+    isJunkDisposition(disposition, subDisposition) ||
+    isJunkDisposition(conv.tags) ||
+    isJunkDisposition((conv.raw_payload as any)?.tags) ||
+    isJunkDisposition((conv.raw_payload as any)?.data?.classifications) ||
+    isJunkDisposition((conv.raw_payload as any)?.classifications)
   );
 
   await insertIQSScore({
@@ -374,7 +377,7 @@ export async function executeScoring(
     parameters,
     modelVersion,
     uncertainParameters,
-    botIqsScore: botPass ? (isJunk ? undefined : (botPass.iqs_score ?? 0)) : undefined,
+    botIqsScore: (isBotOnly || botPass) ? (isJunk ? null : (botPass?.iqs_score ?? 0)) : undefined,
     botParameters,
     botModelVersion: botPass ? modelVersion : undefined,
     breaches: primaryPass.breaches?.map((b: any) => `${b.type}: ${b.quote}`),
@@ -392,7 +395,7 @@ export async function executeScoring(
   });
 
   const finalAgentName = effectiveAgentName;
-  console.log(`[scoring-engine] Scored chat ${chatId} → IQS ${primaryPass.iqs_score}% type=${timing.conversationType}`);
+  console.log(`[scoring-engine] Scored chat ${chatId} → IQS ${isJunk ? 'NIL' : `${primaryPass.iqs_score}%`} type=${timing.conversationType}`);
 
   // Resolve TL name directly via agent_id or agent name
   let resolvedTlName: string | undefined;
@@ -417,29 +420,31 @@ export async function executeScoring(
     actorEmail: 'bot',
     actorRole: 'system',
     ts: new Date().toISOString(),
-    meta: { iqs: primaryPass.iqs_score, agentName: finalAgentName, model: modelVersion },
+    meta: { iqs: isJunk ? null : primaryPass.iqs_score, agentName: finalAgentName, model: modelVersion },
   }).catch(() => {});
 
-  // ── Slack + Sheet alert — deduplicated via KV ─────────────────────────────────────────
-  await fireQualityAlert({
-    chatId,
-    agentName:           finalAgentName,
-    tlName:              resolvedTlName,
-    contactPhone,
-    scores:              Object.fromEntries(Object.entries(parameters).map(([k,v]) => [k, String(v.score)])),
-    reasoning:           Object.fromEntries(Object.entries(parameters).map(([k,v]) => [k, v.reasoning])),
-    iqs:                 primaryPass.iqs_score || 0,
-    disposition,
-    subDisposition,
-    uncertainParameters,
-    breaches:            primaryPass.breaches,
-    complianceFlag:      primaryPass.compliance_flag || !!(primaryPass.breaches && primaryPass.breaches.length > 0),
-    conversationType:    timing.conversationType,
-    isBot:               timing.conversationType === 'bot',
-  }).catch(err => console.error('[scoring-engine] fireQualityAlert error:', err));
+  // ── Slack + Sheet alert — deduplicated via KV (suppressed for junk interactions) ─────
+  if (!isJunk) {
+    await fireQualityAlert({
+      chatId,
+      agentName:           finalAgentName,
+      tlName:              resolvedTlName,
+      contactPhone,
+      scores:              Object.fromEntries(Object.entries(parameters).map(([k,v]) => [k, String(v.score)])),
+      reasoning:           Object.fromEntries(Object.entries(parameters).map(([k,v]) => [k, v.reasoning])),
+      iqs:                 primaryPass.iqs_score || 0,
+      disposition,
+      subDisposition,
+      uncertainParameters,
+      breaches:            primaryPass.breaches,
+      complianceFlag:      primaryPass.compliance_flag || !!(primaryPass.breaches && primaryPass.breaches.length > 0),
+      conversationType:    timing.conversationType,
+      isBot:               timing.conversationType === 'bot',
+    }).catch(err => console.error('[scoring-engine] fireQualityAlert error:', err));
+  }
 
-  // BOT flag channel alert: only for pure bot chats that were not transferred
-  if (botParameters && timing.conversationType === 'bot') {
+  // BOT flag channel alert: only for pure bot chats that were not transferred and not junk
+  if (!isJunk && botParameters && timing.conversationType === 'bot') {
     await fireBotQualityAlert({
       chatId,
       agentName:           finalAgentName,
@@ -457,7 +462,7 @@ export async function executeScoring(
 
   return { 
     chatId, 
-    iqs: primaryPass.iqs_score || 0,
-    botIqs: botPass && humanPass ? (botPass.iqs_score || 0) : undefined
+    iqs: isJunk ? (null as any) : (primaryPass.iqs_score || 0),
+    botIqs: isJunk ? null : (botPass && humanPass ? (botPass.iqs_score || 0) : undefined)
   };
 }

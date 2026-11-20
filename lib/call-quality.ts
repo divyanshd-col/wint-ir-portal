@@ -3,7 +3,7 @@
  * 10 parameters across 3 groups. Chat and call scored independently.
  */
 
-import { robustJsonParse } from './quality';
+import { robustJsonParse, isJunkDisposition } from './quality';
 
 // ── Parameter weights (must sum to 1.0) ──────────────────────────────────────
 
@@ -101,7 +101,14 @@ export interface CallIQSScoreEntry {
 }
 
 // ── IQS calculation ───────────────────────────────────────────────────────────
-export function calculateCallIQS(scores: Record<string, CallParamScore>): number | null {
+export function calculateCallIQS(
+  scores: Record<string, CallParamScore>,
+  disposition?: any,
+  subDisposition?: any,
+): number | null {
+  if (isJunkDisposition(disposition, subDisposition)) {
+    return null;
+  }
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(CALL_WEIGHTS)) {
     const score = scores[param] ?? 'NA';
@@ -811,7 +818,11 @@ export function parseEnergyToneResponse(raw: string): { score: CallParamScore; r
 }
 
 // ── Parse call IQS scoring response ──────────────────────────────────────────
-export function parseCallScoringResponse(raw: string): {
+export function parseCallScoringResponse(
+  raw: string,
+  disposition?: any,
+  subDisposition?: any,
+): {
   scores: Record<string, CallParamScore>;
   reasoning: Record<string, string>;
   poorListeningSegments: PoorListeningSegment[];
@@ -823,7 +834,7 @@ export function parseCallScoringResponse(raw: string): {
   const scores: Record<string, CallParamScore> = data?.scores || {};
   const reasoning: Record<string, string> = data?.reasoning || {};
   const poorListeningSegments: PoorListeningSegment[] = data?.poor_listening_segments || [];
-  const iqs = calculateCallIQS(scores);
+  const iqs = isJunkDisposition(disposition, subDisposition) ? null : calculateCallIQS(scores, disposition, subDisposition);
   const kbCitation = typeof data?.kbCitation === 'string' && data.kbCitation.toLowerCase() !== 'null'
     ? data.kbCitation
     : null;

@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
-import { getDisputeClassification, formatParamLabel } from '@/lib/quality';
+import { getDisputeClassification, formatParamLabel, isJunkDisposition } from '@/lib/quality';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import { rowClick } from '@/components/quality/rowClick';
 import { DateRangeChip } from '@/components/quality/FilterControls';
@@ -379,10 +379,10 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                   </td>
                   <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                   <td style={tdNum}>
-                    {chat.iqsScore != null ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>}
+                    {(!isJunkDisposition(chat.disposition) && chat.iqsScore != null) ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>}
                   </td>
                   <td style={tdNum}>
-                    {chat.callIqsScore != null ? (
+                    {(!isJunkDisposition(chat.disposition) && chat.callIqsScore != null) ? (
                       <IQSBadge score={chat.callIqsScore} muted />
                     ) : chat.callTranscriptStatus === 'transcribed' ? (
                       <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 500 }}>Transcribed</span>
@@ -783,20 +783,20 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   <span style={{ color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
                 </td>
                 <td style={tdNum}>
-                  {d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore ? (
+                  {(!isJunkDisposition(d.disposition) && d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore) ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ textDecoration: 'line-through', opacity: 0.65 }}><IQSBadge score={d.originalScore} /></span>
                       <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>→</span>
                       <IQSBadge score={d.iqsScore} />
                     </span>
-                  ) : (d.originalScore ?? d.iqsScore) != null ? (
+                  ) : (!isJunkDisposition(d.disposition) && (d.originalScore ?? d.iqsScore) != null) ? (
                     <IQSBadge score={d.originalScore ?? d.iqsScore} />
                   ) : (
-                    <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                    <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
                   )}
                 </td>
                 <td style={tdNum}>
-                  {d.callIqsScore != null ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                  {(!isJunkDisposition(d.disposition) && d.callIqsScore != null) ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>{isJunkDisposition(d.disposition) ? 'NIL' : '—'}</span>}
                 </td>
                 <td style={td}><CSATBadge score={d.csatScore} /></td>
                 <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>

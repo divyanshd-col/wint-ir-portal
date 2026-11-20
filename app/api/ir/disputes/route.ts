@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
     // DB unavailable — return flag data only
   }
 
-  const { computeIqsFromRawParams } = await import('@/lib/quality');
+  const { computeIqsFromRawParams, isJunkDisposition } = await import('@/lib/quality');
 
   const enriched = flags.map((f) => {
     let iqsScore: number | null = null;
@@ -132,6 +132,13 @@ export async function GET(req: NextRequest) {
       disposition = cRow.call_disposition || '';
       subDisposition = cRow.call_sub_disposition || null;
       parameters = cRow.iqs_scores ?? null;
+    }
+
+    const isJunk = isJunkDisposition(disposition, subDisposition) || isJunkDisposition(f.disposition);
+    if (isJunk) {
+      iqsScore = null;
+      botIqsScore = null;
+      callIqsScore = null;
     }
 
     return {
