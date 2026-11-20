@@ -7,10 +7,12 @@ import SecuritySection from './settings/SecuritySection';
 import QualityThresholdsSection from './settings/QualityThresholdsSection';
 import PcgEmailInboxSection from './settings/PcgEmailInboxSection';
 import ScoringRubricSection from './settings/ScoringRubricSection';
+import CsatBifurcationSection from './settings/CsatBifurcationSection';
 import PromptsSection from '@/components/settings/PromptsSection';
 import ChangeHistorySection from './settings/ChangeHistorySection';
 import { DEFAULT_QUALITY_THRESHOLDS, type QualityThresholds } from '@/lib/quality-thresholds';
 import { type EvaluationParameterConfig } from '@/lib/email/context-builder';
+import { type CsatBifurcationEntry } from '@/lib/csat-bifurcation';
 
 interface SafeConfig {
   llmProvider?: string;
@@ -38,6 +40,7 @@ interface SafeConfig {
   hasPyannoteKey?: boolean;
   qualityThresholds?: QualityThresholds;
   disputeOwner?: 'qa' | 'tl';
+  csatBifurcationMap?: CsatBifurcationEntry[];
   pcgEmailInboxes?: string[];
   emailParameters?: EvaluationParameterConfig[];
   /** Only the prompts for the workspace the admin is in: field name → saved text and built-in default. */
@@ -64,6 +67,7 @@ const ADMIN_SECTIONS = [
   { id: 'chatbot', label: 'Chatbot Prompts' },
   { id: 'thresholds', label: 'Quality Thresholds' },
   { id: 'rubric', label: 'Scoring Rubric' },
+  { id: 'csat-bifurcation', label: 'CSAT Bifurcation' },
   { id: 'history', label: 'Change History' },
   { id: 'users', label: 'Users & Permissions' },
   { id: 'tokens', label: 'Token Usage' },
@@ -83,6 +87,7 @@ const SECTION_ICON_PATHS: Record<string, React.ReactNode> = {
   integrations: <><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" /><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></>,
   thresholds:   <><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></>,
   rubric:       <><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 14l2 2 4-4" /></>,
+  'csat-bifurcation': <><path d="M16 3h5v5" /><path d="M8 21H3v-5" /><path d="M21 3l-7.5 7.5" /><path d="M3 21l7.5-7.5" /></>,
   history:      <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
   security:     <><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
 };
@@ -121,6 +126,7 @@ export default function SettingsClient({
       { id: 'chatbot', label: 'Chatbot Prompts' },
       { id: 'thresholds', label: 'Quality Thresholds' },
       { id: 'rubric', label: 'Scoring Rubric' },
+      { id: 'csat-bifurcation', label: 'CSAT Bifurcation' },
       { id: 'history', label: 'Change History' },
       { id: 'users', label: 'CX Users & Permissions' },
       { id: 'pcg-users', label: 'PCG Users & Permissions' },
@@ -135,9 +141,9 @@ export default function SettingsClient({
     SECTIONS = [SECURITY_SECTION];
   }
 
-  // Workspaces stay separate: PCG settings never show in the CX workspace, and the CX-only Users / Thresholds / Rubric never show in PCG (super admins included).
+  // Workspaces stay separate: PCG settings never show in the CX workspace, and the CX-only Users / Thresholds / Rubric / CSAT Bifurcation never show in PCG (super admins included).
   const inPcg = activeDomain === 'pcg';
-  if (!isPcgAdminOnly) SECTIONS = SECTIONS.filter(sec => (inPcg ? !['users', 'thresholds', 'rubric', 'chatbot'].includes(sec.id) : !['pcg-users', 'pcg-email'].includes(sec.id)));
+  if (!isPcgAdminOnly) SECTIONS = SECTIONS.filter(sec => (inPcg ? !['users', 'thresholds', 'rubric', 'chatbot', 'csat-bifurcation'].includes(sec.id) : !['pcg-users', 'pcg-email'].includes(sec.id)));
 
   const initialSection = isPcgAdminOnly
     ? 'pcg-users'
@@ -856,6 +862,13 @@ export default function SettingsClient({
         {isAdmin && !inPcg && config.emailParameters && (
           <div className={activeSection === 'rubric' ? '' : 'hidden'}>
             <ScoringRubricSection initial={config.emailParameters} onSaved={showToast} />
+          </div>
+        )}
+
+        {/* ── CSAT BIFURCATION ── */}
+        {isAdmin && !inPcg && (
+          <div className={activeSection === 'csat-bifurcation' ? '' : 'hidden'}>
+            <CsatBifurcationSection initial={config.csatBifurcationMap ?? []} onSaved={showToast} />
           </div>
         )}
 

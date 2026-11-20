@@ -224,6 +224,26 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    try {
+      const fullConv = await query<{ tags: any; csat_label: string | null; iqs_score: number | null }>(
+        `SELECT c.tags, c.csat_label, s.iqs_score
+         FROM conversations c
+         LEFT JOIN iqs_scores s ON s.chat_id = c.id
+         WHERE c.id = $1`, [chatId]
+      );
+      if (fullConv[0]) {
+        const t = typeof fullConv[0].tags === 'string' ? JSON.parse(fullConv[0].tags) : (fullConv[0].tags || {});
+        const { classifyChatCsat } = await import('@/lib/csat-bifurcation');
+        const classified = classifyChatCsat(t.disposition, t.sub_disposition, fullConv[0].iqs_score, fullConv[0].csat_label);
+        await query(
+          `UPDATE conversations SET csat_bifurcation = $1, bifurcated_csat_label = $2, updated_at = NOW() WHERE id = $3`,
+          [classified.bifurcation, classified.bifurcatedCsatLabel, chatId]
+        );
+      }
+    } catch (e) {
+      console.warn('[quality/update] update bifurcation error:', e);
+    }
+
     const convRow = await query<{ conversation_type: string }>(`SELECT conversation_type FROM conversations WHERE id = $1`, [chatId]);
     const convType2 = convRow[0]?.conversation_type;
     const existingParamsObj2 = rowExists && existing[0]?.parameters
