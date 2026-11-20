@@ -7,6 +7,7 @@ import { getKbContextForScoring } from './engine';
 import { GoogleGenAI } from '@google/genai';
 import { log } from '@/lib/log';
 import { promptOrDefault } from '@/lib/prompt-overrides';
+import { isJunkDisposition } from '@/lib/quality';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -32,7 +33,17 @@ export const CALL_IQS_WEIGHTS: Record<string, number> = {
   P11: 12 // Energy, warmth, pace (audio)
 };
 
-export function computeCallIQS(scores: Record<string, any>) {
+export function computeCallIQS(
+  scores: Record<string, any>,
+  disposition?: any,
+  subDisposition?: any,
+) {
+  if (isJunkDisposition(disposition, subDisposition)) {
+    return {
+      iqs_percent: null,
+      applicable_weight: 0,
+    };
+  }
   let earned = 0;
   let applicable = 0;
   for (const [param, weight] of Object.entries(CALL_IQS_WEIGHTS)) {
@@ -348,8 +359,11 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   const isSystemOnly = speechSegments.every((s: any) => s.speaker === 'SYSTEM');
   const isPureSilence = speechSegments.length === 0;
   const isJunkCall = Boolean(
-    (call.call_disposition && call.call_disposition.toLowerCase().includes('junk')) ||
-    (call.call_sub_disposition && call.call_sub_disposition.toLowerCase().includes('junk'))
+    isJunkDisposition(call.call_disposition, call.call_sub_disposition) ||
+    isJunkDisposition(call.chat_tags) ||
+    isJunkDisposition((call.raw_payload as any)?.call_disposition) ||
+    isJunkDisposition((call.raw_payload as any)?.disposition) ||
+    isJunkDisposition((call.raw_payload as any)?.tags)
   );
 
   if (isSystemOnly || isPureSilence || isJunkCall) {
@@ -361,8 +375,20 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
         call_gate_result, gates, iqs_scores, iqs_percent, applicable_weight, verdict, status
       ) VALUES ($1, $2, $3, 1, NOW(), 'audio', 'PASS', '{}', '{}', null, 0, 'NOT_SCOREABLE', 'reviewed')
       ON CONFLICT (call_id) DO UPDATE SET verdict = 'NOT_SCOREABLE', status = 'reviewed', scored_at = NOW(), iqs_percent = null, applicable_weight = 0
-      WHERE call_evaluations.status != 'reviewed'
-    `, [callId, call.chat_id, call.agent_id]);
+    `, [callId, call.chat_id, call.agent_id ?? call.conv_agent_id ?? null]);
+
+    if (call.chat_id) {
+      await query(`
+        UPDATE iqs_scores
+        SET call_iqs_score = NULL,
+            parameters = CASE 
+              WHEN parameters::jsonb ? '__scores' THEN 
+                jsonb_set(parameters::jsonb, '{__scores,call_iqs}', 'null'::jsonb)
+              ELSE parameters 
+            END
+        WHERE chat_id = $1
+      `, [call.chat_id]);
+    }
 
     await query(`UPDATE call_recordings SET status = 'scored', updated_at = NOW() WHERE id = $1`, [callId]);
     return { callId, verdict: 'NOT_SCOREABLE', iqs: null };
@@ -573,9 +599,26 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   // ── Stage 5: Compute + Persist ─────────────────────────────────────────────
   log.info('call-pipeline', `Persisting results for call ${callId}`);
   
+  const isJunkFinal = isJunkCall || isJunkDisposition(callDispo, callSubDispo) || isJunkDisposition(call.chat_tags);
+
   const gateVerdict = gatesResult.call_gate_result || 'PASS';
-  const { iqs_percent, applicable_weight } = computeCallIQS(scoresResult.scores || {});
-  const finalVer = finalVerdict(gateVerdict, iqs_percent);
+  const { iqs_percent: raw_iqs_percent, applicable_weight: raw_applicable_weight } = computeCallIQS(scoresResult.scores || {}, callDispo, callSubDispo);
+  const iqs_percent = isJunkFinal ? null : raw_iqs_percent;
+  const applicable_weight = isJunkFinal ? 0 : raw_applicable_weight;
+  const finalVer = isJunkFinal ? 'NOT_SCOREABLE' : finalVerdict(gateVerdict, iqs_percent);
+
+  if (isJunkFinal && call.chat_id) {
+    await query(`
+      UPDATE iqs_scores
+      SET call_iqs_score = NULL,
+          parameters = CASE 
+            WHEN parameters::jsonb ? '__scores' THEN 
+              jsonb_set(parameters::jsonb, '{__scores,call_iqs}', 'null'::jsonb)
+            ELSE parameters 
+          END
+      WHERE chat_id = $1
+    `, [call.chat_id]);
+  }
 
   // Write evaluation record
   await query(`

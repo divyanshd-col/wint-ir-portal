@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
-import { calculateIQS, isV4Evaluation } from '@/lib/quality';
+import { calculateIQS, isV4Evaluation, hasJunkTag } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 import { storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSAuditEntry } from '@/lib/store';
@@ -55,8 +55,15 @@ export async function PATCH(
   }
 
   try {
-    const beforeState = await query<{ conversation_type: string; iqs_score: number; parameters: any; status: string | null; agent_name: string | null }>(
-      `SELECT c.conversation_type, i.iqs_score, i.parameters, i.status, a.name AS agent_name
+    const beforeState = await query<{
+      conversation_type: string;
+      tags: any;
+      iqs_score: number;
+      parameters: any;
+      status: string | null;
+      agent_name: string | null;
+    }>(
+      `SELECT c.conversation_type, c.tags, i.iqs_score, i.parameters, i.status, a.name AS agent_name
        FROM iqs_scores i
        LEFT JOIN conversations c ON c.id = i.chat_id
        LEFT JOIN agents a ON a.id = c.agent_id
@@ -75,6 +82,7 @@ export async function PATCH(
       role === 'tl' ? tlEditStatus(iqs, reviewThreshold(config, 'chat'), beforeState[0]?.status) : 'reviewed';
     const oldScore = beforeState[0]?.iqs_score ?? null;
     const oldParams = beforeState[0]?.parameters ?? null;
+    const isJunkChat = hasJunkTag(beforeState[0]?.tags);
     const convType = beforeState[0]?.conversation_type;
     const isBot = convType === 'bot' || (convType !== 'agent' && convType !== 'hybrid' && (() => {
       if (!oldParams) return false;
@@ -186,10 +194,10 @@ export async function PATCH(
         }
         
         merged['__scores'] = {
-          agent_iqs: isBot ? null : calculateIQS(pascalScores, false, isV4),
-          bot_iqs: calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true, isV4),
+          agent_iqs: isJunkChat || isBot ? null : calculateIQS(pascalScores, false, isV4),
+          bot_iqs: isJunkChat ? null : calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true, isV4),
         };
-        const newIqs = isBot ? merged['__scores'].bot_iqs : merged['__scores'].agent_iqs;
+        const newIqs = isJunkChat ? null : (isBot ? merged['__scores'].bot_iqs : merged['__scores'].agent_iqs);
 
         isScoreUpdated = (oldIqs !== null && newIqs !== null && oldIqs !== newIqs) || (paramChanges > 0);
 

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 import { computeCallIQS, finalVerdict } from '@/lib/scoring/call-pipeline';
+import { isJunkDisposition } from '@/lib/quality';
 import { checkTlResolve, tlEditStatus } from '@/lib/dispute-owner';
 import { readConfig } from '@/lib/config';
 import { reviewThreshold } from '@/lib/quality-thresholds';
@@ -72,9 +73,19 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
     gateVerdict = hasFail ? 'FAIL' : (callGateResult || call_gate_result ? ((callGateResult || call_gate_result) as 'PASS' | 'FAIL') : 'PASS');
   }
 
+  const callRec = await query(`
+    SELECT cr.call_disposition, cr.call_sub_disposition, c.tags as chat_tags 
+    FROM call_recordings cr 
+    LEFT JOIN conversations c ON c.id = cr.chat_id 
+    WHERE cr.id = $1
+  `, [actualCallId]);
+  const isJunkCall = isJunkDisposition(callRec[0]?.call_disposition, callRec[0]?.call_sub_disposition) || isJunkDisposition(callRec[0]?.chat_tags);
+
   // Calculate new IQS percent & verdict
-  const { iqs_percent, applicable_weight } = computeCallIQS(scores);
-  const newVerdict = finalVerdict(gateVerdict, iqs_percent);
+  const { iqs_percent: raw_iqs_percent, applicable_weight: raw_applicable_weight } = computeCallIQS(scores, callRec[0]?.call_disposition, callRec[0]?.call_sub_disposition);
+  const iqs_percent = isJunkCall ? null : raw_iqs_percent;
+  const applicable_weight = isJunkCall ? 0 : raw_applicable_weight;
+  const newVerdict = isJunkCall ? 'NOT_SCOREABLE' : finalVerdict(gateVerdict, iqs_percent);
 
   // Extract old scores for auditing
   const oldIqsScores = existingEval.iqs_scores || {};

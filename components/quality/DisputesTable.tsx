@@ -4,7 +4,7 @@ import EvalPanel from './EvalPanel';
 import CallEvalPanel from './CallEvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
-import { getDisputeClassification } from '@/lib/quality';
+import { getDisputeClassification, isJunkDisposition } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
 import { rowClick } from './rowClick';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
@@ -384,7 +384,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                   <td style={{ ...td, color: 'var(--qa-text-2)' }}>{d.disposition || '—'}</td>
                   <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
                   <td style={tdNum}>
-                    {(d.originalScore ?? (d.callIqsScore ?? d.iqsScore)) != null ? (
+                    {(!isJunkDisposition(d.disposition) && (d.originalScore ?? (d.callIqsScore ?? d.iqsScore)) != null) ? (
                       <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                         {d.originalScore != null && (d.callIqsScore ?? d.iqsScore) != null && d.originalScore !== (d.callIqsScore ?? d.iqsScore) ? (
                           <span title={`Disputed score: ${d.originalScore}, Revised: ${d.callIqsScore ?? d.iqsScore}`}>

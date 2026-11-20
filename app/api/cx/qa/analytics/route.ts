@@ -192,9 +192,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // ── 2. Overall IQS by channel (for ring cards) — EXCLUDING JUNK ──────────
   const iqsOverview = await query<{ avg_iqs: string | null; avg_call_iqs: string | null; parameters: any }>(
     `SELECT
-       AVG(i.iqs_score)      FILTER (WHERE i.iqs_score      IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS avg_iqs,
-       AVG(i.call_iqs_score) FILTER (WHERE i.call_iqs_score IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS avg_call_iqs,
-       jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
+       AVG(i.iqs_score)      FILTER (WHERE i.iqs_score      IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS avg_iqs,
+       AVG(i.call_iqs_score) FILTER (WHERE i.call_iqs_score IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS avg_call_iqs,
+       jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
      FROM iqs_scores i
      JOIN conversations c ON c.id = i.chat_id
      WHERE c.tags->>'disposition' = ANY($1)

@@ -479,7 +479,9 @@ export async function insertIQSScore(data: {
   if (data.botModelVersion) stored.__bot_model_version = data.botModelVersion;
 
   const isBotOnlyMode = Boolean(data.botParameters && (!data.parameters || Object.keys(data.parameters).length === 0));
-  const primaryScore = data.iqsScore ?? (isBotOnlyMode ? data.botIqsScore : null) ?? null;
+  const primaryScore = data.iqsScore === null
+    ? (isBotOnlyMode && data.botIqsScore !== null && data.botIqsScore !== undefined ? data.botIqsScore : null)
+    : (data.iqsScore ?? (isBotOnlyMode ? (data.botIqsScore ?? null) : null));
 
   await query(`
     INSERT INTO iqs_scores (
@@ -677,7 +679,10 @@ export async function getAllScoredConversations(
       c.tags->>'disposition'      AS "disposition",
       c.tags->>'sub_disposition'  AS "subDisposition",
       a.name                      AS "agentName",
-      s.iqs_score                 AS "iqs",
+      CASE 
+        WHEN (c.tags::text ILIKE '%junk%') THEN NULL
+        ELSE s.iqs_score 
+      END                         AS "iqs",
       s.parameters,
       s.model_version             AS "modelVersion",
       s.scored_at                 AS "scoredAt",
@@ -1001,6 +1006,8 @@ export interface CallRecordingRow {
   interruption_count: number;
   dead_air_count: number;
   status: string;
+  call_disposition?: string | null;
+  call_sub_disposition?: string | null;
   mobile_number?: string | null;
   raw_payload?: any;
 }
@@ -1336,7 +1343,10 @@ export async function getAllScoredCalls(opts: {
       r.call_disposition                     AS "disposition",
       r.call_sub_disposition                 AS "subDisposition",
       NULLIF(COALESCE(a.name, ''), 'Robylon Automation') AS "agentName",
-      COALESCE(ce.iqs_percent, s.call_iqs_score) AS "iqs",
+      CASE 
+        WHEN (r.call_disposition ILIKE '%junk%' OR r.call_sub_disposition ILIKE '%junk%' OR conv.tags::text ILIKE '%junk%') THEN NULL
+        ELSE COALESCE(ce.iqs_percent, s.call_iqs_score) 
+      END                                     AS "iqs",
       COALESCE(ce.iqs_scores, s.call_parameters) AS "parameters",
       ce.verdict                              AS "verdict",
       ce.gates                                AS "gates",

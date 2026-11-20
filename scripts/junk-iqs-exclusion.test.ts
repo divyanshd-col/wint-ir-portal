@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isJunkDisposition } from '../lib/quality';
+import { hasJunkTag, isJunkDisposition, calculateIQS, computeIqsFromRawParams } from '../lib/quality';
+import { calculateCallIQS } from '../lib/call-quality';
+import { computeCallIQS } from '../lib/scoring/call-pipeline';
 import { calculateEmailIQS } from '../lib/email/context-builder';
 
-test('isJunkDisposition identifies junk chat and call dispositions correctly', () => {
-  // Positive matches (should be identified as junk)
+test('hasJunkTag and isJunkDisposition identify junk in various formats', () => {
+  // Positive matches (strings)
   assert.equal(isJunkDisposition('Junk'), true);
   assert.equal(isJunkDisposition('Junk Chats'), true);
   assert.equal(isJunkDisposition('junk'), true);
@@ -15,6 +17,35 @@ test('isJunkDisposition identifies junk chat and call dispositions correctly', (
   assert.equal(isJunkDisposition('  Junk  '), true);
   assert.equal(isJunkDisposition('Spam / Junk Query'), true);
 
+  // JSON string inputs
+  assert.equal(hasJunkTag('{"disposition": "junk"}'), true);
+  assert.equal(hasJunkTag('["tag1", "junk"]'), true);
+  assert.equal(hasJunkTag('{"disposition": "Investment"}'), false);
+
+  // Object inputs with various field names
+  assert.equal(hasJunkTag({ disposition: 'junk' }), true);
+  assert.equal(hasJunkTag({ sub_disposition: 'junk' }), true);
+  assert.equal(hasJunkTag({ subDisposition: 'junk' }), true);
+  assert.equal(hasJunkTag({ call_disposition: 'junk' }), true);
+  assert.equal(hasJunkTag({ call_sub_disposition: 'junk' }), true);
+  assert.equal(hasJunkTag({ tag: 'junk' }), true);
+  assert.equal(hasJunkTag({ tags: ['junk'] }), true);
+  assert.equal(hasJunkTag({ tags: ['legit', 'junk'] }), true);
+  assert.equal(hasJunkTag({ intent_l1: 'junk' }), true);
+  assert.equal(hasJunkTag({ intent_l2: 'junk' }), true);
+  assert.equal(hasJunkTag({ category: 'junk' }), true);
+  assert.equal(hasJunkTag({ custom_field: 'junk_item' }), true);
+
+  // Array inputs
+  assert.equal(hasJunkTag(['junk']), true);
+  assert.equal(hasJunkTag(['legit', 'junk']), true);
+  assert.equal(hasJunkTag(['legit', { disposition: 'junk' }]), true);
+
+  // Sub-disposition checks
+  assert.equal(isJunkDisposition('General Enquiry', 'Junk Call'), true);
+  assert.equal(isJunkDisposition(null, 'Junk Call'), true);
+  assert.equal(isJunkDisposition(undefined, 'Junk Call'), true);
+
   // Negative matches (legitimate interactions, not junk)
   assert.equal(isJunkDisposition('General Enquiry'), false);
   assert.equal(isJunkDisposition('Investment Query'), false);
@@ -23,6 +54,148 @@ test('isJunkDisposition identifies junk chat and call dispositions correctly', (
   assert.equal(isJunkDisposition(''), false);
   assert.equal(isJunkDisposition(null), false);
   assert.equal(isJunkDisposition(undefined), false);
+  assert.equal(hasJunkTag({ disposition: 'Investment', sub_disposition: 'SIP' }), false);
+  assert.equal(hasJunkTag(['tag1', 'tag2']), false);
+});
+
+test('calculateIQS hardcodes exclusion of junk chats from scoring (NIL IQS)', () => {
+  const perfectScores = {
+    IssueResolution: 'Yes' as const,
+    Accuracy: 'Yes' as const,
+    ExpectationFollowThrough: 'Yes' as const,
+    DissatisfactionHandling: 'Yes' as const,
+    Personalization: 'Yes' as const,
+    Empathy: 'Yes' as const,
+    EscalationDecision: 'Yes' as const,
+    Readability: 'Yes' as const,
+    GreetingHandover: 'Yes' as const,
+    PostCallRecap: 'Yes' as const,
+  };
+
+  // Normal chat gets valid score
+  const normalScore = calculateIQS(perfectScores, false, true, 'Investment Query', 'Bonds');
+  assert.equal(normalScore, 100);
+
+  // Chat with junk disposition returns null
+  assert.equal(calculateIQS(perfectScores, false, true, 'Junk'), null);
+  assert.equal(calculateIQS(perfectScores, false, true, 'junk'), null);
+  assert.equal(calculateIQS(perfectScores, false, true, 'Junk Chats'), null);
+
+  // Chat with junk sub-disposition returns null
+  assert.equal(calculateIQS(perfectScores, false, true, 'General Query', 'Junk'), null);
+
+  // Chat with junk tag object returns null
+  assert.equal(calculateIQS(perfectScores, false, true, { disposition: 'junk' }), null);
+  assert.equal(calculateIQS(perfectScores, false, true, ['junk']), null);
+});
+
+test('calculateCallIQS hardcodes exclusion of junk calls from scoring (NIL IQS)', () => {
+  const perfectCallScores = {
+    CallOpening: 'Yes' as const,
+    CallClosing: 'Yes' as const,
+    TechnicalLegal: 'Yes' as const,
+    AllQuestions: 'Yes' as const,
+    Expectation: 'Yes' as const,
+    Process: 'Yes' as const,
+    Grammar: 'Yes' as const,
+    Fillers: 'Yes' as const,
+    EnergyTone: 'Yes' as const,
+    ActiveListening: 'Yes' as const,
+    Simplifying: 'Yes' as const,
+  };
+
+  // Normal call gets valid score
+  const normalCallScore = calculateCallIQS(perfectCallScores, 'Investment Query', 'Bonds');
+  assert.equal(normalCallScore, 100);
+
+  // Call with junk disposition returns null
+  assert.equal(calculateCallIQS(perfectCallScores, 'Junk'), null);
+  assert.equal(calculateCallIQS(perfectCallScores, 'junk calls'), null);
+
+  // Call with junk sub-disposition returns null
+  assert.equal(calculateCallIQS(perfectCallScores, 'Customer Call', 'Junk Call'), null);
+
+  // Call with junk object returns null
+  assert.equal(calculateCallIQS(perfectCallScores, { call_disposition: 'junk' }), null);
+});
+
+test('computeCallIQS hardcodes exclusion of junk calls in pipeline (NIL IQS)', () => {
+  const scores = {
+    P1: { score: 'Yes' },
+    P2: { score: 'Yes' },
+    P3: { score: 'Yes' },
+    P4: { score: 'Yes' },
+    P5: { score: 'Yes' },
+    P6: { score: 'Yes' },
+    P7: { score: 'Yes' },
+    P8: { score: 'Yes' },
+    P9: { score: 'Yes' },
+    P10: { score: 'Yes' },
+    P11: { score: 'Yes' },
+  };
+
+  // Normal call
+  const normalResult = computeCallIQS(scores, 'General Query', 'Support');
+  assert.equal(normalResult.iqs_percent, 100);
+  assert.ok(normalResult.applicable_weight > 0);
+
+  // Junk disposition
+  const junkResult1 = computeCallIQS(scores, 'Junk', null);
+  assert.equal(junkResult1.iqs_percent, null);
+  assert.equal(junkResult1.applicable_weight, 0);
+
+  // Junk sub-disposition
+  const junkResult2 = computeCallIQS(scores, 'Enquiry', 'Junk Call');
+  assert.equal(junkResult2.iqs_percent, null);
+  assert.equal(junkResult2.applicable_weight, 0);
+
+  // Junk object
+  const junkResult3 = computeCallIQS(scores, { call_disposition: 'junk' });
+  assert.equal(junkResult3.iqs_percent, null);
+  assert.equal(junkResult3.applicable_weight, 0);
+});
+
+test('computeIqsFromRawParams hardcodes exclusion of junk from raw parameter scoring', () => {
+  const rawParams = {
+    __agent_parameters: {
+      IssueResolution: { score: 'Yes' },
+      Accuracy: { score: 'Yes' },
+      ExpectationFollowThrough: { score: 'Yes' },
+    },
+    __scores: {
+      agent_iqs: 85,
+    },
+  };
+
+  // Normal parameters
+  const normalScore = computeIqsFromRawParams(rawParams, false, 'Investment', 'SIP');
+  assert.ok(typeof normalScore === 'number' && normalScore > 0);
+
+  // Junk passed in disposition arg
+  assert.equal(computeIqsFromRawParams(rawParams, false, 'Junk'), null);
+  assert.equal(computeIqsFromRawParams(rawParams, false, 'Investment', 'Junk'), null);
+
+  // Junk embedded in paramsObj
+  const junkParamsObj = {
+    ...rawParams,
+    __disposition: 'Junk',
+  };
+  assert.equal(computeIqsFromRawParams(junkParamsObj), null);
+
+  const junkTagsParamsObj = {
+    ...rawParams,
+    tags: ['junk'],
+  };
+  assert.equal(computeIqsFromRawParams(junkTagsParamsObj), null);
+
+  // If agent_iqs was already null, do not compute fallback score
+  const nullScoreParams = {
+    ...rawParams,
+    __scores: {
+      agent_iqs: null,
+    },
+  };
+  assert.equal(computeIqsFromRawParams(nullScoreParams), null);
 });
 
 test('calculateEmailIQS hardcodes exclusion of junk emails from scoring', () => {
@@ -97,41 +270,4 @@ test('Weighted IQS rollup excludes junk rows from total calculation', () => {
   const cleanTotal = computeTotalIQS(rows, r => r.chatCount, r => r.iqsChat, true);
   assert.equal(cleanTotal, 87);
   assert.notEqual(cleanTotal, pollutedTotal);
-});
-
-test('Call pipeline marks junk calls as NOT_SCOREABLE with null IQS', () => {
-  // Simulates call pipeline logic from lib/scoring/call-pipeline.ts
-  function evaluateCall(callDisposition: string | null, subDisposition: string | null) {
-    const isJunkCall =
-      (callDisposition && callDisposition.toLowerCase().includes('junk')) ||
-      (subDisposition && subDisposition.toLowerCase().includes('junk'));
-
-    if (isJunkCall) {
-      return {
-        verdict: 'NOT_SCOREABLE',
-        status: 'reviewed',
-        iqs_percent: null,
-        applicable_weight: 0,
-      };
-    }
-
-    return {
-      verdict: 'COMPLIANT',
-      status: 'evaluated',
-      iqs_percent: 85,
-      applicable_weight: 100,
-    };
-  }
-
-  const junkCall1 = evaluateCall('Junk', null);
-  assert.equal(junkCall1.verdict, 'NOT_SCOREABLE');
-  assert.equal(junkCall1.iqs_percent, null);
-
-  const junkCall2 = evaluateCall('Customer Call', 'Junk Call');
-  assert.equal(junkCall2.verdict, 'NOT_SCOREABLE');
-  assert.equal(junkCall2.iqs_percent, null);
-
-  const legitCall = evaluateCall('Payment Issue', 'Resolved');
-  assert.equal(legitCall.verdict, 'COMPLIANT');
-  assert.equal(legitCall.iqs_percent, 85);
 });
