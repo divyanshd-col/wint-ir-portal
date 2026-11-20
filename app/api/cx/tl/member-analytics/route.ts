@@ -313,9 +313,13 @@ export async function GET(req: NextRequest) {
   // ── Run chats + calls queries in parallel ─────────────────────────────────────
   const [chatsRes, callsRes] = await Promise.all([
     Promise.all([
-      query<{ csat_pct: number | null; iqs: number | null; volume: number; parameters?: any }>(`
+      query<{ csat_pct: number | null; solvable_csat_pct?: number | null; unsolvable_csat_pct?: number | null; iqs: number | null; volume: number; parameters?: any }>(`
         SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                      / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
+               ROUND(COUNT(CASE WHEN c.csat_bifurcation = 'solvable' AND c.csat_label = 'good' THEN 1 END)::numeric
+                     / NULLIF(COUNT(CASE WHEN c.csat_bifurcation = 'solvable' AND c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS solvable_csat_pct,
+               ROUND(COUNT(CASE WHEN c.csat_bifurcation = 'unsolvable' AND c.bifurcated_csat_label = 'good' THEN 1 END)::numeric
+                     / NULLIF(COUNT(CASE WHEN c.csat_bifurcation = 'unsolvable' AND c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS unsolvable_csat_pct,
                ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
                jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
@@ -549,7 +553,13 @@ export async function GET(req: NextRequest) {
     wowWeekStarts: wowWeeks,
     channels: {
       chats: {
-        stats: { csat_pct: chatStatRows[0]?.csat_pct ?? null, iqs: chatWeightedIqs, volume: chatVolume },
+        stats: {
+          csat_pct: chatStatRows[0]?.csat_pct ?? null,
+          solvable_csat_pct: chatStatRows[0]?.solvable_csat_pct ?? null,
+          unsolvable_csat_pct: chatStatRows[0]?.unsolvable_csat_pct ?? null,
+          iqs: chatWeightedIqs,
+          volume: chatVolume,
+        },
         categories,
         wow: buildWow(chatWow as any[], chatWowParams as any[], wowWeeks, true),
       },

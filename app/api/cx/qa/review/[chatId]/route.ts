@@ -212,6 +212,25 @@ export async function PATCH(
 
         log.info(ROUTE, action, { chatId, reviewer: email, oldIqs, newIqs, paramChanges });
         await storeAppendAuditEntry({ id: randomUUID(), action: action === 'submit' ? 'review_submitted' : 'score_overridden', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { oldIqs, newIqs, paramChanges, note: note ?? null } } as IQSAuditEntry);
+
+        try {
+          const convInfo = await query<{ tags: any; csat_label: string | null }>(
+            `SELECT tags, csat_label FROM conversations WHERE id = $1`, [chatId]
+          );
+          if (convInfo[0]) {
+            const tags = typeof convInfo[0].tags === 'string' ? JSON.parse(convInfo[0].tags) : (convInfo[0].tags || {});
+            const { classifyChatCsat } = await import('@/lib/csat-bifurcation');
+            const classified = classifyChatCsat(tags.disposition, tags.sub_disposition, newIqs, convInfo[0].csat_label, config);
+            await query(
+              `UPDATE conversations
+               SET csat_bifurcation = $1, bifurcated_csat_label = $2, updated_at = NOW()
+               WHERE id = $3`,
+              [classified.bifurcation, classified.bifurcatedCsatLabel, chatId]
+            );
+          }
+        } catch (e) {
+          console.warn('[review] update conversation bifurcation error:', e);
+        }
       } else {
         // action without parameter changes — just mark reviewed
         await query(

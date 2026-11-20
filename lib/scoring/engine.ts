@@ -32,6 +32,7 @@ import {
 } from '@/lib/robylon/db';
 import { storeAcquireScoringLock, storeAppendAuditEntry } from '@/lib/store';
 import { transcriptFromJsonb, extractQueryFromTranscript } from './transcript';
+import { classifyChatCsat } from '@/lib/csat-bifurcation';
 
 // ── Convert ParamScore → IQSParameterResult ───────────────────────────────────────────
 function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult {
@@ -385,13 +386,24 @@ export async function executeScoring(
     unrelatedCallFlag: primaryPass.unrelated_call_flag
   });
 
-  // Update timing on conversation row
+  const effectiveIqs = (isBotOnly || noGradeableLeg || isJunk) ? null : (humanPass?.iqs_score ?? primaryPass.iqs_score ?? null);
+  const bifurcationInfo = classifyChatCsat(
+    disposition,
+    subDisposition,
+    effectiveIqs,
+    conv.csat_label,
+    config
+  );
+
+  // Update timing and CSAT bifurcation on conversation row
   await upsertConversation({
     id: chatId,
     conversationType: timing.conversationType,
     frtSeconds: timing.frt ?? null,
     botToTeamSeconds: timing.botToTeamSecs ?? null,
     resolutionSeconds: timing.resolutionTime ?? null,
+    csatBifurcation: bifurcationInfo.bifurcation,
+    bifurcatedCsatLabel: bifurcationInfo.bifurcatedCsatLabel,
   });
 
   const finalAgentName = effectiveAgentName;

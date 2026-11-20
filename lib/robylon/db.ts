@@ -272,6 +272,8 @@ export interface ConversationRow {
   closed_at: string | null;
   csat_score: number | null;
   csat_label: string | null;
+  csat_bifurcation?: string | null;
+  bifurcated_csat_label?: string | null;
   transcript: any;
   tags: any;
   frt_seconds: number | null;
@@ -295,6 +297,8 @@ export async function upsertConversation(data: {
   frtSeconds?: number | null;
   botToTeamSeconds?: number | null;
   resolutionSeconds?: number | null;
+  csatBifurcation?: string | null;
+  bifurcatedCsatLabel?: string | null;
   rawPayload?: any;
   webhookTrigger?: string;
 }): Promise<void> {
@@ -303,8 +307,9 @@ export async function upsertConversation(data: {
       id, contact_id, agent_id, conversation_type,
       started_at, closed_at, transcript, tags,
       frt_seconds, bot_to_team_seconds, resolution_seconds,
+      csat_bifurcation, bifurcated_csat_label,
       raw_payload, webhook_trigger, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
     ON CONFLICT (id) DO UPDATE SET
       contact_id          = COALESCE(EXCLUDED.contact_id, conversations.contact_id),
       agent_id            = COALESCE(EXCLUDED.agent_id, conversations.agent_id),
@@ -316,6 +321,8 @@ export async function upsertConversation(data: {
       frt_seconds         = COALESCE(EXCLUDED.frt_seconds, conversations.frt_seconds),
       bot_to_team_seconds = COALESCE(EXCLUDED.bot_to_team_seconds, conversations.bot_to_team_seconds),
       resolution_seconds  = COALESCE(EXCLUDED.resolution_seconds, conversations.resolution_seconds),
+      csat_bifurcation    = COALESCE(EXCLUDED.csat_bifurcation, conversations.csat_bifurcation),
+      bifurcated_csat_label = COALESCE(EXCLUDED.bifurcated_csat_label, conversations.bifurcated_csat_label),
       raw_payload         = COALESCE(EXCLUDED.raw_payload, conversations.raw_payload),
       webhook_trigger     = COALESCE(EXCLUDED.webhook_trigger, conversations.webhook_trigger),
       updated_at          = NOW()
@@ -331,6 +338,8 @@ export async function upsertConversation(data: {
     data.frtSeconds ?? null,
     data.botToTeamSeconds ?? null,
     data.resolutionSeconds ?? null,
+    data.csatBifurcation ?? null,
+    data.bifurcatedCsatLabel ?? null,
     data.rawPayload ? JSON.stringify(data.rawPayload) : null,
     data.webhookTrigger ?? null,
   ]);
@@ -341,9 +350,33 @@ export async function updateConversationCsat(
   csatScore: number,
   csatLabel: string,
 ): Promise<void> {
+  let bifurcation: string | null = null;
+  let bifurcatedLabel: string | null = csatLabel;
+  try {
+    const rows = await query<{ tags: any; iqs_score: number | null }>(
+      `SELECT c.tags, s.iqs_score
+       FROM conversations c
+       LEFT JOIN iqs_scores s ON s.chat_id = c.id
+       WHERE c.id = $1`,
+      [chatId]
+    );
+    const tags = typeof rows[0]?.tags === 'string' ? JSON.parse(rows[0].tags) : (rows[0]?.tags || {});
+    const iqs = rows[0]?.iqs_score ?? null;
+    const { readConfig } = await import('@/lib/config');
+    const { classifyChatCsat } = await import('@/lib/csat-bifurcation');
+    const config = await readConfig().catch(() => null);
+    const classified = classifyChatCsat(tags.disposition, tags.sub_disposition, iqs, csatLabel, config);
+    bifurcation = classified.bifurcation;
+    bifurcatedLabel = classified.bifurcatedCsatLabel;
+  } catch (err) {
+    console.warn('[db] updateConversationCsat bifurcation error:', err);
+  }
+
   await query(
-    `UPDATE conversations SET csat_score = $1, csat_label = $2, updated_at = NOW() WHERE id = $3`,
-    [csatScore, csatLabel, chatId],
+    `UPDATE conversations
+     SET csat_score = $1, csat_label = $2, csat_bifurcation = $3, bifurcated_csat_label = $4, updated_at = NOW()
+     WHERE id = $5`,
+    [csatScore, csatLabel, bifurcation, bifurcatedLabel, chatId],
   );
 }
 
@@ -354,6 +387,19 @@ export async function updateConversationTags(
   await query(
     `UPDATE conversations SET tags = $1, updated_at = NOW() WHERE id = $2`,
     [JSON.stringify(tags), chatId],
+  );
+}
+
+export async function updateConversationBifurcation(
+  chatId: string,
+  bifurcation: string | null,
+  bifurcatedCsatLabel: string | null,
+): Promise<void> {
+  await query(
+    `UPDATE conversations
+     SET csat_bifurcation = $1, bifurcated_csat_label = $2, updated_at = NOW()
+     WHERE id = $3`,
+    [bifurcation, bifurcatedCsatLabel, chatId],
   );
 }
 

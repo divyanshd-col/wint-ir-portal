@@ -116,6 +116,7 @@ export async function PATCH(req: NextRequest) {
     ...(owner?.ok && { disputeOwner: owner.value }),
     ...(inboxes?.ok && { pcgEmailInboxes: inboxes.value }),
     ...(rubric?.ok && { emailRubric: rubric.value }),
+    ...(Array.isArray(body.csatBifurcationMap) && { csatBifurcationMap: body.csatBifurcationMap }),
   };
 
   // Change history: record what changed (who, before, after) for prompts, the email rubric and thresholds. If it cannot be
