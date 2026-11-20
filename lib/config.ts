@@ -61,6 +61,8 @@ export interface PortalConfig {
   pcgEmailInboxes?: string[];
   // ── Email scoring rubric edits (only what differs from DEFAULT_EMAIL_PARAMETERS) ─
   emailRubric?: EmailRubric;
+  // ── CSAT bifurcation mapping (solvable vs unsolvable dispositions) ─────────
+  csatBifurcationMap?: Array<{ disposition: string; subDisposition: string; type: 'solvable' | 'unsolvable' }>;
 }
 
 export interface QADispositionEntry {

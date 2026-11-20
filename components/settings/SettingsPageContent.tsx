@@ -13,6 +13,7 @@ import { resolveEmailParameters } from '@/lib/email/context-builder';
 import { pcgInboxesOf } from '@/lib/email/inbox';
 import { visiblePromptFields } from '@/lib/prompt-overrides';
 import { PROMPT_DEFAULTS } from '@/lib/prompt-defaults';
+import { getCsatBifurcationList } from '@/lib/csat-bifurcation';
 
 /** The whole Settings screen, as a server component: used by the full page (/settings) and by the popup (@modal/(.)settings). */
 export default async function SettingsPageContent({ inModal = false }: { inModal?: boolean }) {
@@ -71,6 +72,7 @@ export default async function SettingsPageContent({ inModal = false }: { inModal
       qualityThresholds: { ...DEFAULT_QUALITY_THRESHOLDS, ...config.qualityThresholds },
       disputeOwner: (config.disputeOwner === 'tl' ? 'tl' : 'qa') as 'qa' | 'tl',
       emailParameters: resolveEmailParameters(config.emailRubric),
+      csatBifurcationMap: getCsatBifurcationList(config),
     }),
     prompts,
     readOnlyPrompts,

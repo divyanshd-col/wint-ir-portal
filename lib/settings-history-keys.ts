@@ -19,6 +19,7 @@ export const TRACKED_SETTINGS = {
   emailRubric:             { label: 'Email scoring rubric',           workspace: 'cx' },
   qualityThresholds:       { label: 'Quality thresholds',             workspace: 'cx' },
   disputeOwner:            { label: 'Dispute owner (QA or TL)',       workspace: 'cx' },
+  csatBifurcationMap:      { label: 'CSAT Bifurcation mapping',       workspace: 'cx' },
   pcgEmailInboxes:         { label: 'PCG: Email inboxes',             workspace: 'pcg' },
   pcgQualityPrompt:        { label: 'PCG: Quality prompt',            workspace: 'pcg' },
   pcgClassificationPrompt: { label: 'PCG: Classification prompt',     workspace: 'pcg' },
@@ -53,6 +54,10 @@ export function normalizeSettingValue(key: TrackedKey, raw: unknown): SettingVal
   if (key === 'qualityThresholds') {
     if (!raw || typeof raw !== 'object') return null;
     return canon(raw) === canon(DEFAULT_QUALITY_THRESHOLDS) ? null : (raw as Record<string, unknown>);
+  }
+  if (key === 'csatBifurcationMap') {
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    return raw as any;
   }
   return typeof raw === 'string' && raw.trim() ? raw : null;
 }
