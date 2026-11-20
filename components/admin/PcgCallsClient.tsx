@@ -23,6 +23,7 @@ import PcgQualityParametersView from './PcgQualityParametersView';
 import PcgTlCallsView from './PcgTlCallsView';
 import PcgPeriodFilter, { type PcgPeriod } from './PcgPeriodFilter';
 import PcgChatQualityView from './PcgChatQualityView';
+import PcgEmailQualityView from './PcgEmailQualityView';
 
 // Type definitions
 interface CallParameter {
@@ -147,7 +148,7 @@ interface TeamLeadSummary {
   rms: string[];
 }
 
-export type PcgTab = 'calls' | 'chat_quality' | 'tl_calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security' | 'parameter_definitions';
+export type PcgTab = 'calls' | 'chat_quality' | 'email_quality' | 'tl_calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security' | 'parameter_definitions';
 
 const PCG_FALLBACK_TL_TEAMS: Record<string, string[]> = {
   Swetha: [
@@ -301,7 +302,7 @@ export default function PcgCallsClient() {
         setActiveCohortToggle('tl');
       } else if (tabParam === 'tl_chats') {
         setActiveTab('chat_quality');
-      } else if (tabParam === 'scorecard' || tabParam === 'chat_quality' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security' || tabParam === 'parameter_definitions') {
+      } else if (tabParam === 'scorecard' || tabParam === 'chat_quality' || tabParam === 'email_quality' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security' || tabParam === 'parameter_definitions') {
         if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
           setActiveTab('calls');
         } else if (activePersona === 'agent' && tabParam === 'parameter_definitions') {
@@ -1580,6 +1581,21 @@ export default function PcgCallsClient() {
             <span className="quality-shell-sidebar-label">Chat Quality</span>
           </button>
 
+          {/* 3d. Email Quality Navigation Link */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('email_quality')}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'email_quality' ? ' active' : ''}`}
+          >
+            <span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+            </span>
+            <span className="quality-shell-sidebar-label">Email Quality</span>
+          </button>
+
           {/* 4. RM Scorecard Navigation Link */}
           <button
             type="button"
@@ -1708,6 +1724,16 @@ export default function PcgCallsClient() {
           ) : activeTab === 'chat_quality' ? (
             <div>
               <PcgChatQualityView
+                activePersona={activePersona}
+                selectedRm={activePersona === 'agent' ? selectedRm : undefined}
+                selectedTl={activePersona === 'tl' ? activeTlName : undefined}
+                loggedInUserName={loggedInUserName}
+                teamRms={teamRms}
+              />
+            </div>
+          ) : activeTab === 'email_quality' ? (
+            <div>
+              <PcgEmailQualityView
                 activePersona={activePersona}
                 selectedRm={activePersona === 'agent' ? selectedRm : undefined}
                 selectedTl={activePersona === 'tl' ? activeTlName : undefined}
