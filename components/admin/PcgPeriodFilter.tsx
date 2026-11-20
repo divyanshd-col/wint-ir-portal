@@ -1,6 +1,6 @@
 'use client';
 
-export type PcgPeriod = '7d' | '30d' | 'custom';
+export type PcgPeriod = '7d' | '30d' | 'all' | 'custom';
 
 /** The period filter on the PCG Call Quality and TL Call Quality pages (it used to be a read-only "Period:" label with the real
  *  control up in the top bar). Same chip look as before; the value is a dropdown, and Custom adds two date inputs. */
@@ -19,6 +19,7 @@ export default function PcgPeriodFilter({ range, start, end, onChange }: {
           className="font-semibold text-zinc-900 bg-transparent outline-none cursor-pointer">
           <option value="7d">Last 7 Days</option>
           <option value="30d">Last 30 Days</option>
+          <option value="all">All Time (Oct 13+)</option>
           <option value="custom">Custom Range</option>
         </select>
       </div>

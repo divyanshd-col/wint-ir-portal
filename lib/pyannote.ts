@@ -22,6 +22,7 @@ export async function getPyannoteUploadUrl(apiKey: string): Promise<{ pyannoteUr
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ url: pyannoteUri }),
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -34,6 +35,7 @@ export async function getPyannoteUploadUrl(apiKey: string): Promise<{ pyannoteUr
 export interface DiarizeOptions {
   entityId?: string;
   userEmail?: string;
+  maxWaitMs?: number;
 }
 
 /**
@@ -46,6 +48,7 @@ export async function diarizeAudioWithPyannote(
   opts?: DiarizeOptions
 ): Promise<PyannoteSegment[]> {
   const t0 = Date.now();
+  const maxWaitMs = opts?.maxWaitMs ?? 300_000;
   onProgress?.('Initiating Pyannote diarization job…');
   const initRes = await fetch('https://api.pyannote.ai/v1/diarize', {
     method: 'POST',
@@ -57,6 +60,7 @@ export async function diarizeAudioWithPyannote(
       url: audioUrl,
       model: 'precision-2',
     }),
+    signal: AbortSignal.timeout(30_000),
   });
   if (!initRes.ok) {
     const text = await initRes.text();
@@ -67,15 +71,17 @@ export async function diarizeAudioWithPyannote(
   if (!jobId) {
     throw new Error(`No jobId returned from Pyannote. Response: ${JSON.stringify(initData)}`);
   }
-  
+
   onProgress?.(`Pyannote job ${jobId} created — polling status…`);
-  const maxAttempts = 150; // 5 minutes max
+  const pollIntervalMs = 2000;
+  const maxAttempts = Math.max(1, Math.ceil(maxWaitMs / pollIntervalMs));
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, pollIntervalMs));
     const statusRes = await fetch(`https://api.pyannote.ai/v1/jobs/${jobId}`, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
+      signal: AbortSignal.timeout(20_000),
     });
     if (!statusRes.ok) {
       const text = await statusRes.text();
@@ -83,14 +89,16 @@ export async function diarizeAudioWithPyannote(
     }
     const statusData = await statusRes.json();
     const status = statusData.status;
-    
+
     if (status === 'succeeded') {
       onProgress?.('Pyannote diarization job completed successfully.');
-      const output = (statusData.output || []) as PyannoteSegment[];
-      console.log(`[Pyannote Output] Job ${jobId}:`, JSON.stringify(output, null, 2));
+      const rawOutput = statusData.output;
+      const segments: PyannoteSegment[] = Array.isArray(rawOutput)
+        ? rawOutput
+        : (Array.isArray(rawOutput?.diarization) ? rawOutput.diarization : []);
 
       // Calculate audio duration in seconds from max segment end
-      const duration = output.length ? Math.max(...output.map(s => s.end || 0)) : 0;
+      const duration = segments.length ? Math.max(...segments.map(s => Number(s.end) || 0)) : 0;
       const latencyMs = Date.now() - t0;
 
       // Log token/duration usage to llm_token_logs for bifurcation analytics
@@ -108,10 +116,9 @@ export async function diarizeAudioWithPyannote(
 
       // Record token & cost tracking for Pyannote (main token tracker)
       try {
-        const maxEnd = output.reduce((m, s) => Math.max(m, s.end), 0);
-        const audioSeconds = Math.round(maxEnd) || 120;
+        const audioSeconds = Math.round(duration) || 120;
         const inputTokens = audioSeconds * 30; // audio token equivalent (~30 tokens/sec)
-        const outputTokens = output.length * 4;
+        const outputTokens = segments.length * 4;
         const { recordTokenUsage } = await import('@/lib/tokens/tracker');
         recordTokenUsage({
           provider: 'pyannote',
@@ -119,21 +126,21 @@ export async function diarizeAudioWithPyannote(
           feature: 'call_analysis',
           inputTokens,
           outputTokens,
-          latencyMs: attempt * 2000,
-          metadata: { jobId, audioSeconds, segments: output.length },
+          latencyMs,
+          metadata: { jobId, audioSeconds, segments: segments.length },
         });
       } catch {}
 
-      return output;
+      return segments;
     } else if (status === 'failed') {
       throw new Error(`Pyannote job failed: ${statusData.error ?? 'Unknown error'}`);
     } else if (status === 'canceled') {
       throw new Error('Pyannote job was canceled');
     }
-    
+
     onProgress?.(`Pyannote job status: ${status} (attempt ${attempt}/${maxAttempts})…`);
   }
-  throw new Error('Pyannote diarization job timed out after 5 minutes');
+  throw new Error(`Pyannote diarization job timed out after ${Math.round(maxWaitMs / 1000)}s`);
 }
 
 type SpeakerLabel = 'A' | 'B';

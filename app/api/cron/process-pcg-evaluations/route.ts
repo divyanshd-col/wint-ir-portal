@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
+import { readConfig } from '@/lib/config';
 import { runPcgCallPipeline, resolvePcgAgent, resolvePcgAgentAsync, PCG_QUALITY_PARAMETERS } from '@/lib/scoring/pcg-pipeline';
+import { isPcgExcludedInternalPhone } from '@/lib/pcg/excluded-numbers';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max duration on Vercel
 
 async function syncShortCalls(fromDate: string, minDuration: number) {
+  const config = await readConfig().catch(() => null);
+  const customTeamMap = config?.pcgTeamAssignments || {};
+
   const shortCalls = await query<any>(`
     SELECT r.call_id, r.called_by, r.user_phone, r.agent_name, r.duration_seconds, r.phone_number
     FROM pcg_call_recordings r
@@ -26,7 +31,31 @@ async function syncShortCalls(fromDate: string, minDuration: number) {
   const emptyParamsJson = JSON.stringify(emptyParams);
 
   for (const c of shortCalls) {
-    const { rm, tl } = await resolvePcgAgentAsync(c.called_by || c.agent_name || c);
+    const { rm, tl } = await resolvePcgAgentAsync(c.called_by || c.agent_name || c, customTeamMap);
+    if (isPcgExcludedInternalPhone(c.phone_number)) {
+      const exclusionText = `Internal company number (${c.phone_number || 'configured internal number'})`;
+      await query(`
+        INSERT INTO pcg_call_evaluations (
+          call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
+          iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
+          verdict, is_evaluable, exclusion_reason, parameters, transcript_turns, compliance_tripwire, scored_at
+        ) VALUES ($1, $2, $3, $4, 'internal_personal', $5, null, null, null, null, 0, 'EXCLUDED_NON_CLIENT', false, $6, '[]'::jsonb, '[]'::jsonb, false, NOW())
+        ON CONFLICT (call_id) DO UPDATE SET
+          call_category = 'internal_personal',
+          verdict = 'EXCLUDED_NON_CLIENT',
+          is_evaluable = false,
+          exclusion_reason = EXCLUDED.exclusion_reason,
+          scored_at = NOW()
+      `, [c.call_id, rm, tl, c.phone_number, c.duration_seconds || 0, exclusionText]);
+
+      await query(`
+        UPDATE pcg_call_recordings
+        SET call_nature = 'non_client', call_category = 'internal_personal', exclusion_reason = $1, category_source = 'internal_number_rule'
+        WHERE call_id = $2
+      `, [exclusionText, c.call_id]);
+      continue;
+    }
+
     await query(`
       INSERT INTO pcg_call_evaluations (
         call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,

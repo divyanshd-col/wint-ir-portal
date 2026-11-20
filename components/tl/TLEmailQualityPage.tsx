@@ -21,6 +21,7 @@ import EmailMessageView, {
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import UISelect from '@/components/quality/UISelect';
 import EmailSplit from '@/components/quality/EmailSplit';
+import EmailEvaluationPage from '@/components/quality/EmailEvaluationPage';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 import * as T from '@/components/quality/tableStyles';
 
@@ -64,6 +65,7 @@ interface EvaluationItem {
   reviewed_at?: string;
   internal_notes?: InternalNote[];
   raised_by_role?: string;
+  flag_raised_at?: string | null;
   flag_author_name?: string;
 }
 
@@ -81,7 +83,6 @@ const tdNum: React.CSSProperties = T.tdNum;
 
 
 // ─── Disputes (same flow as Quality Chats: raised -> TL resolves or forwards to QA -> history) ──
-const dateOf = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 
 const actionBtn: React.CSSProperties = {
   height: 28, padding: '0 10px', borderRadius: 6, border: '1px solid var(--qa-border)',
@@ -98,6 +99,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const [error, setError] = useState<string | null>(null);
   const [topics, setTopics] = useState<string[]>([]);
   const [topicPick, setTopicPick] = useState<Record<string, string>>({});
+  // 'tl': this TL resolves IR disputes (with an updated score), no Forward to QA. 'qa': the old flow.
+  const [ownerTl, setOwnerTl] = useState(false);
   const [ticketSearch, setTicketSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('');
@@ -110,7 +113,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       const params = new URLSearchParams({ disputeQueue: queue, from, to, limit: '500' });
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
-      if (data.ok) setRows(data.items || []);
+      if (data.ok) { setRows(data.items || []); setOwnerTl(data.disputesOwner === 'tl'); }
     } catch (err) {
       console.error('Failed to load email disputes:', err);
     } finally {
@@ -175,10 +178,13 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
        r.dispute_status === outcomeFilter))
   );
   const [sort, toggleSort] = useSort();
-  const sortedSrc = sortRows(shown, sort, { date: r => r.sent_at, agent: r => r.agent_name, iqs: r => r.effective_score ?? r.quality_score });
+  const sortedSrc = sortRows(shown, sort, { date: r => pending ? (r.flag_raised_at ?? r.updated_at) : (r.reviewed_at ?? r.updated_at), agent: r => r.agent_name, iqs: r => r.effective_score ?? r.quality_score });
   const paging = usePaging(sortedSrc, `${queue}|${ticketSearch}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
-  const colCount = pending ? 6 : 7;
+  const colCount = 7;
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
+
+  // TLs own disputes: resolve them right here with the full parameter-by-parameter panel (the one QA uses), not on another page.
+  if (pending && ownerTl) return <EmailEvaluationPage embedded onResolved={onChanged} />;
 
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, position: 'relative' }}>
@@ -286,7 +292,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
         {pending ? (
           <UISelect value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
             <option value="">All Dispute Statuses</option>
-            <option value="Raised">Forwarded to TL (Pending Review)</option>
+            <option value="Raised">Pending TL review</option>
           </UISelect>
         ) : (
           <UISelect value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
@@ -313,22 +319,22 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 130 }} />
-          <col style={{ width: 135 }} />
+          <col style={{ width: 180 }} />
           <col />
-          <col style={{ width: 90 }} />
           <col style={{ width: 80 }} />
-          <col style={{ width: 120 }} />
-          {!pending && <col style={{ width: 170 }} />}
+          <col style={{ width: 130 }} />
+          <col style={{ width: 190 }} />
+          <col style={{ width: 100 }} />
         </colgroup>
         <thead>
           <tr>
             <th style={th}>Ticket ID</th>
-            <SortTh k="date" sort={sort} onSort={toggleSort} style={th}>Date & Time</SortTh>
             <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+            <th style={th}>Disposition</th>
             <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
-            <th style={th}>CSAT</th>
-            <th style={th}>{pending ? 'Raised' : 'Updated'}</th>
-            {!pending && <th style={th}>Outcome</th>}
+            <SortTh k="date" sort={sort} onSort={toggleSort} style={th}>{pending ? 'Raised' : 'Updated'}</SortTh>
+            <th style={th}>{pending ? 'Status' : 'Outcome'}</th>
+            <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -350,26 +356,14 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                   <td style={tdMono}>
                     <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
                   </td>
-                  {(() => {
-                    const dt = formatEmailDateTime(item.sent_at);
-                    return (
-                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                        <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
-                        {dt.time && (
-                          <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
-                            {dt.time}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })()}
-                  <td style={{ ...td, fontWeight: 500 }}>{item.agent_name || 'Unassigned'}</td>
+                  <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || 'Unassigned'}</td>
+                  <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{intentLabel(item.intent_l1)}</td>
                   <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
                     {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                   </td>
-                  <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
-                  <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>{dateOf(pending ? item.updated_at : (item.reviewed_at ?? item.updated_at))}</td>
-                  {!pending && <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status)}</td>}
+                  <td style={{ ...td, whiteSpace: 'nowrap', color: 'var(--qa-text-2)' }}><T.DateTime value={pending ? (item.flag_raised_at ?? item.updated_at) : (item.reviewed_at ?? item.updated_at)} /></td>
+                  <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status)}</td>
+                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>{isOpen ? 'Hide ▲' : 'Review ▼'}</span></td>
                 </tr>
                 {isOpen && (
                   <tr className="eval-panel-row">
@@ -409,16 +403,18 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                         {pending && (
                           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
-                            {needsTopic(item) && (
+                            {!ownerTl && needsTopic(item) && (
                               <UISelect aria-label="Disposition" value={topicPick[item.message_id] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [item.message_id]: e.target.value }))} style={{ width: '100%' }}>
                                 <option value="">{intentLabel(item.intent_l1) !== '—' ? `${intentLabel(item.intent_l1)} (not assigned), choose` : 'Choose disposition'}</option>
                                 {topics.map(t => <option key={t} value={t}>{t}</option>)}
                               </UISelect>
                             )}
                             <button style={{ ...actionBtn, width: '100%', height: 32 }} disabled={actioning === item.message_id} onClick={() => openResolveModal(item)}>Resolve</button>
+                            {(!ownerTl || item.raised_by_role === 'tl') && (
                             <button style={{ ...actionBtn, width: '100%', height: 32, background: 'var(--qa-gray-700)', color: '#fff', border: 'none' }} disabled={actioning === item.message_id || (needsTopic(item) && !topicPick[item.message_id])} onClick={() => openForwardModal(item)}>
                               {actioning === item.message_id ? '…' : 'Forward to QA'}
                             </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -884,7 +880,7 @@ export default function TLEmailQualityPage() {
             style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: disputeFilter ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
           >
             <option value="">All Dispute Statuses</option>
-            <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+            <option value="forwarded_to_tl">Pending TL review</option>
             <option value="reviewed">Reviewed Disputes</option>
             <option value="none">No Dispute</option>
           </UISelect>
@@ -900,36 +896,34 @@ export default function TLEmailQualityPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '12%' }} />
-              <col style={{ width: '13%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '10%' }} />
+              <col style={{ width: '17%' }} />
+              <col style={{ width: '28.4%' }} />
               <col style={{ width: '8%' }} />
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '11%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '8.6%' }} />
             </colgroup>
             <thead>
               <tr>
                 <th style={th}>Ticket ID</th>
-                <SortTh k="date" sort={sortR} onSort={toggleSortR} style={th}>Date & Time</SortTh>
                 <SortTh k="agent" sort={sortR} onSort={toggleSortR} style={th}>Agent</SortTh>
-                <SortTh k="intent" sort={sortR} onSort={toggleSortR} style={th}>Intent</SortTh>
+                <SortTh k="intent" sort={sortR} onSort={toggleSortR} style={th}>Disposition</SortTh>
                 <SortTh k="iqs" sort={sortR} onSort={toggleSortR} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
-                <th style={th}>CSAT</th>
-                <SortTh k="dispute" sort={sortR} onSort={toggleSortR} style={th}>Dispute</SortTh>
+                <SortTh k="date" sort={sortR} onSort={toggleSortR} style={th}>Date</SortTh>
+                <SortTh k="dispute" sort={sortR} onSort={toggleSortR} style={th}>Status</SortTh>
                 <th style={{ ...th, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     Loading team email replies…
                   </td>
                 </tr>
               ) : paging.pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     No replies matching selected filters
                   </td>
                 </tr>
@@ -961,6 +955,15 @@ export default function TLEmailQualityPage() {
                             </span>
                           )}
                         </td>
+                        <td style={{ ...td, fontWeight: 500 }}>
+                          {reply.agent_name || 'Unassigned'}
+                        </td>
+                        <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {intentLabel(reply.intent_l1)}
+                        </td>
+                        <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
+                          {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                        </td>
                         {(() => {
                           const dt = formatEmailDateTime(reply.sent_at);
                           return (
@@ -974,16 +977,6 @@ export default function TLEmailQualityPage() {
                             </td>
                           );
                         })()}
-                        <td style={{ ...td, fontWeight: 500 }}>
-                          {reply.agent_name || 'Unassigned'}
-                        </td>
-                        <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {intentLabel(reply.intent_l1)}
-                        </td>
-                        <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
-                          {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
-                        </td>
-                        <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
                         <td style={{ ...td, fontSize: 13 }}>
                           {reply.dispute_status && reply.dispute_status !== 'None' ? (
                             disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)
@@ -1000,7 +993,7 @@ export default function TLEmailQualityPage() {
 
                       {isExpanded && (
                         <tr className="eval-panel-row">
-                          <td colSpan={8} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={7} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
                             <EmailSplit
                               conversation={<>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

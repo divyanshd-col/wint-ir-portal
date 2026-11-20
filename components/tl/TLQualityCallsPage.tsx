@@ -116,10 +116,13 @@ export default function TLQualityCallsPage() {
   const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // 'tl': this TL resolves IR disputes by updating the scores in the panel (no Forward to QA). 'qa': the old flow.
+  const [ownerTl, setOwnerTl] = useState(false);
 
   // Filter state for Disputes
   const [pendingAgentFilter, setPendingAgentFilter] = useState('');
   const [pendingOutcomeFilter, setPendingOutcomeFilter] = useState('');
+  const [pendingSearch, setPendingSearch] = useState('');
   const [pendingFromFilter, setPendingFromFilter] = useState('');
   const [pendingToFilter, setPendingToFilter] = useState('');
   const [pendingPage, setPendingPage] = useState(1);
@@ -189,6 +192,7 @@ export default function TLQualityCallsPage() {
       ]);
       const [pData, rData] = await Promise.all([pRes.json(), rRes.json()]);
 
+      setOwnerTl(pData.disputesOwner === 'tl');
       const pAll: TLDisputeRow[] = Array.isArray(pData.disputes) ? pData.disputes : [];
       const rAll: TLDisputeRow[] = Array.isArray(rData.disputes) ? rData.disputes : [];
 
@@ -259,6 +263,7 @@ export default function TLQualityCallsPage() {
   // Filter pending disputes
   const filteredPendingDisputes = pendingDisputes.filter(d => {
     if (pendingAgentFilter && d.agentName !== pendingAgentFilter) return false;
+    if (pendingSearch.trim() && !String(d.callId || d.chatId || '').toLowerCase().includes(pendingSearch.trim().toLowerCase())) return false;
     if (pendingOutcomeFilter) {
       if (pendingOutcomeFilter === 'forwarded_to_tl') {
         if (d.status !== 'pending' && d.status !== 'ir_pending_tl') return false;
@@ -335,8 +340,8 @@ export default function TLQualityCallsPage() {
 
   const [sort, toggleSort] = useSort();
   const sorted1 = sortRows(entries, sort, { agent: c => c.agentName, mobile: c => c.mobileNumber, date: c => c.calledAt ?? c.date, disp: c => c.disposition, iqs: c => c.iqs });
-  const sorted2 = sortRows(pagedPending, sort, { agent: d => d.agentName, mobile: d => d.mobileNumber, by: d => d.raisedByName, iqs: d => d.callIqsScore, disp: d => d.disposition, status: d => d.status });
-  const sorted3 = sortRows(pagedReviewed, sort, { agent: d => d.agentName, mobile: d => d.mobileNumber, by: d => d.raisedByName, iqs: d => d.callIqsScore, status: d => d.status, raised: d => d.raisedAt });
+  const sorted2 = sortRows(pagedPending, sort, { agent: d => d.agentName, mobile: d => d.mobileNumber, raised: d => d.raisedAt, iqs: d => d.callIqsScore, disp: d => d.disposition, status: d => d.status });
+  const sorted3 = sortRows(pagedReviewed, sort, { agent: d => d.agentName, mobile: d => d.mobileNumber, disp: d => d.disposition, iqs: d => d.callIqsScore, status: d => d.status, raised: d => d.raisedAt });
 
   return (
     <div style={{ fontFamily: SANS }}>
@@ -411,7 +416,7 @@ export default function TLQualityCallsPage() {
               style={{ ...chipInputStyle, minWidth: 150 }}
             >
               <option value="">All Calls</option>
-              <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+              <option value="forwarded_to_tl">Pending TL review</option>
               <option value="reviewed">Reviewed Disputes</option>
               <option value="none">No Dispute</option>
             </UISelect>
@@ -464,22 +469,22 @@ export default function TLQualityCallsPage() {
               <colgroup>
               <col style={{ width: '10%' }} />
               <col style={{ width: '13%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '12.4%' }} />
-              <col style={{ width: '10%' }} />
               <col style={{ width: '18%' }} />
               <col style={{ width: '12%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12.4%' }} />
               <col style={{ width: '12.6%' }} />
             </colgroup>
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
-                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
-                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent</SortTh>
                   <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</SortTh>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date</SortTh>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
@@ -523,11 +528,8 @@ export default function TLQualityCallsPage() {
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{call.agentName}</td>
-                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
-                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
-                            {call.calledAt ? <T.DateTime value={call.calledAt} /> : call.date}
-                          </td>
                           <td style={TD_BASE}>{call.disposition || '—'}</td>
+                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {call.chatId ? (
                               <TicketLinkButton id={call.chatId} />
@@ -537,6 +539,9 @@ export default function TLQualityCallsPage() {
                           </td>
                           <td style={TD_NUM}>
                             <IQSBadge score={isJunkDisposition(call.disposition, call.subDisposition) ? null : call.iqs} />
+                          </td>
+                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
+                            {call.calledAt ? <T.DateTime value={call.calledAt} /> : call.date}
                           </td>
                           <td style={{ ...TD_BASE, textAlign: 'right' }}>
                             <button
@@ -612,6 +617,11 @@ export default function TLQualityCallsPage() {
         <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
           <div className="qfilters">
+            <input
+              type="text" value={pendingSearch} placeholder="Search by Call ID…"
+              onChange={e => { setPendingSearch(e.target.value); setPendingPage(1); }}
+              style={{ ...chipInputStyle, width: 170 }}
+            />
             <UISelect
               value={pendingAgentFilter}
               onChange={e => { setPendingAgentFilter(e.target.value); setPendingPage(1); }}
@@ -629,15 +639,16 @@ export default function TLQualityCallsPage() {
               style={{ ...chipInputStyle, minWidth: 180 }}
             >
               <option value="">All Dispute Statuses</option>
-              <option value="forwarded_to_tl">Forwarded to TL (Pending Review)</option>
+              <option value="forwarded_to_tl">Pending TL review</option>
               <option value="raised_ir">Dispute raised by IR</option>
               <option value="raised_tl">Dispute raised by TL</option>
             </UISelect>
 
 
             <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
-            <button type="button" className="qf-chip" disabled={!(pendingAgentFilter || pendingOutcomeFilter || pendingFromFilter || pendingToFilter)}
+            <button type="button" className="qf-chip" disabled={!(pendingSearch || pendingAgentFilter || pendingOutcomeFilter || pendingFromFilter || pendingToFilter)}
                 onClick={() => {
+                  setPendingSearch('');
                   setPendingAgentFilter('');
                   setPendingOutcomeFilter('');
                   setPendingFromFilter('');
@@ -681,14 +692,14 @@ export default function TLQualityCallsPage() {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
-                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
-                  <SortTh k="by" sort={sort} onSort={toggleSort} style={TH_BASE}>Raised By</SortTh>
-                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent</SortTh>
                   <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
+                  <SortTh k="raised" sort={sort} onSort={toggleSort} style={TH_BASE}>Raised</SortTh>
                   <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Actions</th>
+                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -723,20 +734,20 @@ export default function TLQualityCallsPage() {
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
-                          <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
-                          <td style={TD_NUM}>
-                            <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
-                          </td>
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {dispute.chatId ? (
                               <TicketLinkButton id={dispute.chatId} />
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                             )}
                           </td>
-                          <td style={TD_BASE}>
+                          <td style={TD_NUM}>
+                            <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
+                          </td>
+                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap', color: 'var(--qa-text-2)' }}><T.DateTime value={dispute.raisedAt} /></td>
+                          <td style={{ ...TD_BASE, fontSize: 13 }}>
                             <DisputeStatusPill
                               status={dispute.status}
                               raisedByRole={dispute.raisedByRole || (dispute as any).raisedBy}
@@ -745,6 +756,14 @@ export default function TLQualityCallsPage() {
                             />
                           </td>
                           <td style={{ ...TD_BASE, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                            {ownerTl && dispute.raisedByRole !== 'tl' ? (
+                              <button
+                                onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
+                                style={{ padding: 0, fontSize: 12, fontWeight: 500, background: 'none', color: 'var(--qa-text-2)', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}
+                              >
+                                {isOpen ? 'Hide ▲' : 'Review ▼'}
+                              </button>
+                            ) : (
                             <div style={{ display: 'inline-flex', gap: 6 }}>
                               <button
                                 onClick={() => handleForwardToQA(dispute.flagId)}
@@ -779,6 +798,7 @@ export default function TLQualityCallsPage() {
                                 Resolve
                               </button>
                             </div>
+                            )}
                           </td>
                         </tr>
 
@@ -792,7 +812,7 @@ export default function TLQualityCallsPage() {
                             disposition={dispute.disposition}
                             gates={dispute.gates || dispute.parameters?.gates}
                             iqsScores={dispute.parameters || {}}
-                            mode="view"
+                            mode={ownerTl && dispute.raisedByRole !== 'tl' ? 'resolve' : 'view'}
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
@@ -909,13 +929,13 @@ export default function TLQualityCallsPage() {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent</SortTh>
+                  <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
                   <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
-                  <SortTh k="by" sort={sort} onSort={toggleSort} style={TH_BASE}>Raised By</SortTh>
-                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
-                  <SortTh k="raised" sort={sort} onSort={toggleSort} style={TH_BASE}>Date Raised</SortTh>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
+                  <SortTh k="raised" sort={sort} onSort={toggleSort} style={TH_BASE}>Raised</SortTh>
+                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Outcome</SortTh>
                 </tr>
               </thead>
               <tbody>
@@ -950,11 +970,8 @@ export default function TLQualityCallsPage() {
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
+                          <td style={TD_BASE}>{dispute.disposition || '—'}</td>
                           <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
-                          <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
-                          <td style={TD_NUM}>
-                            <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
-                          </td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {dispute.chatId ? (
                               <TicketLinkButton id={dispute.chatId} />
@@ -962,6 +979,10 @@ export default function TLQualityCallsPage() {
                               <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
+                          <td style={TD_NUM}>
+                            <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
+                          </td>
+                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}><T.DateTime value={dispute.raisedAt} /></td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill
                               status={dispute.status}
@@ -970,7 +991,6 @@ export default function TLQualityCallsPage() {
                               parameters={dispute.parameters}
                             />
                           </td>
-                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}><T.DateTime value={dispute.raisedAt} /></td>
                         </tr>
 
                         {isOpen && (

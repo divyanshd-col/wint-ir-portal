@@ -522,12 +522,12 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
-                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
                   <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</SortTh>
-                  <th style={{ ...TH_BASE, textAlign: 'center' }}>Dispute Action</th>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date</SortTh>
+                  <th style={{ ...TH_BASE, textAlign: 'center' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -561,11 +561,8 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           }}
                         >
                           <td style={TD_MONO}>{call.callId}</td>
-                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
-                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
-                            {call.calledAt ? <T.DateTime value={call.calledAt} /> : call.date}
-                          </td>
                           <td style={TD_BASE}>{call.disposition || '—'}</td>
+                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {call.chatId ? (
                               <TicketLinkButton id={call.chatId} />
@@ -575,6 +572,9 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           </td>
                           <td style={TD_NUM}>
                             <IQSBadge score={isJunkDisposition(call.disposition, call.subDisposition) ? null : call.iqs} />
+                          </td>
+                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
+                            {call.calledAt ? <T.DateTime value={call.calledAt} /> : call.date}
                           </td>
                           <td style={{ ...TD_BASE, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                             {pendingDispute ? (
@@ -853,11 +853,11 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
-                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
                   <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date</SortTh>
                   <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
@@ -897,11 +897,8 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                               callKey
                             )}
                           </td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
-                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
-                            {dispute.closedAt ? <T.DateTime value={dispute.closedAt} /> : '—'}
-                          </td>
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {dispute.chatId ? (
                               <TicketLinkButton id={dispute.chatId} />
@@ -911,6 +908,9 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           </td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
+                          </td>
+                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
+                            {dispute.closedAt ? <T.DateTime value={dispute.closedAt} /> : '—'}
                           </td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill
@@ -1054,13 +1054,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
-                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
                   <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
-                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
-                  <SortTh k="rev" sort={sort} onSort={toggleSort} style={TH_BASE}>Reviewed At</SortTh>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date</SortTh>
+                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Outcome</SortTh>
+                  <SortTh k="rev" sort={sort} onSort={toggleSort} style={TH_BASE}>Reviewed</SortTh>
                 </tr>
               </thead>
               <tbody>
@@ -1098,11 +1098,8 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                               callKey
                             )}
                           </td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
-                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
-                            {dispute.closedAt ? <T.DateTime value={dispute.closedAt} /> : '—'}
-                          </td>
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {dispute.chatId ? (
                               <TicketLinkButton id={dispute.chatId} />
@@ -1112,6 +1109,9 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           </td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
+                          </td>
+                          <td style={{ ...TD_BASE, whiteSpace: 'nowrap' }}>
+                            {dispute.closedAt ? <T.DateTime value={dispute.closedAt} /> : '—'}
                           </td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill

@@ -1,4 +1,6 @@
 import { query } from '@/lib/cx/db';
+import { resolvePcgRmByPhone } from '@/lib/pcg/rm-directory';
+import { canonicalizePcgRmName, isPcgAm } from '@/lib/pcg/canonical-names';
 
 export const PCG_INACTIVITY_HOURS = 48;
 export const PCG_INACTIVITY_MS = PCG_INACTIVITY_HOURS * 60 * 60 * 1000;
@@ -7,7 +9,7 @@ export interface DoubleTickTranscriptItem {
   message_id: string | null;
   event_type: 'message_received' | 'status_update';
   direction: 'inbound' | 'outbound';
-  speaker: 'Customer' | 'RM';
+  speaker: 'Customer' | 'RM' | 'AM';
   text: string | null;
   status: string | null; // 'SENT', 'DELIVERED', 'READ', 'FAILED', or null
   type: string;          // 'TEXT', 'IMAGE', 'AUDIO', 'DOCUMENT', 'template'
@@ -16,6 +18,11 @@ export interface DoubleTickTranscriptItem {
   timestamp: string;
   delivered_at?: string | null;
   read_at?: string | null;
+  agent_phone?: string | null;
+  agent_name?: string | null;
+  role?: string | null;
+  is_handoff?: boolean;
+  handoff_note?: string;
 }
 
 /**
@@ -114,7 +121,7 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
     // 1. Detect Event Type, Direction & Speaker
     const isStatusUpdate = !!(item.status || item.statusTimestamp);
     let direction: 'inbound' | 'outbound' = 'inbound';
-    let speaker: 'Customer' | 'RM' = 'Customer';
+    let speaker: 'Customer' | 'RM' | 'AM' = 'Customer';
     let eventType: 'message_received' | 'status_update' = isStatusUpdate ? 'status_update' : 'message_received';
 
     if (item.Direction) {
@@ -149,7 +156,30 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
     const customerName = item.contact?.name || item.customerName || item['Customer Name'] || item.name || null;
     const customerId = item.customerId || item.dtCustomerId || null;
     const assignedRmId = item.assignedTo || item.sentBy || item.userId || null;
-    const rmName = item['Sent By'] || item['Assigned Agent'] || null;
+    let rmName = item['Sent By'] || item['Assigned Agent'] || null;
+
+    let agentPhone: string | null = null;
+    let agentName: string | null = null;
+    let agentRole: 'rm' | 'am' | 'tl' | null = null;
+
+    // Check directory table if rmName is a phone number or null
+    const candidatePhone = (rmName && /^\+?\d{8,15}$/.test(rmName)) ? rmName : (assignedRmId && /^\+?\d{8,15}$/.test(assignedRmId) ? assignedRmId : null);
+    if (candidatePhone) {
+      agentPhone = String(candidatePhone).replace(/\D/g, '');
+      const resolved = await resolvePcgRmByPhone(candidatePhone);
+      if (resolved?.rm) {
+        rmName = canonicalizePcgRmName(resolved.rm);
+        agentName = rmName;
+      }
+    } else if (rmName) {
+      rmName = canonicalizePcgRmName(rmName);
+      agentName = rmName;
+    }
+
+    if (direction === 'outbound' && agentName) {
+      agentRole = isPcgAm(agentName) ? 'am' : 'rm';
+      speaker = agentRole === 'am' ? 'AM' : 'RM';
+    }
     const messageId = item.dtMessageId || item.messageId || item['Message ID'] || item.id || null;
     const status = item.status ? String(item.status).toUpperCase() : null;
 
@@ -164,8 +194,9 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
     const messageTime = item.statusTimestamp || item.receivedAt || item['Sent At'] || new Date().toISOString();
 
     try {
-      // 5. Query Existing Ongoing Conversation
+      // 5. Query Existing Active (OPEN) Conversation Session
       const existingRows = await query<{
+        id: number | string;
         transcript: DoubleTickTranscriptItem[];
         total_messages: number;
         customer_name: string | null;
@@ -176,14 +207,16 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
         closed_at?: string | null;
         last_message_at?: string | null;
       }>(
-        `SELECT transcript, total_messages, customer_name, customer_id, assigned_rm_id, last_status, status, closed_at, last_message_at
+        `SELECT id, transcript, total_messages, customer_name, customer_id, assigned_rm_id, last_status, status, closed_at, last_message_at
          FROM pcg_conversations
-         WHERE customer_phone = $1 AND waba_number = $2`,
+         WHERE customer_phone = $1 AND waba_number = $2 AND (status IS NULL OR status = 'OPEN')
+         ORDER BY id DESC
+         LIMIT 1`,
         [customerPhone, wabaNumber]
       );
 
       if (existingRows.length === 0) {
-        // Create New Conversation Thread
+        // Create Brand New Conversation Session
         const initialTurn: DoubleTickTranscriptItem = {
           message_id: messageId,
           event_type: eventType,
@@ -197,6 +230,9 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
           timestamp: messageTime,
           delivered_at: status === 'DELIVERED' ? messageTime : null,
           read_at: status === 'READ' ? messageTime : null,
+          agent_phone: agentPhone,
+          agent_name: agentName,
+          role: agentRole,
         };
 
         const msgDate = new Date(messageTime);
@@ -210,8 +246,8 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
           `INSERT INTO pcg_conversations (
             customer_phone, waba_number, customer_name, customer_id, assigned_rm_id, rm_name,
             transcript, total_messages, last_message_text, last_event_type, last_direction,
-            last_status, last_message_at, raw_payload, status, closed_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13, $14, $15)`,
+            last_status, last_message_at, raw_payload, status, closed_at, is_am
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
           [
             customerPhone,
             wabaNumber,
@@ -228,30 +264,24 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
             JSON.stringify(item),
             initialStatus,
             initialClosedAt,
+            agentRole === 'am',
           ]
         );
       } else {
-        // Conversation already exists -> Append or Update existing message status
         const row = existingRows[0];
         let currentTranscript: DoubleTickTranscriptItem[] = Array.isArray(row.transcript) ? row.transcript : [];
         let totalMessages = row.total_messages || currentTranscript.length;
 
-        // Check if messageId is already in transcript
+        // Check if messageId is already in current active transcript (status transition)
         const existingIdx = messageId ? currentTranscript.findIndex(t => t.message_id === messageId) : -1;
 
         if (existingIdx !== -1) {
-          // Status Transition (e.g. SENT -> DELIVERED -> READ)
+          // Status Transition (e.g. SENT -> DELIVERED -> READ) within active session
           const targetTurn = currentTranscript[existingIdx];
           if (status) targetTurn.status = status;
           if (status === 'DELIVERED' && !targetTurn.delivered_at) targetTurn.delivered_at = messageTime;
           if (status === 'READ' && !targetTurn.read_at) targetTurn.read_at = messageTime;
           if (text && !targetTurn.text) targetTurn.text = text;
-
-          const isInactive = isConversationInactive(row.last_message_at);
-          const targetStatus = isInactive ? 'CLOSED' : (row.status || 'OPEN');
-          const targetClosedAt = isInactive
-            ? (row.last_message_at ? new Date(new Date(row.last_message_at).getTime() + PCG_INACTIVITY_MS).toISOString() : new Date().toISOString())
-            : (row.status === 'CLOSED' ? (row.closed_at || null) : null);
 
           await query(
             `UPDATE pcg_conversations
@@ -261,11 +291,9 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
                  customer_id = COALESCE($4, customer_id),
                  assigned_rm_id = COALESCE($5, assigned_rm_id),
                  rm_name = COALESCE($6, rm_name),
-                 status = $7,
-                 closed_at = $8,
                  updated_at = NOW(),
-                 raw_payload = $9
-             WHERE customer_phone = $10 AND waba_number = $11`,
+                 raw_payload = $7
+             WHERE id = $8`,
             [
               JSON.stringify(currentTranscript),
               status,
@@ -273,77 +301,162 @@ export async function ingestDoubleTickPayload(rawBody: any): Promise<{ ingestedC
               customerId,
               assignedRmId,
               rmName,
-              targetStatus,
-              targetClosedAt,
               JSON.stringify(item),
-              customerPhone,
-              wabaNumber,
+              row.id,
             ]
           );
         } else {
-          // New dialogue turn -> Append to transcript
-          const newTurn: DoubleTickTranscriptItem = {
-            message_id: messageId,
-            event_type: eventType,
-            direction: direction,
-            speaker: speaker,
-            text: text,
-            status: status,
-            type: messageType,
-            media_url: mediaUrl,
-            template_name: templateName,
-            timestamp: messageTime,
-            delivered_at: status === 'DELIVERED' ? messageTime : null,
-            read_at: status === 'READ' ? messageTime : null,
-          };
+          // New message turn: Check if gap from last message in active session >= 48 hours
+          const prevTime = row.last_message_at ? new Date(row.last_message_at).getTime() : NaN;
+          const curTime = new Date(messageTime).getTime();
+          const has48hInactivityGap = !isNaN(prevTime) && !isNaN(curTime) && (curTime - prevTime >= PCG_INACTIVITY_MS);
 
-          currentTranscript.push(newTurn);
-          totalMessages += 1;
+          if (has48hInactivityGap) {
+            // 1. Close the previous session because it exceeded the 48h inactivity window!
+            const prevSessionClosedAt = new Date(prevTime + PCG_INACTIVITY_MS).toISOString();
+            await query(
+              `UPDATE pcg_conversations
+               SET status = 'CLOSED',
+                   closed_at = $1,
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [prevSessionClosedAt, row.id]
+            );
 
-          const msgDate = new Date(messageTime);
-          const isOld = !isNaN(msgDate.getTime()) && (Date.now() - msgDate.getTime() >= PCG_INACTIVITY_MS);
-          const convStatus = isOld ? 'CLOSED' : 'OPEN';
-          const convClosedAt = isOld && !isNaN(msgDate.getTime())
-            ? new Date(msgDate.getTime() + PCG_INACTIVITY_MS).toISOString()
-            : null;
+            // 2. Start a BRAND NEW conversation session for this new message turn
+            const newTurn: DoubleTickTranscriptItem = {
+              message_id: messageId,
+              event_type: eventType,
+              direction: direction,
+              speaker: speaker,
+              text: text,
+              status: status,
+              type: messageType,
+              media_url: mediaUrl,
+              template_name: templateName,
+              timestamp: messageTime,
+              delivered_at: status === 'DELIVERED' ? messageTime : null,
+              read_at: status === 'READ' ? messageTime : null,
+              agent_phone: agentPhone,
+              agent_name: agentName,
+              role: agentRole,
+            };
 
-          await query(
-            `UPDATE pcg_conversations
-             SET transcript = $1,
-                 total_messages = $2,
-                 last_message_text = COALESCE($3, last_message_text),
-                 last_event_type = $4,
-                 last_direction = $5,
-                 last_status = COALESCE($6, last_status),
-                 last_message_at = $7,
-                 customer_name = COALESCE($8, customer_name),
-                 customer_id = COALESCE($9, customer_id),
-                 assigned_rm_id = COALESCE($10, assigned_rm_id),
-                 rm_name = COALESCE($11, rm_name),
-                 status = $12,
-                 closed_at = $13,
-                 updated_at = NOW(),
-                 raw_payload = $14
-             WHERE customer_phone = $15 AND waba_number = $16`,
-            [
-              JSON.stringify(currentTranscript),
-              totalMessages,
-              text,
-              eventType,
-              direction,
-              status,
-              messageTime,
-              customerName,
-              customerId,
-              assignedRmId,
-              rmName,
-              convStatus,
-              convClosedAt,
-              JSON.stringify(item),
-              customerPhone,
-              wabaNumber,
-            ]
-          );
+            const isOld = !isNaN(curTime) && (Date.now() - curTime >= PCG_INACTIVITY_MS);
+            const convStatus = isOld ? 'CLOSED' : 'OPEN';
+            const convClosedAt = isOld && !isNaN(curTime)
+              ? new Date(curTime + PCG_INACTIVITY_MS).toISOString()
+              : null;
+
+            await query(
+              `INSERT INTO pcg_conversations (
+                customer_phone, waba_number, customer_name, customer_id, assigned_rm_id, rm_name,
+                transcript, total_messages, last_message_text, last_event_type, last_direction,
+                last_status, last_message_at, raw_payload, status, closed_at, is_am
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+              [
+                customerPhone,
+                wabaNumber,
+                customerName || row.customer_name,
+                customerId || row.customer_id,
+                assignedRmId || row.assigned_rm_id,
+                rmName,
+                JSON.stringify([newTurn]),
+                text,
+                eventType,
+                direction,
+                status,
+                messageTime,
+                JSON.stringify(item),
+                convStatus,
+                convClosedAt,
+                agentRole === 'am',
+              ]
+            );
+          } else {
+            // Within 48 hours -> Append to existing active session
+            let isHandoff = false;
+            let handoffNote: string | undefined = undefined;
+
+            if (direction === 'outbound' && agentRole === 'am' && agentName) {
+              const priorOutbounds = currentTranscript.filter(t => t.direction === 'outbound' || t.speaker === 'RM' || t.speaker === 'AM');
+              const hasPriorRm = priorOutbounds.some(t => t.role === 'rm' || (t.agent_name && !isPcgAm(t.agent_name)));
+              const hasPriorAmHandoff = priorOutbounds.some(t => t.is_handoff);
+              if (hasPriorRm && !hasPriorAmHandoff) {
+                isHandoff = true;
+                handoffNote = `Conversation handed off to AM (${agentName})`;
+              }
+            }
+
+            const newTurn: DoubleTickTranscriptItem = {
+              message_id: messageId,
+              event_type: eventType,
+              direction: direction,
+              speaker: speaker,
+              text: text,
+              status: status,
+              type: messageType,
+              media_url: mediaUrl,
+              template_name: templateName,
+              timestamp: messageTime,
+              delivered_at: status === 'DELIVERED' ? messageTime : null,
+              read_at: status === 'READ' ? messageTime : null,
+              agent_phone: agentPhone,
+              agent_name: agentName,
+              role: agentRole,
+              is_handoff: isHandoff || undefined,
+              handoff_note: handoffNote,
+            };
+
+            currentTranscript.push(newTurn);
+            totalMessages += 1;
+
+            const msgDate = new Date(messageTime);
+            const isOld = !isNaN(msgDate.getTime()) && (Date.now() - msgDate.getTime() >= PCG_INACTIVITY_MS);
+            const convStatus = isOld ? 'CLOSED' : 'OPEN';
+            const convClosedAt = isOld && !isNaN(msgDate.getTime())
+              ? new Date(msgDate.getTime() + PCG_INACTIVITY_MS).toISOString()
+              : null;
+
+            await query(
+              `UPDATE pcg_conversations
+               SET transcript = $1,
+                   total_messages = $2,
+                   last_message_text = COALESCE($3, last_message_text),
+                   last_event_type = $4,
+                   last_direction = $5,
+                   last_status = COALESCE($6, last_status),
+                   last_message_at = $7,
+                   customer_name = COALESCE($8, customer_name),
+                   customer_id = COALESCE($9, customer_id),
+                   assigned_rm_id = COALESCE($10, assigned_rm_id),
+                   rm_name = COALESCE($11, rm_name),
+                   status = $12,
+                   closed_at = $13,
+                   is_am = CASE WHEN $14 = true THEN true ELSE is_am END,
+                   updated_at = NOW(),
+                   raw_payload = $15
+               WHERE id = $16`,
+              [
+                JSON.stringify(currentTranscript),
+                totalMessages,
+                text,
+                eventType,
+                direction,
+                status,
+                messageTime,
+                customerName,
+                customerId,
+                assignedRmId,
+                rmName,
+                convStatus,
+                convClosedAt,
+                agentRole === 'am',
+                JSON.stringify(item),
+                row.id,
+              ]
+            );
+          }
         }
       }
 

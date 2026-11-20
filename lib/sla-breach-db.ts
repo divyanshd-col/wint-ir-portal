@@ -12,12 +12,13 @@ import type { EmailTicketRow } from '@/lib/sla-breach';
  *  - has_events:               any webhook event stored for the ticket (older tickets have none and are skipped)
  *  - has_incoming_message:     any incoming message stored (customer or Wint sender); then the first email is a message event
  *  - intent_l1:                latest "Intents_L1" property
+ *  - ticket_source:            latest "ticket_source_rb_em" property ("Email" | "Portal"); a Portal ticket starts with our outbound mail
  */
 export async function fetchOpenTickets(): Promise<EmailTicketRow[]> {
   return query<EmailTicketRow>(
     `SELECT e.id, e.chat_id, e.customer_email, e.customer_phone, e.created_at, e.first_response_at,
             ev.has_events, ev.has_incoming_message, ev.robylon_status, ev.last_customer_message_at, ev.last_agent_message_at, ev.last_agent_status_at,
-            intent.val AS intent_l1
+            intent.val AS intent_l1, src.val AS ticket_source
      FROM email_conversations e
      CROSS JOIN LATERAL (
        SELECT count(*) > 0 AS has_events,
@@ -45,6 +46,14 @@ export async function fetchOpenTickets(): Promise<EmailTicketRow[]> {
          AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
        ORDER BY w.received_at DESC LIMIT 1
      ) intent ON true
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
+       FROM robylon_webhook_payloads w,
+            jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
+       WHERE w.source = 'email' AND w.chat_id = e.chat_id
+         AND p->>'name' = 'ticket_source_rb_em'
+       ORDER BY w.received_at DESC LIMIT 1
+     ) src ON true
      WHERE e.status = 'OPEN'`,
   );
 }

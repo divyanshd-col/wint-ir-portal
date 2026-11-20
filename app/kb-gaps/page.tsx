@@ -87,7 +87,7 @@ export default function KBGapsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, letterSpacing: '-0.02em' }}>
               KB Gap Intelligence & Answer Drafting Bot
             </h1>
             <span style={{ background: 'var(--qa-fill-light)', color: 'var(--qa-text)', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>

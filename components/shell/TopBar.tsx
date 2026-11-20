@@ -98,17 +98,20 @@ export default function TopBar() {
       <style>{'.h-screen{height:calc(var(--vh100) - var(--topbar-h))}.min-h-screen{min-height:calc(var(--vh100) - var(--topbar-h))}'}</style>
       <header className="topbar">
         <span aria-hidden />
-        <nav className="topbar-tabs" aria-label="Main">
-          {tabs.map((t) => {
-            const active = isTabActive(t);
-            return (
-              <Link key={t.key} href={t.href} className={`topbar-tab${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>
-                {t.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="topbar-right">
+        {/* TLs and agents only get Quality: a one-item tab strip is noise, so show it only when there is something to switch between. */}
+        {tabs.length > 1 && (
+          <nav className="topbar-tabs" aria-label="Main">
+            {tabs.map((t) => {
+              const active = isTabActive(t);
+              return (
+                <Link key={t.key} href={t.href} className={`topbar-tab${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>
+                  {t.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
+        <div className="topbar-right" style={{ gridColumn: 3 }}>
           {canOpenMcp && (
             <Link href="/analytics" scroll={false} className={`topbar-icon-btn${mcpOpen ? ' active' : ''}`} aria-label="MCP: ask questions about the data in Claude" aria-current={mcpOpen ? 'page' : undefined} title="MCP">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2v6M15 2v6" /><path d="M6 8h12v4a6 6 0 0 1-12 0z" /><path d="M12 18v4" /></svg>

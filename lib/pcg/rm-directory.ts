@@ -26,14 +26,14 @@ export interface PcgRmDirectoryRow {
   status?: string | null;
 }
 
+export type PcgRmDirectoryRecord = PcgRmDirectoryRow;
+
 // ── In-Memory Static Fallback (Snapshot of pcg_rm_directory) ─────────────────
 export const STATIC_PCG_DIRECTORY: PcgRmDirectoryRow[] = [
   // Team Swetha
   { id: '2', rm_name: 'Ankita Agarwal', tl_name: 'Team Swetha', email: 'ankita.a@wintwealth.com', role: 'rm', phone_number: '917001428772', status: 'active' },
   { id: '8', rm_name: 'Diya Sharma', tl_name: 'Team Swetha', email: 'diya.sharma@wintwealth.com', role: 'rm', phone_number: '919187709725', status: 'active' },
   { id: '18', rm_name: 'Nishtha Veerwani', tl_name: 'Team Swetha', email: 'nishtha.veerwani@wintwealth.com', role: 'rm', phone_number: '918839218181', status: 'active' },
-  { id: '22', rm_name: 'Mishra Richa Santoshkumar', tl_name: 'Team Swetha', email: 'richa.mishra@wintwealth.com', role: 'rm', phone_number: '917001428773', status: 'active' },
-  { id: '29', rm_name: 'Shreya Premkumar Mundada', tl_name: 'Team Swetha', email: 'shreya.mundada@wintwealth.com', role: 'rm', phone_number: '919187709726', status: 'active' },
   { id: '34', rm_name: 'Sujal Dadwani', tl_name: 'Team Swetha', email: 'sujal.dadwani@wintwealth.com', role: 'rm', phone_number: '919187709724', status: 'active' },
   { id: '35', rm_name: 'Suryansh Sharma', tl_name: 'Team Swetha', email: 'suryansh.sharma@wintwealth.com', role: 'rm', phone_number: '919187709727', status: 'active' },
   { id: '36', rm_name: 'Swetha', tl_name: 'Team Swetha', email: 'swetha@wintwealth.com', role: 'tl', phone_number: '919108891628', status: 'active' },
@@ -76,13 +76,15 @@ export const STATIC_PCG_DIRECTORY: PcgRmDirectoryRow[] = [
   // Team Sravanthi
   { id: '4', rm_name: 'Anurag Negi', tl_name: 'Team Sravanthi', email: 'anurag.negi@wintwealth.com', role: 'rm', phone_number: '918433264610', status: 'active' },
   { id: '14', rm_name: 'Mahek Bihani', tl_name: 'Team Sravanthi', email: 'mahek.bihani@wintwealth.com', role: 'rm', phone_number: '919187980521', status: 'active' },
+  { id: '22', rm_name: 'Mishra Richa Santoshkumar', tl_name: 'Team Sravanthi', email: 'richa.mishra@wintwealth.com', role: 'rm', phone_number: '917001428773', status: 'active' },
+  { id: '29', rm_name: 'Shreya Premkumar Mundada', tl_name: 'Team Sravanthi', email: 'shreya.mundada@wintwealth.com', role: 'rm', phone_number: '919187709726', status: 'active' },
   { id: '32', rm_name: 'Sravanthi', tl_name: 'Team Sravanthi', email: 'sravanthi@wintwealth.com', role: 'tl', phone_number: '919036335553', status: 'active' },
+  { id: '33', rm_name: 'Sreeram', tl_name: 'Team Sravanthi', email: 'sreeram.v@wintwealth.com', role: 'rm', phone_number: '919187980515', status: 'active' },
   { id: '41', rm_name: 'Vidyul Kapoor', tl_name: 'Team Sravanthi', email: 'vidyul.kapoor@wintwealth.com', role: 'rm', phone_number: '919187980522', status: 'active' },
 
   // Team Admin
   { id: '1', rm_name: 'Aboli Jawkhedkar', tl_name: 'Team Admin', email: 'aboli.jawkhedkar@quicksell.co', role: 'rm', phone_number: '917039038853', status: 'active' },
   { id: '20', rm_name: 'Pranav Sharma', tl_name: 'Team Admin', email: 'pranav.s@wintwealth.com', role: 'rm', phone_number: '919187980516', status: 'active' },
-  { id: '33', rm_name: 'Sreeram', tl_name: 'Team Admin', email: 'sreeram.v@wintwealth.com', role: 'rm', phone_number: '919187980515', status: 'active' },
 ];
 
 // ── In-Memory Cache ───────────────────────────────────────────────────────────
@@ -123,6 +125,19 @@ export async function getPcgRmDirectory(forceRefresh = false): Promise<PcgRmDire
   cachedDirectory = [...STATIC_PCG_DIRECTORY];
   lastCacheFetchTime = now;
   return cachedDirectory;
+}
+
+/**
+ * Normalizes a phone number to standard 12-digit Indian format (e.g. '919187709712')
+ */
+export function normalizeRmPhone(rawPhone?: string | number | null): string {
+  if (!rawPhone) return '';
+  const clean = String(rawPhone).replace(/\D/g, '').trim();
+  if (!clean) return '';
+  if (clean.length === 10) return `91${clean}`;
+  if (clean.length === 11 && clean.startsWith('0')) return `91${clean.slice(1)}`;
+  if (clean.length === 12 && clean.startsWith('91')) return clean;
+  return clean;
 }
 
 /**
@@ -171,6 +186,8 @@ export async function resolvePcgAgentFromDirectory(
   const directory = await getPcgRmDirectory();
   return matchAgentInDirectory(rawStr.trim(), directory, customTeamMap);
 }
+
+export const resolvePcgAgent = resolvePcgAgentFromDirectory;
 
 /**
  * Synchronous resolver using the current cached directory (or static snapshot).
@@ -267,6 +284,60 @@ function matchAgentInDirectory(
 }
 
 /**
+ * Resolves RM name and Team Lead for a given agent phone number.
+ */
+export async function resolvePcgRmByPhone(
+  rawPhone?: string | number | null,
+  customTeamMap?: Record<string, string>
+): Promise<{
+  rm: string;
+  tl: string;
+  email?: string | null;
+} | null> {
+  if (!rawPhone) return null;
+  const digits = cleanPhoneDigits(String(rawPhone));
+  if (!digits || digits.length < 10) return null;
+
+  const directory = await getPcgRmDirectory();
+  for (const row of directory) {
+    const rowDigits = cleanPhoneDigits(row.phone_number);
+    if (rowDigits && rowDigits === digits) {
+      const canonical = canonicalizePcgRmName(row.rm_name);
+      let tl = row.tl_name?.startsWith('Team ') ? row.tl_name : `Team ${row.tl_name}`;
+      if (customTeamMap) {
+        const cleanCanonical = canonical.toLowerCase().trim();
+        const customTl = customTeamMap[cleanCanonical] || customTeamMap[row.rm_name.toLowerCase().trim()];
+        if (customTl) {
+          tl = customTl.startsWith('Team ') ? customTl : `Team ${customTl}`;
+        }
+      }
+      return {
+        rm: canonical,
+        tl,
+        email: row.email || null,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Loads all active RM directory mappings into an in-memory map keyed by normalized phone.
+ */
+export async function getPcgRmDirectoryMap(forceRefresh = false): Promise<Map<string, PcgRmDirectoryRow>> {
+  const directory = await getPcgRmDirectory(forceRefresh);
+  const map = new Map<string, PcgRmDirectoryRow>();
+  for (const row of directory) {
+    const norm = normalizeRmPhone(row.phone_number);
+    if (norm) {
+      map.set(norm, row);
+    }
+  }
+  return map;
+}
+
+/**
  * Returns dynamic TL -> RM array mapping for team dashboards and views.
  */
 export async function getPcgDynamicTlTeams(): Promise<Record<string, string[]>> {
@@ -287,3 +358,69 @@ export async function getPcgDynamicTlTeams(): Promise<Record<string, string[]>> 
   return teams;
 }
 
+/**
+ * Returns all mapped RM names for a given Team Lead identifier.
+ * Combines database mappings from pcg_rm_directory and fallback TL_TEAMS.
+ */
+export async function getPcgRmsForTl(tlIdentifier: string): Promise<string[]> {
+  if (!tlIdentifier || tlIdentifier.trim() === '' || tlIdentifier === 'all') return [];
+
+  const cleanTl = tlIdentifier.replace(/^Team\s+/i, '').trim().toLowerCase();
+  const rmsSet = new Set<string>();
+
+  // 1. From pcg_rm_directory
+  try {
+    const directory = await getPcgRmDirectory();
+    for (const entry of directory) {
+      const entryTlClean = entry.tl_name.replace(/^Team\s+/i, '').trim().toLowerCase();
+      if (entryTlClean === cleanTl || entryTlClean.includes(cleanTl) || cleanTl.includes(entryTlClean)) {
+        if (entry.role !== 'tl') {
+          rmsSet.add(canonicalizePcgRmName(entry.rm_name));
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[getPcgRmsForTl] Failed to query pcg_rm_directory:', err);
+  }
+
+  // 2. From static fallback TL_TEAMS in pcg-calls
+  try {
+    const { TL_TEAMS } = await import('@/app/api/admin/pcg-calls/route');
+    for (const [tlName, members] of Object.entries(TL_TEAMS)) {
+      const tlClean = tlName.replace(/^Team\s+/i, '').trim().toLowerCase();
+      if (tlClean === cleanTl || tlClean.includes(cleanTl) || cleanTl.includes(tlClean)) {
+        members.forEach((m) => rmsSet.add(canonicalizePcgRmName(m)));
+      }
+    }
+  } catch (err) {
+    console.warn('[getPcgRmsForTl] Failed to load TL_TEAMS:', err);
+  }
+
+  // 3. Dynamic User Management assignments (pcgTeamAssignments in config) override static fallbacks
+  try {
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig().catch(() => null);
+    const customMap = config?.pcgTeamAssignments || {};
+    for (const [rmClean, assignedTl] of Object.entries(customMap)) {
+      if (!assignedTl) continue;
+      const assignedTlClean = assignedTl.replace(/^Team\s+/i, '').trim().toLowerCase();
+      const canonical = canonicalizePcgRmName(rmClean);
+      if (assignedTlClean === cleanTl) {
+        rmsSet.add(canonical);
+      } else {
+        // If assigned to a different TL, purge from this TL's set
+        rmsSet.delete(canonical);
+        rmsSet.delete(rmClean);
+        rmsSet.delete(rmClean.toLowerCase().trim());
+      }
+    }
+  } catch (err) {
+    console.warn('[getPcgRmsForTl] Failed to load custom team assignments:', err);
+  }
+
+  // Purge any TL themselves or admin names
+  rmsSet.delete(canonicalizePcgRmName(tlIdentifier));
+  rmsSet.delete(cleanTl);
+
+  return Array.from(rmsSet).sort((a, b) => a.localeCompare(b));
+}

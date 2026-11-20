@@ -613,7 +613,7 @@ export default function CallEvalPanel({
         ...prev,
         [param]: { ...(prev[param] || { reasoning: '' }), score: val }
       };
-      const newScore = calculateCallIqs(next);
+      const newScore = calculateCallIqs(next, activeWeights);
       setCurrentIqs(newScore);
       return next;
     });
@@ -696,11 +696,12 @@ export default function CallEvalPanel({
       // 2. Re-evaluate quality scores using corrected transcript
       setIsReevaluating(true);
       let evalDone = false;
+      let evalErrorMsg = '';
       try {
         const evalRes = await fetch('/api/call-quality/evaluate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ callId, forceTranscript: false })
+          body: JSON.stringify({ callId, forceTranscript: false, isPcg })
         });
         const data = await evalRes.json();
         if (evalRes.ok && data.ok) {
@@ -726,34 +727,20 @@ export default function CallEvalPanel({
             }
           }
           setHasUserEditedParams(false);
-          onReevaluate?.(callId, parsedIqs || 88);
+          if (parsedIqs != null) {
+            onReevaluate?.(callId, parsedIqs);
+          }
           alert('Transcript saved and call quality re-evaluated successfully! (Re-evaluation limit: 1 of 1 used)');
+        } else {
+          evalErrorMsg = data?.error || `HTTP ${evalRes.status}`;
         }
-      } catch (e) {
+      } catch (e: any) {
         console.warn('Evaluate call network error:', e);
+        evalErrorMsg = e?.message || 'Network error';
       }
 
-      // If backend evaluation was not available (e.g., prototype/mock call ID), simulate score update
       if (!evalDone) {
-        setHasReevaluated(true);
-        setIsTranscriptModified(false);
-        const revisedIqs = Math.min(100, Math.max(88, Math.round((currentIqs || iqsScore || 78) * 1.12)));
-        setCurrentIqs(revisedIqs);
-        setParamState(prev => {
-          const updated = { ...prev };
-          Object.keys(updated).forEach(k => {
-            if (updated[k].score === 'No' || updated[k].score === 'Half') {
-              updated[k] = {
-                score: 'Yes',
-                reasoning: 'Re-evaluated after speaker swap: RM properly addressed customer queries and set clear follow-through.'
-              };
-            }
-          });
-          return updated;
-        });
-        setHasUserEditedParams(true);
-        onReevaluate?.(callId, revisedIqs);
-        alert('Transcript saved and call quality re-evaluated successfully with corrected speaker roles! (Re-evaluation limit: 1 of 1 used)');
+        alert(`Re-evaluation could not complete: ${evalErrorMsg || 'Backend evaluation failed'}. No scores were altered.`);
       }
     } catch (err: any) {
       alert(`Error saving and re-evaluating: ${err.message}`);
@@ -773,7 +760,7 @@ export default function CallEvalPanel({
       const res = await fetch('/api/call-quality/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callId, forceTranscript: false })
+        body: JSON.stringify({ callId, forceTranscript: false, isPcg })
       });
       const data = await res.json();
       if (res.ok && data.ok) {
@@ -856,6 +843,7 @@ export default function CallEvalPanel({
     };
 
     if (onOverrideSubmit) {
+      const computedIqs = calculateCallIqs(paramState, activeWeights) ?? displayedIqs;
       try {
         await onOverrideSubmit({
           callId,
@@ -864,7 +852,7 @@ export default function CallEvalPanel({
           gates: gatesPayload,
           callGateResult: overallGateResult,
           note,
-          iqsScore: displayedIqs,
+          iqsScore: computedIqs,
         });
         onDone();
         return;
@@ -1211,6 +1199,7 @@ export default function CallEvalPanel({
                 ref={audioRef}
                 src={recordingUrl.startsWith('/') ? recordingUrl : `/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
                 controls
+                preload="metadata"
                 onPlay={() => {
                   if (audioRef.current) audioRef.current.playbackRate = playbackRate;
                 }}

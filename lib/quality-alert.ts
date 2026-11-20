@@ -110,6 +110,9 @@ export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
   priya: 'U08TFU5GH51',
   vedant: 'U09HZTDQZBP',
   'vedant g': 'U09HZTDQZBP',
+  manorathi: 'U05R8PE5UFJ',
+  bhavika: 'U09E3MKUE30',
+  'bhavika jain': 'U09E3MKUE30',
   sivaranjini: BOT_DEFAULT_TL_SLACK_ID,
   sivranjini: BOT_DEFAULT_TL_SLACK_ID,
   bot: BOT_DEFAULT_TL_SLACK_ID,
@@ -152,6 +155,30 @@ export function getTLSlackMention(tlName?: string | null, agentName?: string | n
   }
 
   return effectiveTL;
+}
+
+/** Max characters of one quoted piece of evidence in a Slack alert. */
+export const ALERT_QUOTE_MAX = 300;
+/** Max evidence quotes listed per gate in a call alert (the rest are counted, not printed). */
+export const ALERT_EVIDENCE_MAX = 3;
+/** Slack shows roughly 4,000 characters of a message; longer ones are split into follow-up messages. Stay under it. */
+export const ALERT_TEXT_MAX = 3500;
+
+/** One quote cut to `max` characters at a word boundary, with an ellipsis. Alerts carry excerpts, never whole transcript turns. */
+export function clipQuote(text: string | null | undefined, max = ALERT_QUOTE_MAX): string {
+  const t = (text ?? '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
+/** The evidence of one failed gate as a short string: at most `ALERT_EVIDENCE_MAX` clipped quotes joined with "; ", plus how many were left out. */
+export function summariseEvidence(evidence: Array<{ quote?: string; why?: string }> | null | undefined, fallback = 'Call gate requirement failed'): string {
+  const list = (evidence ?? []).map((e) => clipQuote(e?.quote || e?.why)).filter(Boolean);
+  if (!list.length) return fallback;
+  const shown = list.slice(0, ALERT_EVIDENCE_MAX).join('; ');
+  return list.length > ALERT_EVIDENCE_MAX ? `${shown}; (+${list.length - ALERT_EVIDENCE_MAX} more in the portal)` : shown;
 }
 
 export async function fireQualityAlert(opts: {
@@ -306,7 +333,7 @@ export async function fireQualityAlert(opts: {
     if (breachesList.length > 0) {
       for (const b of breachesList) {
         const noteStr = b.note ? ` (${b.note})` : '';
-        const quoteStr = b.quote ? `: "${b.quote}"` : '';
+        const quoteStr = b.quote ? `: "${clipQuote(b.quote, ALERT_QUOTE_MAX * ALERT_EVIDENCE_MAX)}"` : '';
         reasons.push(`• *${b.type.toUpperCase()}*${quoteStr}${noteStr}`);
       }
     }
@@ -333,9 +360,19 @@ export async function fireQualityAlert(opts: {
     lines.push(`TL: ${tlMention}`);
     lines.push(`Reason for Compliance failure:`);
     lines.push(reasons.join('\n'));
+    if (isCallAlert) {
+      lines.push(`_Excerpts only. The full call transcript is in the portal: Quality → Calls, Call ID ${opts.callId || ''}._`);
+    }
+
+    // Slack splits very long messages into follow-ups ("goes on in the next thread"): keep the alert to one message.
+    let text = lines.join('\n');
+    if (text.length > ALERT_TEXT_MAX) {
+      const tail = isCallAlert ? lines[lines.length - 1] : '';
+      text = `${text.slice(0, ALERT_TEXT_MAX - tail.length - 20).trimEnd()}…\n${tail}`;
+    }
 
     const targetToken = complianceToken || token;
-    const sent = await sendSlackMessage(complianceChannel, lines.join('\n'), targetToken);
+    const sent = await sendSlackMessage(complianceChannel, text, targetToken);
     console.log(`[quality-alert] Compliance failure Slack alert for ${isCallAlert ? `call ${opts.callId}` : `chat ${opts.chatId}`}: ${sent ? 'SUCCESS' : 'FAILED'}`);
 
     if (opts.callId && sent) {

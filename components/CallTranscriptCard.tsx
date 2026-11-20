@@ -113,6 +113,7 @@ export function CallTranscriptCard({
                 ref={audioRef}
                 src={rec.recordingUrl ? `/api/quality/audio-proxy?url=${encodeURIComponent(rec.recordingUrl)}` : undefined}
                 controls
+                preload="metadata"
                 onPlay={() => {
                   if (audioRef.current) audioRef.current.playbackRate = playbackRate;
                 }}

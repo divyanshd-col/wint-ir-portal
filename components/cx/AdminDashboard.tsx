@@ -505,7 +505,7 @@ export default function AdminDashboard() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold text-gray-900">CX Performance</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">CX Performance</h1>
           <div className="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
             {(['metrics', 'teams', 'ir_performance'] as const).map(t => (
               <button

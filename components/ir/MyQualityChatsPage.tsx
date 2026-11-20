@@ -430,7 +430,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
       {/* ── TAB 1: EVALUATED CHATS ──────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (
-        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8 }}>
           {/* Single-line Filter & Pagination Bar */}
           <div className="qfilters">
             <AgentFilterSelect value={agentFilter} onChange={(v) => { setAgentFilter(v as 'all' | 'has_calls'); setPage(0); }} options={[{ value: 'all', label: 'All Interactions' }, { value: 'has_calls', label: 'Has Calls' }]} />
@@ -485,22 +485,22 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
               {/* IQS Range */}
               <span className="qf-group">
-<span className="qf-label">IQS</span>
-<input
-                type="number"
-                placeholder="min"
-                value={iqsMin}
-                onChange={(e) => setIqsMin(e.target.value)}
-                style={{ ...chipInputStyle, width: 70 }}
-              />
-<input
-                type="number"
-                placeholder="max"
-                value={iqsMax}
-                onChange={(e) => setIqsMax(e.target.value)}
-                style={{ ...chipInputStyle, width: 70 }}
-              />
-</span>
+                <span className="qf-label">IQS</span>
+                <input
+                  type="number"
+                  placeholder="min"
+                  value={iqsMin}
+                  onChange={(e) => setIqsMin(e.target.value)}
+                  style={{ ...chipInputStyle, width: 70 }}
+                />
+                <input
+                  type="number"
+                  placeholder="max"
+                  value={iqsMax}
+                  onChange={(e) => setIqsMax(e.target.value)}
+                  style={{ ...chipInputStyle, width: 70 }}
+                />
+              </span>
 
               {/* CSAT */}
               <UISelect value={csat} onChange={(e) => setCsat(e.target.value)} style={chipInputStyle}>
@@ -520,12 +520,12 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 ))}
               </UISelect>
 
-              <DateRangeChip from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+              <DateRangeChip from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); setPage(0); }} />
               <button type="button" className="qf-chip" disabled={!(hasFilters)}
-                  onClick={resetFilters}
-                >
-              Reset Filters
-            </button>
+                onClick={resetFilters}
+              >
+                Reset Filters
+              </button>
             </div>
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
@@ -624,11 +624,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent</SortTh>
-                <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</SortTh>
+                <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
                 <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
                 <SortTh k="csat" sort={sort} onSort={toggleSort} style={TH_BASE}>CSAT</SortTh>
                 <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date</SortTh>
-                <th style={TH_BASE}>Dispute</th>
+                <th style={TH_BASE}>Status</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
@@ -823,7 +823,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
       {/* ── TAB 2: DISPUTES RAISED (PENDING) ────────────────────────────────── */}
       {activeTab === 'disputes' && (
-        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8 }}>
           {/* Single-line Filter & Pagination Bar */}
           <div className="qfilters">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -843,15 +843,15 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
               <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
               <button type="button" className="qf-chip" disabled={!(pendingOutcomeFilter || pendingFromFilter || pendingToFilter)}
-                  onClick={() => {
-                    setPendingOutcomeFilter('');
-                    setPendingFromFilter('');
-                    setPendingToFilter('');
-                    setPendingPage(0);
-                  }}
-                >
-              Reset Filters
-            </button>
+                onClick={() => {
+                  setPendingOutcomeFilter('');
+                  setPendingFromFilter('');
+                  setPendingToFilter('');
+                  setPendingPage(0);
+                }}
+              >
+                Reset Filters
+              </button>
             </div>
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
@@ -949,10 +949,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
+                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
-                <th style={TH_BASE}>Raised Date</th>
+                <th style={TH_BASE}>Raised</th>
                 <th style={TH_BASE}>Status</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
               </tr>
@@ -1189,7 +1189,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
       {activeTab === 'reviewed' && (
-        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8 }}>
           {/* Single-line Filter & Pagination Bar */}
           <div className="qfilters">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -1212,15 +1212,15 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
               <DateRangeChip from={reviewedFromFilter} to={reviewedToFilter} onChange={(f, t) => { setReviewedFromFilter(f); setReviewedToFilter(t); }} />
               <button type="button" className="qf-chip" disabled={!(reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter)}
-                  onClick={() => {
-                    setReviewedOutcomeFilter('');
-                    setReviewedFromFilter('');
-                    setReviewedToFilter('');
-                    setReviewedPage(0);
-                  }}
-                >
-              Reset Filters
-            </button>
+                onClick={() => {
+                  setReviewedOutcomeFilter('');
+                  setReviewedFromFilter('');
+                  setReviewedToFilter('');
+                  setReviewedPage(0);
+                }}
+              >
+                Reset Filters
+              </button>
             </div>
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
@@ -1319,10 +1319,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
+                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
-                <th style={TH_BASE}>Reviewed Date</th>
+                <th style={TH_BASE}>Reviewed</th>
                 <th style={TH_BASE}>Reviewed By</th>
                 <th style={TH_BASE}>Outcome</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
@@ -1352,8 +1352,8 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                   const dateStr = row.reviewedAt
                     ? new Date(row.reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                     : row.flaggedAt
-                    ? new Date(row.flaggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                    : '—';
+                      ? new Date(row.flaggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : '—';
 
                   return (
                     <Fragment key={row.flagId}>
