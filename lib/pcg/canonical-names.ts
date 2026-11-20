@@ -119,6 +119,25 @@ export const PCG_RM_TELEPHONY_TO_CANONICAL: Record<string, string> = {
   'sravanthi': 'Sravanthi',
 };
 
+export const ALL_TL_NAMES = [
+  'Swetha',
+  'Swetha Jayakumar',
+  'Saiyam Rastogi',
+  'Tanisha Mittal',
+  'Dheeraj Bhojwani',
+  'Sravanthi',
+];
+
+export function isPcgTl(name?: string | null): boolean {
+  if (!name) return false;
+  const canonical = canonicalizePcgRmName(name).toLowerCase().trim();
+  const raw = name.toLowerCase().trim();
+  return ALL_TL_NAMES.some((tl) => {
+    const tLower = tl.toLowerCase();
+    return canonical === tLower || raw === tLower || raw.includes(tLower) || canonical.includes(tLower);
+  });
+}
+
 export const PCG_AM_NAMES = new Set([
   'ankita agarwal',
   'vishyata tulsani',

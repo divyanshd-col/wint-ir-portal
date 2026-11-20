@@ -666,9 +666,9 @@ export const EMAIL_PARAMETER_DEFINITIONS: QualityParameterDefinition[] = [
     groupWeight: '65%',
     isTripwire: true,
     summary:
-      'Whether everything the agent told the client is correct, compliant and safe, required disclaimers present, client details protected, and any attachment is correct.',
+      'Whether everything the agent told the client is correct per Wint Knowledge Base, PCG-exclusive AIF & MLD KBs, PMS Disclosure Document, AIF PPM, and SEBI rules, with required disclaimers, protected client details, and verified attachments.',
     criteria: [
-      'Facts, dates, amounts, and process steps are 100% accurate against customer account data and Knowledge Base.',
+      'Facts, dates, amounts, product terms (AIF, MLD, PMS, Bonds), and process steps are 100% accurate against customer account data and the shared PCG Knowledge Base (same KBs used for PCG Calls and Chats).',
       'No guaranteed returns, predictions, or unauthorized personal investment advice.',
       'Required statutory and SEBI disclaimers are present where applicable.',
       'Only the client\'s own details are shared; zero data leakage of other investors.',
@@ -743,6 +743,14 @@ export const EMAIL_PARAMETER_DEFINITIONS: QualityParameterDefinition[] = [
     group: 'Customer Service Skills',
     groupWeight: '20%',
     conditional: true,
+    conditionalInfo: {
+      whenEvaluated:
+        'Only when the client expresses concern, frustration, urgency, dissatisfaction, confusion, or worry about a delay, payout, tax filing, or financial stake.',
+      whenNA:
+        'On calm, purely transactional emails (e.g. routine document requests, status confirmations, simple factual queries) where the client has raised no complaint, delay, or emotional concern.',
+      reason:
+        'Empathy is judged specifically when genuine care, reassurance, or ownership is warranted. Agents are never forced to add scripted sympathy lines to routine transactional emails—when no emotional concern is present, this parameter drops cleanly to NA (excluded from both numerator and denominator without penalizing IQS).',
+    },
     summary:
       'Understands customer feelings and stakes (urgency, frustration, money involved), takes ownership with warm, polite language, and calms irritated customers.',
     criteria: [
@@ -802,6 +810,39 @@ export const EMAIL_PARAMETER_DEFINITIONS: QualityParameterDefinition[] = [
       no: 'Multiple stock phrases, fully generic pair, repeated sympathy across consecutive emails, or awkward closing.',
       na: 'Ongoing rapid exchange where formal re-opening is redundant.',
     },
+  },
+];
+
+export const EMAIL_COMPLIANCE_DEFINITIONS: ChatComplianceCheckItem[] = [
+  {
+    id: 'G1_no_advice',
+    num: 1,
+    name: 'G1: Advice (No Investment / Tax Advice)',
+    rule: 'We do not provide unauthorized personal investment recommendations or tax advisory beyond factual disclosures.',
+    description:
+      'Agents must strictly share factual product details, coupon schedules, and filing statuses without recommending specific allocations or giving personal tax advice. Marked NA when the customer query is purely operational and no advisory context arises.',
+    triggerExample:
+      '"You should definitely move your FD into this NCD before March to save tax—it is the safest option for your portfolio."',
+  },
+  {
+    id: 'G2_no_fabrication',
+    num: 2,
+    name: 'G2: Fabrication (No Fabricated Facts)',
+    rule: 'All dates, amounts, payout timelines, and operational statuses must be verified and truthful.',
+    description:
+      'Never guess or fabricate coupon dates, TRACES/Form 16A timelines, payout figures, or operations confirmations. If details are pending verification, clearly communicate next steps instead of inventing commitments.',
+    triggerExample:
+      '"Your Form 16A has already been uploaded to 26AS today" when the return is still awaiting TRACES generation.',
+  },
+  {
+    id: 'G3_identity_first',
+    num: 3,
+    name: 'G3: Identity (Identity Verified First)',
+    rule: 'Protect client PII and share account-specific details only after verifying registered client identity.',
+    description:
+      'Verify registered email, PAN, or masked account details before disclosing holdings, statements, or payout information. Never expose another investor\'s details or unmasked sensitive identifiers.',
+    triggerExample:
+      'Sending an account statement or full bank/PAN details to an unverified third-party email address without confirmation.',
   },
 ];
 
@@ -875,6 +916,20 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
     );
   }, [selectedChannel, searchQuery]);
 
+  // Filtered compliance gates for Email
+  const filteredEmailCompliance = useMemo(() => {
+    if (selectedChannel !== 'emails') return [];
+    if (!searchQuery.trim()) return EMAIL_COMPLIANCE_DEFINITIONS;
+    const q = searchQuery.toLowerCase().trim();
+    return EMAIL_COMPLIANCE_DEFINITIONS.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.rule.toLowerCase().includes(q) ||
+        c.description.toLowerCase().includes(q) ||
+        c.triggerExample.toLowerCase().includes(q)
+    );
+  }, [selectedChannel, searchQuery]);
+
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
   };
@@ -891,7 +946,7 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
             <p className="text-xs text-zinc-500 mt-1">
               {selectedChannel === 'calls' && '11 Voice call evaluation parameters across 3 skill groups, covering client greeting, regulatory adherence, and relationship conduct.'}
               {selectedChannel === 'chats' && '11 WhatsApp chat quality parameters + 5 compliance checks, covering query resolution, multi-session thread continuity, and SEBI compliance.'}
-              {selectedChannel === 'emails' && '7 Email support evaluation rubrics covering ticket resolution, technical accuracy, expectation setting, and professional communication.'}
+              {selectedChannel === 'emails' && '7 Email quality parameters + 3 compliance gates across 3 skill groups, covering issue resolution, accuracy, expectation setting, and professional communication.'}
             </p>
           </div>
 
@@ -900,11 +955,10 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
             {/* Calls Toggle */}
             <button
               onClick={() => handleChannelChange('calls')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-                selectedChannel === 'calls'
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${selectedChannel === 'calls'
                   ? 'bg-white text-zinc-900 shadow-sm font-bold'
                   : 'text-zinc-600 hover:text-zinc-900'
-              }`}
+                }`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
@@ -918,11 +972,10 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
             {/* Chats Toggle */}
             <button
               onClick={() => handleChannelChange('chats')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-                selectedChannel === 'chats'
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${selectedChannel === 'chats'
                   ? 'bg-white text-zinc-900 shadow-sm font-bold'
                   : 'text-zinc-600 hover:text-zinc-900'
-              }`}
+                }`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -936,88 +989,91 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
             {/* Emails Toggle */}
             <button
               onClick={() => handleChannelChange('emails')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-                selectedChannel === 'emails'
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${selectedChannel === 'emails'
                   ? 'bg-white text-zinc-900 shadow-sm font-bold'
                   : 'text-zinc-600 hover:text-zinc-900'
-              }`}
+                }`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect width="20" height="16" x="2" y="4" rx="2" />
                 <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
               </svg>
               <span>Emails</span>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                selectedChannel === 'emails'
-                  ? 'bg-amber-100 text-amber-800'
-                  : 'bg-zinc-200/60 text-zinc-600'
-              }`}>
-                Soon
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${selectedChannel === 'emails' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-200/60 text-zinc-600'}`}>
+                7
               </span>
             </button>
           </div>
         </div>
 
-        {/* ── SCORING LOGIC CALLOUTS (FOR CALLS & CHATS) ──────────────────────── */}
-        {selectedChannel !== 'emails' && (
-          <div className="mt-5 pt-5 border-t border-[#F4F4F5] grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Card 1: Rating Values */}
-            <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-3.5">
-              <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-zinc-800">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                Rating Values
-              </div>
-              {selectedChannel === 'calls' ? (
-                <p className="text-xs text-zinc-600 leading-relaxed">
-                  <strong className="text-zinc-900">Yes:</strong> 100% weight earned.<br />
-                  <strong className="text-zinc-900">No:</strong> 0% weight earned.<br />
-                  <strong className="text-zinc-900">NA:</strong> Dynamically dropped from both earned &amp; possible weight.
-                </p>
-              ) : (
-                <p className="text-xs text-zinc-600 leading-relaxed">
-                  <strong className="text-zinc-900">Yes:</strong> 100% weight earned (fully met).<br />
-                  <strong className="text-zinc-900">Half:</strong> 50% weight earned (one minor gap).<br />
-                  <strong className="text-zinc-900">No:</strong> 0% weight earned &bull; <strong className="text-zinc-900">NA:</strong> Excluded from denominator.
-                </p>
-              )}
+        {/* ── SCORING LOGIC CALLOUTS (CALLS, CHATS & EMAILS) ─────────────────── */}
+        <div className="mt-5 pt-5 border-t border-[#F4F4F5] grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Card 1: Rating Values */}
+          <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-3.5">
+            <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-zinc-800">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Rating Values
             </div>
+            {selectedChannel === 'calls' ? (
+              <p className="text-xs text-zinc-600 leading-relaxed">
+                <strong className="text-zinc-900">Yes:</strong> 100% weight earned.<br />
+                <strong className="text-zinc-900">No:</strong> 0% weight earned.<br />
+                <strong className="text-zinc-900">NA:</strong> Dynamically dropped from both earned &amp; possible weight.
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-600 leading-relaxed">
+                <strong className="text-zinc-900">Yes:</strong> 100% weight earned (fully met).<br />
+                <strong className="text-zinc-900">Half:</strong> 50% weight earned (one minor gap).<br />
+                <strong className="text-zinc-900">No:</strong> 0% weight earned &bull; <strong className="text-zinc-900">NA:</strong> Excluded from denominator.
+              </p>
+            )}
+          </div>
 
-            {/* Card 2: IQS Formula */}
-            <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-3.5">
-              <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-zinc-800">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                {selectedChannel === 'calls' ? 'IQS Formula' : 'Chat IQS Formula'}
+          {/* Card 2: IQS Formula */}
+          <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-3.5">
+            <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-zinc-800">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              {selectedChannel === 'calls' ? 'IQS Formula' : selectedChannel === 'emails' ? 'Email IQS Formula' : 'Chat IQS Formula'}
+            </div>
+            <div className="text-xs text-zinc-600 leading-relaxed">
+              <div className="font-mono bg-white px-2 py-1 rounded border border-zinc-200 text-zinc-800 text-[11px] mb-1.5 inline-block">
+                IQS = (Earned Weights / Applicable Max Weights) × 100
               </div>
-              <div className="text-xs text-zinc-600 leading-relaxed">
-                <div className="font-mono bg-white px-2 py-1 rounded border border-zinc-200 text-zinc-800 text-[11px] mb-1.5 inline-block">
-                  IQS = (Earned Weights / Applicable Max Weights) × 100
-                </div>
-                <p className="text-[11px] text-zinc-500 leading-snug">
-                  {selectedChannel === 'calls'
-                    ? 'RM is never penalized for scenarios that did not occur on the call (NA dynamically drops from both numerator & denominator).'
+              <p className="text-[11px] text-zinc-500 leading-snug">
+                {selectedChannel === 'calls'
+                  ? 'RM is never penalized for scenarios that did not occur on the call (NA dynamically drops from both numerator & denominator).'
+                  : selectedChannel === 'emails'
+                    ? 'Agent is never penalized for scenarios that did not apply to the email reply (NA dynamically drops from both numerator & denominator).'
                     : 'Agent is never penalized for conditional scenarios that did not occur (e.g. Dissatisfaction or Recap drop cleanly from denominator).'}
-                </p>
-              </div>
-            </div>
-
-            {/* Card 3: Compliance Rule */}
-            <div className="bg-red-50/60 border border-red-200 rounded-lg p-3.5">
-              <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-red-900">
-                <span className="w-2 h-2 rounded-full bg-red-600"></span>
-                {selectedChannel === 'calls' ? 'Compliance Gate Rule' : '5 WhatsApp Compliance Checks'}
-              </div>
-              {selectedChannel === 'calls' ? (
-                <p className="text-xs text-red-700 leading-relaxed">
-                  A failure on <strong className="text-red-950 font-semibold">Technically / Legally Correct</strong> triggers an automatic <strong className="text-red-950 font-semibold">GATE BREACH</strong> and Critical Fail on submit.
-                </p>
-              ) : (
-                <p className="text-xs text-red-700 leading-relaxed">
-                  Evaluated against 5 checks: No Investment Advice, No Promised Returns, No Unqualified Past Performance, No Docs on WhatsApp, and No Misleading Mistakes.
-                </p>
-              )}
+              </p>
             </div>
           </div>
-        )}
+
+          {/* Card 3: Compliance Rule */}
+          <div className="bg-red-50/60 border border-red-200 rounded-lg p-3.5">
+            <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-red-900">
+              <span className="w-2 h-2 rounded-full bg-red-600"></span>
+              {selectedChannel === 'calls'
+                ? 'Compliance Gate Rule'
+                : selectedChannel === 'emails'
+                  ? '3 Email Compliance Gates'
+                  : '5 WhatsApp Compliance Checks'}
+            </div>
+            {selectedChannel === 'calls' ? (
+              <p className="text-xs text-red-700 leading-relaxed">
+                A failure on <strong className="text-red-950 font-semibold">Technically / Legally Correct</strong> triggers an automatic <strong className="text-red-950 font-semibold">GATE BREACH</strong> and Critical Fail on submit.
+              </p>
+            ) : selectedChannel === 'emails' ? (
+              <p className="text-xs text-red-700 leading-relaxed">
+                Evaluated against 3 gates (<strong className="text-red-950 font-semibold">Pass / Breach / NA</strong>): G1 Advice (No Investment / Tax Advice), G2 Fabrication (No Fabricated Facts), and G3 Identity (Identity Verified First). NA does not count as a breach.
+              </p>
+            ) : (
+              <p className="text-xs text-red-700 leading-relaxed">
+                Evaluated against 5 checks: No Investment Advice, No Promised Returns, No Unqualified Past Performance, No Docs on WhatsApp, and No Misleading Mistakes.
+              </p>
+            )}
+          </div>
+        </div>
 
         {/* ── PRECEDING CHAT EVALUATION SUMMARY CALLOUT (FOR CHATS) ──────────── */}
         {selectedChannel === 'chats' && (
@@ -1149,79 +1205,114 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
             </div>
           </div>
         )}
+
+        {/* ── PREVIOUS EMAIL REPLIES & CONTEXT EVALUATION CALLOUT (FOR EMAILS) ── */}
+        {selectedChannel === 'emails' && (
+          <div className="mt-5 pt-5 border-t border-[#F4F4F5]">
+            <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-xl p-4 sm:p-5 shadow-2xs">
+              <div className="flex items-start gap-3.5">
+                <div className="w-8 h-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="20" height="16" x="2" y="4" rx="2" />
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                  </svg>
+                </div>
+                <div className="space-y-3 flex-1 min-w-0">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-bold text-zinc-900 tracking-tight">
+                        How Previous Email Replies &amp; Thread Context are Evaluated
+                      </h2>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-zinc-200/80 text-zinc-800 border border-zinc-300">
+                        Per-Reply Evaluation Rule
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-600 mt-1 leading-relaxed">
+                      Client email threads often span multiple back-and-forth replies and handoffs between RMs and AMs. Earlier emails in the thread are passed to the evaluator strictly for context, while each agent is evaluated exclusively on the reply they sent:
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-0.5">
+                    {/* Pillar 1 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-zinc-100 text-zinc-800 flex items-center justify-center text-[10px] font-bold border border-zinc-200">1</span>
+                        Evaluated Only on the Reply Sent
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        The agent (RM or AM) is scored <strong className="text-zinc-900 font-semibold">strictly on the specific outbound email reply they personally sent</strong>. Earlier or subsequent replies by other handlers on the same ticket are never mixed into their score.
+                      </p>
+                    </div>
+
+                    {/* Pillar 2 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-zinc-100 text-zinc-800 flex items-center justify-center text-[10px] font-bold border border-zinc-200">2</span>
+                        Previous Replies Used Only as Context
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        Preceding customer emails and prior agent responses are provided purely as <strong className="text-zinc-900 font-semibold">background context</strong>. The agent is never penalized for delays, missing details, or tone from previous replies in the thread.
+                      </p>
+                    </div>
+
+                    {/* Pillar 3 */}
+                    <div className="bg-white border border-zinc-200 rounded-lg p-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-zinc-100 text-zinc-800 flex items-center justify-center text-[10px] font-bold border border-zinc-200">3</span>
+                        Thread Continuity &amp; Awareness
+                      </div>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        Using the prior thread context, the evaluator verifies that the agent <strong className="text-zinc-900 font-semibold">addresses open questions cleanly</strong> without asking the client to repeat information already shared earlier in the conversation.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* ── COMING SOON VIEW FOR EMAILS ────────────────────────────────────── */}
-      {selectedChannel === 'emails' ? (
-        <div className="bg-white border border-[#E4E4E7] rounded-xl p-8 sm:p-12 text-center shadow-sm">
-          <div className="max-w-md mx-auto space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center mx-auto shadow-2xs">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="20" height="16" x="2" y="4" rx="2" />
-                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-              </svg>
-            </div>
-
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
-              <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse"></span>
-              Coming Soon
-            </div>
-
-            <h2 className="text-xl font-bold text-[#18181B] tracking-tight">
-              PCG Email Quality Evaluation is Under Development
-            </h2>
-
-            <p className="text-xs text-zinc-600 leading-relaxed">
-              PCG email quality evaluation is currently under development. Quality parameters, scoring rubrics, and compliance frameworks for PCG investor email communications will be published here once released.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* ── FILTER TABS & SEARCH BAR ─────────────────────────────────────────── */}
+      {/* ── FILTER TABS & SEARCH BAR ─────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Skill Group Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
           <button
             onClick={() => setSelectedGroup('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-              selectedGroup === 'all'
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${selectedGroup === 'all'
                 ? 'bg-zinc-900 text-white shadow-sm'
                 : 'bg-white text-zinc-600 hover:bg-zinc-100 border border-zinc-200'
-            }`}
+              }`}
           >
             All Parameters ({currentParamsList.length})
           </button>
 
           <button
             onClick={() => setSelectedGroup('Process Skills')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-              selectedGroup === 'Process Skills'
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${selectedGroup === 'Process Skills'
                 ? 'bg-zinc-900 text-white shadow-sm'
                 : 'bg-white text-zinc-600 hover:bg-zinc-100 border border-zinc-200'
-            }`}
+              }`}
           >
-            Process Skills (50%)
+            Process Skills ({selectedChannel === 'emails' ? '65%' : '50%'})
           </button>
 
           <button
             onClick={() => setSelectedGroup('Communication Skills')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-              selectedGroup === 'Communication Skills'
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${selectedGroup === 'Communication Skills'
                 ? 'bg-zinc-900 text-white shadow-sm'
                 : 'bg-white text-zinc-600 hover:bg-zinc-100 border border-zinc-200'
-            }`}
+              }`}
           >
-            Communication (30%)
+            Communication ({selectedChannel === 'emails' ? '15%' : '30%'})
           </button>
 
           <button
             onClick={() => setSelectedGroup('Customer Service Skills')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-              selectedGroup === 'Customer Service Skills'
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${selectedGroup === 'Customer Service Skills'
                 ? 'bg-zinc-900 text-white shadow-sm'
                 : 'bg-white text-zinc-600 hover:bg-zinc-100 border border-zinc-200'
-            }`}
+              }`}
           >
             Customer Service (20%)
           </button>
@@ -1229,18 +1320,17 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
           {/* Compliance Pill */}
           <button
             onClick={() => setSelectedGroup('compliance')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-              selectedGroup === 'compliance'
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${selectedGroup === 'compliance'
                 ? 'bg-red-600 text-white shadow-sm'
                 : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
-            }`}
+              }`}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-            Compliance ({selectedChannel === 'chats' ? '5' : '1'})
+            Compliance ({selectedChannel === 'chats' ? '5' : selectedChannel === 'emails' ? '3' : '1'})
           </button>
         </div>
 
@@ -1323,8 +1413,53 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
         </div>
       )}
 
+      {/* ── EMAIL COMPLIANCE GATES (SHOWN WHEN EMAIL + COMPLIANCE FILTER ACTIVE) ── */}
+      {selectedChannel === 'emails' && selectedGroup === 'compliance' && (
+        <div className="space-y-4">
+          <div className="bg-red-50/70 border border-red-200 rounded-xl p-4">
+            <h2 className="text-xs font-bold text-red-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              3 Mandatory Email Compliance Gate Rules
+            </h2>
+            <p className="text-xs text-red-800 leading-relaxed">
+              In addition to the 7 email quality parameters, every evaluated outbound email reply is audited against these 3 gates with <strong>Pass</strong>, <strong>Breach</strong>, or <strong>NA</strong> (for cases where a gate does not apply). Only a <strong>Breach</strong> triggers a compliance failure.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {filteredEmailCompliance.map((comp) => (
+              <div key={comp.id} className="bg-white border border-red-200/90 rounded-xl p-4 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-md bg-red-100 text-red-800 font-bold text-xs flex items-center justify-center shrink-0">
+                      G{comp.num}
+                    </span>
+                    <h3 className="text-sm font-semibold text-zinc-900">{comp.name}</h3>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-red-50/50 border border-red-100 rounded-lg">
+                  <p className="text-xs font-semibold text-red-950">&ldquo;{comp.rule}&rdquo;</p>
+                </div>
+
+                <p className="text-xs text-zinc-600 leading-relaxed">{comp.description}</p>
+
+                <div className="pt-2 border-t border-zinc-100">
+                  <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Example Violation:</span>
+                  <p className="text-[11px] text-red-700 italic mt-0.5">{comp.triggerExample}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── PARAMETERS LIST ──────────────────────────────────────────────────── */}
-      {filteredParams.length === 0 && (selectedChannel !== 'chats' || selectedGroup !== 'compliance') ? (
+      {filteredParams.length === 0 && !((selectedChannel === 'chats' || selectedChannel === 'emails') && selectedGroup === 'compliance') ? (
         <div className="bg-white border border-[#E4E4E7] rounded-xl p-12 text-center text-zinc-500">
           <p className="text-sm">No quality parameters match your search query &quot;{searchQuery}&quot;.</p>
           <button
@@ -1345,9 +1480,8 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
             return (
               <div
                 key={param.id}
-                className={`bg-white border rounded-xl overflow-hidden shadow-sm transition-all duration-150 ${
-                  param.isTripwire ? 'border-red-200 hover:border-red-300' : 'border-[#E4E4E7] hover:border-zinc-300'
-                }`}
+                className={`bg-white border rounded-xl overflow-hidden shadow-sm transition-all duration-150 ${param.isTripwire ? 'border-red-200 hover:border-red-300' : 'border-[#E4E4E7] hover:border-zinc-300'
+                  }`}
               >
                 {/* Parameter Card Header */}
                 <div
@@ -1372,7 +1506,7 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
                         </span>
                         {param.conditional && (
                           <span
-                            title="Only evaluated when this specific scenario occurs in the chat. Otherwise marked NA without penalizing IQS."
+                            title={`Only evaluated when this specific scenario occurs in the ${selectedChannel === 'emails' ? 'email' : selectedChannel === 'calls' ? 'call' : 'chat'}. Otherwise marked NA without penalizing IQS.`}
                             className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-300 cursor-help flex items-center gap-1"
                           >
                             <span>Conditional</span>
@@ -1567,8 +1701,6 @@ export default function PcgQualityParametersView({ initialChannel = 'calls' }: P
           })}
         </div>
       )}
-    </>
-  )}
-</div>
-);
+    </div>
+  );
 }
