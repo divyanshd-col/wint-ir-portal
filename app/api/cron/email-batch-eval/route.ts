@@ -15,6 +15,7 @@ import {
   collectAndProcessEmailBatchResults,
   evaluateSingleReplySync,
 } from '@/lib/email/gemini-batch-evaluator';
+import { evaluatePcgEmailReplySync } from '@/lib/scoring/pcg-email-pipeline';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -103,12 +104,43 @@ async function handleBatchCron(req: NextRequest) {
       }
     }
 
+    // 3. Process pending PCG email replies using PCG evaluation pipeline & shared PCG KBs
+    const pcgEvalResults: { messageId: string; success: boolean; score?: number; error?: string }[] = [];
+    try {
+      const pendingPcgRows = await query<any>(
+        `SELECT message_id FROM pcg_email_evaluations
+         WHERE evaluation_status = 'Pending'
+         ORDER BY sent_at ASC
+         LIMIT 50`
+      );
+      for (const pRow of pendingPcgRows) {
+        try {
+          const pRes = await evaluatePcgEmailReplySync(pRow.message_id);
+          pcgEvalResults.push({
+            messageId: pRow.message_id,
+            success: true,
+            score: pRes.iqsScore,
+          });
+        } catch (pErr: any) {
+          console.error(`[cron/email-batch-eval] Failed evaluating PCG email reply ${pRow.message_id}:`, pErr);
+          pcgEvalResults.push({
+            messageId: pRow.message_id,
+            success: false,
+            error: pErr?.message || String(pErr),
+          });
+        }
+      }
+    } catch (pcgScanErr: any) {
+      console.warn('[cron/email-batch-eval] Could not query pcg_email_evaluations:', pcgScanErr?.message || pcgScanErr);
+    }
+
     return NextResponse.json({
       ok: true,
       timestamp: new Date().toISOString(),
       action,
       collection: collectionResult,
       directEvaluations: directEvalResults.length > 0 ? directEvalResults : undefined,
+      pcgEvaluations: pcgEvalResults.length > 0 ? pcgEvalResults : undefined,
       submission: submissionResult,
     });
   } catch (err: any) {

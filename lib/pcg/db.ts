@@ -1,4 +1,7 @@
 import { query } from '@/lib/cx/db';
+import { ingestPcgEmailEvent } from '@/lib/pcg/email-db';
+
+export * from '@/lib/pcg/email-db';
 
 export interface PcgWebhookPayloadRecord {
   source: string;
@@ -72,7 +75,7 @@ export async function isKnownPcgEmailTicket(chatId: string): Promise<boolean> {
  * alerts, analytics or scores. One atomic statement for the raw rows. Returns how many raw events were moved.
  */
 export async function adoptCxEmailTicketIntoPcg(chatId: string): Promise<number> {
-  const moved = await query<{ id: number }>(
+  const moved = await query<{ id: number; payload: any }>(
     `WITH moved AS (
        DELETE FROM robylon_webhook_payloads WHERE source = 'email' AND chat_id = $1
        RETURNING event_type, event_id, chat_id, payload, headers, received_at
@@ -81,10 +84,22 @@ export async function adoptCxEmailTicketIntoPcg(chatId: string): Promise<number>
      SELECT 'robylon_email', 'email', m.event_type, m.event_id, m.chat_id, m.payload, m.headers, m.received_at
      FROM moved m
      WHERE m.event_id IS NULL OR NOT EXISTS (SELECT 1 FROM pcg_webhook_payloads p WHERE p.source = 'robylon_email' AND p.event_id = m.event_id)
-     RETURNING id`,
+     RETURNING id, payload`,
     [chatId],
   );
   // email_reply_evaluations rows go with their conversation (ON DELETE CASCADE).
   await query(`DELETE FROM email_conversations WHERE chat_id = $1`, [chatId]);
+
+  // Ingest into pcg_email_conversations as well
+  if (moved.length > 0) {
+    for (const r of moved) {
+      if (r.payload) {
+        await ingestPcgEmailEvent(r.payload).catch((e: any) =>
+          console.error('[adoptCxEmailTicketIntoPcg] Error ingesting to pcg_email_conversations:', e)
+        );
+      }
+    }
+  }
+
   return moved.length;
 }

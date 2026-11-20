@@ -14,8 +14,9 @@ import { saveRobylonWebhookPayload } from '@/lib/robylon/db';
 import { query } from '@/lib/cx/db';
 import { ingestEmailReply } from '@/lib/email/ingest';
 import { evaluateSingleReplySync } from '@/lib/email/gemini-batch-evaluator';
+import { evaluatePcgEmailReplySync } from '@/lib/scoring/pcg-email-pipeline';
 import { emailInboxOf, getPcgEmailInboxes, isPcgInbox } from '@/lib/email/inbox';
-import { adoptCxEmailTicketIntoPcg, isKnownPcgEmailTicket, savePcgEmailEvent } from '@/lib/pcg/db';
+import { adoptCxEmailTicketIntoPcg, ingestPcgEmailEvent, isKnownPcgEmailTicket, savePcgEmailEvent } from '@/lib/pcg/db';
 
 // ── Auth ────────────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
@@ -66,6 +67,25 @@ export async function POST(req: NextRequest) {
         const knownBefore = await isKnownPcgEmailTicket(chatId);
         const saved = await savePcgEmailEvent({ eventType, eventId, chatId, payload: body });
         if (saved === 'duplicate') return NextResponse.json({ ok: true, duplicate: true, workspace: 'pcg', event_type: eventType, ticket_id: ticketId });
+
+        // 2. Dual-storage: ingest/update into pcg_email_conversations and auto-evaluate outbound RM replies
+        try {
+          const ingestRes = await ingestPcgEmailEvent(body);
+          if (ingestRes?.evaluationQueued && ingestRes?.evaluatedMessageId) {
+            try {
+              waitUntil(
+                evaluatePcgEmailReplySync(ingestRes.evaluatedMessageId).catch((evalErr) => {
+                  console.error(`[email-webhook] Error during auto-evaluation of PCG reply ${ingestRes.evaluatedMessageId}:`, evalErr);
+                })
+              );
+            } catch (wErr: any) {
+              console.warn(`[email-webhook] waitUntil not available, PCG reply queued for batch eval:`, wErr.message);
+            }
+          }
+        } catch (ingestErr: any) {
+          console.error(`[email-webhook] Error ingesting PCG email ticket ${ticketId} into pcg_email_conversations:`, ingestErr?.message || ingestErr);
+        }
+
         if (!knownBefore) {
           // First PCG event of this ticket: an earlier inbox-less event may already have gone through the CX pipeline. Move it out.
           try {
