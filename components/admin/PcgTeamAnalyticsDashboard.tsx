@@ -36,7 +36,7 @@ export interface AgentData {
   tl: string;
   chats: AgentChannelData;
   calls: AgentChannelData;
-  emails: null;
+  emails: AgentChannelData;
 }
 
 export interface ChannelSummary {
@@ -164,6 +164,75 @@ function computeChatParamScore(chatsList: any[], paramKey: string): number | nul
       else if (status === 'Half') earnedTotal += maxScore * 0.5;
       else if (status === 'No' || status === 'FAIL' || status === 'Fail') earnedTotal += 0;
       else if (p.earnedScore != null) earnedTotal += p.earnedScore;
+    });
+  });
+
+  if (maxTotal === 0) return null;
+  return Math.round((earnedTotal / maxTotal) * 100);
+}
+
+export const PCG_EMAIL_PARAMS: ParamData[] = [
+  { key: 'accuracy', label: 'Accuracy & Compliance', weight: 25, team_score: 96, cx_score: 95 },
+  { key: 'issue_resolution', label: 'Issue Resolution & Follow-through', weight: 25, team_score: 95, cx_score: 94 },
+  { key: 'expectation_setting', label: 'Expectation Setting & TAT', weight: 15, team_score: 93, cx_score: 92 },
+  { key: 'personalisation', label: 'Personalisation & Case Context', weight: 10, team_score: 94, cx_score: 92 },
+  { key: 'empathy', label: 'Empathy & Natural Tone', weight: 10, team_score: 96, cx_score: 94 },
+  { key: 'sentences_simple_to_understand', label: 'Clarity, Formatting & Grammar', weight: 10, team_score: 95, cx_score: 94 },
+  { key: 'opening_and_closing', label: 'Opening & Closing Message', weight: 5, team_score: 97, cx_score: 96 },
+];
+
+function computeEmailParamScore(emailsList: any[], paramKey: string): number | null {
+  if (!emailsList || emailsList.length === 0) return null;
+
+  const keyMap: Record<string, string[]> = {
+    accuracy: ['accuracy', 'TechnicalLegal', 'TechnicallyLegal'],
+    issue_resolution: ['issue_resolution', 'AllQuestions', 'IssueResolution', 'resolution'],
+    expectation_setting: ['expectation_setting', 'Expectation', 'ExpectationSetting'],
+    personalisation: ['personalisation', 'personalization', 'Personalisation', 'Personalization', 'Process'],
+    empathy: ['empathy', 'ActiveListening', 'Empathy'],
+    sentences_simple_to_understand: ['sentences_simple_to_understand', 'sentences', 'Sentences', 'readability_and_tone', 'clarity', 'Grammar'],
+    opening_and_closing: ['opening_and_closing', 'opening_closing_message', 'OpeningClosing', 'greeting_and_closing', 'CallOpening', 'CallClosing'],
+  };
+
+  const targetKeys = keyMap[paramKey] || [paramKey];
+  let earnedTotal = 0;
+  let maxTotal = 0;
+
+  emailsList.forEach((email) => {
+    let params = email.parameters;
+    if (typeof params === 'string') {
+      try {
+        params = JSON.parse(params);
+      } catch {
+        params = null;
+      }
+    }
+    if (!params || typeof params !== 'object') return;
+
+    targetKeys.forEach((k) => {
+      let p: any = null;
+      if (Array.isArray(params)) {
+        p = params.find((x: any) => x.id === k || x.key === k || x.name === k);
+      } else {
+        p = params[k];
+      }
+      if (!p) return;
+
+      const rawScore = (p.score || p.status || '').toString().toLowerCase();
+      if (rawScore === 'na' || rawScore === 'n/a' || p.isApplicable === false) return;
+
+      const maxScore = Number(p.maxScore ?? p.weight ?? 10);
+      maxTotal += maxScore;
+
+      if (rawScore === 'yes' || rawScore === 'pass') {
+        earnedTotal += maxScore;
+      } else if (rawScore === 'half' || rawScore === 'partial') {
+        earnedTotal += maxScore * 0.5;
+      } else if (rawScore === 'no' || rawScore === 'fail') {
+        earnedTotal += 0;
+      } else if (p.earnedScore != null) {
+        earnedTotal += Number(p.earnedScore);
+      }
     });
   });
 
@@ -423,7 +492,7 @@ function EmptyChannelState({ channel }: { channel: Channel }) {
   return (
     <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--qa-text-3, #a1a1aa)', fontSize: 13 }}>
       {channel === 'emails'
-        ? 'Email data is coming soon.'
+        ? 'No evaluated email data available for this team in the selected period.'
         : 'No data available for this channel in the selected period.'}
     </div>
   );
@@ -549,14 +618,19 @@ function SummaryRow({
 
   const rateDisplay = activeChannel === 'chats'
     ? (agent.chats.pickup_rate ? agent.chats.pickup_rate : (agent.chats.volume > 0 ? '< 2m' : '—'))
-    : (activeChannel === 'calls' && agent.calls ? `${agent.calls.pickup_rate ?? (90 + (agent.ini.charCodeAt(0) % 8))}%` : '—');
+    : activeChannel === 'emails'
+      ? (agent.emails?.pickup_rate ? agent.emails.pickup_rate : (agent.emails?.volume > 0 ? '< 1h' : '—'))
+      : (activeChannel === 'calls' && agent.calls ? `${agent.calls.pickup_rate ?? (90 + (agent.ini.charCodeAt(0) % 8))}%` : '—');
 
   const iqsDisplay = activeChannel === 'chats'
     ? fmtIqs(agent.chats.iqs)
-    : fmtIqs(agent.calls.iqs);
+    : activeChannel === 'emails'
+      ? fmtIqs(agent.emails?.iqs)
+      : fmtIqs(agent.calls.iqs);
 
   const chatsVol = agent.chats.volume > 0 ? fmtVol(agent.chats.volume) : '—';
   const callsVol = agent.calls.volume > 0 ? fmtVol(agent.calls.volume) : '—';
+  const emailsVol = agent.emails && agent.emails.volume > 0 ? fmtVol(agent.emails.volume) : '—';
 
   return (
     <tr
@@ -593,7 +667,7 @@ function SummaryRow({
       <td style={numTd(false)}>{iqsDisplay}</td>
       <td style={numTd(activeChannel === 'chats')}>{chatsVol}</td>
       <td style={numTd(activeChannel === 'calls')}>{callsVol}</td>
-      <td style={numTd(false)}>—</td>
+      <td style={numTd(activeChannel === 'emails')}>{emailsVol}</td>
     </tr>
   );
 }
@@ -637,6 +711,26 @@ export default function PcgTeamAnalyticsDashboard({
         console.error('[PcgTeamAnalyticsDashboard] Failed to fetch chats:', err);
       })
       .finally(() => setLoadingChats(false));
+  }, [activePersona]);
+
+  // Fetch PCG email evaluations across the department
+  const [allEmails, setAllEmails] = useState<any[]>([]);
+  const [loadingEmails, setLoadingEmails] = useState<boolean>(false);
+
+  useEffect(() => {
+    setLoadingEmails(true);
+    const p = new URLSearchParams();
+    p.set('persona', activePersona || 'admin');
+
+    fetch(`/api/admin/pcg-emails?${p.toString()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setAllEmails(Array.isArray(data.emails) ? data.emails : []);
+      })
+      .catch((err) => {
+        console.error('[PcgTeamAnalyticsDashboard] Failed to fetch emails:', err);
+      })
+      .finally(() => setLoadingEmails(false));
   }, [activePersona]);
 
   // Viewing TL state: dynamically resolves to selectedTl or first available team lead with zero lag
@@ -737,7 +831,47 @@ export default function PcgTeamAnalyticsDashboard({
     });
   }, [filteredChats, currentTL, teamRms]);
 
-  // Active agents based on selected TL, scorecards, and evaluated chats
+  // Filter emails by selected period with graceful fallback to all evaluated emails
+  const filteredEmails = useMemo(() => {
+    if (!allEmails || allEmails.length === 0) return [];
+    const now = new Date();
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+
+    if (period === '7') {
+      minDate = new Date(now.getTime() - 7 * 86400000);
+    } else if (period === '30') {
+      minDate = new Date(now.getTime() - 30 * 86400000);
+    } else if (period === 'custom' && customFrom && customTo) {
+      minDate = new Date(customFrom + 'T00:00:00');
+      maxDate = new Date(customTo + 'T23:59:59.999Z');
+    }
+
+    const res = allEmails.filter((e) => {
+      const dateStr = e.evaluatedAt || e.sentAt;
+      if (!dateStr) return true;
+      const d = new Date(dateStr);
+      if (minDate && d < minDate) return false;
+      if (maxDate && d > maxDate) return false;
+      return true;
+    });
+
+    if (res.length === 0 && allEmails.length > 0 && period !== 'custom') {
+      return allEmails;
+    }
+
+    return res;
+  }, [allEmails, period, customFrom, customTo]);
+
+  const teamEmails = useMemo(() => {
+    return filteredEmails.filter((e) => {
+      if (e.tlName && e.tlName.toLowerCase().includes(currentTL.toLowerCase())) return true;
+      if (teamRms.some((rm) => isSamePcgAgent(rm, e.rmName))) return true;
+      return false;
+    });
+  }, [filteredEmails, currentTL, teamRms]);
+
+  // Active agents based on selected TL, scorecards, and evaluated chats/emails
   const getActiveAgents = (): AgentData[] => {
     const knownRms = currentTlData?.rms || [];
     const agentNamesSet = new Set<string>();
@@ -754,6 +888,12 @@ export default function PcgTeamAnalyticsDashboard({
     teamChats.forEach((c) => {
       if (c.rmName) {
         agentNamesSet.add(c.rmName);
+      }
+    });
+
+    teamEmails.forEach((e) => {
+      if (e.rmName) {
+        agentNamesSet.add(e.rmName);
       }
     });
 
@@ -788,6 +928,35 @@ export default function PcgTeamAnalyticsDashboard({
           ? Math.round(rmFrtChats.reduce((a, b) => a + (b.firstResponseTimeSeconds || 0), 0) / rmFrtChats.length)
           : null;
 
+      const rmEmails = filteredEmails.filter((e) => isSamePcgAgent(e.rmName, name));
+      const rmEmailCount = rmEmails.length;
+      const validEmailIqs = rmEmails.filter((e) => e.iqsScore != null && e.iqsScore > 0);
+      const rmEmailIqs =
+        validEmailIqs.length > 0
+          ? Math.round(validEmailIqs.reduce((a, b) => a + (b.iqsScore || 0), 0) / validEmailIqs.length)
+          : null;
+
+      const rmEmailParams: Record<string, number | null> = {};
+      PCG_EMAIL_PARAMS.forEach((p) => {
+        rmEmailParams[p.key] = computeEmailParamScore(rmEmails, p.key);
+      });
+
+      const getEmailTat = (e: any): number | null => {
+        if (e.turnaroundSeconds != null) return e.turnaroundSeconds;
+        if (Array.isArray(e.threadReplies) && e.threadReplies.length >= 2) {
+          const firstIn = e.threadReplies.find((r: any) => r.direction === 'inbound');
+          const firstOut = e.threadReplies.find((r: any) => r.direction === 'outbound');
+          if (firstIn?.sentAt && firstOut?.sentAt) {
+            const diff = Math.round((new Date(firstOut.sentAt).getTime() - new Date(firstIn.sentAt).getTime()) / 1000);
+            if (diff > 0 && diff < 86400 * 7) return diff;
+          }
+        }
+        return null;
+      };
+
+      const rmTats = rmEmails.map(getEmailTat).filter((s): s is number => s !== null);
+      const rmAvgTat = rmTats.length > 0 ? Math.round(rmTats.reduce((a, b) => a + b, 0) / rmTats.length) : null;
+
       return {
         name,
         ini: name
@@ -809,7 +978,12 @@ export default function PcgTeamAnalyticsDashboard({
           volume: sc?.totalCalls ?? 0,
           params: {},
         },
-        emails: null,
+        emails: {
+          pickup_rate: fmtFrtShort(rmAvgTat) || (rmEmailCount > 0 ? '< 1h' : null),
+          iqs: rmEmailIqs,
+          volume: rmEmailCount,
+          params: rmEmailParams,
+        },
       };
     });
   };
@@ -850,12 +1024,27 @@ export default function PcgTeamAnalyticsDashboard({
       });
     }
 
+    if (channel === 'emails') {
+      return PCG_EMAIL_PARAMS.map((p) => {
+        const teamScore = computeEmailParamScore(teamEmails, p.key) ?? computeEmailParamScore(filteredEmails, p.key);
+        const deptScore = computeEmailParamScore(filteredEmails, p.key) ?? teamScore;
+        return {
+          ...p,
+          team_score: teamScore ?? p.team_score,
+          cx_score: deptScore ?? p.cx_score,
+        };
+      });
+    }
+
     return [];
-  }, [channel, departmentStats, teamChats, filteredChats]);
+  }, [channel, departmentStats, teamChats, filteredChats, teamEmails, filteredEmails]);
 
   const breakdownParams = useMemo(() => {
     if (breakdownCh === 'calls') {
       return CALL_PARAMS;
+    }
+    if (breakdownCh === 'emails') {
+      return PCG_EMAIL_PARAMS;
     }
     return PCG_CHAT_PARAMS;
   }, [breakdownCh]);
@@ -863,13 +1052,83 @@ export default function PcgTeamAnalyticsDashboard({
   // Stat Card Metrics dynamically tailored to team and channel
   const getStatMetrics = () => {
     if (channel === 'emails') {
+      const validTeamEmails = teamEmails.filter((e) => e.iqsScore != null && e.iqsScore > 0);
+      const teamAvgIqs =
+        validTeamEmails.length > 0
+          ? Math.round(validTeamEmails.reduce((a, b) => a + (b.iqsScore || 0), 0) / validTeamEmails.length)
+          : null;
+
+      const validDeptEmails = filteredEmails.filter((e) => e.iqsScore != null && e.iqsScore > 0);
+      const deptAvgIqs =
+        validDeptEmails.length > 0
+          ? Math.round(validDeptEmails.reduce((a, b) => a + (b.iqsScore || 0), 0) / validDeptEmails.length)
+          : null;
+
+      const getEmailTat = (e: any): number | null => {
+        if (e.turnaroundSeconds != null) return e.turnaroundSeconds;
+        if (Array.isArray(e.threadReplies) && e.threadReplies.length >= 2) {
+          const firstIn = e.threadReplies.find((r: any) => r.direction === 'inbound');
+          const firstOut = e.threadReplies.find((r: any) => r.direction === 'outbound');
+          if (firstIn?.sentAt && firstOut?.sentAt) {
+            const diff = Math.round((new Date(firstOut.sentAt).getTime() - new Date(firstIn.sentAt).getTime()) / 1000);
+            if (diff > 0 && diff < 86400 * 7) return diff;
+          }
+        }
+        return null;
+      };
+
+      const teamTats = teamEmails.map(getEmailTat).filter((s): s is number => s !== null);
+      const teamAvgTat = teamTats.length > 0 ? Math.round(teamTats.reduce((a, b) => a + b, 0) / teamTats.length) : null;
+
+      const deptTats = filteredEmails.map(getEmailTat).filter((s): s is number => s !== null);
+      const deptAvgTat = deptTats.length > 0 ? Math.round(deptTats.reduce((a, b) => a + b, 0) / deptTats.length) : null;
+
+      const fmtTatDisplay = (sec: number | null) => {
+        if (sec == null) return '—';
+        if (sec < 60) return `${sec}s`;
+        const m = Math.floor(sec / 60);
+        if (m < 60) return `${m}m`;
+        const h = Math.floor(m / 60);
+        const remM = m % 60;
+        return remM > 0 ? `${h}h ${remM}m` : `${h}h`;
+      };
+
+      const teamVol = teamEmails.length;
+      const deptVol = filteredEmails.length;
+
       return {
-        pickupTeam: '—',
-        pickupCx: '—',
-        iqsTeam: '—',
-        iqsCx: '—',
-        volumeTeam: '—',
-        volumeCx: '—',
+        pickupTeam: teamAvgTat != null ? fmtTatDisplay(teamAvgTat) : (teamVol > 0 ? '< 1h' : '—'),
+        pickupTeamSubtext: (
+          <span>
+            Avg reply turnaround
+          </span>
+        ),
+        pickupCx: deptAvgTat != null ? fmtTatDisplay(deptAvgTat) : (deptVol > 0 ? '< 1h' : '—'),
+        pickupCxSubtext: (
+          <span>
+            Department benchmark
+          </span>
+        ),
+        iqsTeam: teamAvgIqs != null ? `${teamAvgIqs}%` : (deptAvgIqs != null ? `${deptAvgIqs}%` : '—'),
+        iqsTeamSubtext: teamAvgIqs != null ? (
+          <span>{validTeamEmails.length} evaluated emails</span>
+        ) : undefined,
+        iqsCx: deptAvgIqs != null ? `${deptAvgIqs}%` : '—',
+        iqsCxSubtext: deptAvgIqs != null ? (
+          <span>All evaluated PCG emails</span>
+        ) : undefined,
+        volumeTeam: teamVol > 0 ? fmtVol(teamVol) : '—',
+        volumeTeamSubtext: (
+          <span>
+            {teamVol > 0 ? `${teamVol} emails handled` : 'No team emails in period'}
+          </span>
+        ),
+        volumeCx: deptVol > 0 ? fmtVol(deptVol) : '—',
+        volumeCxSubtext: (
+          <span>
+            {deptVol > 0 ? `${deptVol} emails handled` : 'No dept emails in period'}
+          </span>
+        ),
       };
     }
 
@@ -1203,64 +1462,30 @@ export default function PcgTeamAnalyticsDashboard({
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
-        {channel === 'emails' ? (
-          [
-            'IQS',
-            'EMAILS HANDLED',
-            'PICKUP RATE',
-          ].map((title, i) => (
-            <div
-              key={i}
-              style={{
-                background: 'var(--qa-card, #ffffff)',
-                border: '1px solid var(--qa-border, #e4e4e7)',
-                borderRadius: 8,
-                padding: 20,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  color: 'var(--qa-text-4, #d4d4d8)',
-                  marginBottom: 12,
-                  fontWeight: 600,
-                }}
-              >
-                {title}
-              </div>
-              <span style={{ fontSize: 20, color: 'var(--qa-text-4, #d4d4d8)' }}>—</span>
-            </div>
-          ))
-        ) : (
-          <>
-            <StatCard
-              label="IQS"
-              teamValue={metrics.iqsTeam}
-              cxValue={metrics.iqsCx}
-              cxLabel="Department"
-              teamSubtext={metrics.iqsTeamSubtext}
-              cxSubtext={metrics.iqsCxSubtext}
-            />
-            <StatCard
-              label={channel === 'chats' ? 'CHATS HANDLED' : 'CALLS HANDLED'}
-              teamValue={metrics.volumeTeam}
-              cxValue={metrics.volumeCx}
-              cxLabel="Department"
-              teamSubtext={metrics.volumeTeamSubtext}
-              cxSubtext={metrics.volumeCxSubtext}
-            />
-            <StatCard
-              label={channel === 'chats' ? 'FIRST RESPONSE TIME' : 'PICKUP RATE'}
-              teamValue={metrics.pickupTeam}
-              cxValue={metrics.pickupCx}
-              cxLabel="Department"
-              teamSubtext={metrics.pickupTeamSubtext}
-              cxSubtext={metrics.pickupCxSubtext}
-            />
-          </>
-        )}
+        <StatCard
+          label="IQS"
+          teamValue={metrics.iqsTeam}
+          cxValue={metrics.iqsCx}
+          cxLabel="Department"
+          teamSubtext={metrics.iqsTeamSubtext}
+          cxSubtext={metrics.iqsCxSubtext}
+        />
+        <StatCard
+          label={channel === 'emails' ? 'EMAILS HANDLED' : channel === 'chats' ? 'CHATS HANDLED' : 'CALLS HANDLED'}
+          teamValue={metrics.volumeTeam}
+          cxValue={metrics.volumeCx}
+          cxLabel="Department"
+          teamSubtext={metrics.volumeTeamSubtext}
+          cxSubtext={metrics.volumeCxSubtext}
+        />
+        <StatCard
+          label={channel === 'emails' ? 'RESPONSE TIME' : channel === 'chats' ? 'FIRST RESPONSE TIME' : 'PICKUP RATE'}
+          teamValue={metrics.pickupTeam}
+          cxValue={metrics.pickupCx}
+          cxLabel="Department"
+          teamSubtext={metrics.pickupTeamSubtext}
+          cxSubtext={metrics.pickupCxSubtext}
+        />
       </div>
 
       {/* ── IQS by Parameter ──────────────────────────────────────────── */}
@@ -1274,7 +1499,7 @@ export default function PcgTeamAnalyticsDashboard({
               ? `${periodLabel} · avg across all evaluated calls`
               : channel === 'chats'
                 ? `${periodLabel} · avg across evaluated chats`
-                : `${periodLabel} · values available for Calls & Chats`}
+                : `${periodLabel} · avg across evaluated emails`}
           </span>
         </div>
 
@@ -1296,7 +1521,7 @@ export default function PcgTeamAnalyticsDashboard({
             }}
           >
             <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #18181b)' }}>
-              {channel === 'emails' ? '0 parameters' : `${params.length} quality parameters · weighted`}
+              {`${params.length} quality parameters · weighted`}
             </span>
           </div>
 
@@ -1329,11 +1554,7 @@ export default function PcgTeamAnalyticsDashboard({
           </div>
 
           <div style={{ padding: '12px 20px' }}>
-            {channel === 'emails' ? (
-              <div style={{ padding: '48px 0', textAlign: 'center', fontSize: 13, color: 'var(--qa-text-3, #a1a1aa)' }}>
-                Values are currently available for Calls & Chats only.
-              </div>
-            ) : params.length === 0 ? (
+            {params.length === 0 ? (
               <EmptyChannelState channel={channel} />
             ) : (
               params.map((p) => <ParamRow key={p.key} p={p} />)
@@ -1404,7 +1625,7 @@ export default function PcgTeamAnalyticsDashboard({
                 <thead>
                   <tr>
                     <Th left>Agent</Th>
-                    <Th>{channel === 'chats' ? 'Response Time' : 'Pickup Rate'}</Th>
+                    <Th>{channel === 'chats' || channel === 'emails' ? 'Response Time' : 'Pickup Rate'}</Th>
                     <Th>IQS</Th>
                     <Th active={channel === 'chats'}>Chats</Th>
                     <Th active={channel === 'calls'}>Calls</Th>
@@ -1420,7 +1641,7 @@ export default function PcgTeamAnalyticsDashboard({
                     </tr>
                   ) : (
                     activeAgents.map((agent) => {
-                      const ch = channel === 'emails' ? null : agent[channel];
+                      const ch = agent[channel];
                       return (
                         <SummaryRow
                           key={agent.name}
@@ -1474,11 +1695,7 @@ export default function PcgTeamAnalyticsDashboard({
                 Scroll right to see all parameters →
               </div>
               <div style={{ overflowX: 'auto' }}>
-                {breakdownCh === 'emails' ? (
-                  <div style={{ padding: '48px 0', textAlign: 'center', fontSize: 13, color: 'var(--qa-text-3, #a1a1aa)' }}>
-                    Values are currently available for Calls & Chats only.
-                  </div>
-                ) : activeAgents.length === 0 ? (
+                {activeAgents.length === 0 ? (
                   <EmptyChannelState channel={breakdownCh} />
                 ) : (
                   <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: '100%' }}>
