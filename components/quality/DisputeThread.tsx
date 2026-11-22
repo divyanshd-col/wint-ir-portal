@@ -166,6 +166,12 @@ export function DisputeThread({
         throw new Error(data.error || 'Failed to post comment');
       }
       setNewComment('');
+      if (data.comment) {
+        setComments((prev) => {
+          if (prev.some((c) => c.id === data.comment.id)) return prev;
+          return [...prev, data.comment];
+        });
+      }
       await fetchComments();
     } catch (err: any) {
       setError(err.message || 'Failed to post comment');

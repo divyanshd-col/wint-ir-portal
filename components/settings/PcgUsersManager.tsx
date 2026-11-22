@@ -73,11 +73,36 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
   // ── Team Leads & Assignments State ─────────────────────────────────────────
   const [teamSearch, setTeamSearch] = useState('');
   const [pendingAssignments, setPendingAssignments] = useState<Record<string, string>>({});
+  const [pendingTlAssignments, setPendingTlAssignments] = useState<Record<string, string>>({});
+  const [savedTlAdminMap, setSavedTlAdminMap] = useState<Record<string, string>>({});
   const [savingAssignments, setSavingAssignments] = useState(false);
 
   // Dynamic Team Leads derived from users who have role === 'tl'
   const tlOptions = useMemo(() => {
     return users.filter((u) => u.role === 'tl' && u.status !== 'disabled');
+  }, [users]);
+
+  // Dynamic PCG Admins derived from users with role === 'admin' or isAdmin or isSuperAdmin
+  const adminOptions = useMemo(() => {
+    const list = users.filter(
+      (u) => (u.role === 'admin' || u.isAdmin || u.isSuperAdmin) && u.status !== 'disabled'
+    );
+    const set = new Set<string>();
+    list.forEach((u) => {
+      if (u.name?.trim()) set.add(u.name.trim());
+    });
+    // Ensure Aahan and ID are always present as standard PCG Admin choices
+    let hasAahan = false;
+    for (const name of set) {
+      if (name.toLowerCase().includes('aahan')) hasAahan = true;
+    }
+    if (!hasAahan) set.add('Aahan');
+    let hasId = false;
+    for (const name of set) {
+      if (name.toLowerCase() === 'id') hasId = true;
+    }
+    if (!hasId) set.add('ID');
+    return Array.from(set).sort();
   }, [users]);
 
   // ── Invite Modal State ─────────────────────────────────────────────────────
@@ -111,9 +136,15 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
   const loadData = async () => {
     setLoadingUsers(true);
     try {
-      const usersRes = await fetch('/api/pcg/admin/users').then((r) => r.json());
+      const [usersRes, teamsRes] = await Promise.all([
+        fetch('/api/pcg/admin/users').then((r) => r.json()).catch(() => ({})),
+        fetch('/api/pcg/admin/teams').then((r) => r.json()).catch(() => ({})),
+      ]);
       if (usersRes.users) {
         setUsers(usersRes.users);
+      }
+      if (teamsRes.pcgTlAdminAssignments) {
+        setSavedTlAdminMap(teamsRes.pcgTlAdminAssignments);
       }
     } catch (err: any) {
       console.error('[PcgUsersManager] failed to load:', err);
@@ -160,6 +191,13 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
       (u) => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
     );
   }, [rms, teamSearch]);
+
+  const filteredTls = useMemo(() => {
+    const q = teamSearch.trim().toLowerCase();
+    return tlOptions.filter(
+      (u) => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    );
+  }, [tlOptions, teamSearch]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const submitInvite = async (e: React.FormEvent) => {
@@ -332,17 +370,22 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
   };
 
   const saveTeamAssignments = async () => {
-    const entries = Object.entries(pendingAssignments);
-    if (!entries.length) return;
+    const rmEntries = Object.entries(pendingAssignments);
+    const tlEntries = Object.entries(pendingTlAssignments);
+    if (!rmEntries.length && !tlEntries.length) return;
     setSavingAssignments(true);
     try {
       const res = await fetch('/api/pcg/admin/teams', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assignments: pendingAssignments }),
+        body: JSON.stringify({
+          assignments: pendingAssignments,
+          tlAdminAssignments: pendingTlAssignments,
+        }),
       });
       if (res.ok) {
         setPendingAssignments({});
+        setPendingTlAssignments({});
         await loadData();
         showToast('Assignments saved');
       } else {
@@ -619,87 +662,171 @@ export default function PcgUsersManager({ showToast, isSuperAdmin = false }: Pcg
             </svg>
             <input
               type="text"
-              placeholder="Search members…"
+              placeholder="Search members or team leads…"
               value={teamSearch}
               onChange={(e) => setTeamSearch(e.target.value)}
               className={`${inputCls} w-full pl-9`}
             />
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/60">
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                    Member (RM)
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                    Assigned Team Lead
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRms.map((rm) => {
-                  const currentTl =
-                    pendingAssignments[rm.name.toLowerCase()] ??
-                    (rm.tlName && rm.tlName !== 'Unassigned' ? rm.tlName : '');
-                  const isChanged = pendingAssignments[rm.name.toLowerCase()] !== undefined;
+          {/* ── 1. Team Leads to Admin Mapping Section ──────────────────────── */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Team Lead Assignments (TL → Admin)</h3>
+              <p className="text-xs text-gray-500">Map Team Leads to the relevant Admin for escalations and dispute overrides (Default: Aahan).</p>
+            </div>
 
-                  return (
-                    <tr
-                      key={rm.userId}
-                      className="border-b border-gray-50 hover:bg-gray-50/40 transition"
-                    >
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <Avatar name={rm.name} email={rm.email} />
-                          <div className="min-w-0">
-                            <div className="font-semibold text-gray-900 truncate">{rm.name}</div>
-                            <div className="text-xs text-gray-400 truncate">{rm.email}</div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/60">
+                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                      Team Lead (TL)
+                    </th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                      Assigned Admin
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTls.map((tl) => {
+                    const defaultAdmin = adminOptions.find(a => a.toLowerCase().includes('aahan')) || 'Aahan';
+                    const currentAdmin =
+                      pendingTlAssignments[tl.name.toLowerCase()] ??
+                      (savedTlAdminMap[tl.name.toLowerCase()] || defaultAdmin);
+                    const isChanged = pendingTlAssignments[tl.name.toLowerCase()] !== undefined;
+
+                    return (
+                      <tr
+                        key={tl.userId}
+                        className="border-b border-gray-50 hover:bg-gray-50/40 transition"
+                      >
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <Avatar name={tl.name} email={tl.email} />
+                            <div className="min-w-0">
+                              <div className="font-semibold text-gray-900 truncate">{tl.name}</div>
+                              <div className="text-xs text-gray-400 truncate">{tl.email}</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={currentTl}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setPendingAssignments((prev) => ({
-                              ...prev,
-                              [rm.name.toLowerCase()]: val,
-                            }));
-                          }}
-                          className={`${inputCls} w-52 ${isChanged ? '!border-amber-400' : ''}`}
-                        >
-                          <option value="">—</option>
-                          {tlOptions.map((tl) => (
-                            <option key={tl.userId} value={tl.name}>
-                              {tl.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {filteredRms.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-10">
-                {loadingUsers ? 'Loading…' : 'No relationship managers found.'}
-              </p>
-            )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={currentAdmin}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setPendingTlAssignments((prev) => ({
+                                ...prev,
+                                [tl.name.toLowerCase()]: val,
+                              }));
+                            }}
+                            className={`${inputCls} w-52 ${isChanged ? '!border-amber-400' : ''}`}
+                          >
+                            {adminOptions.map((adminName) => (
+                              <option key={adminName} value={adminName}>
+                                {adminName}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {filteredTls.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">
+                  {loadingUsers ? 'Loading…' : 'No team leads found.'}
+                </p>
+              )}
+            </div>
           </div>
 
-          {Object.keys(pendingAssignments).length > 0 && (
+          {/* ── 2. Relationship Managers to Team Lead Mapping Section ───────── */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Relationship Manager Assignments (RM → TL)</h3>
+              <p className="text-xs text-gray-500">Map Relationship Managers to their respective Team Lead.</p>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/60">
+                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                      Member (RM)
+                    </th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                      Assigned Team Lead
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRms.map((rm) => {
+                    const currentTl =
+                      pendingAssignments[rm.name.toLowerCase()] ??
+                      (rm.tlName && rm.tlName !== 'Unassigned' ? rm.tlName : '');
+                    const isChanged = pendingAssignments[rm.name.toLowerCase()] !== undefined;
+
+                    return (
+                      <tr
+                        key={rm.userId}
+                        className="border-b border-gray-50 hover:bg-gray-50/40 transition"
+                      >
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <Avatar name={rm.name} email={rm.email} />
+                            <div className="min-w-0">
+                              <div className="font-semibold text-gray-900 truncate">{rm.name}</div>
+                              <div className="text-xs text-gray-400 truncate">{rm.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={currentTl}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setPendingAssignments((prev) => ({
+                                ...prev,
+                                [rm.name.toLowerCase()]: val,
+                              }));
+                            }}
+                            className={`${inputCls} w-52 ${isChanged ? '!border-amber-400' : ''}`}
+                          >
+                            <option value="">—</option>
+                            {tlOptions.map((tl) => (
+                              <option key={tl.userId} value={tl.name}>
+                                {tl.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {filteredRms.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-10">
+                  {loadingUsers ? 'Loading…' : 'No relationship managers found.'}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {(Object.keys(pendingAssignments).length > 0 || Object.keys(pendingTlAssignments).length > 0) && (
             <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
               <p className="text-sm text-amber-700 font-medium">
-                {Object.keys(pendingAssignments).length} unsaved change
-                {Object.keys(pendingAssignments).length !== 1 ? 's' : ''}
+                {Object.keys(pendingAssignments).length + Object.keys(pendingTlAssignments).length} unsaved change
+                {Object.keys(pendingAssignments).length + Object.keys(pendingTlAssignments).length !== 1 ? 's' : ''}
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPendingAssignments({})}
+                  onClick={() => {
+                    setPendingAssignments({});
+                    setPendingTlAssignments({});
+                  }}
                   className="text-xs text-amber-600 hover:underline font-medium"
                 >
                   Discard

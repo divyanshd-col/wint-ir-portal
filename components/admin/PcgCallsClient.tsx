@@ -12,7 +12,7 @@ import PcgRmPerformanceDashboard from './PcgRmPerformanceDashboard';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
 import { ThemeToggle, AccountMenu } from '@/components/shell/TopBar';
-import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
+import { isSamePcgAgent, isPcgAm, isPcgTl } from '@/lib/pcg/canonical-names';
 import {
   formatPcgCallIqsScoresForPanel,
   applyPanelOverridesToPcgParameters,
@@ -89,6 +89,13 @@ interface PCGCall {
   disputeStatus: 'none' | 'pending' | 'resolved' | 'overridden';
   disputeReason?: string;
   tlOverrideNote?: string;
+  disputeComments?: Array<{
+    id: string;
+    authorName: string;
+    authorRole: string;
+    content: string;
+    createdAt: string;
+  }>;
   sopTriggers?: Array<{
     category: string;
     severity: string;
@@ -241,6 +248,118 @@ export const formatCallSegments = (call: PCGCall) => {
   return segments;
 };
 
+const KNOWN_PCG_PARAM_KEYS: Record<string, string> = {
+  callopening: 'CallOpening',
+  callclosing: 'CallClosing',
+  technicallylegallycorrect: 'TechnicalLegal',
+  technicallegal: 'TechnicalLegal',
+  technical: 'TechnicalLegal',
+  allquestionsaddressed: 'AllQuestions',
+  allquestions: 'AllQuestions',
+  expectationsetting: 'Expectation',
+  expectation: 'Expectation',
+  processprecheck: 'Process',
+  precheck: 'Process',
+  process: 'Process',
+  vocabularysentencestructuregrammarpronunciations: 'Grammar',
+  grammar: 'Grammar',
+  fillersfumblingstammeringspeechclarityavoiddeadair: 'Fillers',
+  fillersdeadair: 'Fillers',
+  fillers: 'Fillers',
+  energylevelenthusiasmtonemodulation: 'EnergyTone',
+  energytone: 'EnergyTone',
+  activelisteninginterruptionsempathy: 'ActiveListening',
+  activelistening: 'ActiveListening',
+  simplifyinganswers: 'Simplifying',
+  simplifying: 'Simplifying',
+  p1: 'CallOpening',
+  p2: 'CallClosing',
+  p3: 'TechnicalLegal',
+  p4: 'AllQuestions',
+  p5: 'Expectation',
+  p6: 'Process',
+  p7: 'Grammar',
+  p8: 'Fillers',
+  p9: 'EnergyTone',
+  p10: 'ActiveListening',
+  p11: 'Simplifying',
+};
+
+export const normalizeParamKey = (rawKey: string, callParams?: CallParameter[]): string => {
+  const clean = (rawKey || '').trim();
+  const lowerNoSpaces = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  if (KNOWN_PCG_PARAM_KEYS[lowerNoSpaces]) {
+    return KNOWN_PCG_PARAM_KEYS[lowerNoSpaces];
+  }
+
+  if (callParams && callParams.length > 0) {
+    const matchedParam = callParams.find(p => {
+      const pIdClean = (p.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const pNameClean = (p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return pIdClean === lowerNoSpaces || pNameClean === lowerNoSpaces;
+    });
+    if (matchedParam) return matchedParam.id;
+  }
+
+  return clean;
+};
+
+export const getCallChallengedParams = (call: PCGCall): Array<{ param: string; note: string }> => {
+  const reason = (call.disputeReason || '').trim();
+  if (!reason) return [];
+
+  // 1. Try parsing JSON format
+  if (reason.startsWith('{') || reason.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(reason);
+      const list = Array.isArray(parsed) ? parsed : (parsed.challengedParams || parsed.params);
+      if (Array.isArray(list) && list.length > 0) {
+        const results: Array<{ param: string; note: string }> = [];
+        const seen = new Set<string>();
+        list.forEach((item: any) => {
+          const rawKey = typeof item === 'string' ? item : (item.param || item.id || item.name || '');
+          const normKey = normalizeParamKey(rawKey, call.parameters);
+          if (normKey && !seen.has(normKey)) {
+            seen.add(normKey);
+            const note = typeof item === 'object' ? (item.note || parsed.note || parsed.reason || '') : (parsed.note || parsed.reason || '');
+            results.push({ param: normKey, note });
+          }
+        });
+        return results;
+      }
+    } catch {}
+  }
+
+  // 2. Parse "Parameters challenged: Param1, Param2. Note..." format
+  const match = reason.match(/Parameters challenged:\s*([^.\n]+)/i);
+  if (match && match[1]) {
+    const paramNames = match[1].split(',').map((s) => s.trim()).filter(Boolean);
+
+    let noteText = '';
+    const noteMatch = reason.match(/Parameters challenged:\s*[^.\n]+\.?\s*([\s\S]*)/i);
+    if (noteMatch && noteMatch[1]) {
+      noteText = noteMatch[1].trim();
+    }
+
+    const results: Array<{ param: string; note: string }> = [];
+    const seen = new Set<string>();
+    paramNames.forEach((pName) => {
+      const canonicalKey = normalizeParamKey(pName, call.parameters);
+      if (canonicalKey && !seen.has(canonicalKey)) {
+        seen.add(canonicalKey);
+        const fallbackParam = (call.parameters || []).find(p => p.id === canonicalKey);
+        const note = noteText || fallbackParam?.quote || 'Challenged parameter score.';
+        results.push({ param: canonicalKey, note });
+      }
+    });
+
+    return results;
+  }
+
+  return [];
+};
+
 export default function PcgCallsClient() {
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role || 'admin';
@@ -266,6 +385,9 @@ export default function PcgCallsClient() {
     userRole === 'tl' && loggedInUserName ? loggedInUserName : ''
   );
 
+  // TL Toggle: show only calls handled by the TL themselves
+  const [showMyCallsOnly, setShowMyCallsOnly] = useState(false);
+
   useEffect(() => {
     if (userRole === 'agent') {
       setActivePersona('agent');
@@ -277,6 +399,10 @@ export default function PcgCallsClient() {
       setActivePersona('admin');
     }
   }, [userRole, loggedInUserName]);
+
+  useEffect(() => {
+    setShowMyCallsOnly(false);
+  }, [activePersona]);
 
   // For agent and tl, team_analytics, rm_performance and tl_calls are admin-only; parameter_definitions is TL & Admin only
   useEffect(() => {
@@ -297,7 +423,17 @@ export default function PcgCallsClient() {
         setActivePersona(personaParam);
       }
       const tabParam = urlParams.get('tab');
-      if (tabParam === 'tl_calls') {
+      const disputeTabParam = urlParams.get('disputeTab');
+      if (disputeTabParam === 'raised' || disputeTabParam === 'reviewed') {
+        setDisputeTab(disputeTabParam);
+      }
+      if (tabParam === 'disputes_raised') {
+        setActiveTab('disputes');
+        setDisputeTab('raised');
+      } else if (tabParam === 'disputes_reviewed') {
+        setActiveTab('disputes');
+        setDisputeTab('reviewed');
+      } else if (tabParam === 'tl_calls') {
         setActiveTab('calls');
         setActiveCohortToggle('tl');
       } else if (tabParam === 'tl_chats') {
@@ -318,11 +454,17 @@ export default function PcgCallsClient() {
     }
   }, [activePersona]);
 
-  const handleTabChange = (newTab: PcgTab) => {
+  const handleTabChange = (newTab: PcgTab, subTab?: 'raised' | 'reviewed') => {
     setActiveTab(newTab);
+    if (subTab) setDisputeTab(subTab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('tab', newTab);
+      if (subTab) {
+        url.searchParams.set('disputeTab', subTab);
+      } else {
+        url.searchParams.delete('disputeTab');
+      }
       window.history.pushState({}, '', url.toString());
     }
   };
@@ -428,6 +570,8 @@ export default function PcgCallsClient() {
 
   // Dispute Section Tab: 'raised' | 'reviewed'
   const [disputeTab, setDisputeTab] = useState<'raised' | 'reviewed'>('raised');
+  const [disputeSourceFilter, setDisputeSourceFilter] = useState<'all' | 'rm' | 'am' | 'tl'>('all');
+  const [tlAdminMap, setTlAdminMap] = useState<Record<string, string>>({});
 
   // Inline Agent Dispute state (in drawer below parameters)
   const [isRaisingDispute, setIsRaisingDispute] = useState(false);
@@ -454,7 +598,7 @@ export default function PcgCallsClient() {
       fetchData();
     }, 250);
     return () => clearTimeout(handler);
-  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, activeCohortToggle, selectedRmName, selectedTlName, selectedTeamName, searchQuery, minIqsFilter, maxIqsFilter, activePersona, loggedInUserName]);
+  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, activeCohortToggle, selectedRmName, selectedTlName, selectedTeamName, searchQuery, minIqsFilter, maxIqsFilter, activePersona, loggedInUserName, showMyCallsOnly]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -484,7 +628,12 @@ export default function PcgCallsClient() {
             ['swetha', 'swetha jayakumar'].some((s) => cleanTl.toLowerCase() === s) ? 'Swetha' : cleanTl
           );
         if (matchedTl) p.set('tl_name', matchedTl);
-        if (selectedRmName !== 'all') p.set('rm_name', selectedRmName);
+        if (showMyCallsOnly) {
+          p.set('caller_role', 'tl');
+          p.set('my_calls', 'true');
+        } else {
+          if (selectedRmName !== 'all') p.set('rm_name', selectedRmName);
+        }
       } else if (activePersona === 'admin') {
         if (activeCohortToggle === 'rm') {
           p.set('caller_role', 'rm');
@@ -525,6 +674,7 @@ export default function PcgCallsClient() {
         return loaded;
       });
       setDisputes(data.disputes || []);
+      if (data.tlAdminAssignments) setTlAdminMap(data.tlAdminAssignments);
       setRmScorecards(data.rmScorecards || []);
       const leads = data.teamLeads || [];
       setTeamLeads(leads);
@@ -887,6 +1037,98 @@ export default function PcgCallsClient() {
     );
   };
 
+  const getDisputeCommentNotification = (comments: any[] | undefined, rmName?: string, isTlCall?: boolean) => {
+    if (!Array.isArray(comments) || comments.length === 0) return null;
+
+    const isFromAdmin = (c: any) => {
+      const r = (c.authorRole || c.role || '').toLowerCase();
+      if (r === 'admin') return true;
+      const name = (c.authorName || '').toLowerCase();
+      if (name.includes('aahan') || name === 'id' || name.includes('admin')) return true;
+      return false;
+    };
+
+    const isFromTl = (c: any) => {
+      if (isFromAdmin(c)) return false;
+      const r = (c.authorRole || c.role || '').toLowerCase();
+      if (r === 'tl' || r === 'team lead') return true;
+      if (isPcgTl(c.authorName)) return true;
+      if (isTlCall && rmName && c.authorName && c.authorName.trim().toLowerCase() === rmName.trim().toLowerCase()) return true;
+      return false;
+    };
+
+    const isFromAgent = (c: any) => {
+      if (isFromAdmin(c) || isFromTl(c)) return false;
+      const r = (c.authorRole || c.role || '').toLowerCase();
+      if (r === 'agent' || r === 'rm' || r === 'ir') return true;
+      if (rmName && c.authorName && c.authorName.trim().toLowerCase() === rmName.trim().toLowerCase()) return true;
+      return false;
+    };
+
+    if (activePersona === 'agent') {
+      const incoming = comments.filter((c) => !isFromAgent(c));
+      if (incoming.length === 0) return null;
+      return {
+        count: incoming.length,
+        label: `${incoming.length} TL comment${incoming.length === 1 ? '' : 's'}`,
+      };
+    }
+
+    if (activePersona === 'tl') {
+      if (isTlCall) {
+        // For TL viewing their OWN dispute:
+        // Incoming comments are from the Admin!
+        const incoming = comments.filter((c) => isFromAdmin(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} Admin comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      } else {
+        // For TL reviewing team member's dispute (RM/AM):
+        // Incoming comments are from the RM
+        const incoming = comments.filter((c) => isFromAgent(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} RM comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      }
+    }
+
+    if (activePersona === 'admin') {
+      if (isTlCall) {
+        // In Admin DB on a TL dispute:
+        // Incoming comments are from the TL!
+        const incoming = comments.filter((c) => isFromTl(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} TL comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      } else {
+        // In Admin DB on an RM dispute:
+        const incoming = comments.filter((c) => isFromAgent(c));
+        if (incoming.length === 0) {
+          const tlComments = comments.filter((c) => isFromTl(c));
+          if (tlComments.length > 0) {
+            return {
+              count: tlComments.length,
+              label: `${tlComments.length} TL comment${tlComments.length === 1 ? '' : 's'}`,
+            };
+          }
+          return null;
+        }
+        return {
+          count: incoming.length,
+          label: `${incoming.length} RM comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      }
+    }
+
+    return null;
+  };
+
   const allDisputedCalls = useMemo(() => {
     const map = new Map<string, PCGCall>();
     (disputes || []).forEach(c => map.set(c.id, c));
@@ -898,12 +1140,23 @@ export default function PcgCallsClient() {
     let list = Array.from(map.values());
 
     if (activePersona === 'tl') {
-      if (teamRms.length > 0) {
-        list = list.filter(c => teamRms.some(m => isSamePcgAgent(m, c.rmName)));
-      } else {
-        // Guard against showing un-scoped company-wide disputes while team mappings are loading
-        list = [];
+      const allowedNames = [
+        ...teamRms,
+        activeTlName,
+        loggedInUserName,
+        currentTlTeam?.tlName,
+      ].filter(Boolean) as string[];
+
+      list = list.filter((c) => allowedNames.some((m) => isSamePcgAgent(m, c.rmName)));
+
+      if (disputeSourceFilter === 'tl') {
+        list = list.filter((c) => isPcgTl(c.rmName) || (activeTlName && isSamePcgAgent(activeTlName, c.rmName)));
+      } else if (disputeSourceFilter === 'am') {
+        list = list.filter((c) => isPcgAm(c.rmName));
+      } else if (disputeSourceFilter === 'rm') {
+        list = list.filter((c) => !isPcgTl(c.rmName) && !isPcgAm(c.rmName) && !(activeTlName && isSamePcgAgent(activeTlName, c.rmName)));
       }
+
       if (selectedRmName && selectedRmName !== 'all') {
         list = list.filter(c => isSamePcgAgent(selectedRmName, c.rmName));
       }
@@ -913,6 +1166,13 @@ export default function PcgCallsClient() {
         list = list.filter(c => isSamePcgAgent(agentTarget, c.rmName));
       }
     } else if (activePersona === 'admin') {
+      if (disputeSourceFilter === 'tl') {
+        list = list.filter(c => teamLeads.some(t => isSamePcgAgent(t.tlName, c.rmName)) || isPcgTl(c.rmName));
+      } else if (disputeSourceFilter === 'am') {
+        list = list.filter(c => isPcgAm(c.rmName));
+      } else if (disputeSourceFilter === 'rm') {
+        list = list.filter(c => !isPcgTl(c.rmName) && !isPcgAm(c.rmName) && !teamLeads.some(t => isSamePcgAgent(t.tlName, c.rmName)));
+      }
       if (activeCohortToggle === 'tl') {
         if (selectedTlName && selectedTlName !== 'all') {
           list = list.filter(c => isSamePcgAgent(selectedTlName, c.rmName));
@@ -933,7 +1193,7 @@ export default function PcgCallsClient() {
     }
 
     return list;
-  }, [disputes, calls, activePersona, teamRms, selectedRmName, selectedRm, loggedInUserName, activeCohortToggle, selectedTlName, selectedTeamName, teamLeads]);
+  }, [disputes, calls, activePersona, teamRms, selectedRmName, selectedRm, loggedInUserName, activeCohortToggle, selectedTlName, selectedTeamName, teamLeads, disputeSourceFilter]);
 
   const disputeRaisedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'pending');
   const disputeReviewedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'resolved' || c.disputeStatus === 'overridden');
@@ -1080,17 +1340,17 @@ export default function PcgCallsClient() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [teamLeads, rms]);
 
-  // When activePersona is 'tl' and teamRms is loaded, ensure selectedRm is set to a team member
+  // When activePersona is 'tl' and teamRms is loaded, ensure selectedRm is set to a team member or the TL themselves
   useEffect(() => {
     if (activePersona === 'tl' && teamRms.length > 0) {
       const isSelectedInTeam = teamRms.some(
         (name: string) => isSamePcgAgent(name, selectedRm)
-      );
+      ) || (activeTlName && isSamePcgAgent(activeTlName, selectedRm));
       if (!isSelectedInTeam) {
         setSelectedRm(teamRms[0]);
       }
     }
-  }, [activePersona, teamRms, selectedRm]);
+  }, [activePersona, teamRms, selectedRm, activeTlName]);
 
   const teamRmScorecards: RmScorecard[] = useMemo(() => {
     return rmScorecards.filter((r) =>
@@ -1129,46 +1389,43 @@ export default function PcgCallsClient() {
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-[#111111]">
-              {activePersona === 'agent' ? 'My Quality Disputes' : 'Team Quality Disputes'}
+              {activePersona === 'agent'
+                ? (disputeTab === 'raised' ? 'My Quality Disputes Raised' : 'My Quality Disputes Reviewed')
+                : (disputeTab === 'raised' ? 'Team Quality Disputes Raised' : 'Team Quality Disputes Reviewed')}
             </h3>
           </div>
           <p className="text-xs text-[#71717A] mt-0.5">
-            {activePersona === 'agent'
-              ? 'Track call evaluations you challenged and review decisions made by your Team Leader.'
-              : 'Review agent disputes challenging AI scores, audit evidence, and record override decisions.'}
+            {disputeTab === 'raised'
+              ? (activePersona === 'agent'
+                ? 'Track call evaluations you challenged and review decisions made by your Team Leader.'
+                : 'Review agent disputes challenging AI scores, audit evidence, and record override decisions.')
+              : (activePersona === 'agent'
+                ? 'Track call evaluations that were previously challenged and review decisions made by your Team Leader.'
+                : 'Review historical disputes that have been resolved or overridden.')}
           </p>
         </div>
 
-        {/* Status Tabs */}
-        <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
-          <button
-            onClick={() => setDisputeTab('raised')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${disputeTab === 'raised'
-              ? 'bg-white text-[#111111] shadow-sm font-bold'
-              : 'text-[#71717A] hover:text-[#111111]'
-              }`}
-          >
-            <span>Dispute Raised</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${disputeRaisedCalls.length > 0 ? 'bg-zinc-200 text-zinc-900 border border-zinc-300' : 'bg-zinc-200 text-zinc-600'
-              }`}>
-              {disputeRaisedCalls.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setDisputeTab('reviewed')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${disputeTab === 'reviewed'
-              ? 'bg-white text-[#111111] shadow-sm font-bold'
-              : 'text-[#71717A] hover:text-[#111111]'
-              }`}
-          >
-            <span>✓</span>
-            <span>Dispute Reviewed</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${disputeReviewedCalls.length > 0 ? 'bg-zinc-200 text-zinc-900 border border-zinc-300' : 'bg-zinc-200 text-zinc-600'
-              }`}>
-              {disputeReviewedCalls.length}
-            </span>
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Dispute Source Filter for Admins & Team Leads */}
+          {(activePersona === 'admin' || activePersona === 'tl') && (
+            <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
+              <span className="text-[11px] font-semibold text-[#71717A] px-2">Disputes:</span>
+              {(['all', 'rm', 'am', 'tl'] as const).map((src) => (
+                <button
+                  key={src}
+                  type="button"
+                  onClick={() => setDisputeSourceFilter(src)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                    disputeSourceFilter === src
+                      ? 'bg-white text-[#111111] shadow-sm font-bold'
+                      : 'text-[#71717A] hover:text-[#111111]'
+                  }`}
+                >
+                  {src === 'all' ? 'All' : src === 'rm' ? 'RMs' : src === 'am' ? 'AMs' : activePersona === 'tl' ? 'TLs (My Disputes)' : 'Team Leads'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1196,6 +1453,20 @@ export default function PcgCallsClient() {
               <tbody className="divide-y divide-[#F0F0F2]">
                 {disputeRaisedCalls.map((call) => {
                   const isExpanded = expandedDisputeId === call.id;
+                  const isTlCall = teamLeads.some(t => isSamePcgAgent(t.tlName, call.rmName)) || isPcgTl(call.rmName);
+                  const cleanRm = (call.rmName || '').trim().toLowerCase();
+                  const assignedAdmin = tlAdminMap[cleanRm] || 'Aahan';
+                  const isMappedAdmin = Boolean(
+                    loggedInUserName && (
+                      loggedInUserName.trim().toLowerCase() === assignedAdmin.trim().toLowerCase() ||
+                      loggedInUserName.toLowerCase().includes(assignedAdmin.toLowerCase()) ||
+                      assignedAdmin.toLowerCase().includes(loggedInUserName.toLowerCase())
+                    )
+                  );
+                  const canOverride = activePersona === 'tl'
+                    ? !isTlCall
+                    : (isTlCall && (isMappedAdmin || userRole === 'admin'));
+
                   return (
                     <React.Fragment key={call.id}>
                       <tr
@@ -1224,7 +1495,9 @@ export default function PcgCallsClient() {
                           </td>
                         )}
                         {activePersona !== 'agent' && (
-                          <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
+                          <td className="py-3 px-4">
+                            <div className="font-semibold text-zinc-800">{call.rmName}</div>
+                          </td>
                         )}
                         <td className="py-3 px-4">
                           <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
@@ -1239,12 +1512,28 @@ export default function PcgCallsClient() {
                           )}
                         </td>
                         <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                        <td className="py-3 px-4 text-zinc-800 font-medium max-w-xs truncate">
-                          "{call.disputeReason || 'Agent challenged parameter score.'}"
+                        <td className="py-3 px-4">
+                          <div className="text-zinc-800 font-medium max-w-xs truncate" title={call.disputeReason}>
+                            "{call.disputeReason || 'Agent challenged parameter score.'}"
+                          </div>
+                          {(() => {
+                            const notif = getDisputeCommentNotification(call.disputeComments, call.rmName, isTlCall);
+                            if (!notif) return null;
+                            return (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                  </svg>
+                                  <span>{notif.label}</span>
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-4">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
-                            Pending TL Review
+                            {isTlCall ? `Pending Review (${assignedAdmin})` : 'Pending TL Review'}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1254,7 +1543,7 @@ export default function PcgCallsClient() {
                             }}
                             className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1"
                           >
-                            <span>{isExpanded ? 'Hide' : activePersona === 'tl' ? 'Review' : 'View'}</span>
+                            <span>{isExpanded ? 'Hide' : canOverride ? 'Review & Override' : 'View Dispute'}</span>
                             <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>
                           </button>
                         </td>
@@ -1275,25 +1564,23 @@ export default function PcgCallsClient() {
                           iqsScores={formatCallIqsScores(call)}
                           initialSegments={formatCallSegments(call)}
                           initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                          mode={activePersona === 'tl' ? 'submit' : 'view'}
-                          allowReevaluate={activePersona === 'tl'}
+                          mode={canOverride ? 'submit' : 'view'}
+                          allowReevaluate={canOverride}
                           dispute={{
-                            flagId: call.id,
+                            flagId: call.callId || call.id,
                             agentName: call.rmName,
                             agentNote: call.disputeReason,
-                            raisedBy: 'agent',
+                            raisedBy: isTlCall ? 'TL' : 'agent',
+                            raisedByRole: isTlCall ? 'tl' : 'agent',
                             raisedByName: call.rmName,
                             raisedAt: call.startTime,
-                            challengedParams: (call.parameters || []).filter(p => p.status !== 'Yes').map(p => ({
-                              param: p.id,
-                              note: p.quote || 'Challenged parameter score.'
-                            }))
+                            challengedParams: getCallChallengedParams(call)
                           }}
                           colSpan={activePersona === 'agent' ? 6 : 8}
                           onDone={() => setExpandedDisputeId(null)}
                           onClose={() => setExpandedDisputeId(null)}
                           onOverrideSubmit={async (overrideData) => {
-                            await await handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
+                            await handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
                           }}
                         />
                       )}
@@ -1330,6 +1617,10 @@ export default function PcgCallsClient() {
               <tbody className="divide-y divide-[#F0F0F2]">
                 {disputeReviewedCalls.map((call) => {
                   const isExpanded = expandedDisputeId === call.id;
+                  const isTlCall = teamLeads.some(t => isSamePcgAgent(t.tlName, call.rmName)) || isPcgTl(call.rmName);
+                  const cleanRm = (call.rmName || '').trim().toLowerCase();
+                  const assignedAdmin = tlAdminMap[cleanRm] || 'Aahan';
+
                   return (
                     <React.Fragment key={call.id}>
                       <tr
@@ -1358,7 +1649,9 @@ export default function PcgCallsClient() {
                           </td>
                         )}
                         {activePersona !== 'agent' && (
-                          <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
+                          <td className="py-3 px-4">
+                            <div className="font-semibold text-zinc-800">{call.rmName}</div>
+                          </td>
                         )}
                         <td className="py-3 px-4">
                           <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
@@ -1373,8 +1666,24 @@ export default function PcgCallsClient() {
                           )}
                         </td>
                         <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                        <td className="py-3 px-4 text-zinc-700 font-medium max-w-xs truncate">
-                          "{call.tlOverrideNote || 'Dispute reviewed and resolved by Team Leader.'}"
+                        <td className="py-3 px-4">
+                          <div className="text-zinc-700 font-medium max-w-xs truncate" title={call.tlOverrideNote || call.disputeReason}>
+                            "{call.tlOverrideNote || call.disputeReason || 'Dispute reviewed and resolved.'}"
+                          </div>
+                          {(() => {
+                            const notif = getDisputeCommentNotification(call.disputeComments, call.rmName, isTlCall);
+                            if (!notif) return null;
+                            return (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                  </svg>
+                                  <span>{notif.label}</span>
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-4">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
@@ -1411,6 +1720,17 @@ export default function PcgCallsClient() {
                           initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
                           mode="view"
                           allowReevaluate={activePersona === 'tl'}
+                          dispute={{
+                            flagId: call.callId || call.id,
+                            agentName: call.rmName,
+                            agentNote: call.disputeReason,
+                            reviewNote: call.tlOverrideNote,
+                            raisedBy: isTlCall ? 'TL' : 'agent',
+                            raisedByRole: isTlCall ? 'tl' : 'agent',
+                            raisedByName: call.rmName,
+                            raisedAt: call.startTime,
+                            challengedParams: getCallChallengedParams(call)
+                          }}
                           colSpan={activePersona !== 'agent' ? 8 : 6}
                           onDone={() => setExpandedDisputeId(null)}
                           onClose={() => setExpandedDisputeId(null)}
@@ -1792,7 +2112,7 @@ export default function PcgCallsClient() {
               <PcgMemberAnalyticsDashboard
                 selectedRm={selectedRm}
                 onSelectRm={(rm) => setSelectedRm(rm)}
-                availableRms={activePersona === 'admin' ? allKnownRms : activePersona === 'tl' ? teamRms : [selectedRm]}
+                availableRms={activePersona === 'admin' ? allKnownRms : activePersona === 'tl' ? (activeTlName ? [activeTlName, ...teamRms] : teamRms) : [selectedRm]}
                 allTlNames={teamLeads.map((t) => t.tlName)}
                 calls={calls}
                 activePersona={activePersona}
@@ -1822,32 +2142,85 @@ export default function PcgCallsClient() {
 
           ) : (
             <div className="space-y-6">
-              {/* Call Quality View Header / Switcher: Evaluated Calls / Disputes */}
-              <div className="flex items-center justify-between pb-3 border-b border-[#E4E4E7]">
+              {/* Call Quality View Header / Switcher: Evaluated Calls / Disputes Raised / Disputes Reviewed */}
+              <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[#E4E4E7]">
                 <div className="flex items-center gap-2">
+                  {/* 1. Evaluated Calls */}
                   <button
-                    onClick={() => handleTabChange('calls')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${activeTab === 'calls'
-                      ? 'bg-zinc-900 text-white font-bold'
-                      : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
-                      }`}
+                    onClick={() => {
+                      handleTabChange('calls');
+                      setExpandedDisputeId(null);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                      activeTab === 'calls'
+                        ? 'bg-zinc-900 text-white font-bold shadow-sm'
+                        : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
+                    }`}
                   >
-                    Evaluated Calls
+                    <span>Evaluated Calls</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        activeTab === 'calls'
+                          ? 'bg-zinc-700 text-white'
+                          : 'bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      {totalCallsCount || summary?.evaluatedCalls || calls.length}
+                    </span>
                   </button>
+
+                  {/* 2. Disputes Raised */}
                   <button
-                    onClick={() => handleTabChange('disputes')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${activeTab === 'disputes'
-                      ? 'bg-zinc-900 text-white font-bold'
-                      : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
-                      }`}
+                    onClick={() => {
+                      handleTabChange('disputes', 'raised');
+                      setExpandedDisputeId(null);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                      activeTab === 'disputes' && disputeTab === 'raised'
+                        ? 'bg-zinc-900 text-white font-bold shadow-sm'
+                        : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
+                    }`}
                   >
-                    <span>Disputes</span>
-                    {disputeRaisedCalls.length > 0 && (
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'disputes' ? 'bg-zinc-700 text-white' : 'bg-zinc-200 text-zinc-800'
-                        }`}>
+                    <span>Disputes Raised</span>
+                    {disputeRaisedCalls.length > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
                         {disputeRaisedCalls.length}
                       </span>
+                    ) : (
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          activeTab === 'disputes' && disputeTab === 'raised'
+                            ? 'bg-zinc-700 text-white'
+                            : 'bg-zinc-100 text-zinc-700'
+                        }`}
+                      >
+                        0
+                      </span>
                     )}
+                  </button>
+
+                  {/* 3. Disputes Reviewed */}
+                  <button
+                    onClick={() => {
+                      handleTabChange('disputes', 'reviewed');
+                      setExpandedDisputeId(null);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                      activeTab === 'disputes' && disputeTab === 'reviewed'
+                        ? 'bg-zinc-900 text-white font-bold shadow-sm'
+                        : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
+                    }`}
+                  >
+                    <span>Disputes Reviewed</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        activeTab === 'disputes' && disputeTab === 'reviewed'
+                          ? 'bg-zinc-700 text-white'
+                          : 'bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      {disputeReviewedCalls.length}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -1998,88 +2371,7 @@ export default function PcgCallsClient() {
 
 
 
-                  {/* ── 5. PROPER RM SCORECARD SECTION (FOR TL) ────────────────── */}
 
-                  {/* 5B. TL VIEW: RM-STYLE AGENT SCORECARDS GRID & AGENT-WISE ANALYTICS */}
-                  {activePersona === 'tl' && (
-                    <div className="space-y-4">
-
-
-                      {/* Agent-Wise Analytics Table (Matching Quality Console Table) */}
-                      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">Agent Wise Analytics</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              IQS, Pickup Rate, and performance per agent · Team {selectedTl} · {activeDateInfo.full}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="bg-gray-50/60 border-b border-gray-100 text-[#6B6B6B] font-semibold">
-                                <th className="py-3 px-4 text-left">RM Name</th>
-                                <th className="py-3 px-4 text-right">Calls Handled</th>
-                                <th className="py-3 px-4 text-right">RM Pickup Rate</th>
-                                <th className="py-3 px-4 text-right">Off-Hours Resp.</th>
-                                <th className="py-3 px-4 text-right">Avg IQS</th>
-                                <th className="py-3 px-4 text-center">Compliance</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {teamRmScorecards.length === 0 ? (
-                                <tr>
-                                  <td colSpan={6} className="py-8 text-center text-xs text-gray-500">
-                                    No RM call data recorded for Team {activeTlName || selectedTl} in this period.
-                                  </td>
-                                </tr>
-                              ) : (
-                                teamRmScorecards.map((rm: RmScorecard) => (
-                                  <tr key={rm.rmName} className="hover:bg-gray-50/50 transition-colors">
-                                    <td className="py-3 px-4 font-bold text-gray-900 flex items-center gap-2">
-                                      <span className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-800 flex items-center justify-center font-bold text-[11px]">
-                                        {rm.rmName.charAt(0)}
-                                      </span>
-                                      <span>{rm.rmName}</span>
-                                    </td>
-                                    <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">{rm.totalCalls}</td>
-                                    <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">
-                                      <span className="font-bold">{rm.rmPickupRate ?? 100}%</span>
-                                      <span className="block text-[10px] text-gray-400">
-                                        {rm.clientAnsweredCalls ?? 0} ans.
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">
-                                      {rm.offHoursClientTotal && rm.offHoursClientTotal > 0 ? (
-                                        <span>
-                                          <span className="font-semibold">{rm.offHoursPickupRate}%</span>
-                                          <span className="block text-[10px] text-gray-400">{rm.offHoursClientAnswered}/{rm.offHoursClientTotal}</span>
-                                        </span>
-                                      ) : (
-                                        <span className="text-gray-400 text-[11px]">N/A</span>
-                                      )}
-                                    </td>
-                                    <td className="py-3 px-4 text-right">
-                                      {getScoreBadge(rm.overallScore)}
-                                    </td>
-                                    <td className="py-3 px-4 text-center tabular-nums">
-                                      {rm.complianceFlags > 0 ? (
-                                        <span className="text-zinc-900 font-bold">{rm.complianceFlags} Flags</span>
-                                      ) : (
-                                        <span className="text-zinc-500 font-normal">0 Flags</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {/* 5C. ADMIN VIEW: ON-DEMAND OVERALL TEAM ANALYTICS, RM PERFORMANCE & AI COACHING */}
                   {activePersona === 'admin' && (
@@ -2541,24 +2833,44 @@ export default function PcgCallsClient() {
                         <div className="flex items-center gap-2.5 flex-wrap">
                           {/* Team Member filter strictly for Team Lead view (hidden for Admin) */}
                           {activePersona === 'tl' && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-[#71717A] font-medium">Team Member:</span>
-                              <select
-                                id="table-agent-filter"
-                                value={selectedRmName}
-                                onChange={(e) => {
-                                  setSelectedRmName(e.target.value);
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                id="tl-my-calls-toggle"
+                                onClick={() => {
+                                  setShowMyCallsOnly((prev) => !prev);
                                   setPage(1);
                                 }}
-                                className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs focus:border-[#111111] cursor-pointer"
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer border ${
+                                  showMyCallsOnly
+                                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs font-bold'
+                                    : 'bg-white text-zinc-700 border-[#E4E4E7] hover:bg-zinc-50 hover:text-zinc-900 shadow-2xs'
+                                }`}
                               >
-                                <option value="all">All Team Members</option>
-                                {availableRmsForTable.map((r: { name: string; count: number }) => (
-                                  <option key={r.name} value={r.name}>
-                                    {r.name}
-                                  </option>
-                                ))}
-                              </select>
+                                My calls
+                              </button>
+
+                              {!showMyCallsOnly && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-[#71717A] font-medium">Team Member:</span>
+                                  <select
+                                    id="table-agent-filter"
+                                    value={selectedRmName}
+                                    onChange={(e) => {
+                                      setSelectedRmName(e.target.value);
+                                      setPage(1);
+                                    }}
+                                    className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs focus:border-[#111111] cursor-pointer"
+                                  >
+                                    <option value="all">All Team Members</option>
+                                    {availableRmsForTable.map((r: { name: string; count: number }) => (
+                                      <option key={r.name} value={r.name}>
+                                        {r.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -2759,7 +3071,7 @@ export default function PcgCallsClient() {
                                           }}
                                           className="px-3 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1.5"
                                         >
-                                          <span>{isExpanded ? 'Hide' : activePersona === 'tl' ? 'Review' : 'View Details'}</span>
+                                          <span>{isExpanded ? 'Hide' : (activePersona === 'tl' && !showMyCallsOnly) ? 'Review' : 'View Details'}</span>
                                           <span className="text-[10px] opacity-70">
                                             {isExpanded ? '▲' : '▼'}
                                           </span>
@@ -2841,9 +3153,24 @@ export default function PcgCallsClient() {
                                           iqsScores={formatCallIqsScores(call)}
                                           initialSegments={formatCallSegments(call)}
                                           initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                                          mode={activePersona === 'tl' ? 'submit' : 'view'}
-                                          allowRaiseDispute={activePersona === 'agent'}
-                                          allowReevaluate={activePersona === 'tl'}
+                                          mode={activePersona === 'tl' && !showMyCallsOnly ? 'submit' : 'view'}
+                                          allowRaiseDispute={activePersona === 'agent' || (activePersona === 'tl' && showMyCallsOnly)}
+                                          allowReevaluate={activePersona === 'tl' && !showMyCallsOnly}
+                                          dispute={
+                                            call.disputeStatus && call.disputeStatus !== 'none'
+                                              ? {
+                                                  flagId: call.callId || call.id,
+                                                  agentName: call.rmName,
+                                                  agentNote: call.disputeReason,
+                                                  reviewNote: call.tlOverrideNote,
+                                                  raisedBy: (teamLeads.some(t => isSamePcgAgent(t.tlName, call.rmName)) || isPcgTl(call.rmName)) ? 'TL' : 'agent',
+                                                  raisedByRole: (teamLeads.some(t => isSamePcgAgent(t.tlName, call.rmName)) || isPcgTl(call.rmName)) ? 'tl' : 'agent',
+                                                  raisedByName: call.rmName,
+                                                  raisedAt: call.startTime,
+                                                  challengedParams: getCallChallengedParams(call),
+                                                }
+                                              : undefined
+                                          }
                                           colSpan={activePersona !== 'agent' ? 6 : 5}
                                           onDone={() => setExpandedCallId(null)}
                                           onClose={() => setExpandedCallId(null)}
@@ -2924,9 +3251,24 @@ export default function PcgCallsClient() {
                 iqsScores={formatCallIqsScores(activeCallAudit)}
                 initialSegments={formatCallSegments(activeCallAudit)}
                 initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(activeCallAudit.id)}`}
-                mode={activePersona === 'tl' ? 'submit' : 'view'}
-                allowRaiseDispute={activePersona === 'agent'}
-                allowReevaluate={activePersona === 'tl'}
+                mode={activePersona === 'tl' && !showMyCallsOnly ? 'submit' : 'view'}
+                allowRaiseDispute={activePersona === 'agent' || (activePersona === 'tl' && showMyCallsOnly)}
+                allowReevaluate={activePersona === 'tl' && !showMyCallsOnly}
+                dispute={
+                  activeCallAudit.disputeStatus && activeCallAudit.disputeStatus !== 'none'
+                    ? {
+                        flagId: activeCallAudit.callId || activeCallAudit.id,
+                        agentName: activeCallAudit.rmName,
+                        agentNote: activeCallAudit.disputeReason,
+                        reviewNote: activeCallAudit.tlOverrideNote,
+                        raisedBy: (teamLeads.some(t => isSamePcgAgent(t.tlName, activeCallAudit.rmName)) || isPcgTl(activeCallAudit.rmName)) ? 'TL' : 'agent',
+                        raisedByRole: (teamLeads.some(t => isSamePcgAgent(t.tlName, activeCallAudit.rmName)) || isPcgTl(activeCallAudit.rmName)) ? 'tl' : 'agent',
+                        raisedByName: activeCallAudit.rmName,
+                        raisedAt: activeCallAudit.startTime,
+                        challengedParams: getCallChallengedParams(activeCallAudit),
+                      }
+                    : undefined
+                }
                 onDone={handleCloseCallAudit}
                 onClose={handleCloseCallAudit}
                 onDisputeRaised={() => fetchData()}

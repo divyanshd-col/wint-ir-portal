@@ -47,6 +47,7 @@ export interface PortalConfig {
   pcgQualityPrompt?: string;
   pcgClassificationPrompt?: string;
   pcgTeamAssignments?: Record<string, string>;
+  pcgTlAdminAssignments?: Record<string, string>;
   // ── QA disposition mapping ───────────────────────────────────────────────
   qaDispositionMap?: QADispositionEntry[];
   // ── KB document display names (Drive ID → human-readable name) ──────────────

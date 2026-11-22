@@ -596,15 +596,74 @@ export default function CallEvalPanel({
       .finally(() => setLoading(false));
   }, [callId, initialSegments, initialRecordingUrl, durationSeconds]);
 
+  const effectiveChallengedParams = useMemo(() => {
+    if (dispute?.challengedParams && Array.isArray(dispute.challengedParams) && dispute.challengedParams.length > 0) {
+      return dispute.challengedParams;
+    }
+    const noteText = dispute?.agentNote || dispute?.disputeReason || '';
+    if (typeof noteText === 'string' && noteText.trim()) {
+      const raw = noteText.trim();
+      if (raw.startsWith('{') || raw.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(raw);
+          const list = Array.isArray(parsed) ? parsed : (parsed.challengedParams || parsed.params);
+          if (Array.isArray(list) && list.length > 0) {
+            return list.map((item: any) => ({
+              param: typeof item === 'string' ? item : (item.param || item.id || item.name || ''),
+              note: typeof item === 'object' ? (item.note || parsed.note || '') : '',
+            }));
+          }
+        } catch {}
+      }
+      const match = raw.match(/Parameters challenged:\s*([^.\n]+)/i);
+      if (match && match[1]) {
+        const paramNames = match[1].split(',').map((s: string) => s.trim()).filter(Boolean);
+        let extractedNote = '';
+        const noteMatch = raw.match(/Parameters challenged:\s*[^.\n]+\.?\s*([\s\S]*)/i);
+        if (noteMatch && noteMatch[1]) extractedNote = noteMatch[1].trim();
+        return paramNames.map((pName: string) => ({
+          param: pName,
+          note: extractedNote || 'Challenged parameter score.'
+        }));
+      }
+    }
+    return [];
+  }, [dispute]);
+
   const challengedMap = useMemo(() => {
     const map = new Map<string, string>();
-    if (dispute?.challengedParams && Array.isArray(dispute.challengedParams)) {
-      for (const cp of dispute.challengedParams) {
-        if (cp.param) map.set(cp.param, cp.note || '');
+    if (effectiveChallengedParams && Array.isArray(effectiveChallengedParams)) {
+      for (const cp of effectiveChallengedParams) {
+        if (!cp.param) continue;
+        const note = cp.note || '';
+        const raw = String(cp.param).trim();
+        map.set(raw, note);
+        map.set(raw.toLowerCase(), note);
+        map.set(raw.toLowerCase().replace(/[^a-z0-9]/g, ''), note);
+
+        // Also map through activeAliases
+        for (const [key, aliases] of Object.entries(activeAliases)) {
+          const keyClean = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const rawClean = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (
+            keyClean === rawClean ||
+            aliases.some(a => a.toLowerCase().replace(/[^a-z0-9]/g, '') === rawClean)
+          ) {
+            map.set(key, note);
+          }
+        }
+        // Also map through activeNames
+        for (const [key, name] of Object.entries(activeNames)) {
+          const nameClean = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const rawClean = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (nameClean === rawClean) {
+            map.set(key, note);
+          }
+        }
       }
     }
     return map;
-  }, [dispute]);
+  }, [effectiveChallengedParams, activeAliases, activeNames]);
 
   const handleScoreChange = (param: string, val: string) => {
     setHasUserEditedParams(true);
@@ -978,37 +1037,51 @@ export default function CallEvalPanel({
     background: 'var(--qa-card)',
     margin: '16px auto', boxSizing: 'border-box',
   };
-  const hasBanners = Boolean((dispute?.challengedParams && dispute.challengedParams.length > 0) || dispute?.flagId || raisingDispute);
+  const hasBanners = Boolean((effectiveChallengedParams && effectiveChallengedParams.length > 0) || dispute?.flagId || raisingDispute);
 
   const panelContent = (
     <>
       {hasBanners && (
         <div style={{ padding: '16px 16px 0' }}>
           {/* Disputed Params banner */}
-          {dispute?.challengedParams && dispute.challengedParams.length > 0 && (
+          {effectiveChallengedParams && effectiveChallengedParams.length > 0 && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
               <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)' }}>
                 Disputed Params:
               </span>
-              {dispute.challengedParams.map((cp: any) => (
-                <span
-                  key={cp.param}
-                  title={cp.note}
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: '0.02em',
-                    background: 'var(--qa-fill-light)',
-                    border: '1px solid var(--qa-border)',
-                    borderRadius: 4,
-                    padding: '2px 8px',
-                    color: 'var(--qa-text-2)',
-                    cursor: cp.note ? 'help' : 'default',
-                  }}
-                >
-                  {activeNames[cp.param] ? `${cp.param}: ${activeNames[cp.param]}` : cp.param}
-                </span>
-              ))}
+              {effectiveChallengedParams.map((cp: any) => {
+                const resolvedName = activeNames[cp.param] || (function () {
+                  const rawClean = String(cp.param).toLowerCase().replace(/[^a-z0-9]/g, '');
+                  for (const [k, v] of Object.entries(activeNames)) {
+                    if (k.toLowerCase().replace(/[^a-z0-9]/g, '') === rawClean) return v;
+                  }
+                  for (const [k, aliases] of Object.entries(activeAliases)) {
+                    if (aliases.some(a => a.toLowerCase().replace(/[^a-z0-9]/g, '') === rawClean)) {
+                      return activeNames[k] || k;
+                    }
+                  }
+                  return cp.param;
+                })();
+                return (
+                  <span
+                    key={cp.param}
+                    title={cp.note}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      letterSpacing: '0.02em',
+                      background: 'var(--qa-fill-light)',
+                      border: '1px solid var(--qa-border)',
+                      borderRadius: 4,
+                      padding: '2px 8px',
+                      color: 'var(--qa-text-2)',
+                      cursor: cp.note ? 'help' : 'default',
+                    }}
+                  >
+                    {resolvedName && resolvedName !== cp.param ? `${cp.param}: ${resolvedName}` : cp.param}
+                  </span>
+                );
+              })}
             </div>
           )}
 
@@ -1568,7 +1641,7 @@ export default function CallEvalPanel({
 
                           {isChallenged && (
                             <div style={{ margin: '4px 0', padding: '4px 6px', background: 'var(--sunk)', border: '1px solid var(--line-strong)', borderRadius: 4, fontSize: 11, color: 'var(--qa-text)' }}>
-                              <strong>Challenged by Agent:</strong> {challengedNote || 'No specific note'}
+                              <strong>Challenged by {dispute?.raisedByRole === 'tl' || dispute?.raisedBy === 'TL' ? 'Team Lead' : 'Agent'}:</strong> {challengedNote || 'No specific note'}
                             </div>
                           )}
 
@@ -1648,7 +1721,7 @@ export default function CallEvalPanel({
 
                       {isChallenged && (
                         <div style={{ margin: '4px 0', padding: '4px 6px', background: 'var(--sunk)', border: '1px solid var(--line-strong)', borderRadius: 4, fontSize: 11, color: 'var(--qa-text)' }}>
-                          <strong>Challenged by Agent:</strong> {challengedNote || 'No specific note'}
+                          <strong>Challenged by {dispute?.raisedByRole === 'tl' || dispute?.raisedBy === 'TL' ? 'Team Lead' : 'Agent'}:</strong> {challengedNote || 'No specific note'}
                         </div>
                       )}
 
