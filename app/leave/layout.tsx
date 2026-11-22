@@ -7,7 +7,7 @@ export default async function LeaveLayout({ children }: { children: React.ReactN
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
   return (
-    <div style={{ background: 'var(--page-bg)', minHeight: 'calc(100vh - var(--topbar-h))' }}>
+    <div style={{ background: 'var(--page-bg)', minHeight: 'calc(var(--vh100) - var(--topbar-h))' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto', width: '100%' }}>{children}</div>
     </div>
   );

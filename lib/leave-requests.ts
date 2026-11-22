@@ -184,6 +184,16 @@ export interface ReqRow {
 const REQ_COLS = `leave_id, user_id, type, status, applied_at, reason, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date,
   start_half, end_half, with_level, with_since, reject_code, reject_note, cancel_deadline, holds_spot, sent_to_tl, window_ends_at, stretch_days`;
 
+/**
+ * Lock order, everywhere: the advisory decision lock, then the applicant's users row, then the request row.
+ * Cancel, edit, send-to-TL and apply already take the users row first. The sweep and a decision used to take the request row
+ * first and then needed the users row for the foreign-key check on the ledger and notifications, so a cancel racing them
+ * could deadlock. Call this before locking a request in any path that writes for it.
+ */
+async function lockApplicant(db: Db, leaveId: string): Promise<void> {
+  await db.query(`SELECT 1 FROM users WHERE user_id = (SELECT user_id FROM leave_requests WHERE leave_id = $1) FOR UPDATE`, [leaveId]);
+}
+
 export async function getRequest(db: Db, leaveId: string, lock = false): Promise<ReqRow | null> {
   const r = await db.query<ReqRow>(`SELECT ${REQ_COLS} FROM leave_requests WHERE leave_id = $1${lock ? ' FOR UPDATE' : ''}`, [leaveId]);
   return r[0] ?? null;
@@ -276,6 +286,7 @@ export async function sendToTl(db: Db, leaveId: string, userId: number): Promise
 
 /** Decides a request whose 5 minutes are up, in the order it was made. */
 async function finalizeOne(db: Db, leaveId: string): Promise<void> {
+  await lockApplicant(db, leaveId);
   const r = await getRequest(db, leaveId, true);
   if (!r || r.status !== 'In process' || !r.window_ends_at || new Date(r.window_ends_at) > new Date()) return;
   const person = await loadPerson(db, r.user_id);
@@ -346,6 +357,7 @@ export async function sweepDue(withTx: <T>(fn: (tx: Db) => Promise<T>) => Promis
   const expired = await plain.query<{ leave_id: string; user_id: number }>(`SELECT leave_id, user_id FROM leave_requests WHERE status = 'Auto-rejected' AND cancel_deadline < NOW()`);
   for (const e of expired) {
     await withTx(async tx => {
+      await lockApplicant(tx, e.leave_id);
       const r = await getRequest(tx, e.leave_id, true);
       if (!r || r.status !== 'Auto-rejected') return;
       await cancelLines(tx, e.leave_id);
@@ -397,6 +409,7 @@ export async function decideRequest(db: Db, leaveId: string, who: Approver, acti
   if (!reason.trim()) throw new HttpError(400, 'A reason is required.');
   if (reasonTooLong(reason.trim())) throw new HttpError(400, reasonTooLong(reason.trim())!);
   await db.query(`SELECT pg_advisory_xact_lock(727001)`);
+  await lockApplicant(db, leaveId);
   const r = await getRequest(db, leaveId, true);
   if (!r) throw new HttpError(404, 'Request not found.');
   if (r.status !== 'Pending for approval') throw new HttpError(409, 'This request changed, please refresh.');
