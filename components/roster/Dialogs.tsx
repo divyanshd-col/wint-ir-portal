@@ -85,20 +85,20 @@ function RecalcPanel({ st, title }: { st: PreviewState; title: string }) {
 
 /** Create (edit=undefined) or edit a scheduled roster type change. The rotation continues from the chosen type. */
 export function PatternDialog({ person, patterns, today, edit, onClose, onDone }: { person: Person; patterns: Pattern[]; today: string; edit?: Scheduled; onClose: () => void; onDone: (msg: string) => void }) {
-  const [to, setTo] = useState(edit?.to_pattern ?? patterns[0]?.id ?? 1);
+  const [to, setTo] = useState<number | null>(edit?.to_pattern ?? null); // nothing preselected on a new change: the rotation may already put them on that type
   const [start, setStart] = useState(edit?.starts_on ?? nextMonday(today));
   const [reason, setReason] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const n = patterns.filter(p => p.rotates !== false).length || 4;
   const rotates = (patterns.find(p => p.id === to)?.rotates) !== false;
-  const order = Array.from({ length: n }, (_, i) => ((to - 1 + i) % n) + 1);
+  const order = to === null ? [] : Array.from({ length: n }, (_, i) => ((to - 1 + i) % n) + 1);
   const mondayErr = start && !isMonday(start) ? 'The rotation moves on Mondays. Pick a Monday.' : null;
-  const inputsOk = start > today && isMonday(start);
+  const inputsOk = to !== null && start > today && isMonday(start);
   const { st, refresh } = usePreview(inputsOk ? (edit ? { kind: 'edit', id: edit.id, toPattern: to, start } : { kind: 'create', userId: person.userId, toPattern: to, start }) : null);
   const valid = reason.trim() && inputsOk && st.s === 'ok';
   const save = async () => {
-    if (st.s !== 'ok') return;
+    if (st.s !== 'ok' || to === null) return;
     setBusy(true);
     const e = edit
       ? await send(`/api/roster/assignments/${edit.id}`, 'PATCH', { toPattern: to, start, reason, expectedUpdatedAt: edit.updated_at, expectedFingerprint: st.p.fingerprint })
@@ -122,7 +122,7 @@ export function PatternDialog({ person, patterns, today, edit, onClose, onDone }
       <Field label="Starts on (a Monday)" help={mondayErr ?? 'Tomorrow at the earliest. Past days never change. It can be edited or cancelled until it starts.'}>
         <input type="date" className={inputCls} style={{ width: 220 }} min={nextMonday(today)} value={start} onChange={e => { setStart(e.target.value); setErr(null); }} />
       </Field>
-      <Banner kind="info">{rotates ? <>From that Monday they follow the rotation: {order.map(t => `Type ${t}`).join(' → ')} → Type {order[0]} again, moving on every Monday.</> : <>From that Monday they work Monday to Friday every week, with no rotation.</>} {person.name.split(' ')[0]} isn’t sent a message. The change shows in the roster and their Statement.</Banner>
+      <Banner kind="info">{to === null ? <>Pick the type they should be on in the week they start.</> : rotates ? <>From that Monday they follow the rotation: {order.map(t => `Type ${t}`).join(' → ')} → Type {order[0]} again, moving on every Monday.</> : <>From that Monday they work Monday to Friday every week, with no rotation.</>} {person.name.split(' ')[0]} isn’t sent a message. The change shows in the roster and their Statement.</Banner>
       <RecalcPanel st={st} title="Leave that will be recalculated" />
       <Field label="Reason" help={reason.trim() ? null : 'Required. The button stays off until it’s filled.'}>
         <textarea className={inputCls} placeholder="Write your reason" value={reason} onChange={e => setReason(e.target.value)} />

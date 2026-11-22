@@ -4,6 +4,8 @@ import { requireSkillCheck } from '@/lib/api-guard';
 import { getSkillsForPersona } from '@/lib/skills';
 import { withRosterErrors } from '@/lib/roster-server';
 import { isCxDomain } from '@/lib/roster';
+import type { ApplyInput } from '@/lib/leave-requests';
+import type { Half } from '@/lib/leave';
 
 export type LeaveSkill = 'leave:use:access' | 'leave:approve:access';
 export interface LeaveActor { userId: number; role: string; name: string; email: string; can: { use: boolean; approve: boolean } }
@@ -21,6 +23,12 @@ export async function leaveActor(skill: LeaveSkill | LeaveSkill[]): Promise<{ ac
   const skills = user.skills ?? await getSkillsForPersona(rows[0].role);
   const has = (s: string) => rows[0].role === 'admin' || skills.includes(s);
   return { actor: { userId: rows[0].user_id, role: rows[0].role, name: rows[0].name, email, can: { use: has('leave:use:access') && ['agent', 'tl', 'quality'].includes(rows[0].role), approve: has('leave:approve:access') && ['tl', 'admin'].includes(rows[0].role) } }, response: null };
+}
+
+/** The apply form body. Dates must be real strings (an array or object must not pass as one); a missing end means one day. */
+export function applyInputFrom(b: Record<string, unknown>): ApplyInput {
+  const text = (v: unknown) => (typeof v === 'string' ? v : '');
+  return { start: text(b.start), startHalf: (b.startHalf ?? 'full') as Half, end: b.end === undefined || b.end === null ? text(b.start) : text(b.end), endHalf: (b.endHalf ?? 'full') as Half };
 }
 
 export const MISSING = 'Leave tables are missing. Run migrations 038 and 039 on this database.';

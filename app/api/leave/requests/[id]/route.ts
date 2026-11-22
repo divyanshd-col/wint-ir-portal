@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, withTransaction } from '@/lib/cx/db';
-import { leaveActor, withLeaveErrors } from '@/lib/leave-api';
+import { applyInputFrom, leaveActor, withLeaveErrors } from '@/lib/leave-api';
+import { cleanText } from '@/lib/roster';
 import { HttpError } from '@/lib/roster-server';
-import { cancelRequest, editRequest, sendToTl, sweepDue, type ApplyInput } from '@/lib/leave-requests';
+import { cancelRequest, editRequest, sendToTl, sweepDue } from '@/lib/leave-requests';
 import { requestDetail } from '@/lib/leave-views';
 
 /** One request with its timeline and day-by-day lines. The person it belongs to, their TL, or an admin. */
@@ -21,9 +22,9 @@ const PATCH_ = async (req: NextRequest, ctx: { params: Promise<{ id: string }> }
   const { actor, response } = await leaveActor('leave:use:access');
   if (response) return response;
   const b = await req.json().catch(() => ({}));
-  const input: ApplyInput = { start: String(b.start ?? ''), startHalf: b.startHalf ?? 'full', end: String(b.end ?? b.start ?? ''), endHalf: b.endHalf ?? 'full' };
+  const input = applyInputFrom(b);
   const id = (await ctx.params).id;
-  await withTransaction(tx => editRequest(tx, id, actor.userId, input, String(b.reason ?? '')));
+  await withTransaction(tx => editRequest(tx, id, actor.userId, input, cleanText(b.reason)));
   return NextResponse.json({ ok: true });
 };
 export const PATCH = withLeaveErrors(PATCH_);

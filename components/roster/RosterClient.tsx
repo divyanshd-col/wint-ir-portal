@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { canGoPrev, shiftAnchor, type RosterView } from '@/lib/roster';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { canGoPrev, filterPeople, NO_FILTER, shiftAnchor, type RosterFilter, type RosterView } from '@/lib/roster';
 import { fmtQ } from '@/lib/leave';
+import RosterFilters, { validFilter } from './RosterFilters';
 import { CancelDialog, MarkExtraDialog, PatternDialog, StatementDialog, TeamLeadDialog } from './Dialogs';
 import { Avatar, EmptyState, Switch, btnSecondary, dayNum, roleLabel, fmtDay, fmtMonth, fmtShort, offShort, wdOf, type Person, type RosterData, type Scheduled } from './ui';
 
@@ -10,6 +11,7 @@ type Tab = 'grid' | 'scheduled' | 'channels' | 'teams';
 type Dlg = { t: 'pattern'; p: Person; edit?: Scheduled } | { t: 'mark'; p: Person } | { t: 'cancel'; s: Scheduled } | { t: 'tl'; p: Person; tl: Person } | { t: 'statement'; p: Person } | null;
 const CHANNELS = ['Chats', 'Calls', 'Emails', 'ORM'];
 const card: React.CSSProperties = { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 12, overflow: 'hidden' };
+const cardScroll: React.CSSProperties = { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 12, overflowX: 'auto' }; // not card + overflowX: React warns about mixing overflow and overflowX
 
 export default function RosterClient() {
   const [data, setData] = useState<RosterData | null>(null);
@@ -19,6 +21,7 @@ export default function RosterClient() {
   const [tab, setTab] = useState<Tab>('grid');
   const [dlg, setDlg] = useState<Dlg>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [filter, setFilter] = useState<RosterFilter>(NO_FILTER);
 
   const load = useCallback(async (v: RosterView, a: string | null) => {
     try {
@@ -44,6 +47,8 @@ export default function RosterClient() {
   const done = (msg: string) => { setDlg(null); setToast(msg); reload(); };
   const step = (dir: -1 | 1) => { if (anchor) load(view, shiftAnchor(view, anchor, dir)); };
   const anyEdit = !!data?.people.some(p => p.canEdit);
+  const activeFilter = useMemo(() => data ? validFilter(filter, data.people) : filter, [data, filter]);
+  const shown = useMemo(() => data ? filterPeople(data.people, activeFilter) : [], [data, activeFilter]);
   const pat = (id: number | null) => data?.patterns.find(p => p.id === id);
   const tname = (id: number | null) => id === null ? '–' : pat(id)?.rotates === false ? 'Fixed' : `Type ${id}`;
 
@@ -68,7 +73,7 @@ export default function RosterClient() {
     const title = data.view === 'day' ? fmtDay(data.days[0]) : data.view === 'week' ? `${fmtShort(data.days[0])} – ${fmtDay(data.days[6])}` : fmtMonth(data.anchor);
     const seg = (v: RosterView, label: string) => (
       <button key={v} type="button" aria-pressed={data.view === v} onClick={() => changeView(v)}
-        style={{ padding: '5px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 0, borderLeft: v === 'day' ? 0 : '1px solid var(--qa-border)', background: data.view === v ? 'var(--qa-text)' : 'var(--qa-card)', color: data.view === v ? 'var(--qa-on-text)' : 'var(--qa-text-2)' }}>{label}</button>);
+        style={{ padding: '5px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer', borderStyle: 'solid', borderColor: 'var(--qa-border)', borderWidth: v === 'day' ? 0 : '0 0 0 1px', background: data.view === v ? 'var(--qa-text)' : 'var(--qa-card)', color: data.view === v ? 'var(--qa-on-text)' : 'var(--qa-text-2)' }}>{label}</button>);
     const toolbar = (
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -82,20 +87,22 @@ export default function RosterClient() {
           <div role="group" aria-label="Calendar view" style={{ display: 'inline-flex', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>{seg('day', 'Day')}{seg('week', 'Week')}{seg('month', 'Month')}</div>
         </div>
       </div>);
+    const filters = <RosterFilters people={data.people} patterns={data.patterns} view={data.view} leaveReady={data.leaveReady} value={activeFilter} onChange={setFilter} shown={shown.length} />;
+    const noMatch = <div style={card}><EmptyState title="No one matches these filters" body="Try a different search or clear the filters." /><div style={{ textAlign: 'center', paddingBottom: 24 }}><button type="button" style={btnSecondary} onClick={() => setFilter(NO_FILTER)}>Clear filters</button></div></div>;
 
     if (data.view === 'month') {
       const isLeave = (c: string) => c === 'leave' || c === 'leave-half' || c === 'lop' || c === 'lop-half';
-      const byDay = (i: number) => ({ off: data.people.filter(p => p.cells[i] === 'off'), extra: data.people.filter(p => p.cells[i] === 'extra'), leave: data.people.filter(p => isLeave(p.cells[i])) });
+      const byDay = (i: number) => ({ off: shown.filter(p => p.cells[i] === 'off'), extra: shown.filter(p => p.cells[i] === 'extra'), leave: shown.filter(p => isLeave(p.cells[i])) });
       const first = data.anchor.slice(0, 7);
-      body = (<>{toolbar}
-        <div style={card}>
+      body = (<>{toolbar}{filters}
+        {shown.length === 0 ? noMatch : <div style={card}>
           <div className="roster-month">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => <div key={w} className="roster-month-h">{w}</div>)}
             {data.days.map((d, i) => {
               const { off, extra, leave } = byDay(i);
               const holiday = data.holidays.find(h => h.day === d)?.name;
               const inMonth = d.slice(0, 7) === first;
-              const none = data.people.every(p => p.cells[i] === 'none');
+              const none = shown.every(p => p.cells[i] === 'none');
               const chips = [...extra.map(p => ({ p, k: 'extra' })), ...leave.map(p => ({ p, k: 'leave' })), ...off.map(p => ({ p, k: 'off' }))];
               return (
                 <button key={d} type="button" disabled={none} className={`roster-month-c${inMonth ? '' : ' out'}${d === data.today ? ' today' : ''}`} onClick={() => load('day', d)} aria-label={`${fmtDay(d)}: ${off.length} week-off, ${leave.length} on leave, ${extra.length} extra day${holiday ? `, ${holiday}` : ''}`}>
@@ -105,19 +112,19 @@ export default function RosterClient() {
                 </button>);
             })}
           </div>
-        </div></>);
+        </div>}</>);
     } else {
       const isDay = data.view === 'day';
       const groups = new Map<string, Person[]>();
-      for (const p of data.people) { const k = p.tlName ?? ''; groups.set(k, [...(groups.get(k) ?? []), p]); }
+      for (const p of shown) { const k = p.tlName ?? ''; groups.set(k, [...(groups.get(k) ?? []), p]); }
       const order = [...groups.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)));
-      const showBalance = data.people.some(p => p.balance !== null);
+      const showBalance = data.people.some(p => p.balance !== null); // whole list, so columns do not jump while filtering
       const cols = 2 + data.days.length + (showBalance ? 1 : 0) + (anyEdit ? 1 : 0);
       const hol = (d: string) => data.holidays.find(h => h.day === d)?.name;
       const label = (c: string, d: string) => ({ off: 'Week-off', extra: 'Extra day worked', none: '', leave: 'Leave', 'leave-half': 'Half-day leave', lop: 'LOP', 'lop-half': 'Half-day LOP', hol: `Holiday${hol(d) ? `: ${hol(d)}` : ''}`, work: 'Working' } as Record<string, string>)[c] ?? '';
       const short = (c: string) => ({ off: 'Off', extra: 'Extra', leave: 'Leave', 'leave-half': '½ L', lop: 'LOP', 'lop-half': '½ LOP', hol: 'Hol' } as Record<string, string>)[c] ?? '';
-      body = (<>{toolbar}
-        <div style={{ ...card, overflowX: 'auto' }}>
+      body = (<>{toolbar}{filters}
+        {shown.length === 0 ? noMatch : <div style={cardScroll}>
           <table className="roster-tbl" style={{ minWidth: isDay ? 640 : 760 }}>
             <thead><tr><th style={{ width: 200 }}>Person</th><th style={{ width: 150 }}>Roster type</th>
               {data.days.map(d => <th key={d} className={`rc${d === data.today ? ' today' : ''}`}>{isDay ? 'Status' : <><div>{wdOf(d)}</div><div>{fmtShort(d)}</div></>}</th>)}
@@ -136,7 +143,7 @@ export default function RosterClient() {
                   </tr>))}
               </React.Fragment>))}</tbody>
           </table>
-        </div></>);
+        </div>}</>);
     }
   } else if (tab === 'scheduled') {
     body = data.scheduled.length === 0

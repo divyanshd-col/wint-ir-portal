@@ -15,7 +15,12 @@ export function addDays(iso: string, n: number): string {
 export function weekday(iso: string): number {
   return new Date(iso + 'T00:00:00Z').getUTCDay();
 }
-export const isIsoDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
+/** A real calendar date as YYYY-MM-DD. 2027-02-30 is not one (a parser would quietly roll it to 2 March, and the database would then refuse it). */
+export const isIsoDate = (s: unknown): s is string => {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const t = Date.parse(s + 'T00:00:00Z');
+  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
+};
 
 /** 11:59 pm IST on an IST calendar date, as a real instant. */
 export function endOfDayIST(iso: string): Date {

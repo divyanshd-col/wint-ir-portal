@@ -4,6 +4,7 @@ import { rosterActor, assertCanEdit, withRosterErrors } from '@/lib/roster-serve
 import { planMutation, scheduledRow, type Mutation } from '@/lib/leave-server';
 import { fmtQ } from '@/lib/leave';
 import { todayIST, isIsoDate } from '@/lib/ist';
+import { asId } from '@/lib/roster';
 
 /**
  * What a change would do to the person's leave, without saving anything.
@@ -16,16 +17,18 @@ const POST_ = async (req: NextRequest) => {
   const today = todayIST();
   let userId: number, m: Mutation;
   if (b.kind === 'create') {
-    userId = Number(b.userId);
-    if (!Number.isInteger(userId) || !Number.isInteger(Number(b.toPattern)) || !isIsoDate(b.start)) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
-    m = { kind: 'create', toPattern: Number(b.toPattern), start: b.start };
+    const uid = asId(b.userId), to = asId(b.toPattern);
+    if (uid === null || to === null || !isIsoDate(b.start)) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
+    userId = uid; m = { kind: 'create', toPattern: to, start: b.start };
   } else if (b.kind === 'edit' || b.kind === 'cancel') {
-    const row = await scheduledRow({ query }, Number(b.id), today);
+    const sid = asId(b.id);
+    const row = sid === null ? null : await scheduledRow({ query }, sid, today);
     if (!row) return NextResponse.json({ error: 'This change has already started or was cancelled.' }, { status: 404 });
     userId = row.user_id;
     if (b.kind === 'edit') {
-      if (!Number.isInteger(Number(b.toPattern)) || !isIsoDate(b.start)) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
-      m = { kind: 'edit', id: row.id, toPattern: Number(b.toPattern), start: b.start };
+      const to = asId(b.toPattern);
+      if (to === null || !isIsoDate(b.start)) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
+      m = { kind: 'edit', id: row.id, toPattern: to, start: b.start };
     } else m = { kind: 'cancel', id: row.id };
   } else return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   const denied = await assertCanEdit(actor, userId, today);

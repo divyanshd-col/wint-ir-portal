@@ -389,6 +389,14 @@ tr[data-row-click] { cursor: pointer; }
 .qfilters .qf-label { font-size: 12px; color: var(--qa-text-3); }
 .qfilters .qf-group { display: inline-flex; align-items: center; gap: 8px; }
 .qfilters select { max-width: 220px; }
+.qfilters.roster-filters select.qf-on, .qfilters.roster-filters input.qf-on { border-color: var(--qa-gray-700) !important; }
+.qfilters .qf-search { position: relative; display: inline-flex; align-items: center; }
+.qfilters .qf-search svg { position: absolute; left: 10px; color: var(--qa-text-3); pointer-events: none; }
+.qfilters .qf-search input:not([type="checkbox"]):not([type="radio"]) { width: 200px; padding-left: 30px !important; padding-right: 26px !important; }
+.qfilters .qf-search .qf-x { position: absolute; right: 4px; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--qa-text-3); font-size: 16px; line-height: 1; cursor: pointer; }
+.qfilters .qf-search .qf-x:hover { background: var(--qa-fill-light); color: var(--qa-text); }
+.qfilters.roster-filters select { max-width: 190px; }
+.qfilters.roster-filters .qf-chip:focus-visible, .qfilters.roster-filters select:focus-visible, .qfilters.roster-filters input:focus-visible, .qfilters.roster-filters .qf-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .quality-shell-sidebar-link { white-space: nowrap; }
 
 /* Chat / ticket ID link chip: identical in every queue and panel. */

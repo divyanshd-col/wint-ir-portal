@@ -43,7 +43,7 @@ const GET_ = async (req: NextRequest) => {
 
   const tlByUser = new Map(lines.map(l => [l.user_id, l.tl_user_id]));
   const nameById = new Map(people.map(p => [p.user_id, p.name]));
-  const canEdit = (uid: number) => actor.role === 'admin' || (actor.role === 'tl' && uid !== actor.userId && tlByUser.get(uid) === actor.userId);
+  const canEdit = (uid: number) => actor.canManage && (actor.role === 'admin' || (actor.role === 'tl' && uid !== actor.userId && tlByUser.get(uid) === actor.userId));
 
   const rows = people.map(p => {
     const a = assigns.filter(x => x.user_id === p.user_id);
@@ -62,7 +62,7 @@ const GET_ = async (req: NextRequest) => {
   const scheduledOut = (scheduled as { id: number; user_id: number; starts_on: string }[]).map(s => {
     // the type they'd be on that week without this change (the rotation carries on from their other row)
     const cur = patternOn(assigns.filter(x => x.user_id === s.user_id && x.id !== s.id), s.starts_on, cycleOf(patterns));
-    return { ...s, from_pattern: cur, name: nameById.get(s.user_id) ?? '', canEdit: canEdit(s.user_id) };
+    return { ...s, id: Number(s.id), from_pattern: cur, name: nameById.get(s.user_id) ?? '', canEdit: canEdit(s.user_id) };
   });
   return NextResponse.json({ today, view, anchor, days, patterns, people: rows, scheduled: scheduledOut, holidays: holidayRows, leaveReady: hasLeave, viewer: actor });
 }

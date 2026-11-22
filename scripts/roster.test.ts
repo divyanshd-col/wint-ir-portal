@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMissingTable } from '../lib/roster-server';
-import { todayIST, toIstDate } from '../lib/ist';
-import { extraDayNote, validateReportingLine, patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, cycleOf, ROSTER_START, canEditTarget, isCxDomain, validateNewChange, validateExtraDay, type Pattern, type Assignment } from '../lib/roster';
+import { todayIST, toIstDate, isIsoDate } from '../lib/ist';
+import { extraDayNote, validateReportingLine, patternOn, cellKind, mondayOf, clampAnchor, periodDays, shiftAnchor, canGoPrev, cycleOf, ROSTER_START, canEditTarget, isCxDomain, validateNewChange, validateExtraDay, filterPeople, isFiltered, NO_FILTER, asId, cleanText, reasonTooLong, REASON_MAX, MAX_AHEAD_DAYS, type FilterRow, type Pattern, type Assignment } from '../lib/roster';
 
 const P: Pattern[] = [
   { id: 1, label: 'Saturday and Sunday off', off_weekdays: [6, 0] },
@@ -217,4 +217,96 @@ test('team lead change - admin rules: reason, never your own record, agents only
   assert.match(validateReportingLine({ ...ok, personRole: 'tl' })!, /Only agents/);
   assert.match(validateReportingLine({ ...ok, tlRole: 'agent' })!, /Pick a team lead/);
   assert.ok(validateReportingLine({ ...ok, tlUserId: 2 }));
+});
+
+// ---- calendar filters ----
+const people: FilterRow[] = [
+  { name: 'Kashvi Sethi',   role: 'agent',   tlUserId: 1,    pattern: 3,    cells: ['work', 'off', 'off', 'work', 'work', 'work', 'work'] },
+  { name: 'Rhythum Singhal', role: 'agent',  tlUserId: 1,    pattern: 1,    cells: ['work', 'work', 'work', 'work', 'work', 'off', 'off'] },
+  { name: 'Anjali',          role: 'agent',  tlUserId: 2,    pattern: 3,    cells: ['leave', 'leave-half', 'work', 'work', 'work', 'work', 'work'] },
+  { name: 'Harsh',           role: 'tl',     tlUserId: null, pattern: 4,    cells: ['off', 'work', 'work', 'work', 'work', 'work', 'off'] },
+  { name: 'Isna Rizvi',      role: 'quality', tlUserId: null, pattern: 2,   cells: ['work', 'work', 'work', 'off', 'off', 'work', 'work'] },
+  { name: 'Zed Extra',       role: 'agent',  tlUserId: null, pattern: null, cells: ['none', 'none', 'none', 'none', 'none', 'none', 'none'] },
+  { name: 'Priya Dhawan',    role: 'agent',  tlUserId: 2,    pattern: 2,    cells: ['lop', 'work', 'extra', 'hol', 'work', 'work', 'work'] },
+];
+const names = (f: Partial<typeof NO_FILTER>) => filterPeople(people, { ...NO_FILTER, ...f }).map(p => p.name);
+
+test('filters - no filter returns everyone, in order', () => {
+  assert.equal(names({}).length, people.length);
+  assert.equal(isFiltered(NO_FILTER), false);
+  assert.equal(isFiltered({ ...NO_FILTER, q: '  ' }), false); // spaces alone are not a filter
+  assert.equal(isFiltered({ ...NO_FILTER, role: 'tl' }), true);
+});
+test('filters - search matches every word anywhere in the name, ignoring case and extra spaces', () => {
+  assert.deepEqual(names({ q: 'kash' }), ['Kashvi Sethi']);
+  assert.deepEqual(names({ q: '  SETHI  kashvi ' }), ['Kashvi Sethi']);   // any order, any case
+  assert.deepEqual(names({ q: 'h' }), ['Kashvi Sethi', 'Rhythum Singhal', 'Harsh', 'Priya Dhawan']);   // a single letter matches anywhere in the name
+  assert.deepEqual(names({ q: 'nobody' }), []);
+  assert.deepEqual(names({ q: 'a.' }), []);   // not a regex, "." is just a character
+});
+test('filters - team: a team lead, or nobody assigned', () => {
+  assert.deepEqual(names({ team: '1' }), ['Kashvi Sethi', 'Rhythum Singhal']);
+  assert.deepEqual(names({ team: '2' }), ['Anjali', 'Priya Dhawan']);
+  assert.deepEqual(names({ team: 'none' }), ['Harsh', 'Isna Rizvi', 'Zed Extra']);
+  assert.deepEqual(names({ team: '99' }), []);
+});
+test('filters - roster type, including people with no type yet', () => {
+  assert.deepEqual(names({ type: '3' }), ['Kashvi Sethi', 'Anjali']);
+  assert.deepEqual(names({ type: 'unset' }), ['Zed Extra']);
+  assert.deepEqual(names({ type: '5' }), []);
+});
+test('filters - role', () => {
+  assert.deepEqual(names({ role: 'tl' }), ['Harsh']);
+  assert.deepEqual(names({ role: 'quality' }), ['Isna Rizvi']);
+  assert.deepEqual(names({ role: 'admin' }), []);
+});
+test('filters - status looks at the days on screen, leave includes LOP and half days, no type never matches', () => {
+  assert.deepEqual(names({ status: 'off' }), ['Kashvi Sethi', 'Rhythum Singhal', 'Harsh', 'Isna Rizvi']);
+  assert.deepEqual(names({ status: 'leave' }), ['Anjali', 'Priya Dhawan']);   // leave, half-day leave and LOP
+  assert.deepEqual(names({ status: 'extra' }), ['Priya Dhawan']);
+  assert.deepEqual(names({ status: 'hol' }), ['Priya Dhawan']);
+  assert.ok(!names({ status: 'working' }).includes('Zed Extra'));
+  assert.deepEqual(names({ status: 'bogus' }), []);   // an unknown status shows nobody rather than everybody
+});
+test('filters - combine with AND', () => {
+  assert.deepEqual(names({ team: '2', status: 'leave' }), ['Anjali', 'Priya Dhawan']);
+  assert.deepEqual(names({ team: '2', type: '3' }), ['Anjali']);
+  assert.deepEqual(names({ team: '1', role: 'tl' }), []);
+  assert.deepEqual(names({ q: 'priya', team: '2', type: '2', role: 'agent', status: 'extra' }), ['Priya Dhawan']);
+});
+
+// ---- input hardening ----
+test('asId - only real positive whole ids pass; null, true, [], empty and junk do not', () => {
+  for (const ok of [1, 42, '7', '0012', 999999999999999]) assert.ok(asId(ok) !== null, `${String(ok)} is an id`);
+  assert.equal(asId('0012'), 12);
+  for (const bad of [null, undefined, true, false, [], [5], {}, '', ' ', 'abc', '1.5', 1.5, 0, '0', -1, '-1', NaN, Infinity, '1e3', ' 5', '5 ', '1;DROP', '99999999999999999999', 2 ** 60, '٣'])
+    assert.equal(asId(bad), null, `${String(bad)} is not an id`);
+});
+test('cleanText - only strings count as text, an object never becomes "[object Object]"', () => {
+  assert.equal(cleanText('  hello \n'), 'hello');
+  for (const bad of [null, undefined, 5, true, {}, [], ['a']]) assert.equal(cleanText(bad), '');
+});
+test('reasons - capped at 500 characters on every roster action', () => {
+  assert.equal(reasonTooLong('x'.repeat(REASON_MAX)), null);
+  assert.ok(reasonTooLong('x'.repeat(REASON_MAX + 1)));
+  const long = 'x'.repeat(REASON_MAX + 1);
+  assert.match(validateNewChange({ today: '2026-11-22', start: '2026-11-30', reason: long, toPattern: 2, current: 1, hasFuture: false }) ?? '', /under 500/);
+  assert.match(validateExtraDay({ today: '2026-11-22', day: '2026-11-21', isWeekOff: true, hasActive: false, reason: long }) ?? '', /under 500/);
+  assert.match(validateReportingLine({ actorUserId: 1, userId: 2, tlUserId: 3, reason: long, personRole: 'agent', tlRole: 'tl' }) ?? '', /under 500/);
+});
+test('scheduling - a change can start at most 12 months ahead', () => {
+  const base = { today: '2026-11-22', reason: 'r', toPattern: 2, current: 1, hasFuture: false };
+  assert.equal(validateNewChange({ ...base, start: '2027-11-22' }), null); // exactly 365 days ahead and a Monday: still allowed
+  assert.match(validateNewChange({ ...base, start: '2027-11-29' }) ?? '', /12 months ahead/);
+  const lastMonday = (() => { let d = addDaysT(base.today, MAX_AHEAD_DAYS); while (new Date(d + 'T00:00:00Z').getUTCDay() !== 1) d = addDaysT(d, -1); return d; })();
+  assert.equal(validateNewChange({ ...base, start: lastMonday }), null);
+  assert.match(validateNewChange({ ...base, start: addDaysT(lastMonday, 7) }) ?? '', /12 months ahead/);
+  assert.match(validateNewChange({ ...base, start: '2099-12-28' }) ?? '', /12 months ahead/);
+});
+const addDaysT = (iso: string, n: number) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+
+test('isIsoDate - real calendar dates only, 2027-02-30 is not one', () => {
+  for (const ok of ['2026-11-22', '2028-02-29', '2026-12-31', '2026-01-01']) assert.equal(isIsoDate(ok), true, ok);
+  for (const bad of ['2027-02-30', '2027-02-29', '2026-04-31', '2026-13-01', '2026-00-10', '2026-11-00', '2026-11-5', '26-11-05', '2026-11-05T00:00:00Z', ' 2026-11-05', '2026/11/05', '', 'tomorrow', null, undefined, 20261105, ['2026-11-05'], { a: 1 }])
+    assert.equal(isIsoDate(bad as unknown), false, String(bad));
 });

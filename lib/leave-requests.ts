@@ -1,7 +1,7 @@
 import { HttpError } from '@/lib/roster-server';
 
 import { addDays, endOfDayIST, isIsoDate, toIstDate, weekday } from '@/lib/ist';
-import { cycleOf, isOff, patternOn, type Assignment, type Pattern } from '@/lib/roster';
+import { cycleOf, isOff, patternOn, reasonTooLong, type Assignment, type Pattern } from '@/lib/roster';
 import { LIVE_STATUSES, fmtDayLong, fmtQ, quarter, type Half } from '@/lib/leave';
 import { actionsFor, chargedDays, decide, noticeGiven, noticeNeeded, parseRules, splitLeaveLop, stretchDays, type Actions, type Decision, type FullHalf, type Rules, type SplitLine } from '@/lib/leave-rules';
 import { balanceOf, leaveReady, offCounts, type Db } from '@/lib/leave-server';
@@ -202,6 +202,7 @@ async function leaveAmount(db: Db, leaveId: string): Promise<number> {
 /** Saves a new request. It waits 5 minutes ("In process"), during which the person can edit or cancel it. */
 export async function createRequest(db: Db, userId: number, input: ApplyInput, reason: string): Promise<string> {
   if (!reason.trim()) throw new HttpError(400, 'A reason is required.');
+  if (reasonTooLong(reason.trim())) throw new HttpError(400, reasonTooLong(reason.trim())!);
   await db.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
   const now = new Date();
   const p = await computeRequest(db, userId, input, { appliedAt: now });
@@ -219,6 +220,7 @@ export async function createRequest(db: Db, userId: number, input: ApplyInput, r
 /** Edit while it is still waiting: it goes back through the 5-minute check and loses its place in the queue. */
 export async function editRequest(db: Db, leaveId: string, userId: number, input: ApplyInput, reason: string): Promise<void> {
   if (!reason.trim()) throw new HttpError(400, 'A reason is required.');
+  if (reasonTooLong(reason.trim())) throw new HttpError(400, reasonTooLong(reason.trim())!);
   await db.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
   const r = await getRequest(db, leaveId, true);
   if (!r || r.user_id !== userId) throw new HttpError(404, 'Request not found.');
@@ -393,6 +395,7 @@ export async function approverContext(db: Db, r: ReqRow, who: Approver) {
 /** Approve, reject or forward. Every action needs a reason. The stretch is counted again now: a request that has grown moves up. */
 export async function decideRequest(db: Db, leaveId: string, who: Approver, action: DecideAction, reason: string, overLimitOk: boolean): Promise<{ moved?: string }> {
   if (!reason.trim()) throw new HttpError(400, 'A reason is required.');
+  if (reasonTooLong(reason.trim())) throw new HttpError(400, reasonTooLong(reason.trim())!);
   await db.query(`SELECT pg_advisory_xact_lock(727001)`);
   const r = await getRequest(db, leaveId, true);
   if (!r) throw new HttpError(404, 'Request not found.');

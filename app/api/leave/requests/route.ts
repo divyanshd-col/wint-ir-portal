@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, withTransaction } from '@/lib/cx/db';
-import { leaveActor, withLeaveErrors } from '@/lib/leave-api';
-import { createRequest, sweepDue, type ApplyInput } from '@/lib/leave-requests';
+import { applyInputFrom, leaveActor, withLeaveErrors } from '@/lib/leave-api';
+import { cleanText } from '@/lib/roster';
+import { createRequest, sweepDue } from '@/lib/leave-requests';
 
 /** My requests, newest first. */
 const GET_ = async (req: NextRequest) => {
@@ -25,8 +26,8 @@ const POST_ = async (req: NextRequest) => {
   const { actor, response } = await leaveActor('leave:use:access');
   if (response) return response;
   const b = await req.json().catch(() => ({}));
-  const input: ApplyInput = { start: String(b.start ?? ''), startHalf: b.startHalf ?? 'full', end: String(b.end ?? b.start ?? ''), endHalf: b.endHalf ?? 'full' };
-  const id = await withTransaction(tx => createRequest(tx, actor.userId, input, String(b.reason ?? '')));
+  const input = applyInputFrom(b);
+  const id = await withTransaction(tx => createRequest(tx, actor.userId, input, cleanText(b.reason)));
   return NextResponse.json({ id });
 };
 export const POST = withLeaveErrors(POST_);
