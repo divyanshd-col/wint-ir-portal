@@ -5,7 +5,8 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { log, withLogging } from '@/lib/log';
 import { readConfig } from '@/lib/config';
-import { computeIqsFromRawParams } from '@/lib/quality';
+import { computeIqsFromRawParams, isJunkDisposition } from '@/lib/quality';
+import { reviewThreshold } from '@/lib/quality-thresholds';
 
 const ROUTE = 'cx/tl/chats';
 
@@ -27,6 +28,7 @@ export interface TLChatRow {
   reviewedBy:    string | null;
   reviewedAt:    string | null;
   conversationType?: 'bot' | 'agent' | 'hybrid';
+  disputeStatus?: string | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -84,8 +86,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  // For QA (or mapped admins), restrict by assigned dispositions
-  if (role === 'quality' || qaEntry) {
+  // For QA (or mapped admins), restrict by assigned dispositions. A TL is never restricted this way, even if their
+  // email is also in the QA map (an empty entry there used to hide a TL's whole team).
+  if (role === 'quality' || (qaEntry && role !== 'tl')) {
     const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     const strictDispositions = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
     if (strictDispositions.length > 0) {
@@ -132,12 +135,22 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   if (role === 'tl' || role === 'agent') {
     extraWhere += ` AND i.iqs_score IS NOT NULL`;
   }
+
+  const disputeStatus = searchParams.get('dispute_status') || searchParams.get('disputeStatus');
+  if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl') {
+    extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status IN ('pending', 'ir_pending_tl'))`;
+  } else if (disputeStatus === 'reviewed') {
+    extraWhere += ` AND EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status IN ('reviewed', 'tl_resolved'))`;
+  } else if (disputeStatus === 'none') {
+    extraWhere += ` AND NOT EXISTS (SELECT 1 FROM iqs_flags f WHERE f.chat_id = c.id AND f.status NOT IN ('cancelled'))`;
+  }
+
   const statusFilter = searchParams.get('status');
   if (statusFilter === 'reviewed') {
     extraWhere += ` AND i.status = 'reviewed'`;
   } else if (['admin', 'quality'].includes(role)) {
     // Exclude chats that are in the pending review section of Chat Evaluation for QA and Admin views
-    extraWhere += ` AND NOT (i.status IN ('pending', 'reopened') AND (i.iqs_score <= 85 OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters')))`;
+    extraWhere += ` AND NOT (i.status IN ('pending', 'reopened') AND (i.iqs_score <= ${reviewThreshold(config, 'chat')} OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters')))`;
   }
 
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
@@ -173,7 +186,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             c.tags->>'sub_disposition' AS sub_disposition,
             c.csat_score, i.parameters,
             ct.phone AS mobile_number,
-            i.reviewed_by, i.reviewed_at, c.conversation_type
+            i.reviewed_by, i.reviewed_at, c.conversation_type,
+            (SELECT f.status FROM iqs_flags f WHERE f.chat_id = c.id AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1) AS dispute_status
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -212,22 +226,30 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       || r.agent_name === 'Robylon Automation'
       || (r.agent_id !== null && [15, 447, 784].includes(Number(r.agent_id)));
 
-    if (iqsScore === null && !isBotOnly) {
-      iqsScore = computeIqsFromRawParams(params, false);
-      if (iqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
-        iqsScore = parseFloat(r.iqs_score);
-      }
-    }
-    if (botIqsScore === null) {
-      botIqsScore = computeIqsFromRawParams(params, true);
-    }
-    if (botIqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
-      if (r.conversation_type === 'bot' || isBotOnly || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
-        botIqsScore = parseFloat(r.iqs_score);
-      }
-    }
-    if (isBotOnly) {
+    const isJunk = isJunkDisposition(r.disposition, r.sub_disposition);
+
+    if (isJunk) {
       iqsScore = null;
+      botIqsScore = null;
+      callIqsScore = null;
+    } else {
+      if (iqsScore === null && !isBotOnly) {
+        iqsScore = computeIqsFromRawParams(params, false, r.disposition, r.sub_disposition);
+        if (iqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
+          iqsScore = parseFloat(r.iqs_score);
+        }
+      }
+      if (botIqsScore === null) {
+        botIqsScore = computeIqsFromRawParams(params, true, r.disposition, r.sub_disposition);
+      }
+      if (botIqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
+        if (r.conversation_type === 'bot' || isBotOnly || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+          botIqsScore = parseFloat(r.iqs_score);
+        }
+      }
+      if (isBotOnly) {
+        iqsScore = null;
+      }
     }
 
     return {
@@ -246,6 +268,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       reviewedBy:     r.reviewed_by ?? null,
       reviewedAt:     r.reviewed_at ?? null,
       conversationType: r.conversation_type as any,
+      disputeStatus:    (r as any).dispute_status ?? null,
     };
   });
 

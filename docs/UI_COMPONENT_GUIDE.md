@@ -20,6 +20,8 @@ Defined in `app/globals.css` (light defaults) and `app/dark-theme.css` (shell to
 
 Plus brand: `--accent` (light `#1f7a4d`, dark `#4cc287`), `--accent-hover`, `--accent-active`, `--accent-weak`, `--accent-on`.
 
+Font stacks: `--qa-sans` and `--qa-mono` (in `app/globals.css`, same in both themes). Use these instead of a local `SANS` / `MONO` constant.
+
 Semantic status tokens (Chat Evaluation reference, both themes): `--pass` / `--pass-soft`, `--fail` / `--fail-soft`, `--marker` / `--marker-fg` (blue: **focus outlines and change markers only**), `--ink` / `--ink-fg` (primary action and active chips: use this pair instead of `#fff` on a `--qa-gray-700` fill), `--sunk` (recessed filter bars and notes), `--line` / `--line-strong`, `--faint` (low-priority text).
 
 Light values: muted gray-green `#f5f6f4` for `--page-bg`, `--tb-bg`, `--sb-bg` (top bar, sidebar and page blend as one surface), white `--qa-card` / `--color-background-primary` for cards. Muted / faint text are `#4f584f` / `#667066` (the reference's `#5f685f` / `#8a938a` measured 2.8-3.2:1 on white; these pass AA and stay three distinct tiers). Dark values live under `[data-theme="dark"]` (below).
@@ -76,7 +78,7 @@ app/layout.tsx  ->  <Providers><TopBar/>{children}</Providers>
 - Three-column grid (`minmax(0,1fr) auto minmax(0,1fr)`): logo left, **tab pill centred**, theme toggle + account menu right. On phones (<=640px) it becomes `auto 1fr auto` and the pill scrolls horizontally.
 - Tabs come from `lib/nav.ts` (pure, unit-tested in `scripts/nav.test.ts`): `topTabs(role, skills)` returns Chat / Analytics / Quality / Settings filtered by skill (`chat:access`, `analytics:access`, `quality:analytics:access`, `settings:manage:access`; admin sees all). `activeTab(pathname)` maps routes to a tab (`/chat`; `/analytics`, `/call-analysis`, `/cx`; `/quality`, `/tl`, `/agent`; `/settings`, `/tokens`).
 - Hidden on `/login`, `/setup`, `/set-password` (`isAuthPath`) and when unauthenticated.
-- It injects a small `<style>` that subtracts `--topbar-h` (56px) from Tailwind's `h-screen` / `min-h-screen`, so pages sized with those classes still fit.
+- It injects a small `<style>` that subtracts `--topbar-h` (48px, set in `app/topbar.css`) from Tailwind's `h-screen` / `min-h-screen`, so pages sized with those classes still fit.
 - Account menu shows name, email, role chip and Sign out.
 
 ### Sidebars: `components/RoleShell.tsx`
@@ -87,8 +89,12 @@ interface NavItem { label; href; icon; roles?: string[]; skill?: string; section
 ```
 - Visibility: admin sees every item; others need `roles` to include their role and, if set, the `skill`.
 - **Section headings (admin only):** when `role === 'admin'` and an item has `section`, a heading is rendered whenever the section changes between consecutive visible items. The sidebar title (`Admin`) covers the first group; headings are **QA**, **TL**, **IR Agent**. Keep items of one section contiguous in the array.
-- **Pinned and collapsible:** the sidebar is `position: sticky` under the top bar (own scroll if the nav is long, never scrolls with the page). The chevron at the top collapses it to a 64px icon rail; the choice is stored in `localStorage.wint_sidebar`, and a first visit on <=1100px starts collapsed. Labels stay in the DOM as `.quality-shell-sidebar-label` (visually hidden, plus a `title` tooltip). <=560px it becomes a scrolling icon strip above the content (the reference hides it; the strip keeps every page reachable).
+- **Pinned and collapsible:** the sidebar is `position: sticky` under the top bar (own scroll if the nav is long, never scrolls with the page). The chevron at the top collapses it to a 56px icon rail; the choice is stored in `localStorage.wint_sidebar`, and a first visit on <=1100px starts collapsed. Labels stay in the DOM as `.quality-shell-sidebar-label` (visually hidden, plus a `title` tooltip). <=560px it becomes a scrolling icon strip above the content (the reference hides it; the strip keeps every page reachable).
 - CSS classes (in `app/globals.css`): `.quality-shell-sidebar`, `.quality-shell-sidebar-title` (also used for section headings), `.quality-shell-sidebar-link` (+ `.active`), `.quality-shell-main`.
+
+**Other sidebars use the same CSS classes**, so they look and collapse the same way (shared `localStorage.wint_sidebar`): the chat sidebar (`components/Sidebar.tsx`), the Settings nav (`SettingsClient.tsx`), the Analytics-area nav for MCP / CX Dashboard / Call Analysis (`components/PageNav.tsx`, hidden when there is only one destination) and the PCG sidebar items (`PcgCallsClient.tsx`, which keeps its own header because PCG hides the global top bar). Do not hand-style a sidebar row; use `.quality-shell-sidebar-link` (+ `.quality-shell-sidebar-btn` for a `<button>`, `.active` for the current page).
+
+**Page titles** are one `<h1>` at 24px / 600 inside the page content (inline `fontSize: 24, fontWeight: 600` or `text-2xl font-semibold`). No title strip above the content.
 
 Shell wrappers and their layouts:
 
@@ -107,14 +113,14 @@ Shell wrappers and their layouts:
 | Component | File | Use |
 |---|---|---|
 | `PeriodFilter` (+ `DEFAULT_PERIOD`, `PeriodState`) | `components/quality/PeriodFilter.tsx` | All / 7 days / 30 days / Custom range control (opens `DateRangePicker`). Controlled: `value`, `onChange`. Default All (`'all'`). Pair with `periodBounds()` from `lib/email/ui.ts` to build query params. |
-| `TicketLinkButton` | `components/quality/TicketLinkButton.tsx` | Ticket/chat id rendered as a bordered blue "Show chat ↗"-style button that opens `https://app.robylon.ai/unified-inbox/share/{id}` in a new tab. Props: `id` (used for the URL), optional `label` (display text, e.g. a shortened id). Stops click propagation so the row doesn't expand. |
+| `TicketLinkButton` | `components/quality/TicketLinkButton.tsx` | Ticket/chat id rendered as the neutral `.id-link` chip (mono id + "↗", no blue) that opens `https://app.robylon.ai/unified-inbox/share/{id}` in a new tab. Props: `id` (used for the URL), optional `label` (display text, e.g. a shortened id). Stops click propagation so the row doesn't expand. |
 | `EmailMessageView`, `CustomerCoreQueryCard`, `CustomerEmailThreadCard`, `CustomerSummaryBlock`, `EmailHistoryPanel`, `stripHtml`, `sanitizeEmailHtml` | `components/quality/EmailContentRenderer.tsx` | Email body rendering. `EmailMessageView` runs content through `trimEmailBody` (no trailing blank lines/empty blocks) and uses the `.email-html-body` rules in `app/globals.css` (tight paragraphs, no trailing margin). `CustomerCoreQueryCard` renders the prominent, synthesized user intent; `CustomerEmailThreadCard` renders the inbound email thread separately with proper spacing and collapsible controls; `CustomerSummaryBlock` is the composite wrapper; `EmailHistoryPanel` shows prior-interaction history. |
 | `usePaging`, `ShowingCount`, `Pager` | `components/quality/TablePaging.tsx` | Client-side paging for the email tables, same look as the chat tables: `ShowingCount` = "Showing X of N" + rows-per-page button (20/50/100) at the right end of the filter bar; `Pager` = "Page x of y" + Prev/Next footer (hidden on one page); `usePaging(items, resetKey)` slices the rows and returns to page 1 when `resetKey` changes. Pure helpers `pageSlice` / `pageCount` live in `lib/email/ui.ts`. |
 | `ParamScoreRow` | `components/quality/ParamScoreRow.tsx` | One evaluation parameter laid out like the chat evaluation panel: name on the left, Yes / Half / No (/ NA) buttons and the weight (`25%`) on the same line, the AI reasoning underneath (no description; it is the name's tooltip). Pass `onChange` to make it editable (QA email drawer); without it the buttons are a read-only display with the selected answer highlighted and the rest dimmed (TL and agent drawers). A value that is none of the four (missing, numeric) shows as text. Used for every parameter list on the email pages. |
 | `ScoreRing` | `components/quality/ScoreRing.tsx` | Neutral IQS ring (64px, whole-number score, dash when unscored) used in the agent and TL email detail panels; token colours so it works in dark mode. The QA email page keeps its own colour-coded ring. |
 | `DateRangePicker` | `components/quality/DateRangePicker.tsx` | Calendar popover used by `PeriodFilter` and the chat/call/email tables. |
 | `DisputeStatusPill` | exported from `components/tl/QualityChatsPage.tsx` | Dispute label for chats/calls (shared by TL chats, TL calls, My Quality Chats/Calls). Now **plain text**, despite the name. |
-| `ParamBadge`, `IQSRing`, `IQSRingCard`, `EvalPanel`, `CallEvalPanel` | `components/quality/` | Older chat/call scoring pieces; not used by the email pages. |
+| `IQSRing`, `IQSRingCard`, `EvalPanel`, `CallEvalPanel` | `components/quality/` | Older chat/call scoring pieces; not used by the email pages. |
 
 ### Helpers: `lib/email/ui.ts` (pure, tested in `scripts/email-ui.test.ts`)
 
@@ -169,12 +175,12 @@ Page wrappers: QA and TL pages are a plain `<div>` (full width of `<main>`, same
 
 Follow these on every quality table so views stay consistent.
 
-1. **No coloured pills.** IQS, status, CSAT, compliance and dispute values are plain text (weight/colour from tokens). Done for the email views, Chat Evaluation, Call Evaluation, TL Quality Calls and the shared dispute label. Colour is allowed only for: the active tab / active filter (dark filled pill), the score ring (a chart), message banners (e.g. the compliance-breach box), the Yes/Half/No scoring buttons in the QA panel (controls), and the blue "Show chat ↗" / ticket link buttons.
+1. **No coloured pills.** IQS, status, compliance and dispute values are plain text (weight/colour from tokens). Done for the email views, Chat Evaluation, Call Evaluation, TL Quality Calls and the shared dispute label. The one exception is CSAT, which renders `CsatPill` (section 7a). Colour is otherwise allowed only for: the active filter chip (`--ink` fill), the score ring (a chart), message banners (e.g. the compliance-breach box), and the Pass / Breach gate buttons in the evaluation panel (controls). ID links are the neutral `.id-link` chip, not blue.
 2. **Column order:** ID first, then Agent, then the data columns, then Action last (right-aligned). Numeric columns (IQS) are right-aligned.
 3. **IQS is a whole number.** Postgres returns `numeric` as strings (`"95.00"`); round with `Math.round(Number(x))` before rendering (rings, labels, "Adjusted from …").
 4. **CSAT** column shows "—" for emails until email CSAT exists.
 5. **Row expansion:** click a row to open an inline drawer (`<tr><td colSpan={n}>`); `colSpan` must equal the column count. Drawer background `--qa-gray-50`, cards `--qa-card` with `--qa-border`.
-6. **Tabs** are a pill group: container `--qa-card` + `--qa-border`, active tab `--qa-gray-700` with `#fff` text, count badge `--qa-gray-100` (active: `rgba(255,255,255,.2)`).
+6. **Tabs** are underlined, on a hairline tab bar: 40px high, 13px, active tab `--qa-text` with a 2px `--qa-text` underline and weight 600, inactive `--qa-text-2` weight 500 (`tabStyle` in each page; see section 7a). Not a pill group.
 7. **Tables** use `tableLayout: fixed` with a `<colgroup>`; header cells are 12px uppercase, 0.08em tracking, `--qa-text-2`, on `--qa-gray-50`.
 8. **Period filter** sits at the right of the tab row (the slot the chat pages use for their dropdown) and drives the cards, tab counts and rows together.
 9. Don't use emoji in UI text.
@@ -188,7 +194,7 @@ Follow these on every quality table so views stay consistent.
 | Route | Component | Audience |
 |---|---|---|
 | `/quality/email-evaluation` | `components/quality/EmailEvaluationPage.tsx` | QA (admin, quality): review, override scores, resolve disputes |
-| `/tl/quality-emails` | `components/tl/TLEmailQualityPage.tsx` | TL/admin: team cards, member table, replies, disputes |
+| `/tl/quality-emails` | `components/tl/TLEmailQualityPage.tsx` | TL/admin: team cards, member table, replies, raise disputes, review/forward agent disputes |
 | `/agent/quality-emails` | `components/ir/MyQualityEmailsPage.tsx` | Agent (and admin via the admin shell): own replies, raise disputes |
 
 Data: `GET/POST /api/email-evaluations` (`app/api/email-evaluations/route.ts`) over `email_reply_evaluations` joined to `email_conversations`, with the latest Robylon `Intents_L1` per ticket (`intent_l1`).
@@ -201,7 +207,7 @@ Data: `GET/POST /api/email-evaluations` (`app/api/email-evaluations/route.ts`) o
 | QA, Reviewed Emails | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Reviewed By, Reviewed At, Action |
 | QA, Disputes | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Dispute, Action |
 | QA, Awaiting AI | Ticket ID, Date & Time, Agent, Intent, Action (no IQS yet) |
-| TL, replies | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Action |
+| TL, replies | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Dispute, Action |
 | TL, members | Agent Name, Replies, Avg Score, Disputes, Action (Filter) |
 | TL, Disputes Raised | Ticket ID, Date & Time, Agent, IQS, CSAT, Raised, Status, Action (Resolve, Forward to QA, View) |
 | TL, Reviewed Disputes | Ticket ID, Date & Time, Agent, IQS, CSAT, Updated, Outcome, Action (View) |

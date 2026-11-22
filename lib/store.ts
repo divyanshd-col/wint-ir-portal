@@ -263,6 +263,8 @@ export interface IQSFlag {
   reviewedAt?: string;
   reviewNote?: string;
   originalScore?: number | null;
+  disposition?: string;
+  subDisposition?: string;
 }
 
 export interface IQSFlagComment {
@@ -438,6 +440,27 @@ export async function storeAppendFlagComment(comment: IQSFlagComment): Promise<v
       comment.createdAt || new Date().toISOString(),
     ]);
   } catch (err: any) {
+    if (err?.message?.includes('violates foreign key constraint') || err?.code === '23503') {
+      try {
+        await query(`ALTER TABLE iqs_flag_comments DROP CONSTRAINT IF EXISTS iqs_flag_comments_flag_id_fkey`);
+        await query(`
+          INSERT INTO iqs_flag_comments (id, flag_id, author_email, author_name, role, content, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (id) DO NOTHING
+        `, [
+          comment.id,
+          comment.flagId,
+          comment.authorEmail,
+          comment.authorName,
+          comment.role,
+          comment.content,
+          comment.createdAt || new Date().toISOString(),
+        ]);
+        return;
+      } catch (retryErr: any) {
+        log.warn('store', 'Failed to retry append comment after dropping constraint', { err: retryErr.message });
+      }
+    }
     log.warn('store', 'Failed to append comment', { err: err.message });
   }
 }
@@ -450,6 +473,8 @@ export async function storeGetFlagThread(flagId: string): Promise<IQSFlagComment
         role, content, created_at AS "createdAt"
       FROM iqs_flag_comments
       WHERE flag_id = $1
+         OR flag_id = (SELECT call_id FROM pcg_call_recordings WHERE id::text = $1 LIMIT 1)
+         OR flag_id = (SELECT id::text FROM pcg_call_recordings WHERE call_id = $1 LIMIT 1)
       ORDER BY created_at ASC
     `, [flagId]);
 

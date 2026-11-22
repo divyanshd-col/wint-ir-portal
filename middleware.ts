@@ -57,7 +57,7 @@ export async function middleware(req: NextRequest) {
       'roster:view:access', 'roster:manage:access',
       'leave:approve:access',
       'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
-      'quality:analytics:access', 'tl:member_analytics:access',
+      'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
       'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
     ],
     quality: [
@@ -196,9 +196,9 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // Team Analytics (restricted to admin)
+  // Team Analytics: needs the skill (admin and TL by default); others go to member analytics
   if (pathname === '/tl' || pathname === '/tl/') {
-    if (!isAdmin) {
+    if (!checkSkill('tl:team_analytics:access')) {
       if (checkSkill('tl:member_analytics:access') || checkSkill('agent:my_analytics:access')) {
         return NextResponse.redirect(new URL('/tl/member-analytics', req.url));
       }

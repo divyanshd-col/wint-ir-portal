@@ -1,10 +1,10 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
-import { getDisputeClassification, formatParamLabel } from '@/lib/quality';
+import { getDisputeClassification, formatParamLabel, isJunkDisposition } from '@/lib/quality';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import { rowClick } from '@/components/quality/rowClick';
 import { DateRangeChip } from '@/components/quality/FilterControls';
@@ -12,6 +12,7 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { CsatPill, csatLabel } from '@/components/quality/csat';
 import UISelect from '@/components/quality/UISelect';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
+import * as T from '@/components/quality/tableStyles';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -21,17 +22,10 @@ function fmtTime(iso: string) {
 }
 
 // ─── Shared table styles ───────────────────────────────────────────────────────
-const th: React.CSSProperties = {
-  height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-  fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-  fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
-};
-const td: React.CSSProperties = {
-  height: 52, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
-  fontSize: 14, color: 'var(--qa-text)', verticalAlign: 'middle',
-};
-const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text-2)' };
-const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13 };
+const th: React.CSSProperties = T.th;
+const td: React.CSSProperties = T.td;
+const tdMono: React.CSSProperties = T.tdMono;
+const tdNum: React.CSSProperties  = T.tdNum;
 
 const chip: React.CSSProperties = {
   height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
@@ -48,7 +42,7 @@ function IQSBadge({ score, muted }: { score: number | null; muted?: boolean }) {
   return (
     <span style={{
       fontFamily: 'ui-monospace, monospace',
-      fontSize: muted ? 12 : 14, fontWeight: muted ? 400 : 700,
+      fontSize: 13, fontWeight: muted ? 400 : 600,
       color: muted ? 'var(--faint)' : 'var(--qa-text)',
     }}>{score}</span>
   );
@@ -77,22 +71,26 @@ export function DisputeStatusPill({
   let label = '';
 
   if (status === 'pending' || status === 'ir_pending_tl') {
-    label = 'Dispute raised by IR';
+    label = 'Pending TL review';
   } else if (status === 'tl_forwarded') {
     if (role === 'tl') {
       label = 'Dispute raised by TL';
     } else {
-      label = 'Forwarded by TL';
+      label = 'Forwarded to QA';
     }
   } else if (status === 'tl_resolved') {
-    label = 'Resolved by TL';
+    label = 'Reviewed by TL';
   } else if (status === 'reviewed') {
-    const hasAnswerChanges = Array.isArray(parameters?.__answerChanges) && parameters.__answerChanges.length > 0;
-    const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
-    if (isUpdated) {
-      label = 'Updated by QA';
+    if (note.includes('tl') || (reviewNote && reviewNote.toLowerCase().includes('tl'))) {
+      label = 'Reviewed by TL';
     } else {
-      label = 'Resolved by QA';
+      const hasAnswerChanges = Array.isArray(parameters?.__answerChanges) && parameters.__answerChanges.length > 0;
+      const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
+      if (isUpdated) {
+        label = 'Updated by QA';
+      } else {
+        label = 'Reviewed';
+      }
     }
   } else if (status === 'cancelled') {
     label = 'Cancelled';
@@ -101,7 +99,7 @@ export function DisputeStatusPill({
   }
 
   return (
-    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
+    <span style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>
       {label}
     </span>
   );
@@ -140,6 +138,16 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   const [iqsMin,  setIqsMin]  = useState('');
   const [iqsMax,  setIqsMax]  = useState('');
   const [csat,    setCsat]    = useState<string[]>([]);
+  const [csatOpen, setCsatOpen] = useState(false);
+  const csatRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!csatOpen) return;
+    const onDown = (e: MouseEvent) => { if (!csatRef.current?.contains(e.target as Node)) setCsatOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCsatOpen(false); };
+    document.addEventListener('mousedown', onDown); document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [csatOpen]);
+  const [disputeFilter, setDisputeFilter] = useState('');
 
   // Auto-expand target chat
   const autoExpandedRef = React.useRef(false);
@@ -165,6 +173,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
       if (to)     params.set('to', to);
       if (iqsMin) params.set('iqs_min', iqsMin);
       if (iqsMax) params.set('iqs_max', iqsMax);
+      if (disputeFilter) params.set('dispute_status', disputeFilter);
       csat.forEach(v => params.append('csat', v));
       const res = await fetch(`/api/cx/tl/chats?${params}`);
       if (!res.ok) return;
@@ -177,11 +186,11 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
     } finally {
       setLoading(false);
     }
-  }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, limit, onTotalChange]);
+  }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, disputeFilter, limit, onTotalChange]);
 
   useEffect(() => { fetchChats(page); }, [fetchChats, page]);
 
-  useEffect(() => { setPage(1); }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, limit]);
+  useEffect(() => { setPage(1); }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, disputeFilter, limit]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -215,23 +224,49 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 <input type="number" value={iqsMin} onChange={e => setIqsMin(e.target.value)} placeholder="min" style={{ ...inputStyle, width: 70 }} />
 <input type="number" value={iqsMax} onChange={e => setIqsMax(e.target.value)} placeholder="max" style={{ ...inputStyle, width: 70 }} />
 </span>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>CSAT</span>
-          {['5','3','1'].map(v => (
-            <button
-              key={v}
-              style={csat.includes(v) ? chipActive : chip}
-              onClick={() => setCsat(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v])}
-            >
-              {csatLabel(v)}
-            </button>
-          ))}
+        {/* CSAT: multi-select dropdown (same pattern as the Chat Evaluation filter bar) */}
+        <div ref={csatRef} style={{ position: 'relative' }}>
+          <button type="button" style={csat.length ? chipActive : chip} onClick={() => setCsatOpen(o => !o)} aria-haspopup="listbox" aria-expanded={csatOpen}>
+            {csat.length ? `CSAT: ${['5', '3', '1'].filter(v => csat.includes(v)).map(v => csatLabel(v)).join(', ')}` : 'CSAT'}
+            <span style={{ fontSize: 9 }}>▾</span>
+          </button>
+          {csatOpen && (
+            <div role="listbox" aria-multiselectable="true" style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 40, marginTop: 4, minWidth: 180, padding: '6px 0',
+              background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}>
+              {['5', '3', '1'].map(v => {
+                const checked = csat.includes(v);
+                return (
+                  <label key={v} role="option" aria-selected={checked} style={{
+                    padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+                  }}>
+                    <input type="checkbox" checked={checked} onChange={() => setCsat(prev => checked ? prev.filter(x => x !== v) : [...prev, v])} style={{ accentColor: 'var(--accent)' }} />
+                    {csatLabel(v)}
+                  </label>
+                );
+              })}
+              {csat.length > 0 && (
+                <button type="button" onClick={() => setCsat([])} style={{
+                  width: '100%', textAlign: 'left', padding: '8px 14px', marginTop: 4, border: 0, borderTop: '1px solid var(--qa-border-sub)',
+                  background: 'none', fontFamily: 'inherit', fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer',
+                }}>Clear</button>
+              )}
+            </div>
+          )}
         </div>
         <DateRangeChip from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+        <UISelect value={disputeFilter} onChange={e => setDisputeFilter(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
+          <option value="">All Dispute Statuses</option>
+          <option value="forwarded_to_tl">Pending TL review</option>
+          <option value="reviewed">Reviewed Disputes</option>
+          <option value="none">No Dispute</option>
+        </UISelect>
         <button
           type="button" className="qf-chip"
-          disabled={!(chatIdSearch || agent || from || to || iqsMin || iqsMax || csat.length)}
-          onClick={() => { setChatIdSearch(''); setAgent(''); setFrom(''); setTo(''); setIqsMin(''); setIqsMax(''); setCsat([]); setPage(1); }}
+          disabled={!(chatIdSearch || agent || from || to || iqsMin || iqsMax || csat.length || disputeFilter)}
+          onClick={() => { setChatIdSearch(''); setAgent(''); setFrom(''); setTo(''); setIqsMin(''); setIqsMax(''); setCsat([]); setDisputeFilter(''); setPage(1); }}
         >
           Reset Filters
         </button>
@@ -298,7 +333,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
           <tr>
             <th style={th}>Chat ID</th>
             <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
-            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Agent IQS</SortTh>
+            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
             <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
             <SortTh k="csat" sort={sort} onSort={toggleSort} style={{ ...th, paddingLeft: 32 }}>CSAT</SortTh>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
@@ -329,18 +364,30 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                   onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                 >
-                  <td style={tdMono}><ChatIdCell chatId={chat.chatId} /></td>
+                  <td style={tdMono}>
+                    <ChatIdCell chatId={chat.chatId} />
+                    {chat.disputeStatus && (chat.disputeStatus === 'pending' || chat.disputeStatus === 'ir_pending_tl') && (
+                      <span style={{ display: 'block', fontSize: 10, color: '#b45309', fontWeight: 600, marginTop: 2 }}>
+                        Pending TL Review
+                      </span>
+                    )}
+                    {chat.disputeStatus && (chat.disputeStatus === 'reviewed' || chat.disputeStatus === 'tl_resolved') && (
+                      <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
+                        Reviewed
+                      </span>
+                    )}
+                  </td>
                   <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                   <td style={tdNum}>
-                    {chat.iqsScore != null ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>}
+                    {(!isJunkDisposition(chat.disposition) && chat.iqsScore != null) ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>}
                   </td>
                   <td style={tdNum}>
-                    {chat.callIqsScore != null ? (
+                    {(!isJunkDisposition(chat.disposition) && chat.callIqsScore != null) ? (
                       <IQSBadge score={chat.callIqsScore} muted />
                     ) : chat.callTranscriptStatus === 'transcribed' ? (
-                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>Transcribed</span>
+                      <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 500 }}>Transcribed</span>
                     ) : chat.callTranscriptStatus === 'pending' ? (
-                      <span style={{ fontSize: 12, color: '#ca8a04', fontWeight: 500 }}>Pending</span>
+                      <span style={{ fontSize: 13, color: '#ca8a04', fontWeight: 500 }}>Pending</span>
                     ) : (
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                     )}
@@ -351,7 +398,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                       onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
                       style={{
                         background: 'none', border: 0, padding: 0,
-                        fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                         color: 'var(--qa-text)', cursor: 'pointer',
                         display: 'inline-flex', alignItems: 'center', gap: 5,
                       }}
@@ -413,12 +460,13 @@ export function getDisputeOutcomeKey(d: TLDisputeRow): string {
   const note = (d.reviewNote || '').toLowerCase();
 
   if (status === 'pending' || status === 'ir_pending_tl') {
-    return 'raised_ir';
+    return 'forwarded_to_tl';
   } else if (status === 'tl_forwarded') {
     return role === 'tl' ? 'raised_tl' : 'forwarded';
   } else if (status === 'tl_resolved') {
-    return 'resolved_tl';
+    return 'reviewed_tl';
   } else if (status === 'reviewed') {
+    if (note.includes('tl')) return 'reviewed_tl';
     const hasAnswerChanges = Array.isArray(d.parameters?.__answerChanges) && d.parameters.__answerChanges.length > 0;
     const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
     return isUpdated ? 'updated' : 'resolved_qa';
@@ -437,6 +485,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const [disputes,   setDisputes]   = useState<TLDisputeRow[]>([]);
   const [definedTopics, setDefinedTopics] = useState<string[]>([]);
   const [topicPick, setTopicPick] = useState<Record<string, string>>({});
+  // 'tl': this TL resolves IR disputes by updating the scores in the panel (no Forward to QA). 'qa': the old flow.
+  const [ownerTl, setOwnerTl] = useState(false);
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning,  setActioning]  = useState<string | null>(null);
@@ -463,6 +513,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           const list = (data.disputes ?? []).filter((d: any) => !d.callId && !d.messageId);
           setDisputes(list);
           setDefinedTopics(data.definedDispositions ?? []);
+          setOwnerTl(data.disputesOwner === 'tl');
           onTotalChange?.(list.length);
         }
       } finally {
@@ -479,7 +530,21 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const filteredDisputes = disputes.filter(d => {
     if (chatSearch.trim() && !String(d.chatId).includes(chatSearch.trim())) return false;
     if (agentFilter && d.agentName !== agentFilter) return false;
-    if (outcomeFilter && getDisputeOutcomeKey(d) !== outcomeFilter) return false;
+    if (outcomeFilter) {
+      if (outcomeFilter === 'forwarded_to_tl') {
+        if (d.status !== 'pending' && d.status !== 'ir_pending_tl') return false;
+      } else if (outcomeFilter === 'reviewed_tl') {
+        if (d.status !== 'tl_resolved' && !(d.status === 'reviewed' && (d.reviewNote?.toLowerCase().includes('tl') || d.reviewedBy?.toLowerCase().includes('tl')))) return false;
+      } else if (outcomeFilter === 'reviewed') {
+        if (d.status !== 'reviewed' && d.status !== 'tl_resolved') return false;
+      } else if (outcomeFilter === 'raised_ir') {
+        if (d.raisedByRole !== 'ir' && d.raisedBy !== 'IR') return false;
+      } else if (outcomeFilter === 'raised_tl') {
+        if (d.raisedByRole !== 'tl' && d.raisedBy !== 'TL') return false;
+      } else if (getDisputeOutcomeKey(d) !== outcomeFilter) {
+        return false;
+      }
+    }
     if (fromFilter) {
       const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
       if (dDate < fromFilter) return false;
@@ -491,7 +556,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     return true;
   });
 
-  const colCount = status === 'pending' ? 7 : 8;
+  const colCount = 9;
   const totalPages = Math.max(1, Math.ceil(filteredDisputes.length / limit));
   const pagedDisputes = filteredDisputes.slice((page - 1) * limit, page * limit);
 
@@ -583,17 +648,18 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       )}
 
       <UISelect value={outcomeFilter} onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
-        <option value="">{status === 'pending' ? 'All Statuses' : 'All Outcomes'}</option>
+        <option value="">{status === 'pending' ? 'All Dispute Statuses' : 'All Outcomes'}</option>
         {status === 'resolved' ? (
           <>
-            <option value="updated">Updated by QA</option>
+            <option value="reviewed_tl">Reviewed by TL</option>
             <option value="resolved_qa">Resolved by QA</option>
-            <option value="resolved_tl">Resolved by TL</option>
-            <option value="forwarded">Forwarded by TL</option>
+            <option value="updated">Updated by QA</option>
+            <option value="forwarded">Forwarded to QA</option>
             <option value="cancelled">Cancelled</option>
           </>
         ) : (
           <>
+            <option value="forwarded_to_tl">Pending TL review</option>
             <option value="raised_ir">Dispute raised by IR</option>
             <option value="raised_tl">Dispute raised by TL</option>
           </>
@@ -667,8 +733,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
         {(status === 'pending'
-          ? ['12%', '15%', undefined, '10%', '9%', '11%', '14%']
-          : ['12%', '14%', undefined, '9%', '8%', '10%', '13%', '20%']
+          ? ['11%', '14%', undefined, '7%', '8%', '10%', '12%', '14%', '9%']
+          : ['11%', '13%', undefined, '7%', '8%', '9%', '12%', '17%', '9%']
         ).map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
       </colgroup>
       <thead>
@@ -676,11 +742,12 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           <th style={th}>Chat ID</th>
           <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
           <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
-          <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS (Agent)</SortTh>
+          <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
           <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
           <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
           <SortTh k="raised" sort={sort} onSort={toggleSort} style={th}>Raised</SortTh>
-          {status !== 'pending' && <th style={th}>Outcome</th>}
+          <th style={th}>{status === 'pending' ? 'Status' : 'Outcome'}</th>
+          <th style={{ ...th, textAlign: 'right' }}>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -713,32 +780,31 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                 <td style={tdMono}><ChatIdCell chatId={d.chatId} /></td>
                 <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.agentName}</td>
                 <td style={td}>
-                  <span style={{ fontSize: 13, color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
+                  <span style={{ color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
                 </td>
                 <td style={tdNum}>
-                  {d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore ? (
+                  {(!isJunkDisposition(d.disposition) && d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore) ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ textDecoration: 'line-through', opacity: 0.65 }}><IQSBadge score={d.originalScore} /></span>
                       <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>→</span>
                       <IQSBadge score={d.iqsScore} />
                     </span>
-                  ) : (d.originalScore ?? d.iqsScore) != null ? (
+                  ) : (!isJunkDisposition(d.disposition) && (d.originalScore ?? d.iqsScore) != null) ? (
                     <IQSBadge score={d.originalScore ?? d.iqsScore} />
                   ) : (
-                    <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                    <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
                   )}
                 </td>
                 <td style={tdNum}>
-                  {d.callIqsScore != null ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                  {(!isJunkDisposition(d.disposition) && d.callIqsScore != null) ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>{isJunkDisposition(d.disposition) ? 'NIL' : '—'}</span>}
                 </td>
                 <td style={td}><CSATBadge score={d.csatScore} /></td>
-                <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
+                <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
                   {fmtDate(d.raisedAt)}
                   <br />
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(d.raisedAt)}</span>
                 </td>
-                {status !== 'pending' && (
-                <td style={{ ...td }}>
+                <td style={{ ...td, fontSize: 13 }}>
                     <DisputeStatusPill
                       status={d.status}
                       raisedByRole={d.raisedByRole}
@@ -751,7 +817,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                       </div>
                     )}
                   </td>
-                )}
+                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>{expandedId === d.chatId ? 'Hide ▲' : 'Review ▼'}</span></td>
               </tr>
 
               {/* Dispute detail: agent note + challenged params + eval panel */}
@@ -799,7 +865,15 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                                 ))}
                               </div>
                             )}
-                            {status === 'pending' && (
+                            {status === 'pending' && ownerTl && (
+                          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
+                            <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>
+                              Review the transcript, change any score you disagree with in the panel below, add a note and resolve. Chats at or below the review threshold still go to QA for audit.
+                            </div>
+                          </div>
+                            )}
+                            {status === 'pending' && !ownerTl && (
                           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
                             {definedTopics.length > 0 && !definedTopics.some(t => t.trim().toLowerCase() === (d.disposition || '').trim().toLowerCase()) && (
@@ -849,7 +923,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                     disposition={d.disposition}
                     parameters={d.parameters}
                     mobileNumber={d.csatScore != null ? String(d.csatScore) : null}
-                    mode="view"
+                    mode={ownerTl && status === 'pending' && d.raisedByRole !== 'tl' ? 'resolve' : 'view'}
                     flagId={d.flagId}
                     dispute={{
                       raisedBy:        d.raisedBy,
@@ -857,7 +931,13 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                       agentNote:       d.agentNote,
                       challengedParams: d.challengedParams,
                     }}
-                    onDone={() => setExpandedId(null)}
+                    onDone={() => {
+                      setExpandedId(null);
+                      // Resolved by this TL: it leaves the pending queue. (Harmless for view mode: nothing changed.)
+                      if (ownerTl && status === 'pending' && d.raisedByRole !== 'tl') {
+                        setDisputes(prev => { const next = prev.filter(x => x.flagId !== d.flagId); onTotalChange?.(next.length); return next; });
+                      }
+                    }}
                     onClose={() => setExpandedId(null)}
                     colSpan={colCount}
                     inset

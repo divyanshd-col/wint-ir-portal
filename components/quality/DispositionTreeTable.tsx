@@ -9,6 +9,7 @@ interface Props {
   periodLabel: string;
   totalChatIQS?: number | null;
   totalCallIQS?: number | null;
+  totalEmailIQS?: number | null;
 }
 
 function fmt(v: number | null, suffix = '%') {
@@ -83,7 +84,7 @@ const DownloadIcon = () => (
 
 type SortCol = 'count' | 'csatChat' | 'csatCall' | 'aiChatCsat' | 'pctDeflected' | 'iqsChat' | 'iqsCall' | 'resolutionSecs';
 
-export default function DispositionTreeTable({ mode, rows, loading, periodLabel, totalChatIQS, totalCallIQS }: Props) {
+export default function DispositionTreeTable({ mode, rows, loading, periodLabel, totalChatIQS, totalCallIQS, totalEmailIQS }: Props) {
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
   const [sortCol, setSortCol]   = useState<SortCol>('count');
   const [sortDir, setSortDir]   = useState<'desc' | 'asc'>('desc');
@@ -302,9 +303,13 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel,
                 {totalRows > 0 && (() => {
                   const grandCount = rows.reduce((s, r) => s + r.count, 0);
 
-                  // Weighted averages — only include rows where the metric is non-null
-                  function wavg(getValue: (r: DispositionRow) => number | null): number | null {
-                    const valid = rows.filter(r => getValue(r) != null);
+                  // Weighted averages — only include rows where the metric is non-null. For IQS, hardcode exclusion of junk.
+                  function wavg(getValue: (r: DispositionRow) => number | null, isIqs = false): number | null {
+                    const valid = rows.filter(r => {
+                      if (getValue(r) == null) return false;
+                      if (isIqs && r.disposition.toLowerCase().includes('junk')) return false;
+                      return true;
+                    });
                     if (!valid.length) return null;
                     const wSum = valid.reduce((s, r) => s + (getValue(r) as number) * r.count, 0);
                     const wCnt = valid.reduce((s, r) => s + r.count, 0);
@@ -347,9 +352,9 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel,
                         </>
                       ) : (
                         <>
-                          <td style={totNumStyle}>{fmtIQS(totalChatIQS ?? wavg(r => r.iqsChat))}</td>
-                          <td style={totNumStyle}>{fmtIQS(totalCallIQS ?? wavg(r => r.iqsCall))}</td>
-                          <td style={totNumStyle}>—</td>
+                          <td style={totNumStyle}>{fmtIQS(totalChatIQS ?? wavg(r => r.iqsChat, true))}</td>
+                          <td style={totNumStyle}>{fmtIQS(totalCallIQS ?? wavg(r => r.iqsCall, true))}</td>
+                          <td style={totNumStyle}>{fmtIQS(totalEmailIQS ?? wavg(r => r.iqsEmail, true))}</td>
                           <td style={totNumStyle}>{fmtTime(wavg(r => r.resolutionSecs))}</td>
                         </>
                       )}

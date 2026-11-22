@@ -213,8 +213,9 @@ export async function generateScorecard(input: ScorecardInput): Promise<Generate
   // 2. Compute the numbers
   const chatsHandled = rows.length;
 
-  const validScores = rows.map(r => r.iqs_score).filter(s => s !== null && s !== undefined);
-  const paramsArray = rows.map(r => r.parameters);
+  const nonJunkRows = rows.filter(r => !r.disposition?.toLowerCase().includes('junk'));
+  const validScores = nonJunkRows.map(r => r.iqs_score).filter(s => s !== null && s !== undefined);
+  const paramsArray = nonJunkRows.map(r => r.parameters);
   const pooled = extractPooledParams(paramsArray);
 
   // Replicate the intermediate parameter-level rounding used in analytics to match exactly

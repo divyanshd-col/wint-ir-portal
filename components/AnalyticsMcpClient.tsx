@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import PageNav from '@/components/PageNav';
 
 interface ConnectionRow {
@@ -20,6 +21,10 @@ interface Props {
   isAdmin: boolean;
   flags: { callAnalysis?: boolean; cxDashboard?: boolean };
   mcpUrl: string;
+  /** Shown as a popup: no sidebar, and it does not size itself to the screen. */
+  inModal?: boolean;
+  /** Other Analytics pages this user can open (listed in the popup, which has no sidebar). */
+  otherPages?: { href: string; label: string }[];
 }
 
 const cardCls = 'bg-white border border-gray-200 rounded-2xl p-6 shadow-sm';
@@ -35,12 +40,12 @@ function fmtDate(s: string | null): string {
   }
 }
 
-export default function AnalyticsMcpClient({ username, role, isAdmin, flags, mcpUrl }: Props) {
+export default function AnalyticsMcpClient({ username, role, isAdmin, flags, mcpUrl, inModal = false, otherPages = [] }: Props) {
   return (
-    <div className="min-h-screen bg-[#f7f8f7] flex">
-      <PageNav username={username} role={role} isAdmin={isAdmin} flags={flags} />
+    <div className={inModal ? 'bg-[#f7f8f7]' : 'min-h-screen bg-[#f7f8f7] flex'}>
+      {!inModal && <PageNav username={username} role={role} isAdmin={isAdmin} flags={flags} />}
 
-      <main className="flex-1 min-w-0 px-6 py-8 lg:px-10">
+      <main className={`flex-1 min-w-0 px-6 py-8 ${inModal ? 'pr-14' : 'lg:px-10'}`}>
         <div className="mx-auto max-w-3xl space-y-6">
           <header>
             <h1 className="text-2xl font-semibold text-gray-900">Analytics via Claude</h1>
@@ -56,6 +61,13 @@ export default function AnalyticsMcpClient({ username, role, isAdmin, flags, mcp
           {isAdmin && <ConnectionsManager />}
 
           <SafetyNote />
+
+          {inModal && otherPages.length > 0 && (
+            <nav aria-label="Other analytics pages" className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              <span className="text-gray-500">Also in Analytics:</span>
+              {otherPages.map(p => <Link key={p.href} href={p.href} className="font-medium text-[#1f7a4d] hover:underline">{p.label}</Link>)}
+            </nav>
+          )}
         </div>
       </main>
     </div>

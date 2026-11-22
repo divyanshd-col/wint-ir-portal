@@ -281,13 +281,13 @@ export default function TokensClient() {
   const currentLogs = recentLogsList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--qa-bg, var(--qa-gray-50))', color: 'var(--qa-text, var(--qa-text))', padding: '24px 32px' }}>
+    <div style={{ minHeight: 'var(--vh100)', background: 'var(--qa-bg, var(--qa-gray-50))', color: 'var(--qa-text, var(--qa-text))', padding: '24px 32px' }}>
       
       {/* ── Top Navigation & Header ────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>Token Usage & Cost Intelligence</h1>
+            <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, letterSpacing: '-0.02em' }}>Token Usage & Cost Intelligence</h1>
             <span style={{ background: 'var(--pass-soft)', color: 'var(--pass)', fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>
               Real Data Tracking
             </span>

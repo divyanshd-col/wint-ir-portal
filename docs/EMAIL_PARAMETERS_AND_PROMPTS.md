@@ -208,7 +208,7 @@ Regardless of parameter scores, any outbound email is flagged as `compliance_pas
 4. **Missing Tier A Mandatory Disclaimers**.
 5. **Rude or Unprofessional Language**.
 
-When `compliance_passed: false`, an automated alert is routed to the `#compliance-alerts` Slack channel via [`lib/email/compliance-alert.ts`](file:///Users/admin/Documents/WintWealth/wint-ir-portal/lib/email/compliance-alert.ts).
+When `compliance_passed: false`, an automated alert is routed to the dedicated `#compliance-flag-emails` Slack channel (channel ID: `C0CERSWEXTM`) via [`lib/email/compliance-alert.ts`](file:///Users/admin/Documents/WintWealth/wint-ir-portal/lib/email/compliance-alert.ts) (configured via `COMPLIANCE_EMAIL_SLACK_CHANNEL`).
 
 ---
 

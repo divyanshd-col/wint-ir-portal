@@ -22,6 +22,7 @@ const TABS: (NavTab & { skill: string | string[] })[] = [
   { key: 'quality',   label: 'Quality',   href: '/quality',   skill: 'quality:analytics:access' },
   { key: 'roster',    label: 'Roster',    href: '/roster',    skill: 'roster:view:access' },
   { key: 'leave',     label: 'Leave',     href: '/leave',     skill: ['leave:use:access', 'leave:approve:access'] }, // off for everyone but admins (and TLs, to approve) until switched on in Settings > Skills
+  { key: 'settings',  label: 'Settings',  href: '/settings',  skill: 'settings:manage:access' }, // shown by the top bar as an icon, not a tab
 ];
 
 export function topTabs(role: string | undefined, skills: string[] | undefined, activeDomain: 'cx' | 'pcg' = 'cx'): NavTab[] {
@@ -37,7 +38,7 @@ const AREAS: [TabKey, string[]][] = [
   ['quality', ['/quality', '/tl', '/agent']],
   ['roster', ['/roster']],
   ['leave', ['/leave']],
-  ['settings', ['/settings', '/tokens']], // reached from the account menu, not a top tab
+  ['settings', ['/settings', '/tokens']],
   ['pcg-calls', ['/admin/pcg-calls', '/pcg']],
 ];
 

@@ -81,13 +81,13 @@ export default function KBGapsPage() {
   const transferredCount = rows.filter((r) => r.chat_type === 'Transferred to Agent').length;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--qa-gray-50)', color: 'var(--qa-text)', padding: '24px 32px' }}>
+    <div style={{ minHeight: 'var(--vh100)', background: 'var(--qa-gray-50)', color: 'var(--qa-text)', padding: '24px 32px' }}>
       
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, letterSpacing: '-0.02em' }}>
               KB Gap Intelligence & Answer Drafting Bot
             </h1>
             <span style={{ background: 'var(--qa-fill-light)', color: 'var(--qa-text)', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>

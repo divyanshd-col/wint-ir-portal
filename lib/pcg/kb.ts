@@ -120,3 +120,38 @@ export async function getPcgKbContextForScoring(
     })
     .join('\n---\n');
 }
+
+const PCG_EMAIL_KB_MAX_CHARS = 15_000;
+
+/**
+ * Retrieves the exact same PCG Knowledge Base corpus used for PCG Calls & Chats
+ * (shared Drive KBs minus CX AIF/MLD + PCG-exclusive AIF & MLD KBs) for PCG Email scoring.
+ * Never throws: returns '' if no excerpts match or retrieval fails.
+ */
+export async function getPcgEmailKbContextForScoring(
+  subject: string | null | undefined,
+  customerMessage: string | null | undefined,
+  agentReplyText?: string | null,
+  topK = 6
+): Promise<string> {
+  try {
+    const query = [
+      subject || '',
+      (customerMessage || '').replace(/\s+/g, ' ').slice(0, 400),
+      (agentReplyText || '').replace(/\s+/g, ' ').slice(0, 400),
+    ]
+      .join(' ')
+      .trim();
+
+    if (!query) return '';
+
+    const kb = await getPcgKbContextForScoring(query, topK);
+    if (!kb) return '';
+    return kb.length > PCG_EMAIL_KB_MAX_CHARS
+      ? `${kb.slice(0, PCG_EMAIL_KB_MAX_CHARS)}\n[…excerpt shortened]`
+      : kb;
+  } catch (err: any) {
+    console.warn('[pcg-kb] Email KB context retrieval failed:', err?.message || err);
+    return '';
+  }
+}

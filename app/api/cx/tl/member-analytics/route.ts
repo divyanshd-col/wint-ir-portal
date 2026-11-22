@@ -7,6 +7,7 @@ import { readConfig } from '@/lib/config';
 import { getWeekStart, getLast8Weeks } from '@/lib/cx/week';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
+import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
 
 // ── Param definitions (mirrors team-analytics) ─────────────────────────────────
 export const PARAM_DEFS = PARAM_ORDER.map(p => ({
@@ -25,7 +26,7 @@ function getDateRange(period: string, from?: string | null, to?: string | null) 
   const today = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  if (period === '7')                    return { dateFrom: fmt(new Date(today.getTime() - 6 * 86400_000)), dateTo: fmt(today) };
+  if (period === '7') return { dateFrom: fmt(new Date(today.getTime() - 6 * 86400_000)), dateTo: fmt(today) };
   if (period === 'custom' && from && to) return { dateFrom: from, dateTo: to };
   return { dateFrom: fmt(new Date(today.getTime() - 29 * 86400_000)), dateTo: fmt(today) };
 }
@@ -82,13 +83,13 @@ export const PASS_RATE_SELECT = `
 
 // ── Build WoW data ─────────────────────────────────────────────────────────────
 function buildWow(
-  sumRows:   { week_start: string; csat_pct: number|null; iqs: number|null; volume: number }[],
-  paramRows: { week_start: string; param_key: string; pass_rate: number|null }[],
-  weeks:     string[],
+  sumRows: { week_start: string; csat_pct: number | null; iqs: number | null; volume: number }[],
+  paramRows: { week_start: string; param_key: string; pass_rate: number | null }[],
+  weeks: string[],
   isChat = false,
 ) {
   const sumMap = new Map(sumRows.map(r => [r.week_start, r]));
-  const paramMap = new Map<string, Record<string, number|null>>();
+  const paramMap = new Map<string, Record<string, number | null>>();
   for (const r of paramRows) {
     const k = normKey(r.param_key);
     if (!paramMap.has(r.week_start)) paramMap.set(r.week_start, {});
@@ -116,22 +117,22 @@ interface FlatCatRow {
 
 interface CatSub {
   sub_disposition: string;
-  chats_iqs: number|null; chats_volume: number; chats_resolution_seconds: number|null;
-  calls_iqs: number|null; calls_volume: number;
+  chats_iqs: number | null; chats_volume: number; chats_resolution_seconds: number | null;
+  calls_iqs: number | null; calls_volume: number;
 }
 
 export interface CatRow {
   disposition: string;
-  chats_iqs: number|null; chats_volume: number; chats_resolution_seconds: number|null;
-  calls_iqs: number|null; calls_volume: number;
+  chats_iqs: number | null; chats_volume: number; chats_resolution_seconds: number | null;
+  calls_iqs: number | null; calls_volume: number;
   subs: CatSub[];
 }
 
 function buildCategories(
   chatParents: FlatCatRow[],
-  chatSubs:    FlatCatRow[],
+  chatSubs: FlatCatRow[],
   callParents: FlatCatRow[],
-  callSubs:    FlatCatRow[],
+  callSubs: FlatCatRow[],
 ): CatRow[] {
   const map = new Map<string, CatRow>();
 
@@ -171,11 +172,11 @@ function buildCategories(
     const subNames = new Set([...cs.keys(), ...ls.keys()]);
     parent.subs = Array.from(subNames).map(n => ({
       sub_disposition: n,
-      chats_iqs:               cs.get(n)?.iqs ?? null,
-      chats_volume:            cs.get(n)?.volume ?? 0,
+      chats_iqs: cs.get(n)?.iqs ?? null,
+      chats_volume: cs.get(n)?.volume ?? 0,
       chats_resolution_seconds: cs.get(n)?.resolution_seconds ?? null,
-      calls_iqs:               ls.get(n)?.iqs ?? null,
-      calls_volume:            ls.get(n)?.volume ?? 0,
+      calls_iqs: ls.get(n)?.iqs ?? null,
+      calls_volume: ls.get(n)?.volume ?? 0,
     })).sort((a, b) => b.chats_volume - a.chats_volume);
   }
 
@@ -232,14 +233,34 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ agentName: null, agents: [], wowWeekStarts: wowWeeks, channels: { chats: null, calls: null, emails: null } });
   }
 
-  const requestedAgent = searchParams.get('agent');
+  const requestedAgent = searchParams.get('agent')?.trim();
   let agentName: string;
   if (role === 'agent') {
     agentName = tlAgentNames[0];
+  } else if (requestedAgent) {
+    // 1. Case-insensitive match against existing tlAgentNames
+    const match = tlAgentNames.find(n => n.toLowerCase().trim() === requestedAgent.toLowerCase());
+    if (match) {
+      agentName = match;
+    } else if (role === 'admin') {
+      // 2. Query database for agent across all active agents (Admin only)
+      const dbMatch = await query<{ name: string }>(`
+        SELECT name FROM agents WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND status = 'active' LIMIT 1
+      `, [requestedAgent]).catch(() => []);
+      if (dbMatch.length > 0) {
+        agentName = dbMatch[0].name;
+        if (!tlAgentNames.some(n => n.toLowerCase().trim() === agentName.toLowerCase().trim())) {
+          tlAgentNames = [agentName, ...tlAgentNames];
+        }
+      } else {
+        agentName = tlAgentNames[0];
+      }
+    } else {
+      // TL role: strictly confined to members mapped to this TL
+      agentName = tlAgentNames[0];
+    }
   } else {
-    agentName = (requestedAgent && tlAgentNames.includes(requestedAgent))
-      ? requestedAgent
-      : tlAgentNames[0];
+    agentName = tlAgentNames[0];
   }
 
   // ── E-mail stats for the member + CX-wide averages (all active agents, same period) ──────
@@ -247,26 +268,31 @@ export async function GET(req: NextRequest) {
   const BOTS = `('Robylon', 'Robylon AI', 'Robylon Automation')`;
   const safe = <T,>(p: Promise<T>) => p.catch(() => null as T | null);
   const extraP = Promise.all([
-    safe(query<{ iqs: number|null; volume: number }>(`
-      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score))::numeric,1)::float AS iqs, COUNT(*)::int AS volume
+    safe(query<{ iqs: number | null; volume: number }>(`
+      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric,1)::float AS iqs, COUNT(*)::int AS volume
       FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
       WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
         AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
     `, [dateFrom, dateTo, agentName])),
-    safe(query<{ csat_pct: number|null; iqs: number|null; volume: number; agents: number }>(`
+    safe(query<{ csat_pct: number | null; iqs: number | null; volume: number; agents: number }>(`
       SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                    / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-             ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+             ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
              COUNT(c.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
       FROM conversations c
       JOIN agents a ON a.id = c.agent_id
       LEFT JOIN iqs_scores s ON s.chat_id = c.id
       WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND a.name NOT IN ${BOTS}
     `, [dateFrom, dateTo])),
-    safe(query<{ csat_pct: number|null; iqs: number|null; volume: number; agents: number }>(`
+    safe(query<{ csat_pct: number | null; iqs: number | null; volume: number; agents: number }>(`
       SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                    / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
              COUNT(cr.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
       FROM call_recordings cr
       LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -275,10 +301,11 @@ export async function GET(req: NextRequest) {
       JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
       WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name NOT IN ${BOTS}
     `, [dateFrom, dateTo])),
-    safe(query<{ iqs: number|null; volume: number; agents: number }>(`
-      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score))::numeric,1)::float AS iqs,
+    safe(query<{ iqs: number | null; volume: number; agents: number }>(`
+      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
              COUNT(*)::int AS volume, COUNT(DISTINCT LOWER(TRIM(e.agent_name)))::int AS agents
       FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
       WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
     `, [dateFrom, dateTo])),
   ]);
@@ -286,12 +313,16 @@ export async function GET(req: NextRequest) {
   // ── Run chats + calls queries in parallel ─────────────────────────────────────
   const [chatsRes, callsRes] = await Promise.all([
     Promise.all([
-      query<{ csat_pct: number|null; iqs: number|null; volume: number; parameters?: any }>(`
+      query<{ csat_pct: number | null; solvable_csat_pct?: number | null; unsolvable_csat_pct?: number | null; iqs: number | null; volume: number; parameters?: any }>(`
         SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                      / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               ROUND(COUNT(CASE WHEN c.csat_bifurcation = 'solvable' AND c.csat_label = 'good' THEN 1 END)::numeric
+                     / NULLIF(COUNT(CASE WHEN c.csat_bifurcation = 'solvable' AND c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS solvable_csat_pct,
+               ROUND(COUNT(CASE WHEN c.csat_bifurcation = 'unsolvable' AND c.bifurcated_csat_label = 'good' THEN 1 END)::numeric
+                     / NULLIF(COUNT(CASE WHEN c.csat_bifurcation = 'unsolvable' AND c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS unsolvable_csat_pct,
+               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -300,10 +331,10 @@ export async function GET(req: NextRequest) {
 
       query<FlatCatRow & { parameters?: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
                ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -315,10 +346,10 @@ export async function GET(req: NextRequest) {
       query<FlatCatRow & { parameters?: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
                c.tags->>'sub_disposition' AS sub_disposition,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
                ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -328,13 +359,13 @@ export async function GET(req: NextRequest) {
         GROUP BY 1, 2 ORDER BY 1, COUNT(c.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
-      query<{ week_start: string; csat_pct: number|null; iqs: number|null; volume: number; parameters?: any }>(`
+      query<{ week_start: string; csat_pct: number | null; iqs: number | null; volume: number; parameters?: any }>(`
         SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
                ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
                      NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -342,7 +373,7 @@ export async function GET(req: NextRequest) {
         GROUP BY 1 ORDER BY 1
       `, [wowFrom, wowTo, agentName]),
 
-      query<{ week_start: string; param_key: string; pass_rate: number|null }>(`
+      query<{ week_start: string; param_key: string; pass_rate: number | null }>(`
         SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
                ${PASS_RATE_SELECT}
         FROM iqs_scores s
@@ -354,7 +385,7 @@ export async function GET(req: NextRequest) {
         GROUP BY 1, 2 ORDER BY 1
       `, [wowFrom, wowTo, agentName]),
 
-      query<{ param_key: string; pass_rate: number|null }>(`
+      query<{ param_key: string; pass_rate: number | null }>(`
         SELECT ${PASS_RATE_SELECT}
         FROM iqs_scores s
         JOIN conversations c ON c.id = s.chat_id
@@ -367,10 +398,14 @@ export async function GET(req: NextRequest) {
     ]),
 
     Promise.all([
-      query<{ csat_pct: number|null; iqs: number|null; volume: number }>(`
+      query<{ csat_pct: number | null; iqs: number | null; volume: number }>(`
         SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                      / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
         LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -382,7 +417,11 @@ export async function GET(req: NextRequest) {
 
       query<FlatCatRow>(`
         SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
         LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -397,7 +436,11 @@ export async function GET(req: NextRequest) {
       query<FlatCatRow>(`
         SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
                COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') AS sub_disposition,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
         LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -410,11 +453,15 @@ export async function GET(req: NextRequest) {
         GROUP BY 1, 2 ORDER BY 1, COUNT(cr.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
-      query<{ week_start: string; csat_pct: number|null; iqs: number|null; volume: number }>(`
+      query<{ week_start: string; csat_pct: number | null; iqs: number | null; volume: number }>(`
         SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
                ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
                      NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
         LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
@@ -425,7 +472,7 @@ export async function GET(req: NextRequest) {
         GROUP BY 1 ORDER BY 1
       `, [wowFrom, wowTo, agentName]),
 
-      query<{ week_start: string; param_key: string; pass_rate: number|null }>(`
+      query<{ week_start: string; param_key: string; pass_rate: number | null }>(`
         SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
                ${PASS_RATE_SELECT}
         FROM call_recordings cr
@@ -469,9 +516,9 @@ export async function GET(req: NextRequest) {
 
   const categories = buildCategories(
     chatParents as FlatCatRow[],
-    chatSubs    as FlatCatRow[],
+    chatSubs as FlatCatRow[],
     callParents as FlatCatRow[],
-    callSubs    as FlatCatRow[],
+    callSubs as FlatCatRow[],
   );
 
   const chatPeriodParamMap: Record<string, number | null> = {};
@@ -480,24 +527,46 @@ export async function GET(req: NextRequest) {
     if (chatPeriodParamMap[k] == null) chatPeriodParamMap[k] = r.pass_rate;
   }
   const chatPeriodPooled = extractPooledParams(chatStatRows[0]?.parameters || []);
-  const chatWeightedIqs = calculateWeightedOverallIQS(chatPeriodPooled, 'human', { roundDecimals: 1 }) ?? (chatStatRows[0]?.iqs ?? null);
+  let chatWeightedIqs = calculateWeightedOverallIQS(chatPeriodPooled, 'human', { roundDecimals: 1 }) ?? (chatStatRows[0]?.iqs ?? null);
+  let chatVolume = chatStatRows[0]?.volume ?? 0;
+
+  // Fallback to PCG WhatsApp chat evaluations if Robylon chat volume is 0
+  if (chatVolume === 0) {
+    const pcgChatStats = await query<{ iqs: number | null; volume: number }>(`
+      SELECT ROUND(AVG(iqs_score)::numeric, 1)::float AS iqs,
+             COUNT(id)::int AS volume
+      FROM pcg_chat_evaluations
+      WHERE chat_closed_at::date >= $1 AND chat_closed_at::date <= $2
+        AND (LOWER(TRIM(rm_name)) = LOWER(TRIM($3)) OR LOWER(TRIM(rm_name)) = LOWER(TRIM($4)))
+    `, [dateFrom, dateTo, agentName, canonicalizePcgRmName(agentName)]).catch(() => []);
+    if (pcgChatStats?.[0] && Number(pcgChatStats[0].volume) > 0) {
+      chatWeightedIqs = pcgChatStats[0].iqs;
+      chatVolume = Number(pcgChatStats[0].volume);
+    }
+  }
 
   return NextResponse.json({
     agentName,
-    agents:        tlAgentNames,
+    agents: tlAgentNames,
     dateFrom,
     dateTo,
     wowWeekStarts: wowWeeks,
     channels: {
       chats: {
-        stats:      { csat_pct: chatStatRows[0]?.csat_pct ?? null, iqs: chatWeightedIqs, volume: chatStatRows[0]?.volume ?? 0 },
+        stats: {
+          csat_pct: chatStatRows[0]?.csat_pct ?? null,
+          solvable_csat_pct: chatStatRows[0]?.solvable_csat_pct ?? null,
+          unsolvable_csat_pct: chatStatRows[0]?.unsolvable_csat_pct ?? null,
+          iqs: chatWeightedIqs,
+          volume: chatVolume,
+        },
         categories,
-        wow:        buildWow(chatWow as any[], chatWowParams as any[], wowWeeks, true),
+        wow: buildWow(chatWow as any[], chatWowParams as any[], wowWeeks, true),
       },
       calls: {
-        stats:      { csat_pct: callStatRows[0]?.csat_pct ?? null, iqs: callStatRows[0]?.iqs ?? null, volume: callStatRows[0]?.volume ?? 0 },
+        stats: { csat_pct: callStatRows[0]?.csat_pct ?? null, iqs: callStatRows[0]?.iqs ?? null, volume: callStatRows[0]?.volume ?? 0 },
         categories,
-        wow:        buildWow(callWow as any[], callWowParams as any[], wowWeeks, false),
+        wow: buildWow(callWow as any[], callWowParams as any[], wowWeeks, false),
       },
       emails: emailStatRows
         ? { stats: { csat_pct: null, iqs: emailStatRows[0]?.iqs ?? null, volume: emailStatRows[0]?.volume ?? 0 }, categories: [], wow: [] }
@@ -505,9 +574,9 @@ export async function GET(req: NextRequest) {
     },
     // Team-wide benchmark for the same period: pooled CSAT / IQS and average volume per agent.
     cxAverage: {
-      chats:  cxChatRows?.[0]  ? { csat_pct: cxChatRows[0].csat_pct,  iqs: cxChatRows[0].iqs,  volume: cxChatRows[0].agents  ? Math.round(cxChatRows[0].volume  / cxChatRows[0].agents)  : null } : null,
-      calls:  cxCallRows?.[0]  ? { csat_pct: cxCallRows[0].csat_pct,  iqs: cxCallRows[0].iqs,  volume: cxCallRows[0].agents  ? Math.round(cxCallRows[0].volume  / cxCallRows[0].agents)  : null } : null,
-      emails: cxEmailRows?.[0] ? { csat_pct: null,                    iqs: cxEmailRows[0].iqs, volume: cxEmailRows[0].agents ? Math.round(cxEmailRows[0].volume / cxEmailRows[0].agents) : null } : null,
+      chats: cxChatRows?.[0] ? { csat_pct: cxChatRows[0].csat_pct, iqs: cxChatRows[0].iqs, volume: cxChatRows[0].agents ? Math.round(cxChatRows[0].volume / cxChatRows[0].agents) : null } : null,
+      calls: cxCallRows?.[0] ? { csat_pct: cxCallRows[0].csat_pct, iqs: cxCallRows[0].iqs, volume: cxCallRows[0].agents ? Math.round(cxCallRows[0].volume / cxCallRows[0].agents) : null } : null,
+      emails: cxEmailRows?.[0] ? { csat_pct: null, iqs: cxEmailRows[0].iqs, volume: cxEmailRows[0].agents ? Math.round(cxEmailRows[0].volume / cxEmailRows[0].agents) : null } : null,
     },
   });
 }

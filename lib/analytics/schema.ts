@@ -1,11 +1,9 @@
 // Full database schema description, embedded verbatim into LLM prompts.
 //
-// Single source of truth shared by:
-//   - lib/analytics/text-to-sql.ts  (the in-app Gemini planner, legacy path)
-//   - app/api/mcp/[transport]/route.ts  (the remote MCP `get_schema` tool)
+// Served by the remote MCP `get_schema` tool (app/api/mcp/[transport]/route.ts).
 //
 // Keep this in sync with db/migrations/*.sql. When a table or column changes,
-// update it here and both consumers pick it up.
+// update it here.
 
 export const DB_SCHEMA = `
 TABLE: conversations

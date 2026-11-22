@@ -129,7 +129,7 @@ async function main() {
     
     const startTime = Date.now();
     try {
-      const result = await runCallPipeline(call.id, { forceTranscript });
+      const result = await runCallPipeline(call.id, { forceTranscript, skipSlackAlert: true });
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`✅ Success | IQS: ${result.iqs}% | Verdict: ${result.verdict} | Time: ${elapsed}s`);
       successCount++;

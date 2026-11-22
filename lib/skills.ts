@@ -55,7 +55,7 @@ const DEFAULT_PERSONA_SKILLS: Record<string, string[]> = {
     'roster:view:access', 'roster:manage:access',
     'leave:approve:access',
     'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
-    'quality:analytics:access', 'tl:member_analytics:access',
+    'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
     'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
   ],
   quality: [

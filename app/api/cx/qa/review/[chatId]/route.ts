@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
-import { calculateIQS, isV4Evaluation } from '@/lib/quality';
+import { calculateIQS, isV4Evaluation, hasJunkTag } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 import { storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSAuditEntry } from '@/lib/store';
@@ -10,6 +10,9 @@ import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
 import { ALL_DB_KEY_TO_PASCAL as DB_TO_PASCAL } from '@/lib/param-keys';
 import { fireKbChangeAlert } from '@/lib/quality-alert';
+import { checkTlResolve, tlEditStatus } from '@/lib/dispute-owner';
+import { readConfig } from '@/lib/config';
+import { reviewThreshold } from '@/lib/quality-thresholds';
 
 // Bot-distinctive DB keys — parameters that appear ONLY in the bot rubric, never
 // the human one. IssueResolution/Accuracy/Personalization are shared between both
@@ -25,8 +28,8 @@ export async function PATCH(
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role = (session.user as any).role as string;
-  // QA reviews chats; TL is view-only and has no mutating access here.
-  if (!['quality', 'admin'].includes(role)) {
+  // QA, Admin and TL can review chats / dispute overrides
+  if (!['quality', 'admin', 'tl'].includes(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -52,14 +55,34 @@ export async function PATCH(
   }
 
   try {
-    const beforeState = await query<{ conversation_type: string; iqs_score: number; parameters: any }>(
-      `SELECT c.conversation_type, i.iqs_score, i.parameters
+    const beforeState = await query<{
+      conversation_type: string;
+      tags: any;
+      iqs_score: number;
+      parameters: any;
+      status: string | null;
+      agent_name: string | null;
+    }>(
+      `SELECT c.conversation_type, c.tags, i.iqs_score, i.parameters, i.status, a.name AS agent_name
        FROM iqs_scores i
        LEFT JOIN conversations c ON c.id = i.chat_id
+       LEFT JOIN agents a ON a.id = c.agent_id
        WHERE i.chat_id = $1`, [chatId]
     );
+    // A TL may only resolve an open dispute of their own team, and only by 'resolve' (never a plain submit/override/reopen).
+    if (role === 'tl') {
+      const denied = action !== 'resolve'
+        ? { status: 403, error: 'A TL can only resolve a dispute' }
+        : await checkTlResolve({ role, email, flagId, agentName: beforeState[0]?.agent_name });
+      if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
+    }
+    const config = role === 'tl' ? await readConfig().catch(() => null) : null;
+    // Only a TL edit keeps below-threshold chats in QA's audit queue; QA and admin edits mark the chat reviewed as before.
+    const statusAfter = (iqs: number | null) =>
+      role === 'tl' ? tlEditStatus(iqs, reviewThreshold(config, 'chat'), beforeState[0]?.status) : 'reviewed';
     const oldScore = beforeState[0]?.iqs_score ?? null;
     const oldParams = beforeState[0]?.parameters ?? null;
+    const isJunkChat = hasJunkTag(beforeState[0]?.tags);
     const convType = beforeState[0]?.conversation_type;
     const isBot = convType === 'bot' || (convType !== 'agent' && convType !== 'hybrid' && (() => {
       if (!oldParams) return false;
@@ -171,10 +194,10 @@ export async function PATCH(
         }
         
         merged['__scores'] = {
-          agent_iqs: isBot ? null : calculateIQS(pascalScores, false, isV4),
-          bot_iqs: calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true, isV4),
+          agent_iqs: isJunkChat || isBot ? null : calculateIQS(pascalScores, false, isV4),
+          bot_iqs: isJunkChat ? null : calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true, isV4),
         };
-        const newIqs = isBot ? merged['__scores'].bot_iqs : merged['__scores'].agent_iqs;
+        const newIqs = isJunkChat ? null : (isBot ? merged['__scores'].bot_iqs : merged['__scores'].agent_iqs);
 
         isScoreUpdated = (oldIqs !== null && newIqs !== null && oldIqs !== newIqs) || (paramChanges > 0);
 
@@ -182,20 +205,39 @@ export async function PATCH(
           `UPDATE iqs_scores
            SET parameters = $1, iqs_score = $2,
                reviewed_by = $3, reviewed_at = NOW(), review_note = $4,
-               status = 'reviewed'
+               status = $6
            WHERE chat_id = $5`,
-          [JSON.stringify(merged), newIqs, email, note ?? null, chatId]
+          [JSON.stringify(merged), newIqs, email, note ?? null, chatId, statusAfter(newIqs)]
         );
 
         log.info(ROUTE, action, { chatId, reviewer: email, oldIqs, newIqs, paramChanges });
         await storeAppendAuditEntry({ id: randomUUID(), action: action === 'submit' ? 'review_submitted' : 'score_overridden', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { oldIqs, newIqs, paramChanges, note: note ?? null } } as IQSAuditEntry);
+
+        try {
+          const convInfo = await query<{ tags: any; csat_label: string | null }>(
+            `SELECT tags, csat_label FROM conversations WHERE id = $1`, [chatId]
+          );
+          if (convInfo[0]) {
+            const tags = typeof convInfo[0].tags === 'string' ? JSON.parse(convInfo[0].tags) : (convInfo[0].tags || {});
+            const { classifyChatCsat } = await import('@/lib/csat-bifurcation');
+            const classified = classifyChatCsat(tags.disposition, tags.sub_disposition, newIqs, convInfo[0].csat_label, config);
+            await query(
+              `UPDATE conversations
+               SET csat_bifurcation = $1, bifurcated_csat_label = $2, updated_at = NOW()
+               WHERE id = $3`,
+              [classified.bifurcation, classified.bifurcatedCsatLabel, chatId]
+            );
+          }
+        } catch (e) {
+          console.warn('[review] update conversation bifurcation error:', e);
+        }
       } else {
         // action without parameter changes — just mark reviewed
         await query(
           `UPDATE iqs_scores
-           SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2, status = 'reviewed'
+           SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2, status = $4
            WHERE chat_id = $3`,
-          [email, note ?? null, chatId]
+          [email, note ?? null, chatId, statusAfter(oldScore)]
         );
         log.info(ROUTE, action, { chatId, reviewer: email, paramChanges: 0 });
         await storeAppendAuditEntry({ id: randomUUID(), action: 'review_submitted', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { note: note ?? null } } as IQSAuditEntry);
@@ -203,7 +245,8 @@ export async function PATCH(
 
       // For resolve: mark the KV flag as reviewed
       if (action === 'resolve' && flagId) {
-        const autoNote = isScoreUpdated ? 'Score updated by QA' : 'Resolved by QA (No score change)';
+        const who = role === 'tl' ? 'TL' : 'QA';
+        const autoNote = isScoreUpdated ? `Score updated by ${who}` : `Resolved by ${who} (No score change)`;
         const finalNote = note ? (isScoreUpdated && !note.toLowerCase().includes('score') ? `${note} (Score updated)` : note) : autoNote;
 
         await storeUpdateIQSFlag(flagId, {
@@ -286,7 +329,7 @@ export async function PATCH(
             afterState[0].iqs_score,
             oldParams ? JSON.stringify(oldParams) : null,
             JSON.stringify(afterState[0].parameters),
-            action,
+            role === 'tl' ? 'tl_resolve' : action,
             email,
             note ?? null
           ]

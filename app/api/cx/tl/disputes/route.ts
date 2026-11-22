@@ -3,12 +3,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
-import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
-import { computeIqsFromRawParams } from '@/lib/quality';
+import { computeIqsFromRawParams, isJunkDisposition } from '@/lib/quality';
 import { getDefinedDispositions } from '@/lib/qa-topics';
+import { agentInTeam, getDisputeOwner, getTlAgentNames, isTlActionable } from '@/lib/dispute-owner';
 
 const ROUTE = 'cx/tl/disputes';
 
@@ -62,16 +62,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`);
     agentNames = rows.map(r => r.name);
   } else {
-    const config = await readConfig();
-    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    let tlAgentName = configUser?.agentName;
-    if (!tlAgentName && email) {
-      const { getUserByEmail } = await import('@/lib/users');
-      const dbUser = await getUserByEmail(email).catch(() => null);
-      if (dbUser?.name) tlAgentName = dbUser.name;
-    }
-    if (!tlAgentName) tlAgentName = email;
-    agentNames = await getAgentNamesByTL(tlAgentName);
+    agentNames = await getTlAgentNames(email);
   }
 
   if (!agentNames.length) {
@@ -79,6 +70,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   const t0 = Date.now();
+  const owner = await getDisputeOwner();
   const rawFlags = await storeGetIQSFlags();
 
   // Filter by requested status (excluding email disputes which have their own queue)
@@ -89,10 +81,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       // Email disputes are managed exclusively in TLEmailQualityPage (/api/email-evaluations?disputeQueue=...)
       // and must never appear in TL chat or call dispute queues.
       if (f.messageId) return false;
-      // 'pending' = awaiting TL action (the actionable "Disputes Raised" queue).
+      // 'pending' / 'forwarded_to_tl' = awaiting TL review (the actionable "Disputes Raised" queue).
       // 'resolved' = already forwarded to QA or given a final decision (history).
-      if (statusFilter === 'pending') return f.status === 'ir_pending_tl' || f.status === 'pending';
-      if (statusFilter === 'resolved') return f.status === 'tl_forwarded' || f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
+      // 'reviewed' = reviewed by TL or QA.
+      // When TLs own disputes, the queue is every open IR dispute (including those already forwarded to QA); a TL-raised one stays with QA.
+      if (statusFilter === 'pending' || statusFilter === 'forwarded_to_tl') {
+        return owner === 'tl' ? isTlActionable(f, owner) : f.status === 'ir_pending_tl' || f.status === 'pending';
+      }
+      if (statusFilter === 'resolved') return (f.status === 'tl_forwarded' && !isTlActionable(f, owner)) || f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
+      if (statusFilter === 'reviewed') return f.status === 'reviewed' || f.status === 'tl_resolved';
+      if (statusFilter === 'all') return f.status !== 'cancelled';
       return false;
     });
 
@@ -112,10 +110,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     iqs_score: string; parameters: any;
     csat_score: string | null; mobile_number: string | null;
     conversation_type: string | null;
+    tags?: any;
   }[] = [];
   if (chatIds.length > 0) {
     dbRows = await query(
       `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name, c.closed_at,
+              c.tags,
               c.tags->>'disposition'     AS disposition,
               c.tags->>'sub_disposition' AS sub_disposition,
               i.iqs_score, i.parameters, c.csat_score,
@@ -184,14 +184,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     if (!db && !callDb) continue;
 
     // Only show disputes for this TL's agents (supporting prefix/full match)
-    const matchesAgent = (name: string | null) => {
-      if (!name) return false;
-      return agentNames.some(a =>
-        a.toLowerCase() === name.toLowerCase() ||
-        a.toLowerCase().startsWith(name.toLowerCase() + ' ') ||
-        name.toLowerCase().startsWith(a.toLowerCase() + ' ')
-      );
-    };
+    const matchesAgent = (name: string | null) => agentInTeam(agentNames, name);
 
     const agentName = db?.agent_name || callDb?.agent_name || flag.agentName;
     if (!matchesAgent(db?.agent_name ?? null) && !matchesAgent(callDb?.agent_name ?? null) && !matchesAgent(flag.agentName)) continue;
@@ -203,39 +196,50 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     let iqsScore: number | null = null;
     let callIqsScore: number | null = null;
 
-    if (params.__scores) {
-      botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
-      iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
-      callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
-    }
+    const isJunk = isJunkDisposition(flag.disposition) ||
+      isJunkDisposition(callDb?.disposition, callDb?.sub_disposition) ||
+      isJunkDisposition(db?.disposition, db?.sub_disposition) ||
+      isJunkDisposition(db?.tags);
 
-    if (callDb?.iqs_percent != null && isCall) {
-      callIqsScore = parseFloat(callDb.iqs_percent);
-      if (iqsScore === null) iqsScore = callIqsScore;
-    }
-
-    const isBot = db ? (
-      db.agent_name === 'Robylon AI'
-      || db.conversation_type === 'bot'
-      || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)))
-    ) : false;
-
-    if (iqsScore === null && !isBot && !callDb) {
-      iqsScore = computeIqsFromRawParams(params, false);
-      if (iqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
-        iqsScore = parseFloat(db.iqs_score);
-      }
-    }
-    if (botIqsScore === null && !callDb) {
-      botIqsScore = computeIqsFromRawParams(params, true);
-    }
-    if (botIqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
-      if (isBot || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
-        botIqsScore = parseFloat(db.iqs_score);
-      }
-    }
-    if (isBot) {
+    if (isJunk) {
+      botIqsScore = null;
       iqsScore = null;
+      callIqsScore = null;
+    } else {
+      if (params.__scores) {
+        botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
+        iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
+        callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
+      }
+
+      if (callDb?.iqs_percent != null && isCall) {
+        callIqsScore = parseFloat(callDb.iqs_percent);
+        if (iqsScore === null) iqsScore = callIqsScore;
+      }
+
+      const isBot = db ? (
+        db.agent_name === 'Robylon AI'
+        || db.conversation_type === 'bot'
+        || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)))
+      ) : false;
+
+      if (iqsScore === null && !isBot && !callDb) {
+        iqsScore = computeIqsFromRawParams(params, false, flag.disposition || db?.disposition);
+        if (iqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
+          iqsScore = parseFloat(db.iqs_score);
+        }
+      }
+      if (botIqsScore === null && !callDb) {
+        botIqsScore = computeIqsFromRawParams(params, true, flag.disposition || db?.disposition);
+      }
+      if (botIqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
+        if (isBot || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+          botIqsScore = parseFloat(db.iqs_score);
+        }
+      }
+      if (isBot) {
+        iqsScore = null;
+      }
     }
 
     const roleTag = raisedByLabel(flag);
@@ -294,7 +298,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   });
 
   const definedDispositions = await getDefinedDispositions().catch(() => [] as string[]);
-  return NextResponse.json({ disputes: finalDisputes, definedDispositions }, {
+  return NextResponse.json({ disputes: finalDisputes, definedDispositions, disputesOwner: owner }, {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     },

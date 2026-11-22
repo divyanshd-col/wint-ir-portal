@@ -3,8 +3,17 @@ import { readConfig } from '@/lib/config';
 import { getIQSGeminiKeys, callGeminiForCall, geminiGenerate } from '@/lib/gemini';
 import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { getPcgKbContextForScoring } from '@/lib/pcg/kb';
+import { isPcgExcludedInternalPhone } from '@/lib/pcg/excluded-numbers';
+import {
+  runPyannoteForPcgBuffer,
+  buildPcgDiarizationPrompt,
+  verifyAndFixPcgSpeakerLabels,
+  type PcgTranscriptTurn,
+  type PyannoteTimelineResult,
+} from '@/lib/pcg/speaker-diarization';
 import { GoogleGenAI } from '@google/genai';
 import { log } from '@/lib/log';
+import { promptOrDefault } from '@/lib/prompt-overrides';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -31,6 +40,18 @@ export const PCG_QUALITY_PARAMETERS = [
 ];
 
 import { canonicalizePcgRmName } from '@/lib/pcg/canonical-names';
+import {
+  detectPcgSopTriggers,
+  savePcgSopTriggers,
+  sendPcgSopSlackAlert,
+  updatePcgSopSlackStatus,
+  getPcgSopSlackChannel,
+  PcgSopTrigger,
+} from '@/lib/pcg/sop-alert';
+import {
+  resolvePcgAgentFromDirectory,
+  resolvePcgAgentSync,
+} from '@/lib/pcg/rm-directory';
 
 // ── Known RM to Team Lead Mappings (Default fallbacks) ─────────────────────────
 const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
@@ -46,15 +67,19 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   'harshita dhona': { rm: 'Harshita Dhona', tl: 'Team Tanisha Mittal' },
   'keshvi suresh thacker': { rm: 'Keshvi Suresh Thacker', tl: 'Team Tanisha Mittal' },
   'nischay manish jain': { rm: 'Nischay Manish Jain', tl: 'Team Tanisha Mittal' },
+  'tanisha mittal': { rm: 'Tanisha Mittal', tl: 'Team Tanisha Mittal' },
+  'tanisha': { rm: 'Tanisha Mittal', tl: 'Team Tanisha Mittal' },
 
   // Team Dheeraj Bhojwani
   'ramita kapoor': { rm: 'Ramita Kapoor', tl: 'Team Dheeraj Bhojwani' },
-  'shrey jain': { rm: 'Shrey jain', tl: 'Team Dheeraj Bhojwani' },
+  'shrey jain': { rm: 'Shrey Jain', tl: 'Team Dheeraj Bhojwani' },
   'ishaan kapoor': { rm: 'Ishaan Kapoor', tl: 'Team Dheeraj Bhojwani' },
   'yaashvi arora': { rm: 'Yaashvi Arora', tl: 'Team Dheeraj Bhojwani' },
   'paritosh ashiya': { rm: 'Paritosh Ashiya', tl: 'Team Dheeraj Bhojwani' },
   'shivam kumar baghel': { rm: 'Shivam Kumar Baghel', tl: 'Team Dheeraj Bhojwani' },
   'sargun singh': { rm: 'Sargun Singh', tl: 'Team Dheeraj Bhojwani' },
+  'dheeraj bhojwani': { rm: 'Dheeraj Bhojwani', tl: 'Team Dheeraj Bhojwani' },
+  'dheeraj': { rm: 'Dheeraj Bhojwani', tl: 'Team Dheeraj Bhojwani' },
 
   // Team Swetha
   'sujal dadwani': { rm: 'Sujal Dadwani', tl: 'Team Swetha' },
@@ -67,6 +92,7 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   'suryansh sharma': { rm: 'Suryansh Sharma', tl: 'Team Swetha' },
   'ankita agarwal': { rm: 'Ankita Agarwal', tl: 'Team Swetha' },
   'vishyata tulsani': { rm: 'Vishyata Tulsani', tl: 'Team Swetha' },
+  'swetha': { rm: 'Swetha', tl: 'Team Swetha' },
 
   // Team Saiyam Rastogi
   'vishal kumar yadav': { rm: 'Vishal Kumar Yadav', tl: 'Team Saiyam Rastogi' },
@@ -80,15 +106,52 @@ const PCG_RM_TL_MAP: Record<string, { rm: string; tl: string }> = {
   'mahi agarwal': { rm: 'Mahi Agarwal', tl: 'Team Saiyam Rastogi' },
   'nandini': { rm: 'Nandini', tl: 'Team Saiyam Rastogi' },
   'nandani': { rm: 'Nandini', tl: 'Team Saiyam Rastogi' },
+  'saiyam rastogi': { rm: 'Saiyam Rastogi', tl: 'Team Saiyam Rastogi' },
+  'saiyam': { rm: 'Saiyam Rastogi', tl: 'Team Saiyam Rastogi' },
+
+  // Team Sravanthi
+  'anurag negi': { rm: 'Anurag Negi', tl: 'Team Sravanthi' },
+  'mahek bihani': { rm: 'Mahek Bihani', tl: 'Team Sravanthi' },
+  'mishra richa santoshkumar': { rm: 'Mishra Richa Santoshkumar', tl: 'Team Sravanthi' },
+  'richa mishra': { rm: 'Mishra Richa Santoshkumar', tl: 'Team Sravanthi' },
+  'shreya premkumar mundada': { rm: 'Shreya Premkumar Mundada', tl: 'Team Sravanthi' },
+  'shreya mundada': { rm: 'Shreya Premkumar Mundada', tl: 'Team Sravanthi' },
+  'sreeram': { rm: 'Sreeram', tl: 'Team Sravanthi' },
+  'sravanthi': { rm: 'Sravanthi', tl: 'Team Sravanthi' },
+  'vidyul kapoor': { rm: 'Vidyul Kapoor', tl: 'Team Sravanthi' },
 
   // Admin / General
   'aahan thaker': { rm: 'Aahan Thaker', tl: 'Team Admin' },
   'aahan': { rm: 'Aahan Thaker', tl: 'Team Admin' },
   'aahan pcg': { rm: 'Aahan Thaker', tl: 'Team Admin' },
   'dhanush': { rm: 'Dhanush', tl: 'Team Admin' },
+  'pranav sharma': { rm: 'Pranav Sharma', tl: 'Team Admin' },
+  'aboli jawkhedkar': { rm: 'Aboli Jawkhedkar', tl: 'Team Admin' },
 };
 
-export function resolvePcgAgent(rawAgentName: any, customTeamMap?: Record<string, string>): { rm: string; tl: string } {
+/**
+ * Asynchronously resolves RM and TL directly from dynamic pcg_rm_directory table.
+ */
+export async function resolvePcgAgentAsync(
+  rawAgentName: any,
+  customTeamMap?: Record<string, string>
+): Promise<{ rm: string; tl: string }> {
+  const res = await resolvePcgAgentFromDirectory(rawAgentName, customTeamMap);
+  return { rm: res.rm, tl: res.tl };
+}
+
+/**
+ * Synchronously resolves RM and TL using in-memory directory cache with static fallbacks.
+ */
+export function resolvePcgAgent(
+  rawAgentName: any,
+  customTeamMap?: Record<string, string>
+): { rm: string; tl: string } {
+  const dirRes = resolvePcgAgentSync(rawAgentName, customTeamMap);
+  if (dirRes.tl && dirRes.tl !== 'PCG Team') {
+    return { rm: dirRes.rm, tl: dirRes.tl };
+  }
+
   if (!rawAgentName) return { rm: 'Unassigned RM', tl: 'PCG Team' };
   const rawStr = typeof rawAgentName === 'object'
     ? (rawAgentName.called_by || rawAgentName.agent_name || '')
@@ -102,11 +165,11 @@ export function resolvePcgAgent(rawAgentName: any, customTeamMap?: Record<string
   }
 
   for (const [key, val] of Object.entries(PCG_RM_TL_MAP)) {
-    if (clean === key || clean.includes(key)) {
+    if (clean === key || clean.startsWith(key + ' ')) {
       return { rm: canonical, tl: val.tl };
     }
   }
-  return { rm: canonical, tl: 'PCG Team' };
+  return { rm: dirRes.rm || canonical, tl: dirRes.tl || 'PCG Team' };
 }
 
 // ── Detect MIME type from audio buffer or extension ─────────────────────────
@@ -191,213 +254,364 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
   }
 }
 
-// ── Master System Prompt for PCG 11-Parameter Quality Evaluation ──────────────
-export const PCG_QUALITY_SYSTEM_PROMPT = `You are a Senior Quality Assurance and Compliance Auditor for Wint Wealth's Private Client Group (PCG) Relationship Managers (RMs).
-
-You will evaluate ONE recorded client call. Evaluate STRICTLY from the perspective of the RM (speaker RM). Never penalize the RM for the client's behaviour, questions, or objections.
-
-You must evaluate the call on the following 11 Quality Parameters, divided across three skill groups.
-Each parameter must be evaluated INDEPENDENTLY using one of:
-- "Yes": The RM fully met the requirement
-- "No": The RM did not meet the requirement
-- "NA": The situation covered by the parameter did not occur during the call
-
-## MANDATORY EXPLANATION REQUIREMENT FOR EVERY PARAMETER (CX QUALITY STANDARD):
-For EVERY parameter without exception, you MUST provide a detailed, context-specific "explanation" field supported by exact conversation turns and spoken facts:
-1. If "Yes": Cite the exact turn(s) (e.g. 'Turn 1 [RM]: ...') and detail specifically what the RM said or did that satisfied the criteria.
-2. If "No": Cite the exact turn(s) where the failure occurred or was missing, explain specifically what the RM failed to do or said incorrectly, and state what should have been done instead.
-3. If "NA": Explicitly justify why this parameter does not apply to this specific conversation.
-4. STRICT PARAMETER ISOLATION: The explanation for parameter X must ONLY discuss criteria defined for parameter X.
-   - NEVER evaluate Grammar or Tone inside Call Opening or Call Closing.
-   - NEVER evaluate Product Accuracy inside Active Listening or Simplifying.
-   - NEVER evaluate Questions Addressed inside Expectation Setting.
-5. NEVER return generic boilerplate or vague one-liners (such as "Parameter satisfied", "Good call", or "All product information consistent"). Provide thorough, real, context-specific analysis citing spoken facts.
-
----
-
-## GROUP 1: PROCESS SKILLS (50%)
-
-### 1. Call Opening (Weight: 5%) — key: CallOpening
-- Criteria:
-  * RM opens warmly and respectfully, addressing the client as Sir or Ma'am.
-  * Identifies self and Wint Wealth (or Wint Wealth PCG) clearly in the opening few seconds.
-  * Explicitly checks client availability to talk before starting the agenda ("Is this a good time to speak?", "Do you have 2 minutes?").
-- Explanation Standard:
-  * Yes: State exact Turn X [RM], detailing the respectful salutation (Sir/Ma'am), brand identification (Wint Wealth), and the exact availability question asked before starting the agenda.
-  * No: State exact Turn X [RM] and pinpoint what was missing — e.g. skipped checking availability and jumped straight into the pitch, omitted Wint Wealth brand, or lacked respectful greeting.
-  * NA: Explain why opening was not applicable (e.g. client called in and launched immediately into agenda, or immediate reconnection within minutes of a dropped call).
-
-### 2. Call Closing (Weight: 5%) — key: CallClosing
-- Criteria:
-  * RM closes warmly, leaving client with a clear sense of what happens next.
-  * Summarizes agreed next steps / follow-ups, thanks client for their time, offers ongoing availability, and ends with polite Sir/Ma'am sign-off.
-- Explanation Standard:
-  * Yes: State exact Turn X [RM], detailing how next steps were confirmed, client thanked, and polite sign-off delivered.
-  * No: State exact Turn X [RM], detailing what was missing — e.g. abrupt disconnect, left next steps unconfirmed, rushed off without thanking client.
-  * NA: Explain why closing could not occur (e.g. client abruptly hung up mid-sentence or sudden technical disconnect).
-
-### 3. Technically / Legally Correct (Weight: 15% - HIGHEST PRIORITY) — key: TechnicallyLegal
-- Criteria:
-  * Technical and legal correctness is of utmost importance for PCG HNI investors.
-  * All statements regarding AIF (Wint Wealth Debt Fund), MLDs, PMS, and Bonds must match official KB_CONTEXT, PMS Disclosure Document, AIF PPM, and SEBI regulations.
-  * AUTOMATIC NO and COMPLIANCE TRIPWIRE if RM:
-    - Promises or implies guaranteed, assured, or fixed returns on AIF, MLDs, or bonds.
-    - Compares market-linked debt or AIF returns to risk-free bank FDs without highlighting credit/market risks.
-    - Quotes past performance without stating the disclaimer that past performance does not guarantee future returns.
-    - Misrepresents fees, hurdle rate, lock-in, tenure, or taxation (e.g. claiming AIF returns are tax-free or MLD is senior secured by default).
-    - Gives unauthorized personalized investment advice beyond permitted SEBI execution/distribution scope.
-- Explanation Standard:
-  * Yes: State exact Turn X [RM], explicitly naming the product, targeted yield/XIRR, tenure, lock-in, taxation, or risk discussed, cite the specific KB document / section verifying these facts, and confirm no guaranteed returns were promised.
-  * No: Quote exact Turn X [RM], pinpoint the specific factual error or SEBI regulatory violation, cite contradicting KB guidance, and explain what should have been stated instead. Set "compliance_breach": true and specify "breach_reason".
-  * NA: Explain specifically why NA applies (e.g. purely administrative callback scheduling; zero discussion of products, yields, or financial mechanics).
-
-### 4. All Questions Addressed (Weight: 10%) — key: AllQuestions
-- Criteria:
-  * Every single client query, objection, or clarification asked during the call is answered clearly and accurately.
-  * If RM cannot answer live on call, handles transparently: confirms and clarifies the question, acknowledges needing to check with ops or fund management team (does not guess), and commits to a specific follow-up timeline.
-- Explanation Standard:
-  * Yes: Enumerate each question asked by the investor (e.g. Turn X [Customer]) and detail how the RM answered each accurately or deferred with an agreed timeline.
-  * No: Cite Turn X [Customer] and pinpoint which specific question was ignored, brushed aside, guessed incorrectly, or left hanging without an answer or follow-up path.
-  * NA: State that the customer asked zero questions during this call.
-
-### 5. Expectation Setting (Weight: 10%) — key: Expectation
-- Criteria:
-  * On open items or pending requests (drawdown, allotment, onboarding, account statements, redemption, ops tickets), RM provides a clear timeline or takes clear ownership to coordinate with backend team and provide an update.
-  * Providing an exact TAT is not always mandatory if the RM clearly takes ownership, commits to coordinate with backend team, and promises an update as soon as possible.
-- Explanation Standard:
-  * Yes: Cite Turn X [RM], detailing the exact timeline, next step, or backend escalation commitment provided to the client.
-  * No: Cite Turn X [Customer] & Turn Y [RM], explaining that client had an open item or asked for a timeline, but RM gave no timeline, no ownership, or vague next steps ("I'll see").
-  * NA: Explain that all matters were resolved live on the call with no open items or timeline-sensitive follow-ups.
-
-### 6. Process / Pre-check (Weight: 5%) — key: Process
-- Criteria:
-  * RM is prepared with client context (holdings, prior calls, recent transactions, CRM notes) from CRM/PCG Finder.
-  * Does not ask the client to repeat known information already on record; avoids unnecessary hold time.
-- Explanation Standard:
-  * Yes: Cite Turn X [RM], detailing how the RM demonstrated preparation by referencing existing holdings, prior discussions, or account details without making the client repeat themselves.
-  * No: Cite Turn X [RM], pinpointing where the RM showed a lack of preparation (e.g. asked client to repeat basic holdings/ticket details on record, or took prolonged unannounced holds to check basic details).
-  * NA: Explain why NA applies (e.g. brand new inbound/outbound lead with zero prior CRM history on record).
-
----
-
-## GROUP 2: COMMUNICATION SKILLS (30%)
-
-### 7. Vocabulary / Sentence Structure / Grammar / Pronunciations (Weight: 10%) — key: VocabularyGrammar
-- Criteria:
-  * Professional vocabulary, correct pronunciation of fund names and financial terms (e.g., AIF, MLD, debentures, XIRR). Comfortable code-switching between English and Hindi is acceptable. Minor slips excused. Focus purely on language, tone, and grammar. (Financial concept simplification is judged under Parameter 11).
-  * Each speaker turn is an utterance — evaluate grammar per utterance.
-- Explanation Standard:
-  * Yes: Detail the linguistic execution — e.g. "RM maintained polished, professional vocabulary and correct sentence construction throughout turns 1–18, with accurate pronunciation of fund and financial terms."
-  * No: Cite Turn X [RM], quoting specific repeated grammatical breakdowns, broken phrasing, or mispronunciations that caused confusion or impaired professionalism.
-  * NA: Explain why communication could not be evaluated.
-
-### 8. Fillers, Fumbling & Speech Clarity / Avoid Dead Air (Weight: 10%) — key: FillersDeadAir
-- Criteria:
-  * Clear, steady delivery without excessive fillers ("uh", "um", "matlab", "like").
-  * Avoids awkward dead air. Announced pauses ("Please give me a moment while I pull up your statement") are HOLDS, NOT dead air. Dead air >5s without hold announcement is penalized.
-- Explanation Standard:
-  * Yes: Detail delivery fluency — e.g. "Fluent and confident delivery with minimal filler words; all system lookup pauses were clearly announced to the client."
-  * No: Cite Turn X [RM], detailing frequent filler words, noticeable stammering/fumbling, or citing duration of unannounced dead air.
-  * NA: Explain why fluency could not be evaluated.
-
-### 9. Warmth, Energy & Tone Modulation (Weight: 10%) — key: EnergyTone
-- Criteria:
-  * Evaluated from audio. Attentive, calm, composed energy suited to HNI wealth management (not high-pressure aggressive pitching). Modulates tone: reassuring on market volatility, upbeat on payouts.
-- Explanation Standard:
-  * Yes: Detail vocal demeanor — e.g. "RM maintained a calm, composed, and courteous tone suited to HNI wealth advisory, remaining patient and welcoming throughout."
-  * No: Detail vocal issues — e.g. "RM sounded flat, bored, monotone, or overly aggressive/rushed during turns 3–12."
-  * NA: State that audio was unavailable (transcript-only scoring).
-
----
-
-## GROUP 3: CUSTOMER SERVICE SKILLS (20%)
-
-### 10. Active Listening, Interruptions & Empathy (Weight: 10%) — key: ActiveListening
-- Criteria:
-  * Listens attentively without interrupting, talking over client, or having parallel background conversations.
-  * Demonstrates genuine empathy when client raises concerns (delays, volatility, statements) before jumping to explanations.
-- Explanation Standard:
-  * Yes: Cite Turn X [RM], detailing how RM listened patiently without interrupting and demonstrated empathy when client voiced concerns.
-  * No: Cite Turn X [RM], pinpointing where RM interrupted, talked over client, dismissed concerns, or showed lack of empathy.
-  * NA: Explain why active listening could not be evaluated.
-
-### 11. Simplifying Answers (Weight: 10%) — key: Simplifying
-- Criteria:
-  * Explains complex terms (hurdle rate, high-water mark, drawdown, carried interest, NAV, pass-through taxation, Senior Secured) in plain language matched to client understanding. Avoids over-explaining to savvy HNIs.
-- Explanation Standard:
-  * Yes: Cite Turn X [RM], detailing how RM explained complex financial concepts using plain language or concrete numerical examples.
-  * No: Cite Turn X [RM], pinpointing where RM used heavy, unexplained jargon that left the investor confused.
-  * NA: State that no complex financial or technical concepts were discussed during the call.
-
----
-
-## OUTPUT FORMAT
-Return ONLY valid JSON matching this schema:
-{
-  "call_category": "13_pitching" | "upselling" | "support",
-  "parameters": {
-    "CallOpening": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ...",
-      "quote": "Short exact dialogue quote"
-    },
-    "CallClosing": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ...",
-      "quote": "Short exact dialogue quote"
-    },
-    "TechnicallyLegal": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation citing Turn X [RM]: ... and KB doc/section",
-      "quote": "Short exact dialogue quote",
-      "compliance_breach": false,
-      "breach_reason": null
-    },
-    "AllQuestions": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation enumerating questions and answers citing Turn X...",
-      "quote": "Short exact dialogue quote"
-    },
-    "Expectation": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of timeline/next steps citing Turn X [RM]...",
-      "quote": "Short exact dialogue quote"
-    },
-    "Process": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of pre-check context citing Turn X [RM]...",
-      "quote": "Short exact dialogue quote"
-    },
-    "VocabularyGrammar": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of grammar and language quality...",
-      "quote": "Short exact dialogue quote"
-    },
-    "FillersDeadAir": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of delivery fluency and dead air...",
-      "quote": "Short exact dialogue quote"
-    },
-    "EnergyTone": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of vocal demeanor and composure...",
-      "quote": "Short exact dialogue quote"
-    },
-    "ActiveListening": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of listening patience and empathy citing Turn X [RM]...",
-      "quote": "Short exact dialogue quote"
-    },
-    "Simplifying": {
-      "rating": "Yes" | "No" | "NA",
-      "explanation": "Thorough, context-specific explanation of financial simplification citing Turn X [RM]...",
-      "quote": "Short exact dialogue quote"
-    }
-  },
-  "compliance_tripwire": false,
-  "compliance_reason": null
+export interface PcgAudioTranscriptionOutput {
+  transcriptTurns: PcgTranscriptTurn[];
+  detectedLanguage: string;
+  deadAirCount: number;
+  interruptionCount: number;
+  usedPyannote: boolean;
+  pyannoteSpeakers: string[];
+  pyannoteSegmentCount: number;
+  speakerMap?: Record<string, string>;
+  speakerIdConfidence?: string;
+  speakerIdReasoning?: string;
+  verification: {
+    swapped: boolean;
+    method: 'deterministic' | 'llm_sanity_check' | 'none';
+    confidence: 'high' | 'medium' | 'low';
+    reason: string;
+  };
 }
-`;
+
+/**
+ * Downloads a PCG call recording, runs Pyannote `precision-2` acoustic diarization (with graceful
+ * Gemini-only fallback), transcribes + maps speakers using known RM name & call direction,
+ * recovers any truncated tail turns, and runs post-transcription speaker verification.
+ */
+export async function transcribeAndDiarizePcgAudio(opts: {
+  callId: string;
+  recordingUrl: string;
+  durationSeconds: number;
+  rmName: string;
+  callType?: string | null;
+  geminiKeys: string[];
+  pyannoteApiKey?: string;
+}): Promise<PcgAudioTranscriptionOutput> {
+  const { callId, recordingUrl, durationSeconds, rmName, callType, geminiKeys, pyannoteApiKey } = opts;
+  const apiKey = geminiKeys[0];
+
+  log.info(ROUTE, `Transcribing audio from S3 for PCG call ${callId}: ${recordingUrl}`);
+  const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(recordingUrl, apiKey);
+
+  const durationMins = Math.floor((durationSeconds || 0) / 60);
+  const durationSecs = ((durationSeconds || 0) % 60).toString().padStart(2, '0');
+  const formattedDuration = `${durationMins}:${durationSecs}`;
+
+  const ai = new GoogleGenAI({ apiKey });
+  try {
+    // Pass 1: Pyannote precision-2 acoustic speaker diarization (gracefully falls back to null on error/timeout)
+    const pyannoteTimeline: PyannoteTimelineResult | null = await runPyannoteForPcgBuffer(
+      buffer,
+      mimeType,
+      pyannoteApiKey,
+      callId
+    );
+
+    // Pass 2: Metadata-anchored Gemini transcription + speaker role mapping
+    const diarizationPrompt = buildPcgDiarizationPrompt({
+      formattedDuration,
+      durationSeconds: durationSeconds || 0,
+      rmName,
+      callType,
+      pyannoteTimeline,
+    });
+
+    const diarizationRaw = await callGeminiForCall(
+      geminiKeys,
+      [{
+        parts: [
+          { file_data: { mime_type: mimeType, file_uri: fileUri } },
+          { text: diarizationPrompt },
+        ]
+      }],
+      undefined,
+      180_000
+    );
+
+    const parsedDiarization = JSON.parse(diarizationRaw.replace(/```json/g, '').replace(/```/g, '').trim());
+    const detectedLanguage = parsedDiarization.detected_language || 'English';
+    const deadAirCount = parsedDiarization.dead_air_count || 0;
+    const interruptionCount = parsedDiarization.interruption_count || 0;
+    const speakerMap = parsedDiarization.speaker_map && typeof parsedDiarization.speaker_map === 'object'
+      ? parsedDiarization.speaker_map
+      : undefined;
+    const speakerIdConfidence = parsedDiarization.speaker_id_confidence || undefined;
+    const speakerIdReasoning = parsedDiarization.speaker_id_reasoning || undefined;
+
+    let transcriptTurns: PcgTranscriptTurn[] = (parsedDiarization.turns || []).map((t: any, idx: number) => ({
+      speaker: t.speaker === 'Customer' ? ('Customer' as const) : ('RM' as const),
+      text: t.text || '',
+      time: t.time || '00:00',
+      turnIndex: idx + 1,
+      ...(t.speaker_id ? { speakerId: String(t.speaker_id) } : {}),
+    }));
+
+    // ── Automated Tail Verification & Recovery Pass ─────────────────────────
+    const parseTsSecs = (ts: string): number => {
+      if (!ts) return 0;
+      const parts = ts.trim().split(':');
+      if (parts.length === 2) return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      if (parts.length === 3) return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
+      return 0;
+    };
+
+    const lastTurn = transcriptTurns[transcriptTurns.length - 1];
+    const lastTurnSecs = lastTurn ? parseTsSecs(lastTurn.time) : 0;
+    const callDurationSecs = durationSeconds || 0;
+    const missingTailSeconds = callDurationSecs - lastTurnSecs;
+
+    if (callDurationSecs > 45 && missingTailSeconds > 20) {
+      log.info(ROUTE, `Transcript stopped early at ${lastTurn?.time || '00:00'} (${lastTurnSecs}s), but call duration is ${formattedDuration} (${callDurationSecs}s). Missing ${missingTailSeconds}s. Running tail recovery pass...`);
+      try {
+        const recentAnchor = transcriptTurns
+          .slice(-3)
+          .map((t) => `Turn ${t.turnIndex} [${t.speaker} - ${t.time}]: ${t.text}`)
+          .join('\n');
+        const tailPyannote = pyannoteTimeline
+          ? pyannoteTimeline.mergedSegments
+              .filter((s) => s.end >= Math.max(0, lastTurnSecs - 2))
+              .map((s) => `[${Math.floor(s.start / 60).toString().padStart(2, '0')}:${Math.floor(s.start % 60).toString().padStart(2, '0')} - ${Math.floor(s.end / 60).toString().padStart(2, '0')}:${Math.floor(s.end % 60).toString().padStart(2, '0')}] ${s.speaker}${speakerMap?.[s.speaker] ? ` (${speakerMap[s.speaker]})` : ''}`)
+              .join('\n')
+          : '';
+
+        const tailPrompt = `The previous transcription of this phone call between Wint Wealth RM "${rmName}" and Investor ("Customer") ended early at timestamp ${lastTurn?.time || '00:00'}, but the call audio continues until ${formattedDuration} (${callDurationSecs} seconds).
+
+LAST TRANSCRIBED TURNS (keep speaker roles 100% consistent with these):
+${recentAnchor || '(none)'}
+${tailPyannote ? `\nREMAINING PYANNOTE SPEAKER TIMELINE:\n${tailPyannote}\n` : ''}
+The final instances of the call (closing pleasantries, wrap-up discussion, next steps, 'thank you', 'take care', 'okay bye', and call disconnect) were cut off and must be captured.
+
+Listen to the audio starting from ${lastTurn?.time || '00:00'} until the very end of the recording (${formattedDuration}).
+Transcribe ALL remaining turns of conversation until the call ends into fluent English, maintaining exact "RM" vs "Customer" speaker labels.
+
+Return valid JSON:
+{
+  "tail_turns": [
+    { "speaker": "RM" | "Customer", "time": "MM:SS", "text": "fluent English dialogue..." }
+  ]
+}`;
+
+        const tailRaw = await callGeminiForCall(
+          geminiKeys,
+          [{
+            parts: [
+              { file_data: { mime_type: mimeType, file_uri: fileUri } },
+              { text: tailPrompt },
+            ]
+          }],
+          undefined,
+          120_000
+        );
+
+        const parsedTail = JSON.parse(tailRaw.replace(/```json/g, '').replace(/```/g, '').trim());
+        const newTurns = parsedTail.tail_turns || parsedTail.turns || [];
+        if (Array.isArray(newTurns) && newTurns.length > 0) {
+          let nextIdx = transcriptTurns.length + 1;
+          for (const nt of newTurns) {
+            const ntSecs = parseTsSecs(nt.time);
+            if (ntSecs > lastTurnSecs || (ntSecs === lastTurnSecs && nt.text !== lastTurn?.text)) {
+              transcriptTurns.push({
+                speaker: nt.speaker === 'Customer' ? 'Customer' : 'RM',
+                text: nt.text || '',
+                time: nt.time || formattedDuration,
+                turnIndex: nextIdx++,
+              });
+            }
+          }
+          log.info(ROUTE, `Successfully recovered ${newTurns.length} closing turns. Transcript now has ${transcriptTurns.length} turns ending at ${transcriptTurns[transcriptTurns.length - 1]?.time}.`);
+        }
+      } catch (tailErr: any) {
+        log.warn(ROUTE, `Tail recovery pass encountered error: ${tailErr.message}. Keeping initial ${transcriptTurns.length} turns.`);
+      }
+    }
+
+    // Pass 3: Post-transcription speaker verification & deterministic/LLM auto-swap guard
+    const verification = await verifyAndFixPcgSpeakerLabels(transcriptTurns, {
+      rmName,
+      callType,
+      callId,
+      geminiKeys,
+      diarizationConfidence: speakerIdConfidence,
+    });
+    transcriptTurns = verification.turns;
+
+    return {
+      transcriptTurns,
+      detectedLanguage,
+      deadAirCount,
+      interruptionCount,
+      usedPyannote: Boolean(pyannoteTimeline),
+      pyannoteSpeakers: pyannoteTimeline?.speakerIds || [],
+      pyannoteSegmentCount: pyannoteTimeline?.mergedSegments.length || 0,
+      speakerMap,
+      speakerIdConfidence,
+      speakerIdReasoning,
+      verification: {
+        swapped: verification.swapped,
+        method: verification.method,
+        confidence: verification.confidence,
+        reason: verification.reason,
+      },
+    };
+  } finally {
+    // Always clean up Gemini File API upload to prevent remote storage leaks
+    try {
+      const fileNameMatch = fileUri.split('/files/')[1];
+      if (fileNameMatch) await ai.files.delete({ name: `files/${fileNameMatch}` });
+    } catch { }
+  }
+}
+import { PCG_QUALITY_SYSTEM_PROMPT, PCG_CLASSIFICATION_SYSTEM_PROMPT } from './prompts/pcg';
+export { PCG_QUALITY_SYSTEM_PROMPT, PCG_CLASSIFICATION_SYSTEM_PROMPT };
+
+// ── Call Category Types & Definitions ──────────────────────────────────────────
+export type PcgCallCategory =
+  | '13_pitching'
+  | 'upselling'
+  | 'support'
+  | 'hiring'
+  | 'telemarketing'
+  | 'delivery_logistics'
+  | 'wrong_number'
+  | 'internal_personal';
+
+export interface SopTrigger {
+  category: string;
+  severity: 'CRITICAL' | 'MEDIUM' | 'LOW';
+  direction: 'Customer said this to RM' | 'RM said this to customer';
+  signal: string;
+  timestamp?: string;
+  turn_index?: number;
+  quote: string;
+}
+
+export interface PcgCallTriageResult {
+  detected_category: PcgCallCategory;
+  is_evaluable: boolean;
+  confidence: number;
+  opening_quote: string;
+  reason: string;
+}
+
+
+export async function classifyPcgCallOpening(
+  openingDialogueText: string,
+  geminiKeys: string[],
+  systemPrompt?: string,
+): Promise<PcgCallTriageResult> {
+  const prompt = `OPENING 45–60 SECONDS CALL TRANSCRIPT:
+${openingDialogueText}
+
+Analyze this opening portion and classify the call purpose according to the instructions. Return valid JSON only.`;
+
+  try {
+    const rawResponse = await geminiGenerate(
+      geminiKeys,
+      DEFAULT_GEMINI_MODEL,
+      [{ role: 'user', parts: [{ text: prompt }] }],
+      {
+        systemInstruction: promptOrDefault(systemPrompt, PCG_CLASSIFICATION_SYSTEM_PROMPT),
+        responseMimeType: 'application/json',
+      }
+    );
+
+    const parsed = JSON.parse(rawResponse.replace(/```json/g, '').replace(/```/g, '').trim());
+    const validCategories: PcgCallCategory[] = [
+      '13_pitching', 'upselling', 'support',
+      'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'
+    ];
+
+    let category = (parsed.detected_category || 'support') as PcgCallCategory;
+    if (!validCategories.includes(category)) {
+      category = 'support';
+    }
+
+    const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0.8;
+    const isExcluded = ['hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(category);
+
+    // Safeguard: If confidence is low or doubtful, do NOT exclude genuine investors
+    if (isExcluded && confidence < 0.65) {
+      log.warn(ROUTE, `Triage confidence too low (${confidence}) for exclusion (${category}). Defaulting to evaluable support call.`);
+      return {
+        detected_category: 'support',
+        is_evaluable: true,
+        confidence,
+        opening_quote: parsed.opening_quote || '',
+        reason: `Ambiguous opening defaulted to support call (confidence ${confidence})`,
+      };
+    }
+
+    const isEvaluable = !isExcluded;
+
+    return {
+      detected_category: category,
+      is_evaluable: isEvaluable,
+      confidence,
+      opening_quote: parsed.opening_quote || '',
+      reason: parsed.reason || 'Classification complete',
+    };
+  } catch (err: any) {
+    log.error(ROUTE, `Failed to classify call opening: ${err.message}. Defaulting to evaluable support call.`);
+    return {
+      detected_category: 'support',
+      is_evaluable: true,
+      confidence: 0.5,
+      opening_quote: '',
+      reason: 'Classifier error fallback to support',
+    };
+  }
+}
+
+// ── Non-English Text Detection & Parameter Translation ─────────────────────────
+export function hasNonEnglishText(text: string): boolean {
+  if (!text) return false;
+  if (/[\u0900-\u0D7F]/.test(text)) return true;
+  const hinglishPattern = /\b(haan|nahi|nahin|kya|toh|karna|bol raha|accha|theek|bhi|aur|kaise|mera|aapka|sir ji|bataiye|samajh|paise|rupaye|boliye|kariye|dekh lijiye|batata hoon|kar deta hoon|bhaiya|bhai|humne|humara|dala|matlab|kaunse|apne|baat kar|is cheez|hume pata)\b/i;
+  return hinglishPattern.test(text);
+}
+
+export async function translateParametersToEnglish(
+  params: any[],
+  geminiKeys: string[]
+): Promise<any[]> {
+  if (!Array.isArray(params) || params.length === 0) return params;
+  const needsTranslation = params.some(
+    (p) => hasNonEnglishText(p.explanation || '') || hasNonEnglishText(p.quote || '') || hasNonEnglishText(p.reasoning || '')
+  );
+  if (!needsTranslation) return params;
+
+  log.info(ROUTE, `Non-English dialogue quotes detected in parameter explanations. Running translation pass to English...`);
+  const prompt = `You are a QA Auditor translation specialist for Wint Wealth.
+The following QA evaluation parameter objects contain dialogue citations in Hindi, Hinglish, or regional speech in their "explanation", "reasoning", or "quote" fields (e.g., 'Theek hai, bhaiya', 'Pura HNI ka hi aaya', 'Aap Ahaan se baat kar sakte ho', etc.).
+
+TASK:
+- Translate all non-English / Hindi / Hinglish dialogue quotes, phrases, and words into fluent, natural English.
+- Example: "Turn 50 [RM] ('Theek hai, bhaiya. Okay, aur kuch ho toh batana.')" -> "Turn 50 [RM] ('All right, brother. Okay, let me know if there is anything else.')"
+- Example: "Turn 34 [RM] ('Pura HNI ka hi aaya. Matlab humara toh 20 Cr humne jo dala tha wo tha.')" -> "Turn 34 [RM] ('It was entirely from HNIs. Meaning, the 20 Cr that we had contributed was that.')"
+- Example: "Turn 48 [RM] ('Aap Ahaan se baat kar sakte ho is cheez ke liye')" -> "Turn 48 [RM] ('You can speak to Ahaan regarding this')"
+- Keep all parameter IDs, names, maxScores, earnedScores, and statuses ('Yes', 'Half', 'No', 'NA') exactly unchanged.
+- Return ONLY the updated JSON array matching the input schema.
+
+INPUT PARAMETERS:
+${JSON.stringify(params, null, 2)}`;
+
+  try {
+    const raw = await geminiGenerate(
+      geminiKeys,
+      DEFAULT_GEMINI_MODEL,
+      [{ role: 'user', parts: [{ text: prompt }] }],
+      { responseMimeType: 'application/json' }
+    );
+    const translated = JSON.parse(raw.replace(/```json/g, '').replace(/```/g, '').trim());
+    if (Array.isArray(translated) && translated.length === params.length) {
+      log.info(ROUTE, `Successfully translated all parameter explanations to English.`);
+      return translated;
+    }
+  } catch (err: any) {
+    log.warn(ROUTE, `Parameter translation pass failed: ${err.message}. Preserving original parameters.`);
+  }
+  return params;
+}
 
 // ── Run Evaluation Pipeline for a Single PCG Call ─────────────────────────────
 export async function runPcgCallPipeline(callId: string, options?: { forceTranscript?: boolean }): Promise<any> {
@@ -416,7 +630,74 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
   const caller = (call.called_by && call.called_by.trim() && call.called_by.toLowerCase() !== 'unknown')
     ? call.called_by.trim()
     : (call.agent_name && call.agent_name.trim() && call.agent_name.toLowerCase() !== 'unknown' ? call.agent_name.trim() : 'Unassigned RM');
-  const { rm: resolvedRm, tl: resolvedTl } = resolvePcgAgent(caller);
+  const config = await readConfig();
+  const customTeamMap = config.pcgTeamAssignments || {};
+  const { rm: resolvedRm, tl: resolvedTl } = await resolvePcgAgentAsync(caller, customTeamMap);
+
+  // Auto-exclude known internal company phone numbers immediately (0 LLM cost)
+  if (isPcgExcludedInternalPhone(call.phone_number)) {
+    const exclusionText = `Internal company number (${call.phone_number || 'configured internal number'})`;
+    log.info(ROUTE, `Call ${call.call_id} auto-excluded as internal_personal: ${exclusionText}`);
+
+    await query(`
+      INSERT INTO pcg_call_evaluations (
+        call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
+        iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
+        verdict, is_evaluable, exclusion_reason, parameters, transcript_turns, sop_triggers, compliance_tripwire, scored_at, updated_at
+      ) VALUES ($1, $2, $3, $4, 'internal_personal', $5, null, null, null, null, 0, 'EXCLUDED_NON_CLIENT', false, $6, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, false, NOW(), NOW())
+      ON CONFLICT (call_id) DO UPDATE SET
+        rm_name = EXCLUDED.rm_name,
+        tl_name = EXCLUDED.tl_name,
+        customer_phone = EXCLUDED.customer_phone,
+        call_category = 'internal_personal',
+        duration_seconds = EXCLUDED.duration_seconds,
+        iqs_score = null,
+        process_score = null,
+        communication_score = null,
+        customer_service_score = null,
+        applicable_weight = 0,
+        verdict = 'EXCLUDED_NON_CLIENT',
+        is_evaluable = false,
+        exclusion_reason = EXCLUDED.exclusion_reason,
+        parameters = '[]'::jsonb,
+        sop_triggers = '[]'::jsonb,
+        compliance_tripwire = false,
+        compliance_reason = null,
+        scored_at = NOW(),
+        updated_at = NOW()
+    `, [
+      call.call_id,
+      resolvedRm,
+      resolvedTl,
+      call.phone_number,
+      call.duration_seconds || 0,
+      exclusionText,
+    ]);
+
+    await query(`
+      UPDATE pcg_call_recordings
+      SET
+        call_nature = 'non_client',
+        exclusion_reason = $1,
+        call_category = 'internal_personal',
+        category_source = 'internal_number_rule'
+      WHERE call_id = $2
+    `, [exclusionText, call.call_id]);
+
+    return {
+      callId: call.call_id,
+      rmName: resolvedRm,
+      tlName: resolvedTl,
+      category: 'internal_personal',
+      isEvaluable: false,
+      verdict: 'EXCLUDED_NON_CLIENT',
+      exclusionReason: exclusionText,
+      iqs: null,
+      parameters: [],
+      transcriptTurns: [],
+      sopTriggers: [],
+    };
+  }
 
   // If call is unopened / zero duration, mark as NOT_SCOREABLE immediately
   if (!call.duration_seconds || call.duration_seconds < 15 || !call.recording_url) {
@@ -430,17 +711,16 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
       INSERT INTO pcg_call_evaluations (
         call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
         iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
-        verdict, parameters, transcript_turns, compliance_tripwire, scored_at
-      ) VALUES ($1, $2, $3, $4, 'support', $5, null, null, null, null, 0, 'NOT_SCOREABLE', $6, '[]'::jsonb, false, NOW())
+        verdict, is_evaluable, parameters, transcript_turns, sop_triggers, compliance_tripwire, scored_at
+      ) VALUES ($1, $2, $3, $4, 'support', $5, null, null, null, null, 0, 'NOT_SCOREABLE', true, $6, '[]'::jsonb, '[]'::jsonb, false, NOW())
       ON CONFLICT (call_id) DO UPDATE SET
-        verdict = 'NOT_SCOREABLE', scored_at = NOW()
+        verdict = 'NOT_SCOREABLE', is_evaluable = true, sop_triggers = '[]'::jsonb, scored_at = NOW()
     `, [call.call_id, resolvedRm, resolvedTl, call.phone_number, call.duration_seconds || 0, JSON.stringify(paramsMap)]);
 
-    return { callId: call.call_id, verdict: 'NOT_SCOREABLE', iqs: null };
+    return { callId: call.call_id, verdict: 'NOT_SCOREABLE', iqs: null, sopTriggers: [] };
   }
 
   // 2. Fetch Gemini API configuration
-  const config = await readConfig();
   const geminiKeys = getIQSGeminiKeys(config);
   if (!geminiKeys.length) {
     throw new Error('No Gemini API key configured for IQS scoring');
@@ -472,60 +752,131 @@ export async function runPcgCallPipeline(callId: string, options?: { forceTransc
       time: t.time || '00:00',
       turnIndex: t.turnIndex || (idx + 1),
     }));
-  } else {
-    log.info(ROUTE, `Transcribing audio from S3 for PCG call ${call.call_id}: ${call.recording_url}`);
-    const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(call.recording_url, apiKey);
 
-    const diarizationPrompt = `Listen carefully to this phone call between a Wint Wealth Relationship Manager (RM) and an investor (Customer).
-Transcribe the entire call verbatim into chronological speaker dialogue turns.
-Identify whether each speaker is "RM" (the Wint Wealth representative) or "Customer" (the client/investor).
-Return JSON matching:
-{
-  "detected_language": "English" | "Hindi" | "Hinglish",
-  "dead_air_count": number,
-  "interruption_count": number,
-  "turns": [
-    { "speaker": "RM" | "Customer", "time": "MM:SS", "text": "..." }
-  ]
-}`;
-
-    const ai = new GoogleGenAI({ apiKey });
-    try {
-      const diarizationRaw = await callGeminiForCall(
-        geminiKeys,
-        [{
-          parts: [
-            { file_data: { mime_type: mimeType, file_uri: fileUri } },
-            { text: diarizationPrompt },
-          ]
-        }],
-        undefined,
-        180_000
-      );
-
-      const parsedDiarization = JSON.parse(diarizationRaw.replace(/```json/g, '').replace(/```/g, '').trim());
-      detectedLanguage = parsedDiarization.detected_language || 'English';
-      deadAirCount = parsedDiarization.dead_air_count || 0;
-      interruptionCount = parsedDiarization.interruption_count || 0;
-
-      transcriptTurns = (parsedDiarization.turns || []).map((t: any, idx: number) => ({
-        speaker: t.speaker === 'Customer' ? ('Customer' as const) : ('RM' as const),
-        text: t.text || '',
-        time: t.time || '00:00',
-        turnIndex: idx + 1,
-      }));
-    } finally {
-      // Clean up Gemini File API upload
+    // If existing transcript still contains non-English dialogue, translate it into English before scoring
+    const hasRegionalSpeech = transcriptTurns.some(t => hasNonEnglishText(t.text));
+    if (hasRegionalSpeech) {
+      log.info(ROUTE, `Existing transcript turns contain non-English dialogue. Translating dialogue to English...`);
       try {
-        const fileNameMatch = fileUri.split('/files/')[1];
-        if (fileNameMatch) await ai.files.delete({ name: `files/${fileNameMatch}` });
-      } catch { }
+        const transPrompt = `Translate the following dialogue turns into fluent, natural English.
+Preserve speaker ('RM' vs 'Customer'), timestamps ('time'), turn indices ('turnIndex'), and financial/brand terms ('Wint Wealth', bond names, percentages).
+Return valid JSON array matching the exact input structure:
+${JSON.stringify(transcriptTurns, null, 2)}`;
+        const rawTrans = await geminiGenerate(
+          geminiKeys,
+          DEFAULT_GEMINI_MODEL,
+          [{ role: 'user', parts: [{ text: transPrompt }] }],
+          { responseMimeType: 'application/json' }
+        );
+        const parsed = JSON.parse(rawTrans.replace(/```json/g, '').replace(/```/g, '').trim());
+        if (Array.isArray(parsed) && parsed.length === transcriptTurns.length) {
+          transcriptTurns = parsed;
+        }
+      } catch (err: any) {
+        log.warn(ROUTE, `Dialogue translation failed: ${err.message}. Proceeding with existing turns.`);
+      }
     }
+  } else {
+    const pyannoteKey =
+      config.pyannoteApiKey ||
+      process.env.PYANNOTE_API_KEY ||
+      process.env.PYANNOTEAI_API_KEY ||
+      '';
+
+    const audioOut = await transcribeAndDiarizePcgAudio({
+      callId: call.call_id,
+      recordingUrl: call.recording_url,
+      durationSeconds: call.duration_seconds || 0,
+      rmName: resolvedRm,
+      callType: call.call_type,
+      geminiKeys,
+      pyannoteApiKey: pyannoteKey,
+    });
+
+    transcriptTurns = audioOut.transcriptTurns;
+    detectedLanguage = audioOut.detectedLanguage;
+    deadAirCount = audioOut.deadAirCount;
+    interruptionCount = audioOut.interruptionCount;
   }
 
   const transcriptText = transcriptTurns.map((t) => `Turn ${t.turnIndex} [${t.speaker} - ${t.time}]: ${t.text}`).join('\n');
 
-  // 4. Retrieve PCG-Exclusive KB Context
+  // 4. Stage 1: Initial Call Classification & Triage (Opening 45-60 seconds)
+  const openingTurns = transcriptTurns.slice(0, 8);
+  const openingDialogueText = openingTurns.map((t) => `Turn ${t.turnIndex} [${t.speaker} - ${t.time}]: ${t.text}`).join('\n');
+  const triage = await classifyPcgCallOpening(openingDialogueText, [apiKey], config.pcgClassificationPrompt);
+
+  log.info(ROUTE, `Stage 1 Triage for call ${call.call_id}: category=${triage.detected_category}, is_evaluable=${triage.is_evaluable}, confidence=${triage.confidence}`);
+
+  // If excluded: immediately store as EXCLUDED_NON_CLIENT with NULL IQS score and abort evaluation
+  if (!triage.is_evaluable) {
+    const exclusionText = `${triage.reason}${triage.opening_quote ? ` (Quote: "${triage.opening_quote}")` : ''}`;
+    log.info(ROUTE, `Call ${call.call_id} excluded from quality evaluation: ${exclusionText}`);
+
+    await query(`
+      INSERT INTO pcg_call_evaluations (
+        call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
+        iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
+        verdict, is_evaluable, exclusion_reason, parameters, transcript_turns, sop_triggers, compliance_tripwire, scored_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, null, null, null, null, 0, 'EXCLUDED_NON_CLIENT', false, $7, '[]'::jsonb, $8, '[]'::jsonb, false, NOW(), NOW())
+      ON CONFLICT (call_id) DO UPDATE SET
+        rm_name = EXCLUDED.rm_name,
+        tl_name = EXCLUDED.tl_name,
+        customer_phone = EXCLUDED.customer_phone,
+        call_category = EXCLUDED.call_category,
+        duration_seconds = EXCLUDED.duration_seconds,
+        iqs_score = null,
+        process_score = null,
+        communication_score = null,
+        customer_service_score = null,
+        applicable_weight = 0,
+        verdict = 'EXCLUDED_NON_CLIENT',
+        is_evaluable = false,
+        exclusion_reason = EXCLUDED.exclusion_reason,
+        parameters = '[]'::jsonb,
+        transcript_turns = EXCLUDED.transcript_turns,
+        sop_triggers = '[]'::jsonb,
+        compliance_tripwire = false,
+        compliance_reason = null,
+        scored_at = NOW(),
+        updated_at = NOW()
+    `, [
+      call.call_id,
+      resolvedRm,
+      resolvedTl,
+      call.phone_number,
+      triage.detected_category,
+      call.duration_seconds,
+      exclusionText,
+      JSON.stringify(transcriptTurns),
+    ]);
+
+    await query(`
+      UPDATE pcg_call_recordings
+      SET
+        call_nature = 'non_client',
+        exclusion_reason = $1,
+        call_category = $1,
+        category_source = 'ai_triage'
+      WHERE call_id = $2
+    `, [triage.detected_category, call.call_id]);
+
+    return {
+      callId: call.call_id,
+      rmName: resolvedRm,
+      tlName: resolvedTl,
+      category: triage.detected_category,
+      isEvaluable: false,
+      verdict: 'EXCLUDED_NON_CLIENT',
+      exclusionReason: exclusionText,
+      iqs: null,
+      parameters: [],
+      transcriptTurns,
+      sopTriggers: [],
+    };
+  }
+
+  // 5. Retrieve PCG-Exclusive KB Context
   const kbContext = await getPcgKbContextForScoring(transcriptText.slice(0, 800), 6);
 
   // 5. LLM Quality & Compliance Evaluation
@@ -541,14 +892,14 @@ AUDIO SIGNALS:
 VERIFIED PCG KNOWLEDGE BASE CONTEXT (Strict Source of Truth for AIF & MLDs):
 ${kbContext || 'No specific KB excerpts retrieved.'}
 
-Please evaluate this PCG call strictly against the 11 parameters and compliance gates. Output valid JSON only.`;
+Please evaluate this PCG call strictly against the 11 parameters, compliance gates, and the 7 SOP conduct/communication monitoring categories. Output valid JSON only.`;
 
   const responseText = await geminiGenerate(
     [apiKey],
     DEFAULT_GEMINI_MODEL,
     [{ role: 'user', parts: [{ text: userPrompt }] }],
     {
-      systemInstruction: PCG_QUALITY_SYSTEM_PROMPT,
+      systemInstruction: promptOrDefault(config.pcgQualityPrompt, PCG_QUALITY_SYSTEM_PROMPT),
       responseMimeType: 'application/json',
     }
   );
@@ -625,16 +976,143 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     verdict = 'COMPLIANCE_BREACH';
   }
 
-  const category = evalJson.call_category || call.call_category || '13_pitching';
+  const category = (evalJson.call_category && ['13_pitching', 'upselling', 'support'].includes(evalJson.call_category))
+    ? evalJson.call_category
+    : (triage.detected_category || '13_pitching');
+
+  // 6b. Mandatory English Translation Guard: Ensure all cited parameter quotes & explanations are 100% in English
+  const cleanedParameters = await translateParametersToEnglish(formattedParameters, [apiKey, ...geminiKeys]);
+
+  // 6c. Parse & Sanitize SOP Triggers (7 Communication & Conduct Monitoring Categories)
+  const rawSopTriggers = Array.isArray(evalJson.sop_triggers) ? evalJson.sop_triggers : [];
+  const validCategories = new Set([
+    'Customer Behaviour & Hostility',
+    'Guaranteed or Assured Returns',
+    'Unauthorized Advice & Mis-selling',
+    'Customer Churn & Capital Withdrawal Threat',
+    'Missed Commitment & Service Escalation',
+    'Confidentiality & Data Privacy Breach',
+    'Unprofessional Conduct & Communication Slips',
+    'RM Communication & Tone',
+    'Professional Boundary Monitoring',
+    'Returns & Benefits Negotiation',
+    'Out-of-Scope Queries',
+    'Internal Tools Probing',
+    'Business Information Probing',
+  ]);
+
+  const sanitizedSopTriggers: PcgSopTrigger[] = rawSopTriggers
+    .filter((tr: any) => tr && typeof tr === 'object' && (tr.quote || tr.signal))
+    .map((tr: any) => {
+      const cat = String(tr.category || '').trim();
+      const category = validCategories.has(cat) ? cat : 'Customer Behaviour & Hostility';
+      const sev = String(tr.severity || '').toUpperCase().trim();
+      const severity: 'CRITICAL' | 'MEDIUM' | 'LOW' =
+        sev === 'CRITICAL' ? 'CRITICAL' : sev === 'LOW' ? 'LOW' : 'MEDIUM';
+      const dirStr = String(tr.direction || '').trim().toLowerCase();
+      const direction: 'Customer said this to RM' | 'RM said this to customer' =
+        dirStr.includes('rm said') || dirStr.includes('rm to customer')
+          ? 'RM said this to customer'
+          : 'Customer said this to RM';
+
+      const turnIdx = typeof tr.turn_index === 'number'
+        ? tr.turn_index
+        : typeof tr.turnIndex === 'number'
+        ? tr.turnIndex
+        : undefined;
+
+      return {
+        call_id: call.call_id,
+        rm_name: resolvedRm,
+        tl_name: resolvedTl,
+        customer_phone: call.phone_number,
+        category,
+        severity,
+        direction,
+        signal: String(tr.signal || category).trim(),
+        timestamp: tr.timestamp ? String(tr.timestamp).trim() : undefined,
+        turn_index: turnIdx,
+        quote: String(tr.quote || '').trim(),
+      };
+    });
+
+  // Also run deterministic and deep SOP behavioral tripwires
+  let detectedTriggers: PcgSopTrigger[] = [];
+  try {
+    detectedTriggers = await detectPcgSopTriggers(
+      transcriptTurns,
+      {
+        callId: call.call_id,
+        rmName: resolvedRm,
+        tlName: resolvedTl,
+        customerPhone: call.phone_number,
+        durationSeconds: call.duration_seconds,
+      },
+      geminiKeys
+    );
+  } catch (sopErr: any) {
+    log.error(ROUTE, `SOP detection error for call ${call.call_id}: ${sopErr.message}`);
+  }
+
+  // Deduplicate triggers by quote/signal
+  const combinedTriggers: PcgSopTrigger[] = [...sanitizedSopTriggers];
+  for (const dt of detectedTriggers) {
+    const exists = combinedTriggers.some(
+      (ct) => (ct.quote && dt.quote && (ct.quote.includes(dt.quote) || dt.quote.includes(ct.quote))) ||
+              (ct.category === dt.category && ct.timestamp === dt.timestamp)
+    );
+    if (!exists) {
+      combinedTriggers.push(dt);
+    }
+  }
+
+  // 6d. Persist SOP triggers to database
+  let savedTriggers: PcgSopTrigger[] = [];
+  if (combinedTriggers.length > 0) {
+    log.info(ROUTE, `Detected ${combinedTriggers.length} SOP trigger(s) for call ${call.call_id}. Persisting to DB...`);
+    savedTriggers = await savePcgSopTriggers(call.call_id, combinedTriggers, {
+      rmName: resolvedRm,
+      tlName: resolvedTl,
+      customerPhone: call.phone_number,
+    });
+
+    // 6e. Automatically fire Slack alerts to designated channel
+    const sopSlackChannel = getPcgSopSlackChannel();
+    for (const trig of savedTriggers) {
+      try {
+        const slackRes = await sendPcgSopSlackAlert(
+          trig,
+          {
+            callId: call.call_id,
+            rmName: resolvedRm,
+            tlName: resolvedTl,
+            customerPhone: call.phone_number,
+            durationSeconds: call.duration_seconds,
+          }
+        );
+        if (trig.id) {
+          await updatePcgSopSlackStatus(
+            trig.id,
+            slackRes.ok,
+            sopSlackChannel,
+            slackRes.ts,
+            slackRes.error
+          );
+        }
+      } catch (slackErr: any) {
+        log.error(ROUTE, `Failed to post Slack alert for SOP trigger: ${slackErr.message}`);
+      }
+    }
+  }
 
   // 7. Store Result in pcg_call_evaluations
   await query(`
     INSERT INTO pcg_call_evaluations (
       call_id, rm_name, tl_name, customer_phone, call_category, duration_seconds,
       iqs_score, process_score, communication_score, customer_service_score, applicable_weight,
-      verdict, parameters, compliance_tripwire, compliance_reason, ai_coaching_tip,
-      transcript_turns, scored_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, null, $16, NOW(), NOW())
+      verdict, is_evaluable, exclusion_reason, parameters, compliance_tripwire, compliance_reason, ai_coaching_tip,
+      transcript_turns, sop_triggers, scored_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, null, $13, $14, $15, null, $16, $17, NOW(), NOW())
     ON CONFLICT (call_id) DO UPDATE SET
       rm_name = EXCLUDED.rm_name,
       tl_name = EXCLUDED.tl_name,
@@ -647,11 +1125,14 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
       customer_service_score = EXCLUDED.customer_service_score,
       applicable_weight = EXCLUDED.applicable_weight,
       verdict = EXCLUDED.verdict,
+      is_evaluable = true,
+      exclusion_reason = null,
       parameters = EXCLUDED.parameters,
       compliance_tripwire = EXCLUDED.compliance_tripwire,
       compliance_reason = EXCLUDED.compliance_reason,
       ai_coaching_tip = null,
       transcript_turns = EXCLUDED.transcript_turns,
+      sop_triggers = EXCLUDED.sop_triggers,
       scored_at = NOW(),
       updated_at = NOW()
   `, [
@@ -667,22 +1148,35 @@ Please evaluate this PCG call strictly against the 11 parameters and compliance 
     csScore,
     totalApplicable,
     verdict,
-    JSON.stringify(formattedParameters),
+    JSON.stringify(cleanedParameters),
     complianceTripwire,
     complianceReason,
     JSON.stringify(transcriptTurns),
+    JSON.stringify(savedTriggers),
   ]);
 
-  log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}`);
+  await query(`
+    UPDATE pcg_call_recordings
+    SET
+      call_nature = 'client',
+      call_category = $1,
+      category_source = 'ai_triage'
+    WHERE call_id = $2
+  `, [category, call.call_id]);
+
+  log.info(ROUTE, `Successfully evaluated PCG call ${call.call_id} — IQS: ${iqsScore}%, Verdict: ${verdict}, SOP Triggers: ${savedTriggers.length}`);
 
   return {
     callId: call.call_id,
     rmName: resolvedRm,
     tlName: resolvedTl,
+    category,
+    isEvaluable: true,
     iqs: iqsScore,
     verdict,
-    parameters: formattedParameters,
+    parameters: cleanedParameters,
     transcriptTurns,
+    sopTriggers: savedTriggers,
   };
 }
 

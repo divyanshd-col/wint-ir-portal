@@ -38,7 +38,7 @@ async function runRerunInBackground(statusFilter: string, limit: number | null, 
     for (let i = 0; i < calls.length; i++) {
       const call = calls[i];
       try {
-        await runCallPipeline(call.id);
+        await runCallPipeline(call.id, { skipSlackAlert: true });
         successCount++;
       } catch (err: any) {
         log.error('cx/qa/rerun-calls', `Failed re-evaluating call ${call.id}: ${err.message}`);

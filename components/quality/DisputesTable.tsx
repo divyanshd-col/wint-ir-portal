@@ -4,12 +4,15 @@ import EvalPanel from './EvalPanel';
 import CallEvalPanel from './CallEvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
-import { getDisputeClassification } from '@/lib/quality';
+import { getDisputeClassification, isJunkDisposition } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
 import { rowClick } from './rowClick';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { CsatPill } from './csat';
 import { useSort, sortRows, SortTh } from './sort';
+import UISelect from '@/components/quality/UISelect';
+import { DisputeStatusPill } from '@/components/tl/QualityChatsPage';
+import * as T from './tableStyles';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -47,6 +50,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [mobileSearch, setMobileSearch] = useState(initialMobile || '');
   const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
+  const [disputeStatusFilter, setDisputeStatusFilter] = useState('');
   const [openDrop,     setOpenDrop]     = useState<string | null>(null);
   const [page,         setPage]         = useState(1);
   const [pageSize,     setPageSize]     = useState(20);
@@ -57,7 +61,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
 
   useEffect(() => {
     setPage(1);
-  }, [agentFilter, callsFilter, chatIdSearch, mobileSearch, type]);
+  }, [agentFilter, callsFilter, chatIdSearch, mobileSearch, type, disputeStatusFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +70,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
         const params = new URLSearchParams({ agent_filter: agentFilter });
         if (type !== 'all') params.set('type', type);
         if (callsFilter !== 'all') params.set('has_calls', callsFilter);
+        if (disputeStatusFilter) params.set('dispute_status', disputeStatusFilter);
         const res = await fetch(`/api/cx/qa/disputes?${params}`);
         if (!res.ok) return;
         const data = await res.json();
@@ -79,14 +84,16 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
             list = list.filter((d: any) => Boolean(d.callId));
           }
           setDisputes(list);
-          onCountChange?.(list.length);
+          if (!disputeStatusFilter) {
+            onCountChange?.(list.length);
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [agentFilter, callsFilter, type, onCountChange]);
+  }, [agentFilter, callsFilter, type, disputeStatusFilter, onCountChange]);
 
   function toggleExpand(id: string) {
     setExpandedId(prev => prev === id ? null : id);
@@ -114,7 +121,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
     }
   }
 
-  const hasFilters = !!(chatIdSearch || mobileSearch || callsFilter !== 'all');
+  const hasFilters = !!(chatIdSearch || mobileSearch || callsFilter !== 'all' || disputeStatusFilter);
 
   let visibleDisputes = disputes;
 
@@ -139,18 +146,11 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
   const [sort, toggleSort] = useSort();
   const sortedRows = sortRows(pagedDisputes, sort, { mobile: d => d.mobileNumber, date: d => d.closedAt, disp: d => d.disposition, agent: d => d.agentName, iqs: d => d.iqsScore, csat: d => d.csatScore });
 
-  const th: React.CSSProperties = {
-    height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-    fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
-  };
-  const td: React.CSSProperties = {
-    height: 52, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
-    fontSize: 14, color: 'var(--qa-text)', verticalAlign: 'middle',
-  };
-  const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text-2)' };
-  const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13 };
-  const tdAct: React.CSSProperties  = { ...td, textAlign: 'right' };
+  const th: React.CSSProperties = T.th;
+  const td: React.CSSProperties = T.td;
+  const tdMono: React.CSSProperties = T.tdMono;
+  const tdNum: React.CSSProperties  = T.tdNum;
+  const tdAct: React.CSSProperties  = T.tdAct;
 
   const chip: React.CSSProperties = {
     height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
@@ -214,9 +214,33 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
           </div>
         )}
 
+        <UISelect
+          value={disputeStatusFilter}
+          onChange={e => setDisputeStatusFilter(e.target.value)}
+          style={{
+            height: 32,
+            padding: '0 10px',
+            border: `1px solid ${disputeStatusFilter ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`,
+            borderRadius: 8,
+            background: 'var(--qa-card)',
+            color: disputeStatusFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
+            fontSize: 13,
+            fontFamily: 'inherit',
+            outline: 'none',
+            cursor: 'pointer',
+            minWidth: 160,
+          }}
+        >
+          <option value="">All Open Disputes</option>
+          <option value="forwarded_to_tl">Pending TL review</option>
+          <option value="forwarded_to_qa">Forwarded to QA</option>
+          <option value="reviewed">Reviewed Disputes</option>
+          <option value="all">All Disputes (incl. Reviewed)</option>
+        </UISelect>
+
         <button
           disabled={!hasFilters}
-          onClick={() => { setChatIdSearch(''); setMobileSearch(''); setCallsFilter('all'); }}
+          onClick={() => { setChatIdSearch(''); setMobileSearch(''); setCallsFilter('all'); setDisputeStatusFilter(''); }}
           style={{
             ...chip,
             color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
@@ -282,13 +306,14 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 120 }} />
+          <col style={{ width: 110 }} />
+          <col style={{ width: 130 }} />
           <col style={{ width: 120 }} />
-          <col style={{ width: 140 }} />
-          <col style={{ width: 130 }} />
-          <col style={{ width: 130 }} />
-          <col style={{ width: 90 }} />
-          <col style={{ width: 150 }} />
-          <col style={{ width: 100 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 85 }} />
+          <col style={{ width: 110 }} />
+          <col style={{ width: 165 }} />
+          <col style={{ width: 120 }} />
         </colgroup>
         <thead>
           <tr>
@@ -299,6 +324,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
             <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
             <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS Score</SortTh>
             <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
+            <th style={th}>Dispute Status</th>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
@@ -306,7 +332,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <tr key={i}>
-              {Array.from({ length: 8 }).map((_, j) => (
+              {Array.from({ length: 9 }).map((_, j) => (
                 <td key={j} style={td}>
                   <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: '60%' }} />
                 </td>
@@ -315,7 +341,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
           ))
         ) : pagedDisputes.length === 0 ? (
           <tr>
-            <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+            <td colSpan={9} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
               No disputes pending review.
             </td>
           </tr>
@@ -347,13 +373,18 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                   <td style={tdMono}>
                     {d.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                   </td>
-                  <td style={td}>
-                    {d.closedAt ? `${fmtDate(d.closedAt)} ${fmtTime(d.closedAt)}` : '—'}
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                    {d.closedAt ? (
+                      <>
+                        <div style={{ fontSize: 13 }}>{fmtDate(d.closedAt)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: T.MONO }}>{fmtTime(d.closedAt)}</div>
+                      </>
+                    ) : '—'}
                   </td>
                   <td style={{ ...td, color: 'var(--qa-text-2)' }}>{d.disposition || '—'}</td>
                   <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
                   <td style={tdNum}>
-                    {(d.originalScore ?? (d.callIqsScore ?? d.iqsScore)) != null ? (
+                    {(!isJunkDisposition(d.disposition) && (d.originalScore ?? (d.callIqsScore ?? d.iqsScore)) != null) ? (
                       <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                         {d.originalScore != null && (d.callIqsScore ?? d.iqsScore) != null && d.originalScore !== (d.callIqsScore ?? d.iqsScore) ? (
                           <span title={`Disputed score: ${d.originalScore}, Revised: ${d.callIqsScore ?? d.iqsScore}`}>
@@ -372,7 +403,16 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                   <td style={td}>
                     <CsatPill value={d.csatScore} />
                   </td>
-                  <td style={{ ...tdAct, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, border: 'none', height: 52 }}>
+                  <td style={td}>
+                    <DisputeStatusPill
+                      status={d.status}
+                      raisedByRole={d.raisedBy}
+                      reviewNote={d.reviewNote}
+                      parameters={d.parameters}
+                    />
+                  </td>
+                  <td style={{ ...tdAct, whiteSpace: 'nowrap' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
                     <button
                       onClick={() => openThread(d.flagId)}
                       style={{
@@ -390,7 +430,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                       onClick={() => toggleExpand(rowKey)}
                       style={{
                         background: 'none', border: 0, padding: 0,
-                        fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                         color: 'var(--qa-text)', cursor: 'pointer',
                         display: 'inline-flex', alignItems: 'center', gap: 5,
                       }}
@@ -402,13 +442,14 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                         transition: 'transform 0.15s', display: 'inline-block',
                       }}>▾</span>
                     </button>
+                   </div>
                   </td>
                 </tr>
 
                 {/* Thread panel */}
                 {threadId === d.flagId && (
                   <tr>
-                    <td colSpan={8} style={{ padding: '0 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+                    <td colSpan={9} style={{ padding: '0 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
                       <DisputeThread
                         flagId={d.flagId}
                         agentNote={d.agentNote}
@@ -440,12 +481,12 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                       onClose={() => setExpandedId(null)}
                       mobileNumber={d.mobileNumber}
                       durationSeconds={d.durationSeconds}
-                      colSpan={8}
+                      colSpan={9}
                     />
                   ) : (
                     <React.Fragment>
                       <tr>
-                        <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
+                        <td colSpan={9} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
                           <DisputeThread
                             flagId={d.flagId}
                             agentNote={d.agentNote}
@@ -477,7 +518,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                           }}
                           onDone={() => removeDispute(d.chatId)}
                           onClose={() => setExpandedId(null)}
-                          colSpan={8}
+                          colSpan={9}
                           conversationType={d.conversationType}
                         />
                       </ErrorBoundary>

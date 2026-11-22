@@ -617,7 +617,7 @@ export default function CallLinkTestClient({ userRole }: Props) {
     <div className="max-w-md mx-auto px-4 py-10">
       <div className="text-center mb-8">
         
-        <h1 className="text-2xl font-bold text-slate-800">Call Transcript Test</h1>
+        <h1 className="text-2xl font-semibold text-slate-800">Call Transcript Test</h1>
         <p className="text-slate-500 mt-1.5 text-sm">
           Enter a Chat ID to fetch its call recording(s), run transcription and IQS scoring.
         </p>

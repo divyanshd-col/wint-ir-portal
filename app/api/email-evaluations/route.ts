@@ -29,6 +29,16 @@ import {
 
 const submitterCache = new Map<string, string>();
 
+import { readConfig as readPortalConfig } from '@/lib/config';
+import { reviewThreshold } from '@/lib/quality-thresholds';
+import { agentInTeam, disputesOwnedByTL, emailReviewDenial, tlEditStatus, tlEmailDenial } from '@/lib/dispute-owner';
+
+/** SQL for the QA "Pending Review" queue: completed, not yet reviewed, and worth a QA look. Same rule as chats and calls:
+ *  IQS at or below the email threshold (Settings → Quality Thresholds), plus emails with no score or a compliance failure. */
+function pendingReviewSql(threshold: number): string {
+  return `e.evaluation_status = 'Completed' AND (e.review_status = 'pending' OR e.review_status IS NULL) AND (e.quality_score IS NULL OR e.quality_score <= ${threshold} OR e.compliance_passed = FALSE OR COALESCE(array_length(e.compliance_issues, 1), 0) > 0)`;
+}
+
 async function getSubmitterName(emailOrName: string): Promise<string> {
   if (!emailOrName) return 'Yashvi Chajjer';
   const clean = emailOrName.trim();
@@ -56,7 +66,7 @@ async function getSubmitterName(emailOrName: string): Promise<string> {
       submitterCache.set(lower, dbUser.name);
       return dbUser.name;
     }
-  } catch {}
+  } catch { }
   if (clean.includes('@')) {
     const local = clean.split('@')[0];
     const formatted = local.split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -122,6 +132,37 @@ async function getScopedAgentNamesForUser(
   return null;
 }
 
+/** The email row plus what a review decision needs: current review state, scores, and who raised the dispute (the flag). */
+const EVAL_FOR_REVIEW_SQL = `
+  SELECT e.id, e.ticket_id, e.message_id, e.flag_id, e.agent_name, e.dispute_status, e.dispute_notes, e.review_status,
+         e.quality_score, e.qa_override_score, e.compliance_passed, e.compliance_issues,
+         fl.raised_by_role AS flag_raised_by_role, fl.agent_email AS flag_agent_email
+  FROM email_reply_evaluations e LEFT JOIN iqs_flags fl ON fl.id = e.flag_id
+  WHERE e.message_id = $1`;
+
+const denial = (d: { status: number; error: string } | null) => (d ? NextResponse.json({ error: d.error }, { status: d.status }) : null);
+
+/** Gate for a TL changing an email's scores or deciding its dispute (rules: tlEmailDenial). Null when allowed. */
+async function tlEmailGate(o: { role: string; email: string; name: string; existing: any; tlOwns: boolean }): Promise<NextResponse | null> {
+  if (o.role !== 'tl') return null;
+  const team = (await getScopedAgentNamesForUser(o.email, o.name, 'tl', false)) || [];
+  return denial(tlEmailDenial({
+    role: o.role, owner: o.tlOwns ? 'tl' : 'qa', email: o.email, inTeam: agentInTeam(team, o.existing.agent_name),
+    disputeStatus: o.existing.dispute_status, flagRaisedByRole: o.existing.flag_raised_by_role, flagAgentEmail: o.existing.flag_agent_email,
+  }));
+}
+
+/** review_status after a decision. A TL edit keeps at-or-below-threshold emails (and compliance failures) in QA's audit queue; everything else is reviewed. */
+async function reviewStatusAfter(o: { role: string; tlOwns: boolean; existing: any; newScore: number | null; compliancePassed?: boolean; complianceIssues?: string[] }): Promise<string> {
+  if (!(o.role === 'tl' && o.tlOwns)) return 'reviewed';
+  const e = o.existing;
+  const score = o.newScore ?? (e.qa_override_score != null ? Number(e.qa_override_score) : e.quality_score != null ? Number(e.quality_score) : null);
+  const failing = o.compliancePassed !== undefined
+    ? !o.compliancePassed || (o.complianceIssues?.length ?? 0) > 0
+    : e.compliance_passed === false || (e.compliance_issues?.length ?? 0) > 0;
+  return tlEditStatus(score, reviewThreshold(await readPortalConfig().catch(() => null), 'email'), e.review_status ?? 'pending', failing);
+}
+
 async function getScopedDispositionsForUser(
   userEmail: string,
   userRole: string,
@@ -151,7 +192,7 @@ async function getScopedDispositionsForUser(
         if (dbUser?.assigned_dispositions && dbUser.assigned_dispositions.length > 0) {
           userDisps = dbUser.assigned_dispositions;
         }
-      } catch {}
+      } catch { }
     }
 
     return {
@@ -164,6 +205,7 @@ async function getScopedDispositionsForUser(
 }
 
 export async function GET(req: NextRequest) {
+  const pendingSql = pendingReviewSql(reviewThreshold(await readPortalConfig().catch(() => null), 'email'));
   try {
     const { searchParams } = new URL(req.url);
     const session = await getServerSession(authOptions).catch(() => null);
@@ -280,7 +322,7 @@ export async function GET(req: NextRequest) {
     // QA Review workflow filtering
     if (tab === 'pending' || reviewStatus === 'pending' || status === 'Pending_Review') {
       // Completed AI evaluation, pending QA review
-      whereClauses.push(`e.evaluation_status = 'Completed' AND (e.review_status = 'pending' OR e.review_status IS NULL)`);
+      whereClauses.push(pendingSql);
     } else if (tab === 'reviewed' || reviewStatus === 'reviewed' || status === 'Reviewed') {
       // Finalized & submitted by QA
       whereClauses.push(`e.review_status = 'reviewed'`);
@@ -325,19 +367,53 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`(e.compliance_passed = FALSE OR array_length(e.compliance_issues, 1) > 0)`);
     }
 
+    // When TLs own disputes, every open IR dispute (including ones already forwarded to QA) is in the TL queue; TL-raised ones stay with QA.
+    const tlOwns = await disputesOwnedByTL();
+    const raisedByTl = `COALESCE(fl.raised_by_role, 'ir') = 'tl'`;
+    // The TL's Disputes Raised tab embeds the QA table; an admin opening it must get the TL queue too, not the QA one.
+    const tlView = userRole === 'tl' || (isAdmin && searchParams.get('view') === 'tl');
+    const tlOpenSql = `(e.dispute_status IN ('Raised', 'Under_Review') AND NOT ${raisedByTl})`;
     if (disputeQueue === 'tl_pending') {
-      whereClauses.push(`e.dispute_status = 'Raised'`);
+      whereClauses.push(tlOwns ? tlOpenSql : `e.dispute_status = 'Raised'`);
     } else if (disputeQueue === 'tl_history') {
-      whereClauses.push(`e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
+      if (disputeStatus === 'reviewed') {
+        whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
+      } else if (disputeStatus === 'forwarded_to_qa' || disputeStatus === 'Under_Review') {
+        whereClauses.push(tlOwns ? `(e.dispute_status = 'Under_Review' AND ${raisedByTl})` : `e.dispute_status = 'Under_Review'`);
+      } else {
+        whereClauses.push(tlOwns
+          ? `((e.dispute_status = 'Under_Review' AND ${raisedByTl}) OR e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved'))`
+          : `e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
+      }
     } else if (tab === 'disputes') {
-      // QA queue: only disputes a TL has forwarded (like chats); Raised ones are still with the TL.
+      if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl' || disputeStatus === 'Raised') {
+        whereClauses.push(`e.dispute_status = 'Raised'`);
+      } else if (disputeStatus === 'reviewed') {
+        whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
+      } else if (disputeStatus === 'all') {
+        whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
+      } else if (tlOwns && tlView) {
+        // A TL on this page sees their own queue: every open IR dispute, whether or not it was already forwarded to QA.
+        whereClauses.push(tlOpenSql);
+      } else {
+        // Default QA dispute queue shows forwarded disputes ('Under_Review')
+        whereClauses.push(`e.dispute_status = 'Under_Review'`);
+      }
+    } else if (disputeStatus === 'forwarded_to_tl' || disputeStatus === 'pending_tl' || disputeStatus === 'Raised') {
+      whereClauses.push(`e.dispute_status = 'Raised'`);
+    } else if (disputeStatus === 'forwarded_to_qa' || disputeStatus === 'Under_Review') {
       whereClauses.push(`e.dispute_status = 'Under_Review'`);
-    } else if (disputesOnly === 'true') {
-      whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
-    } else if (disputeStatus === 'pending') {
-      whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
     } else if (disputeStatus === 'reviewed') {
       whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
+    } else if (disputeStatus === 'none') {
+      whereClauses.push(`(e.dispute_status IS NULL OR e.dispute_status = 'None')`);
+    } else if (disputesOnly === 'true' || disputeStatus === 'pending') {
+      whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
+    }
+
+    // QA's dispute tab does not list open IR disputes while TLs own them (decided ones and TL-raised ones stay visible).
+    if (tlOwns && tab === 'disputes' && !disputeQueue && !tlView) {
+      whereClauses.push(`NOT ${tlOpenSql}`);
     }
 
     if (search) {
@@ -386,10 +462,19 @@ export async function GET(req: NextRequest) {
         c.thread_summary,
         c.intent_l1,
         COALESCE(e.qa_override_score, e.quality_score) AS effective_score,
-        COALESCE(e.reviewed_by, ag.qa_name) AS qa_name
+        COALESCE(e.reviewed_by, ag.qa_name) AS qa_name,
+        fl.raised_by_role,
+        fl.flagged_at AS flag_raised_at,
+        fl.agent_name AS flag_author_name,
+        -- who raised the dispute (agent_name is the agent it is about; for TL disputes the raiser is the TL)
+        COALESCE(
+          (SELECT u.name FROM users u WHERE LOWER(u.email) = LOWER(fl.agent_email) LIMIT 1),
+          NULLIF(split_part(fl.agent_email, '@', 1), '')
+        ) AS flag_raiser_name
       FROM email_reply_evaluations e
       JOIN email_conversations c ON e.ticket_id = c.id
       LEFT JOIN agents ag ON LOWER(ag.name) = LOWER(e.agent_name)
+      LEFT JOIN iqs_flags fl ON fl.id = e.flag_id
       WHERE ${whereSQL}
       ORDER BY e.sent_at DESC
       LIMIT ${limit} OFFSET ${offset}
@@ -487,11 +572,12 @@ export async function GET(req: NextRequest) {
     }
 
     const hasDispositionFilter = singleDisposition !== null || effectiveDispositions !== null;
-    let statsFrom = 'FROM email_reply_evaluations e';
+    let statsFrom = 'FROM email_reply_evaluations e LEFT JOIN email_conversations c ON e.ticket_id = c.id LEFT JOIN iqs_flags fl ON fl.id = e.flag_id';
     if (hasDispositionFilter) {
       statsFrom = `
         FROM email_reply_evaluations e
         JOIN email_conversations c ON e.ticket_id = c.id
+        LEFT JOIN iqs_flags fl ON fl.id = e.flag_id
       `;
 
       if (singleDisposition === '__FORBIDDEN__') {
@@ -510,17 +596,17 @@ export async function GET(req: NextRequest) {
     const statsQuery = `
       SELECT 
         COUNT(*)::int AS total_count,
-        COUNT(CASE WHEN e.evaluation_status = 'Completed' AND (e.review_status = 'pending' OR e.review_status IS NULL) THEN 1 END)::int AS pending_review_count,
+        COUNT(CASE WHEN ${pendingSql} THEN 1 END)::int AS pending_review_count,
         COUNT(CASE WHEN e.review_status = 'reviewed' THEN 1 END)::int AS reviewed_count,
         COUNT(CASE WHEN e.evaluation_status IN ('Pending', 'In_Batch') THEN 1 END)::int AS unscored_count,
         COUNT(CASE WHEN e.evaluation_status = 'Completed' THEN 1 END)::int AS completed_count,
-        ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE e.evaluation_status = 'Completed'), 2) AS avg_score,
+        ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE e.evaluation_status = 'Completed' AND (c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')), 2) AS avg_score,
         COUNT(CASE WHEN e.compliance_passed = FALSE THEN 1 END)::int AS compliance_breach_count,
         COUNT(CASE WHEN e.dispute_status IN ('Raised', 'Under_Review') THEN 1 END)::int AS active_disputes_count,
         COUNT(CASE WHEN e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved') THEN 1 END)::int AS reviewed_disputes_count,
         COUNT(CASE WHEN e.dispute_status = 'Under_Review' THEN 1 END)::int AS qa_disputes_count,
-        COUNT(CASE WHEN e.dispute_status = 'Raised' THEN 1 END)::int AS tl_pending_disputes_count,
-        COUNT(CASE WHEN e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved') THEN 1 END)::int AS tl_history_disputes_count,
+        COUNT(CASE WHEN ${tlOwns ? tlOpenSql : `e.dispute_status = 'Raised'`} THEN 1 END)::int AS tl_pending_disputes_count,
+        COUNT(CASE WHEN ${tlOwns ? `((e.dispute_status = 'Under_Review' AND ${raisedByTl}) OR e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved'))` : `e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`} THEN 1 END)::int AS tl_history_disputes_count,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS qa_overrides_count
       ${statsFrom}
       ${statsWhere}
@@ -531,7 +617,7 @@ export async function GET(req: NextRequest) {
     // Calculate total all-time pending review count respecting agent and disposition scoping
     let totalPendingCount = Number(summary.pending_review_count || 0);
     if (rangeClauses.length > 0) {
-      const scopeClauses: string[] = ["e.evaluation_status = 'Completed'", "(e.review_status = 'pending' OR e.review_status IS NULL)"];
+      const scopeClauses: string[] = [pendingSql];
       const scopeParams: any[] = [];
       if (agentName) {
         const reqLower = agentName.trim().toLowerCase();
@@ -580,7 +666,7 @@ export async function GET(req: NextRequest) {
       tlBreakdownClauses.push(`LOWER(TRIM(e.agent_name)) = ANY($${tlBreakdownParams.length}::text[])`);
     }
 
-    let tlBreakdownFrom = 'FROM email_reply_evaluations e';
+    let tlBreakdownFrom = 'FROM email_reply_evaluations e LEFT JOIN email_conversations c ON e.ticket_id = c.id';
     if (hasDispositionFilter) {
       tlBreakdownFrom = `
         FROM email_reply_evaluations e
@@ -605,7 +691,7 @@ export async function GET(req: NextRequest) {
       SELECT 
         e.agent_name,
         COUNT(*)::int AS total_replies,
-        ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE e.evaluation_status = 'Completed'), 1) AS avg_score,
+        ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE e.evaluation_status = 'Completed' AND (c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')), 1) AS avg_score,
         COUNT(CASE WHEN e.compliance_passed = FALSE THEN 1 END)::int AS compliance_errors,
         COUNT(CASE WHEN e.dispute_status IN ('Raised', 'Under_Review') THEN 1 END)::int AS disputes_raised,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS overrides_count
@@ -662,6 +748,7 @@ export async function GET(req: NextRequest) {
       },
       agentBreakdown: agentBreakdown || [],
       availableAgents: scopedAgentNames || (agentBreakdown || []).map((a: any) => a.agent_name),
+      disputesOwner: (await disputesOwnedByTL()) ? 'tl' : 'qa',
       assignedDispositions: scopedDispositions || allDispositions,
     });
   } catch (err: any) {
@@ -690,20 +777,23 @@ export async function POST(req: NextRequest) {
       const reviewerName = await getSubmitterName(rawReviewer);
       const reviewerEmail = sessionUser?.email || '';
       const role = sessionUser?.role || 'quality';
+      const denied = denial(emailReviewDenial(sessionUser));
+      if (denied) return denied;
+      const tlOwns = await disputesOwnedByTL();
 
       const finalScore = score !== undefined && score !== null
         ? Number(score)
         : (overrideScore !== undefined && overrideScore !== null ? Number(overrideScore) : null);
 
       // Check if this evaluation has an active dispute
-      const evalRows = await query<any>(
-        `SELECT id, ticket_id, message_id, flag_id, dispute_status, agent_name FROM email_reply_evaluations WHERE message_id = $1`,
-        [messageId]
-      );
+      const evalRows = await query<any>(EVAL_FOR_REVIEW_SQL, [messageId]);
       const existing = evalRows?.[0];
       if (!existing) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
+      const tlDenied = await tlEmailGate({ role, email: reviewerEmail, name: reviewerName, existing, tlOwns });
+      if (tlDenied) return tlDenied;
+      const reviewStatus = await reviewStatusAfter({ role, tlOwns, existing, newScore: finalScore, compliancePassed: compliancePassed !== undefined ? Boolean(compliancePassed) : undefined, complianceIssues });
 
       if (role === 'quality' && !sessionUser?.isAdmin) {
         const { scopedDispositions } = await getScopedDispositionsForUser(reviewerEmail, role, false);
@@ -729,12 +819,12 @@ export async function POST(req: NextRequest) {
          SET qa_override_score = $1,
              qa_notes = COALESCE($2, qa_notes),
              parameter_scores = CASE WHEN $3::text IS NOT NULL THEN COALESCE(parameter_scores, '{}'::jsonb) || $3::jsonb ELSE parameter_scores END,
-             review_status = 'reviewed',
+             review_status = $8,
              dispute_status = CASE WHEN dispute_status IN ('Under_Review', 'Raised') THEN 'Resolved' ELSE dispute_status END,
              reviewed_by = $4,
              reviewed_at = NOW(),
-             compliance_passed = COALESCE($5, compliance_passed),
-             compliance_issues = COALESCE($6, compliance_issues),
+             compliance_passed = CASE WHEN $5::boolean IS NOT NULL THEN $5::boolean ELSE compliance_passed END,
+             compliance_issues = CASE WHEN $6::text[] IS NOT NULL THEN $6::text[] ELSE compliance_issues END,
              updated_at = NOW()
          WHERE message_id = $7`,
         [
@@ -743,14 +833,15 @@ export async function POST(req: NextRequest) {
           parameterScores ? JSON.stringify(parameterScores) : null,
           reviewerName,
           compliancePassed !== undefined ? Boolean(compliancePassed) : null,
-          complianceIssues ? complianceIssues : null,
+          complianceIssues !== undefined ? complianceIssues : null,
           messageId,
+          reviewStatus,
         ]
       );
 
       // If resolving an active dispute, synchronize the linked iqs_flag and append discussion/audit entries
       if (wasDispute && existing?.flag_id) {
-        const resolutionNote = qaNotes || 'Dispute reviewed and resolved by QA';
+        const resolutionNote = qaNotes || `Dispute reviewed and resolved by ${role === 'tl' ? 'TL' : 'QA'}`;
 
         await storeUpdateIQSFlag(existing.flag_id, {
           status: 'reviewed',
@@ -765,8 +856,8 @@ export async function POST(req: NextRequest) {
           flagId: existing.flag_id,
           authorEmail: reviewerEmail,
           authorName: reviewerName,
-          role: 'quality',
-          content: `QA Review Submitted: Dispute resolved${finalScore !== null ? ` with score ${finalScore}%` : ''}${qaNotes ? ` - Notes: ${qaNotes}` : ''}`,
+          role: role === 'tl' ? 'tl' : 'quality',
+          content: `${role === 'tl' ? 'TL' : 'QA'} Review Submitted: Dispute resolved${finalScore !== null ? ` with score ${finalScore}%` : ''}${qaNotes ? ` - Notes: ${qaNotes}` : ''}`,
           createdAt: new Date().toISOString(),
         });
 
@@ -807,13 +898,16 @@ export async function POST(req: NextRequest) {
 
       // Fetch existing evaluation
       const evalRows = await query<any>(
-        `SELECT id, ticket_id, message_id, agent_name, flag_id FROM email_reply_evaluations WHERE message_id = $1`,
+        `SELECT id, ticket_id, message_id, agent_name, flag_id, dispute_status FROM email_reply_evaluations WHERE message_id = $1`,
         [messageId]
       );
       if (!evalRows.length) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
       const existing = evalRows[0];
+      if (existing.dispute_status && existing.dispute_status !== 'None') {
+        return NextResponse.json({ error: 'A dispute is already active for this evaluation' }, { status: 400 });
+      }
       const flagId = existing.flag_id || randomUUID();
       const paramsArray = Array.isArray(challengedParams) ? challengedParams : [];
 
@@ -929,7 +1023,7 @@ export async function POST(req: NextRequest) {
 
     // Action 3: QA resolves/rejects dispute (Page 7)
     if (action === 'resolve_dispute') {
-      const { messageId, decision, notes, newScore, parameterScores } = body; // decision: 'Resolved' | 'Rejected'
+      const { messageId, decision, notes, newScore, parameterScores, compliancePassed, complianceIssues } = body; // decision: 'Resolved' | 'Rejected'
       if (!messageId || !decision) {
         return NextResponse.json({ error: 'messageId and decision are required' }, { status: 400 });
       }
@@ -942,15 +1036,17 @@ export async function POST(req: NextRequest) {
       const reviewerName = await getSubmitterName(rawReviewer);
       const reviewerEmail = sessionUser?.email || '';
       const role = sessionUser?.role || 'quality';
+      const denied = denial(emailReviewDenial(sessionUser));
+      if (denied) return denied;
+      const tlOwns = await disputesOwnedByTL();
 
-      const evalRows = await query<any>(
-        `SELECT id, ticket_id, message_id, flag_id, quality_score, qa_override_score FROM email_reply_evaluations WHERE message_id = $1`,
-        [messageId]
-      );
+      const evalRows = await query<any>(EVAL_FOR_REVIEW_SQL, [messageId]);
       if (!evalRows.length) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
       const existing = evalRows[0];
+      const tlDenied = await tlEmailGate({ role, email: reviewerEmail, name: reviewerName, existing, tlOwns });
+      if (tlDenied) return tlDenied;
 
       if (role === 'quality' && !sessionUser?.isAdmin) {
         const { scopedDispositions } = await getScopedDispositionsForUser(reviewerEmail, role, false);
@@ -973,6 +1069,7 @@ export async function POST(req: NextRequest) {
 
       const updateScore = newScore !== undefined && newScore !== null ? Number(newScore) : null;
       const finalNote = notes || `Dispute marked as ${decision}`;
+      const reviewStatus = await reviewStatusAfter({ role, tlOwns, existing, newScore: updateScore, compliancePassed: compliancePassed !== undefined ? Boolean(compliancePassed) : undefined, complianceIssues });
 
       if (flagId) {
         await storeUpdateIQSFlag(flagId, {
@@ -988,8 +1085,8 @@ export async function POST(req: NextRequest) {
           flagId,
           authorEmail: reviewerEmail,
           authorName: reviewerName,
-          role: 'quality',
-          content: `QA Decision: ${decision}${notes ? ` - ${notes}` : ''}`,
+          role: role === 'tl' ? 'tl' : 'quality',
+          content: `${role === 'tl' ? 'TL' : 'QA'} Decision: ${decision}${notes ? ` - ${notes}` : ''}`,
           createdAt: new Date().toISOString(),
         });
       }
@@ -1000,18 +1097,23 @@ export async function POST(req: NextRequest) {
              qa_notes = COALESCE(qa_notes, '') || ' [Dispute Decision: ' || $1::text || ' - ' || $2::text || ']',
              qa_override_score = CASE WHEN $3::numeric IS NOT NULL THEN $3::numeric ELSE qa_override_score END,
              parameter_scores = CASE WHEN $4::text IS NOT NULL THEN COALESCE(parameter_scores, '{}'::jsonb) || $4::jsonb ELSE parameter_scores END,
-             review_status = 'reviewed',
-             reviewed_by = COALESCE($5, reviewed_by),
+             compliance_passed = CASE WHEN $5::boolean IS NOT NULL THEN $5::boolean ELSE compliance_passed END,
+             compliance_issues = CASE WHEN $6::text[] IS NOT NULL THEN $6::text[] ELSE compliance_issues END,
+             review_status = $9,
+             reviewed_by = COALESCE($7, reviewed_by),
              reviewed_at = NOW(),
              updated_at = NOW()
-         WHERE message_id = $6`,
+         WHERE message_id = $8`,
         [
           decision,
           notes || '',
           updateScore,
           parameterScores ? JSON.stringify(parameterScores) : null,
+          compliancePassed !== undefined ? Boolean(compliancePassed) : null,
+          complianceIssues !== undefined ? complianceIssues : null,
           reviewerName,
           messageId,
+          reviewStatus,
         ]
       );
 
@@ -1039,6 +1141,10 @@ export async function POST(req: NextRequest) {
       const email = ((session?.user as any)?.email || session?.user?.name || '') as string;
       const role = ((session?.user as any)?.role || 'tl') as string;
       const submitterName = await getSubmitterName(email);
+
+      if (role === 'tl' && (await disputesOwnedByTL())) {
+        return NextResponse.json({ error: 'Disputes are resolved by the TL; use Resolve with the updated score' }, { status: 409 });
+      }
 
       const evalRows = await query<any>(
         `SELECT id, ticket_id, message_id, flag_id, dispute_notes, challenged_params, agent_name FROM email_reply_evaluations WHERE message_id = $1`,
@@ -1137,7 +1243,7 @@ export async function POST(req: NextRequest) {
 
     // Action 3c: TL resolves a raised dispute at TL level (no QA review needed)
     if (action === 'tl_resolve_dispute') {
-      const { messageId, notes } = body;
+      const { messageId, notes, newScore, parameterScores, compliancePassed, complianceIssues } = body;
       if (!messageId) {
         return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
       }
@@ -1150,29 +1256,47 @@ export async function POST(req: NextRequest) {
       const submitterName = await getSubmitterName(email);
 
       const evalRows = await query<any>(
-        `SELECT id, ticket_id, message_id, flag_id, dispute_notes, agent_name FROM email_reply_evaluations WHERE message_id = $1`,
+        `SELECT e.id, e.ticket_id, e.message_id, e.flag_id, e.dispute_notes, e.agent_name, e.dispute_status, e.review_status,
+                e.quality_score, e.qa_override_score, e.compliance_passed, e.compliance_issues,
+                fl.raised_by_role AS flag_raised_by_role, fl.agent_email AS flag_agent_email
+         FROM email_reply_evaluations e LEFT JOIN iqs_flags fl ON fl.id = e.flag_id
+         WHERE e.message_id = $1`,
         [messageId]
       );
       if (!evalRows.length) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
       const existing = evalRows[0];
+      const tlOwns = await disputesOwnedByTL();
 
       if (role === 'tl') {
         const tlAgents = await getScopedAgentNamesForUser(email, submitterName, 'tl', false);
-        if (tlAgents && tlAgents.length > 0) {
-          const lowerTL = tlAgents.map(a => a.trim().toLowerCase());
-          if (!lowerTL.includes((existing.agent_name || '').trim().toLowerCase())) {
-            return NextResponse.json({ error: 'Forbidden: You can only resolve disputes for your assigned agents' }, { status: 403 });
+        const lowerTL = (tlAgents || []).map(a => a.trim().toLowerCase());
+        const mine = lowerTL.includes((existing.agent_name || '').trim().toLowerCase());
+        // Old flow: only checked when the TL has agents. TL-owned flow: strict, a TL with no agents resolves nothing.
+        if (tlOwns ? !mine : (tlAgents && tlAgents.length > 0 && !mine)) {
+          return NextResponse.json({ error: 'Forbidden: You can only resolve disputes for your assigned agents' }, { status: 403 });
+        }
+        if (tlOwns) {
+          if (!['Raised', 'Under_Review'].includes(existing.dispute_status)) {
+            return NextResponse.json({ error: 'This dispute is not open for TL review' }, { status: 409 });
+          }
+          if (existing.flag_raised_by_role === 'tl' || (existing.flag_agent_email || '').toLowerCase() === email.toLowerCase()) {
+            return NextResponse.json({ error: 'You cannot resolve a dispute you raised' }, { status: 403 });
           }
         }
       }
 
       const flagId = existing.flag_id;
+      const updateScore = newScore !== undefined && newScore !== null && newScore !== '' ? Number(newScore) : null;
+      if (updateScore !== null && !(updateScore >= 0 && updateScore <= 100)) {
+        return NextResponse.json({ error: 'newScore must be a number from 0 to 100' }, { status: 400 });
+      }
+      const reviewStatus = await reviewStatusAfter({ role, tlOwns, existing, newScore: updateScore, compliancePassed: compliancePassed !== undefined ? Boolean(compliancePassed) : undefined, complianceIssues });
 
       if (flagId) {
         await storeUpdateIQSFlag(flagId, {
-          status: 'tl_resolved',
+          status: 'reviewed',
           reviewedBy: email,
           reviewedAt: new Date().toISOString(),
           reviewNote: notes || 'Resolved query at TL level',
@@ -1185,18 +1309,35 @@ export async function POST(req: NextRequest) {
           authorEmail: email,
           authorName: submitterName,
           role: 'tl',
-          content: `Resolved by TL: ${notes || 'Resolved query at TL level'}`,
+          content: `Reviewed by TL: ${notes || 'Resolved query at TL level'}${updateScore !== null ? ` (score updated to ${updateScore}%)` : ''}`,
           createdAt: new Date().toISOString(),
         });
       }
 
       await query(
         `UPDATE email_reply_evaluations
-         SET dispute_status = 'TL_Resolved',
-             dispute_notes = COALESCE(dispute_notes, '') || ' [TL Resolved: ' || $1 || ']',
+         SET dispute_status = 'Resolved',
+             review_status = $4,
+             reviewed_by = $1,
+             reviewed_at = NOW(),
+             qa_notes = COALESCE(qa_notes, '') || ' [TL Reviewed: ' || $2 || ']',
+             dispute_notes = COALESCE(dispute_notes, '') || ' [TL Resolved: ' || $2 || ']',
+             qa_override_score = CASE WHEN $5::numeric IS NOT NULL THEN $5::numeric ELSE qa_override_score END,
+             parameter_scores = CASE WHEN $6::text IS NOT NULL THEN COALESCE(parameter_scores, '{}'::jsonb) || $6::jsonb ELSE parameter_scores END,
+             compliance_passed = CASE WHEN $7::boolean IS NOT NULL THEN $7::boolean ELSE compliance_passed END,
+             compliance_issues = CASE WHEN $8::text[] IS NOT NULL THEN $8::text[] ELSE compliance_issues END,
              updated_at = NOW()
-         WHERE message_id = $2`,
-        [notes || 'Resolved query at TL level', messageId]
+         WHERE message_id = $3`,
+        [
+          submitterName,
+          notes || 'Resolved query at TL level',
+          messageId,
+          reviewStatus,
+          updateScore,
+          parameterScores ? JSON.stringify(parameterScores) : null,
+          compliancePassed !== undefined ? Boolean(compliancePassed) : null,
+          complianceIssues !== undefined ? complianceIssues : null,
+        ]
       );
 
       await storeAppendAuditEntry({
@@ -1206,7 +1347,7 @@ export async function POST(req: NextRequest) {
         actorEmail: email,
         actorRole: role,
         ts: new Date().toISOString(),
-        meta: { flagId, messageId, notes, resolvedBy: 'tl' },
+        meta: { flagId, messageId, notes, resolvedBy: 'tl', newScore: updateScore, reviewStatus },
       } as any);
 
       return NextResponse.json({ ok: true, message: 'Dispute resolved at TL level' });

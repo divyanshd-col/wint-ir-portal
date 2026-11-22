@@ -3,7 +3,7 @@
  * 10 parameters across 3 groups. Chat and call scored independently.
  */
 
-import { robustJsonParse } from './quality';
+import { robustJsonParse, isJunkDisposition } from './quality';
 
 // ── Parameter weights (must sum to 1.0) ──────────────────────────────────────
 
@@ -101,7 +101,14 @@ export interface CallIQSScoreEntry {
 }
 
 // ── IQS calculation ───────────────────────────────────────────────────────────
-export function calculateCallIQS(scores: Record<string, CallParamScore>): number | null {
+export function calculateCallIQS(
+  scores: Record<string, CallParamScore>,
+  disposition?: any,
+  subDisposition?: any,
+): number | null {
+  if (isJunkDisposition(disposition, subDisposition)) {
+    return null;
+  }
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(CALL_WEIGHTS)) {
     const score = scores[param] ?? 'NA';
@@ -221,6 +228,7 @@ If a name is unclear, write it phonetically as best you can, or write [unclear].
 TRANSCRIPTION RULES
 ══════════════════════════════════════════
 - Process the ENTIRE audio recording from 0:00 to the very last second. DO NOT stop midway or skip later parts of the conversation. Keep transcribing until the final closing or disconnection.
+- CRITICAL COMPLETENESS (NO CUTTING OFF): Capture all final instances of the call, including closing pleasantries, final clarifications, next steps, 'thank you', 'take care', 'bye', and disconnection sign-offs.
 - Each segment = one complete speaker turn.
 - Transcribe EVERY single word spoken — do not skip, summarize, or paraphrase anything.
 - During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff point; the interrupting speaker's words appear in their own new segment.
@@ -685,21 +693,25 @@ Score all 11 parameters. Output ONLY the JSON.`;
 function fixSpeakerLabels(segments: CallSegment[]): CallSegment[] {
   const speechSegs = segments.filter(s => s.type === 'speech');
 
-  // Heuristic 1: INVESTOR says "from Wint" / introduces as Wint Wealth employee
-  const investorClaimsWint = speechSegs.some(
-    s => s.speaker === 'INVESTOR' &&
-         /\bwint\b/i.test(s.text || '') &&
-         // Confirm it looks like a self-introduction, not a question about Wint
-         !/is\s+this\s+wint|are\s+you\s+(from\s+)?wint|this\s+is\s+wint\?/i.test(s.text || ''),
-  );
+  // Detect explicit self-introduction as a Wint Wealth employee:
+  // e.g. "I am Shalini speaking from Wint Wealth", "This is Charvi from Wint Wealth", "My name is Rahul from Wint"
+  const selfIntroRegex = /(?:\b(?:i am|this is|my name is)\b[^.?!\n]{0,40}\b(?:from|at|with)\s+wint\b|\b(?:i am|this is)\b[^.?!\n]{0,30}\bspeaking from\s+wint\b)/i;
+  // Questions/checks asked by an investor:
+  // e.g. "Is this Wint?", "Are you speaking from Wint?", "From Wint Wealth right?"
+  const questionRegex = /\b(?:is this|are you|did you)\b[^.?!\n]{0,30}\bwint\b/i;
 
-  // Heuristic 2: IR EXECUTIVE asks "is this Wint Wealth?" — investor question pattern
-  const irAsksIfWint = speechSegs.some(
-    s => s.speaker === 'IR EXECUTIVE' &&
-         /is\s+this\s+(wint|wint\s+wealth)|are\s+you\s+(from\s+)?wint/i.test(s.text || ''),
-  );
+  const isSelfIntro = (text: string) => selfIntroRegex.test(text || '') && !questionRegex.test(text || '');
+  const isQuestion = (text: string) => questionRegex.test(text || '');
 
-  const labelsReversed = investorClaimsWint || irAsksIfWint;
+  const investorHasSelfIntro = speechSegs.some(s => s.speaker === 'INVESTOR' && isSelfIntro(s.text || ''));
+  const irHasSelfIntro = speechSegs.some(s => s.speaker === 'IR EXECUTIVE' && isSelfIntro(s.text || ''));
+
+  const irAsksIfWint = speechSegs.some(s => s.speaker === 'IR EXECUTIVE' && isQuestion(s.text || ''));
+  const investorAsksIfWint = speechSegs.some(s => s.speaker === 'INVESTOR' && isQuestion(s.text || ''));
+
+  // Labels are only reversed if INVESTOR genuinely introduces as Wint while IR does not,
+  // OR if IR asks customer-style verification questions while INVESTOR does not.
+  const labelsReversed = (investorHasSelfIntro && !irHasSelfIntro) || (irAsksIfWint && !investorAsksIfWint);
   if (!labelsReversed) return segments;
 
   console.warn('[fixSpeakerLabels] Detected reversed labels — swapping IR EXECUTIVE ↔ INVESTOR');
@@ -806,7 +818,11 @@ export function parseEnergyToneResponse(raw: string): { score: CallParamScore; r
 }
 
 // ── Parse call IQS scoring response ──────────────────────────────────────────
-export function parseCallScoringResponse(raw: string): {
+export function parseCallScoringResponse(
+  raw: string,
+  disposition?: any,
+  subDisposition?: any,
+): {
   scores: Record<string, CallParamScore>;
   reasoning: Record<string, string>;
   poorListeningSegments: PoorListeningSegment[];
@@ -818,7 +834,7 @@ export function parseCallScoringResponse(raw: string): {
   const scores: Record<string, CallParamScore> = data?.scores || {};
   const reasoning: Record<string, string> = data?.reasoning || {};
   const poorListeningSegments: PoorListeningSegment[] = data?.poor_listening_segments || [];
-  const iqs = calculateCallIQS(scores);
+  const iqs = isJunkDisposition(disposition, subDisposition) ? null : calculateCallIQS(scores, disposition, subDisposition);
   const kbCitation = typeof data?.kbCitation === 'string' && data.kbCitation.toLowerCase() !== 'null'
     ? data.kbCitation
     : null;

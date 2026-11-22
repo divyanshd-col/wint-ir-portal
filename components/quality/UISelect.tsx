@@ -1,5 +1,6 @@
 'use client';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { uiZoom } from '@/lib/ui-zoom';
 
 interface Opt { value: string; label: string; disabled?: boolean }
 
@@ -49,10 +50,11 @@ export default function UISelect({ value, onChange, children, style, disabled, t
   useLayoutEffect(() => {
     if (!open || !btn.current) return;
     const r = btn.current.getBoundingClientRect();
+    const z = uiZoom();   // measured in on-screen pixels, positioned in CSS pixels
     const below = window.innerHeight - r.bottom;
     setPos(below < 260 && r.top > below
-      ? { left: r.left, bottom: window.innerHeight - r.top + 4, minWidth: r.width }
-      : { left: r.left, top: r.bottom + 4, minWidth: r.width });
+      ? { left: r.left / z, bottom: (window.innerHeight - r.top) / z + 4, minWidth: r.width / z }
+      : { left: r.left / z, top: r.bottom / z + 4, minWidth: r.width / z });
     setHi(Math.max(0, options.findIndex(o => o.value === String(value ?? ''))));
   }, [open, options, value]);
 

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
@@ -27,5 +28,9 @@ export default async function TLReportsPage() {
   const name = dbUser?.name || configUser?.agentName || email.split('@')[0];
 
   // Render the same report client component but with TL/Admin role so it runs in read-only mode for comments
-  return <AgentReportsClient agentName={name} role={resolvedRole} />;
+  return (
+    <Suspense fallback={<div className="p-8 text-zinc-500 font-sans text-sm">Loading Reports...</div>}>
+      <AgentReportsClient agentName={name} role={resolvedRole} />
+    </Suspense>
+  );
 }

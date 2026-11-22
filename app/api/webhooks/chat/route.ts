@@ -57,7 +57,7 @@ import {
   normalizeRobylonMessages,
   type RobyMessage,
 } from '@/lib/scoring/transcript';
-import { analyzeConversationTiming, type TimedMessage } from '@/lib/quality';
+import { analyzeConversationTiming, isJunkDisposition, type TimedMessage } from '@/lib/quality';
 
 // ── Auth ────────────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
@@ -266,6 +266,7 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
 
   const disposition    = primary.names?.l1 || '';
   const subDisposition = primary.names?.l2 || '';
+  const isJunk = isJunkDisposition(disposition, subDisposition);
 
   // Upsert conversation with tags (will create row if not yet present)
   await upsertConversation({
@@ -273,6 +274,39 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
     tags: { disposition, sub_disposition: subDisposition },
     webhookTrigger: 'CLASSIFICATION_UPDATED',
   });
+
+  if (isJunk) {
+    // Strictly mark NIL IQS for this chat in iqs_scores and any linked call_evaluations
+    await query(`
+      UPDATE iqs_scores
+      SET iqs_score = NULL,
+          bot_iqs_score = NULL,
+          call_iqs_score = NULL,
+          parameters = CASE 
+            WHEN parameters::jsonb ? '__scores' THEN 
+              jsonb_set(
+                jsonb_set(
+                  jsonb_set(parameters::jsonb, '{__scores,agent_iqs}', 'null'::jsonb),
+                  '{__scores,bot_iqs}', 'null'::jsonb
+                ),
+                '{__scores,call_iqs}', 'null'::jsonb
+              )
+            ELSE parameters 
+          END
+      WHERE chat_id = $1
+    `, [chatId]);
+
+    await query(`
+      UPDATE call_evaluations
+      SET iqs_percent = NULL,
+          applicable_weight = 0,
+          verdict = 'NOT_SCOREABLE'
+      WHERE chat_id = $1
+    `, [chatId]);
+
+    console.log(`[webhook][CLASSIFICATION_UPDATED] Chat ${chatId} has junk tag (${disposition} > ${subDisposition}) — strictly set NIL IQS`);
+    return NextResponse.json({ ok: true, event: 'tags_stored_junk', chat_id: chatId, iqs: null, disposition, subDisposition });
+  }
 
   // Check if transcript already stored and not yet scored
   const conv = await getConversation(chatId);
@@ -579,14 +613,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  // Persist raw incoming webhook payload immediately as received
-  await saveRobylonWebhookPayload({
-    source: 'chat',
-    eventType: body?.event_type ? String(body.event_type) : null,
-    eventId: body?.event_id ? String(body.event_id) : null,
-    chatId: body?.chat_id ? String(body.chat_id) : (body?.conversation_id ? String(body.conversation_id) : null),
-    payload: body,
-  });
+  // Persist the raw payload first; if that fails answer 500 so Robylon retries (see saveRobylonWebhookPayload).
+  // A duplicate (a retry of a stored event) still goes through the existing event_type + event_id dedupe below.
+  try {
+    await saveRobylonWebhookPayload({
+      source: 'chat',
+      eventType: body?.event_type ? String(body.event_type) : null,
+      eventId: body?.event_id ? String(body.event_id) : null,
+      chatId: body?.chat_id ? String(body.chat_id) : (body?.conversation_id ? String(body.conversation_id) : null),
+      payload: body,
+    });
+  } catch (err: any) {
+    console.error('[webhook] Failed to store chat payload:', err?.message || err);
+    return NextResponse.json({ error: 'Failed to store payload' }, { status: 500 });
+  }
 
   // Log only non-sensitive metadata — never dump full payload in production
   if (process.env.NODE_ENV !== 'production') {

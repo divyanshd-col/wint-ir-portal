@@ -6,6 +6,7 @@ import { isSamePcgAgent, canonicalizePcgRmName } from '@/lib/pcg/canonical-names
 import { readConfig } from '@/lib/config';
 import { listUsers } from '@/lib/users';
 import { TL_TEAMS } from '@/app/api/admin/pcg-calls/route';
+import { getPcgRmsForTl } from '@/lib/pcg/rm-directory';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -23,15 +24,25 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const rmFilter = searchParams.get('rm');
   const weekFilter = searchParams.get('week');
+  const channel = (searchParams.get('channel') || 'calls').toLowerCase();
+  const startDate = searchParams.get('startDate') || searchParams.get('date_from') || searchParams.get('start');
+  const endDate = searchParams.get('endDate') || searchParams.get('date_to') || searchParams.get('end');
+  const period = searchParams.get('period') || searchParams.get('date_range') || searchParams.get('dateRange');
 
   try {
+    // Find mapped RMs for this TL
+    const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
+    const mappedRms = await getPcgRmsForTl(userName);
+    const allRms = mappedRms.map((r) => r.toLowerCase());
+
+    // Unified scorecards flow (Calls + Chats + Emails)
     let whereClauses: string[] = ["status = 'published'"];
     let params: any[] = [];
 
     // Strictly exclude Team Leads and Admins from appearing in scorecards
     const nonRmList = [
       'gokul', 'gokul_admin', 'aahan thaker', 'aahan', 'unknown', 'unknown rm', 'test-pcg-admin', 'test-cx-tl',
-      'dheeraj', 'dheeraj bhojwani', 'swetha', 'swetha jayakumar', 'saiyam', 'saiyam rastogi', 'tanisha', 'tanisha mittal'
+      'dheeraj', 'dheeraj bhojwani', 'swetha', 'swetha jayakumar', 'saiyam', 'saiyam rastogi', 'tanisha', 'tanisha mittal', 'sravanthi'
     ];
     params.push(nonRmList);
     whereClauses.push(`LOWER(rm_name) != ALL($${params.length})`);
@@ -41,18 +52,11 @@ export async function GET(req: NextRequest) {
       params.push(canonicalRm);
       whereClauses.push(`LOWER(rm_name) = LOWER($${params.length})`);
     } else if (role === 'tl') {
-      // Find mapped RMs for this TL
-      const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
-      const cleanTl = userName.replace(/^Team\s+/i, '').trim().toLowerCase();
-      const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
-        .map(([rm]) => rm.toLowerCase());
-      const fallbackRms = (TL_TEAMS[userName] || TL_TEAMS[cleanTl] || []).map((r) => r.toLowerCase());
-      const allRms = Array.from(new Set([...directRms, ...fallbackRms]));
-
       if (allRms.length > 0) {
         params.push(allRms);
         whereClauses.push(`LOWER(rm_name) = ANY($${params.length})`);
+      } else {
+        whereClauses.push(`1 = 0`);
       }
     } else if (role === 'admin' && rmFilter && rmFilter !== 'all') {
       params.push(canonicalizePcgRmName(rmFilter));
@@ -62,6 +66,15 @@ export async function GET(req: NextRequest) {
     if (weekFilter && weekFilter !== 'all') {
       params.push(weekFilter);
       whereClauses.push(`week_start::date = $${params.length}::date`);
+    } else {
+      if (startDate) {
+        params.push(startDate);
+        whereClauses.push(`week_start::date >= $${params.length}::date`);
+      }
+      if (endDate) {
+        params.push(endDate);
+        whereClauses.push(`week_end::date <= $${params.length}::date`);
+      }
     }
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
@@ -74,9 +87,37 @@ export async function GET(req: NextRequest) {
       params
     );
 
-    // Map rows into clean PcgWeeklyReport objects
+    // Map rows into clean unified PcgWeeklyReport objects
     const reports = rows.map((r) => {
       const g = r.generated || {};
+      const num = g.numbers || {};
+      const callsMetric = num.calls || {
+        handled: num.callsHandled ?? 0,
+        avgScore: num.averageScore ?? 0,
+        below85Count: num.below85Count ?? 0,
+        pickupRateText: num.pickupRateText || num.connectRateText || '—',
+        breachesCount: num.complianceBreachesCount ?? 0,
+      };
+      const chatsMetric = num.chats || {
+        handled: 0,
+        avgScore: null,
+        below85Count: 0,
+        firstResponseText: '—',
+        breachesCount: 0,
+      };
+      const emailsMetric = num.emails || {
+        handled: 0,
+        avgScore: null,
+        below85Count: 0,
+        resolutionText: '—',
+        breachesCount: 0,
+      };
+
+      const totalInteractions = num.totalInteractions ?? ((callsMetric.handled || 0) + (chatsMetric.handled || 0) + (emailsMetric.handled || 0));
+      const blendedAvgScore = num.blendedAvgScore ?? num.averageScore ?? callsMetric.avgScore ?? 0;
+      const totalBelow85Count = num.totalBelow85Count ?? ((callsMetric.below85Count || 0) + (chatsMetric.below85Count || 0));
+      const totalComplianceBreaches = num.totalComplianceBreaches ?? ((callsMetric.breachesCount || 0) + (chatsMetric.breachesCount || 0));
+
       return {
         id: r.id,
         rmName: r.rm_name,
@@ -87,18 +128,25 @@ export async function GET(req: NextRequest) {
         viewedAt: r.viewed_at,
         generatedAt: r.generated_at,
         comments: r.comments || [],
-        numbers: g.numbers || {
-          callsHandled: 0,
-          averageScore: 0,
-          below85Count: 0,
-          pickupRateText: '—',
-          connectRateText: '—',
-          complianceBreachesCount: 0,
+        numbers: {
+          callsHandled: callsMetric.handled,
+          averageScore: blendedAvgScore,
+          below85Count: totalBelow85Count,
+          pickupRateText: callsMetric.pickupRateText,
+          connectRateText: callsMetric.pickupRateText,
+          complianceBreachesCount: totalComplianceBreaches,
+          calls: callsMetric,
+          chats: chatsMetric,
+          emails: emailsMetric,
+          totalInteractions,
+          blendedAvgScore,
+          totalBelow85Count,
+          totalComplianceBreaches,
         },
         whatWentWell: g.whatWentWell || '',
-        themes: g.themes || [],
-        breaches: g.breaches || [],
-        evidence: g.evidence || [],
+        themes: (g.themes || []).map((t: any) => ({ ...t, channel: t.channel || 'call' })),
+        breaches: (g.breaches || []).map((b: any) => ({ ...b, channel: b.channel || 'call' })),
+        evidence: (g.evidence || []).map((e: any) => ({ ...e, channel: e.channel || 'call' })),
       };
     });
 
@@ -140,15 +188,9 @@ export async function GET(req: NextRequest) {
     reports.forEach((r) => agentSet.add(canonicalizePcgRmName(r.rmName)));
 
     // Include mapped RMs from config & TL_TEAMS
-    const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
     if (role === 'tl') {
-      const cleanTl = userName.replace(/^Team\s+/i, '').trim().toLowerCase();
-      const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
-        .map(([rm]) => canonicalizePcgRmName(rm));
-      const fallbackRms = (TL_TEAMS[userName] || TL_TEAMS[cleanTl] || []).map((r) => canonicalizePcgRmName(r));
       agentSet.clear();
-      [...directRms, ...fallbackRms].forEach((rm) => agentSet.add(rm));
+      mappedRms.forEach((rm) => agentSet.add(rm));
     } else if (role === 'admin') {
       Object.keys(customTeamMap).forEach((rm) => agentSet.add(canonicalizePcgRmName(rm)));
       Object.values(TL_TEAMS).forEach((members) => {

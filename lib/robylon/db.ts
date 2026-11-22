@@ -272,6 +272,8 @@ export interface ConversationRow {
   closed_at: string | null;
   csat_score: number | null;
   csat_label: string | null;
+  csat_bifurcation?: string | null;
+  bifurcated_csat_label?: string | null;
   transcript: any;
   tags: any;
   frt_seconds: number | null;
@@ -295,6 +297,8 @@ export async function upsertConversation(data: {
   frtSeconds?: number | null;
   botToTeamSeconds?: number | null;
   resolutionSeconds?: number | null;
+  csatBifurcation?: string | null;
+  bifurcatedCsatLabel?: string | null;
   rawPayload?: any;
   webhookTrigger?: string;
 }): Promise<void> {
@@ -303,8 +307,9 @@ export async function upsertConversation(data: {
       id, contact_id, agent_id, conversation_type,
       started_at, closed_at, transcript, tags,
       frt_seconds, bot_to_team_seconds, resolution_seconds,
+      csat_bifurcation, bifurcated_csat_label,
       raw_payload, webhook_trigger, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
     ON CONFLICT (id) DO UPDATE SET
       contact_id          = COALESCE(EXCLUDED.contact_id, conversations.contact_id),
       agent_id            = COALESCE(EXCLUDED.agent_id, conversations.agent_id),
@@ -316,6 +321,8 @@ export async function upsertConversation(data: {
       frt_seconds         = COALESCE(EXCLUDED.frt_seconds, conversations.frt_seconds),
       bot_to_team_seconds = COALESCE(EXCLUDED.bot_to_team_seconds, conversations.bot_to_team_seconds),
       resolution_seconds  = COALESCE(EXCLUDED.resolution_seconds, conversations.resolution_seconds),
+      csat_bifurcation    = COALESCE(EXCLUDED.csat_bifurcation, conversations.csat_bifurcation),
+      bifurcated_csat_label = COALESCE(EXCLUDED.bifurcated_csat_label, conversations.bifurcated_csat_label),
       raw_payload         = COALESCE(EXCLUDED.raw_payload, conversations.raw_payload),
       webhook_trigger     = COALESCE(EXCLUDED.webhook_trigger, conversations.webhook_trigger),
       updated_at          = NOW()
@@ -331,6 +338,8 @@ export async function upsertConversation(data: {
     data.frtSeconds ?? null,
     data.botToTeamSeconds ?? null,
     data.resolutionSeconds ?? null,
+    data.csatBifurcation ?? null,
+    data.bifurcatedCsatLabel ?? null,
     data.rawPayload ? JSON.stringify(data.rawPayload) : null,
     data.webhookTrigger ?? null,
   ]);
@@ -341,9 +350,33 @@ export async function updateConversationCsat(
   csatScore: number,
   csatLabel: string,
 ): Promise<void> {
+  let bifurcation: string | null = null;
+  let bifurcatedLabel: string | null = csatLabel;
+  try {
+    const rows = await query<{ tags: any; iqs_score: number | null }>(
+      `SELECT c.tags, s.iqs_score
+       FROM conversations c
+       LEFT JOIN iqs_scores s ON s.chat_id = c.id
+       WHERE c.id = $1`,
+      [chatId]
+    );
+    const tags = typeof rows[0]?.tags === 'string' ? JSON.parse(rows[0].tags) : (rows[0]?.tags || {});
+    const iqs = rows[0]?.iqs_score ?? null;
+    const { readConfig } = await import('@/lib/config');
+    const { classifyChatCsat } = await import('@/lib/csat-bifurcation');
+    const config = await readConfig().catch(() => null);
+    const classified = classifyChatCsat(tags.disposition, tags.sub_disposition, iqs, csatLabel, config);
+    bifurcation = classified.bifurcation;
+    bifurcatedLabel = classified.bifurcatedCsatLabel;
+  } catch (err) {
+    console.warn('[db] updateConversationCsat bifurcation error:', err);
+  }
+
   await query(
-    `UPDATE conversations SET csat_score = $1, csat_label = $2, updated_at = NOW() WHERE id = $3`,
-    [csatScore, csatLabel, chatId],
+    `UPDATE conversations
+     SET csat_score = $1, csat_label = $2, csat_bifurcation = $3, bifurcated_csat_label = $4, updated_at = NOW()
+     WHERE id = $5`,
+    [csatScore, csatLabel, bifurcation, bifurcatedLabel, chatId],
   );
 }
 
@@ -354,6 +387,19 @@ export async function updateConversationTags(
   await query(
     `UPDATE conversations SET tags = $1, updated_at = NOW() WHERE id = $2`,
     [JSON.stringify(tags), chatId],
+  );
+}
+
+export async function updateConversationBifurcation(
+  chatId: string,
+  bifurcation: string | null,
+  bifurcatedCsatLabel: string | null,
+): Promise<void> {
+  await query(
+    `UPDATE conversations
+     SET csat_bifurcation = $1, bifurcated_csat_label = $2, updated_at = NOW()
+     WHERE id = $3`,
+    [bifurcation, bifurcatedCsatLabel, chatId],
   );
 }
 
@@ -479,7 +525,9 @@ export async function insertIQSScore(data: {
   if (data.botModelVersion) stored.__bot_model_version = data.botModelVersion;
 
   const isBotOnlyMode = Boolean(data.botParameters && (!data.parameters || Object.keys(data.parameters).length === 0));
-  const primaryScore = data.iqsScore ?? (isBotOnlyMode ? data.botIqsScore : null) ?? null;
+  const primaryScore = data.iqsScore === null
+    ? (isBotOnlyMode && data.botIqsScore !== null && data.botIqsScore !== undefined ? data.botIqsScore : null)
+    : (data.iqsScore ?? (isBotOnlyMode ? (data.botIqsScore ?? null) : null));
 
   await query(`
     INSERT INTO iqs_scores (
@@ -677,7 +725,10 @@ export async function getAllScoredConversations(
       c.tags->>'disposition'      AS "disposition",
       c.tags->>'sub_disposition'  AS "subDisposition",
       a.name                      AS "agentName",
-      s.iqs_score                 AS "iqs",
+      CASE 
+        WHEN (c.tags::text ILIKE '%junk%') THEN NULL
+        ELSE s.iqs_score 
+      END                         AS "iqs",
       s.parameters,
       s.model_version             AS "modelVersion",
       s.scored_at                 AS "scoredAt",
@@ -769,9 +820,9 @@ export async function getScoredConversationsSummary(opts: GetScoredConversations
       COUNT(*) FILTER (WHERE c.bot_to_team_seconds <= 180)::int AS "slaOk",
       COUNT(c.bot_to_team_seconds)::int AS "slaTotal",
       AVG(c.resolution_seconds) AS "avgResolution",
-      AVG(s.iqs_score) AS "avgIqs",
-      COUNT(s.iqs_score)::int AS "iqsSampleSize",
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+      AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AS "avgIqs",
+      COUNT(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')::int AS "iqsSampleSize",
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
@@ -819,11 +870,11 @@ export async function getScoredConversationsAgentStats(opts: GetScoredConversati
     SELECT
       COALESCE(a.name, 'Unknown') AS "agent",
       COUNT(*)::int AS "chats",
-      AVG(s.iqs_score) AS "avgIqs",
+      AVG(s.iqs_score) FILTER (WHERE c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AS "avgIqs",
       MIN(s.iqs_score)::int AS "minIqs",
       MAX(s.iqs_score)::int AS "maxIqs",
-      COUNT(*) FILTER (WHERE s.iqs_score >= 90)::int AS "high",
-      COUNT(*) FILTER (WHERE s.iqs_score IS NOT NULL AND s.iqs_score < 70)::int AS "atRisk",
+      COUNT(*) FILTER (WHERE (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score >= 90)::int AS "high",
+      COUNT(*) FILTER (WHERE (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%') AND s.iqs_score IS NOT NULL AND s.iqs_score < 70)::int AS "atRisk",
       AVG(c.frt_seconds) AS "avgFrt",
       AVG(c.resolution_seconds) AS "avgResolution",
       AVG(c.bot_to_team_seconds) AS "avgBotToTeam",
@@ -831,7 +882,7 @@ export async function getScoredConversationsAgentStats(opts: GetScoredConversati
       COUNT(*) FILTER (WHERE c.csat_score = 3)::int AS "csatCbb",
       COUNT(*) FILTER (WHERE c.csat_score = 1)::int AS "csatBad",
       COUNT(*) FILTER (WHERE c.csat_score IN (1, 3, 5))::int AS "csatTotal",
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')) AS parameters
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
@@ -1001,6 +1052,8 @@ export interface CallRecordingRow {
   interruption_count: number;
   dead_air_count: number;
   status: string;
+  call_disposition?: string | null;
+  call_sub_disposition?: string | null;
   mobile_number?: string | null;
   raw_payload?: any;
 }
@@ -1237,6 +1290,7 @@ export async function getAllScoredCalls(opts: {
   maxScore?: number;
   unreviewedOnly?: boolean;
   dispositions?: string[];
+  disputeStatus?: string;
   page?: number;
   pageSize?: number;
 } = {}): Promise<{ rows: any[]; total: number }> {
@@ -1284,6 +1338,25 @@ export async function getAllScoredCalls(opts: {
     params.push(opts.dispositions);
     conditions.push(`r.call_disposition = ANY($${params.length})`);
   }
+  if (opts.disputeStatus === 'forwarded_to_tl' || opts.disputeStatus === 'pending_tl') {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM iqs_flags f
+      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
+        AND f.status IN ('pending', 'ir_pending_tl')
+    )`);
+  } else if (opts.disputeStatus === 'reviewed') {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM iqs_flags f
+      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
+        AND f.status IN ('reviewed', 'tl_resolved')
+    )`);
+  } else if (opts.disputeStatus === 'none') {
+    conditions.push(`NOT EXISTS (
+      SELECT 1 FROM iqs_flags f
+      WHERE (f.call_id = r.id OR f.chat_id = r.chat_id)
+        AND f.status NOT IN ('cancelled')
+    )`);
+  }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
 
@@ -1316,7 +1389,10 @@ export async function getAllScoredCalls(opts: {
       r.call_disposition                     AS "disposition",
       r.call_sub_disposition                 AS "subDisposition",
       NULLIF(COALESCE(a.name, ''), 'Robylon Automation') AS "agentName",
-      COALESCE(ce.iqs_percent, s.call_iqs_score) AS "iqs",
+      CASE 
+        WHEN (r.call_disposition ILIKE '%junk%' OR r.call_sub_disposition ILIKE '%junk%' OR conv.tags::text ILIKE '%junk%') THEN NULL
+        ELSE COALESCE(ce.iqs_percent, s.call_iqs_score) 
+      END                                     AS "iqs",
       COALESCE(ce.iqs_scores, s.call_parameters) AS "parameters",
       ce.verdict                              AS "verdict",
       ce.gates                                AS "gates",
@@ -1325,7 +1401,8 @@ export async function getAllScoredCalls(opts: {
       COALESCE(ce.reviewed_by, s.reviewed_by) AS "reviewedBy",
       COALESCE(ce.reviewed_at, s.reviewed_at) AS "reviewedAt",
       COALESCE(ce.review_note, s.review_note) AS "reviewNote",
-      COALESCE(ct_cr.phone, ct_c.phone)       AS "mobileNumber"
+      COALESCE(ct_cr.phone, ct_c.phone)       AS "mobileNumber",
+      (SELECT f.status FROM iqs_flags f WHERE (f.call_id = r.id OR f.chat_id = r.chat_id) AND f.status NOT IN ('cancelled') ORDER BY f.flagged_at DESC LIMIT 1) AS "disputeStatus"
     FROM call_recordings r
     LEFT JOIN call_evaluations ce ON ce.call_id = r.id
     LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
@@ -1433,47 +1510,51 @@ export interface RobylonWebhookPayloadRecord {
 }
 
 /**
- * Stores incoming webhook payloads as-is into `robylon_webhook_payloads`.
- * Catches and logs errors so that failure to log never interrupts webhook processing.
+ * Stores an incoming webhook payload as-is in `robylon_webhook_payloads`.
  *
- * NOTE: Any PCG sources ('doubletick', 'runo') are automatically routed to
- * the dedicated `pcg_webhook_payloads` table.
+ * Robylon's delivery rules (Hriday, Robylon, Nov 2026): a delivery that gets a non-2xx, cannot connect, or takes longer than
+ * 10 seconds is retried up to 5 more times (5, 10, 20, 40, 45 s apart; about 2 minutes in all), then dropped for good.
+ * Every retry carries the same event_id. So:
+ *  - a failed write THROWS, and the webhook route must answer 5xx so Robylon retries. (It used to be swallowed and answered 200,
+ *    which made Robylon treat the event as delivered: the main source of missing email events.)
+ *  - an event_id already stored for this source is not stored again: returns 'duplicate' (a retry of a delivery we already have,
+ *    e.g. when our first reply took longer than 10 s).
+ *
+ * PCG sources ('doubletick', 'runo') are routed to `pcg_webhook_payloads` as before.
  */
-export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRecord): Promise<void> {
+export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRecord): Promise<'stored' | 'duplicate'> {
   // Defensive routing: ensure PCG payloads always go to pcg_webhook_payloads
   if (record.source === 'doubletick' || record.source === 'runo') {
-    try {
-      const { savePcgWebhookPayload } = await import('@/lib/pcg/db');
-      await savePcgWebhookPayload({
-        source: record.source,
-        channel: record.source === 'doubletick' ? 'whatsapp' : 'call',
-        eventType: record.eventType,
-        eventId: record.eventId,
-        chatId: record.chatId,
-        payload: record.payload,
-        headers: record.headers,
-      });
-      return;
-    } catch (err: any) {
-      console.error('[db] Failed to route PCG webhook payload to pcg_webhook_payloads:', err?.message || err);
-      return;
-    }
+    const { savePcgWebhookPayload } = await import('@/lib/pcg/db');
+    await savePcgWebhookPayload({            // throws on failure, like the insert below
+      source: record.source,
+      channel: record.source === 'doubletick' ? 'whatsapp' : 'call',
+      eventType: record.eventType,
+      eventId: record.eventId,
+      chatId: record.chatId,
+      payload: record.payload,
+      headers: record.headers,
+    });
+    return 'stored';
   }
 
-  try {
-    await query(
-      `INSERT INTO robylon_webhook_payloads (source, event_type, event_id, chat_id, payload, headers)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        record.source || 'chat',
-        record.eventType ?? null,
-        record.eventId ?? null,
-        record.chatId ?? null,
-        JSON.stringify(record.payload),
-        record.headers ? JSON.stringify(record.headers) : null,
-      ]
-    );
-  } catch (err: any) {
-    console.error('[db] Failed to save webhook payload:', err.message);
-  }
+  const source = record.source || 'chat';
+  // ponytail: check-then-insert, so two deliveries of one event arriving in the same instant can both land; a unique index on
+  // (source, event_id) would close that, add it if duplicates ever show up.
+  const rows = await query<{ id: number }>(
+    `INSERT INTO robylon_webhook_payloads (source, event_type, event_id, chat_id, payload, headers)
+     SELECT $1::text, $2::text, $3::text, $4::text, $5::jsonb, $6::jsonb
+     WHERE $3::text IS NULL
+        OR NOT EXISTS (SELECT 1 FROM robylon_webhook_payloads WHERE event_id = $3::text AND source = $1::text)
+     RETURNING id`,
+    [
+      source,
+      record.eventType ?? null,
+      record.eventId ?? null,
+      record.chatId ?? null,
+      JSON.stringify(record.payload),
+      record.headers ? JSON.stringify(record.headers) : null,
+    ]
+  );
+  return rows.length ? 'stored' : 'duplicate';
 }

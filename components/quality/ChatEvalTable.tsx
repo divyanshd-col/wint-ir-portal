@@ -8,6 +8,8 @@ import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { csatLabel } from './csat';
+import DropdownSearch, { matchesSearch } from '@/components/shell/DropdownSearch';
+import * as T from './tableStyles';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -78,6 +80,7 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
   // ── Filter state ──────────────────────────────────────────────────────────
   const [chatIdSearch,  setChatIdSearch]  = useState(initialChatId || '');
   const [dispFilter,    setDispFilter]    = useState<string[]>([]);
+  const [dispSearch, setDispSearch] = useState('');
   const [subDispFilter, setSubDispFilter] = useState<string[]>([]);
   const [iqsMin,        setIqsMin]        = useState('');
   const [iqsMax,        setIqsMax]        = useState('');
@@ -196,24 +199,12 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
   const showStatus = sortedChats.some(c => c.status === 'reopened');
   const cols = showStatus ? 7 : 6;
 
-  const th: React.CSSProperties = {
-    height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--faint)',
-    fontWeight: 600, textAlign: 'left', padding: '0 12px', whiteSpace: 'nowrap',
-  };
-  const thBtn: React.CSSProperties = {
-    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em',
-    color: 'var(--faint)', fontWeight: 600, fontFamily: 'inherit',
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-  };
-  const td: React.CSSProperties = {
-    height: 48, padding: '0 12px', borderBottom: '1px solid var(--qa-border-sub)',
-    fontSize: 13, color: 'var(--qa-text)', verticalAlign: 'middle',
-  };
-  const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, monospace', fontSize: 12, color: 'var(--qa-text-2)' };
-  const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 12 };
-  const tdAct: React.CSSProperties  = { ...td, textAlign: 'right', width: 100 };
+  const th: React.CSSProperties = T.th;
+  const thBtn: React.CSSProperties = T.thBtn;
+  const td: React.CSSProperties = T.td;
+  const tdMono: React.CSSProperties = T.tdMono;
+  const tdNum: React.CSSProperties  = T.tdNum;
+  const tdAct: React.CSSProperties  = { ...T.tdAct, width: 100 };
 
   function SortIcon({ col }: { col: SortCol }) {
     if (sortCol !== col) return <span style={{ opacity: 0.3 }}>↕</span>;
@@ -266,14 +257,15 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
           </button>
           {openDrop === 'disp' && (
             <div style={dropdown} onClick={e => e.stopPropagation()}>
+              <DropdownSearch value={dispSearch} onChange={setDispSearch} count={dispositions.length} placeholder="Search dispositions…" />
               <div style={dropItem} onClick={() => { setDispFilter([]); setSubDispFilter([]); }}>
                 Clear
               </div>
-              {dispositions.map(d => {
+              {dispositions.filter(d => matchesSearch(dispSearch, d)).map(d => {
                 const checked = dispFilter.includes(d);
                 return (
                   <div key={d} style={dropItem} onClick={() => setDispFilter(prev => checked ? prev.filter(x => x !== d) : [...prev, d])}>
-                    <span style={{ fontSize: 10 }}>{checked ? '☑' : '☐'}</span> {d}
+                    <T.Check checked={checked} /> {d}
                   </div>
                 );
               })}
@@ -298,7 +290,7 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
                     const checked = subDispFilter.includes(s);
                     return (
                       <div key={s} style={dropItem} onClick={() => setSubDispFilter(prev => checked ? prev.filter(x => x !== s) : [...prev, s])}>
-                        <span style={{ fontSize: 10 }}>{checked ? '☑' : '☐'}</span> {s}
+                        <T.Check checked={checked} /> {s}
                       </div>
                     );
                   })}
@@ -382,7 +374,7 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
                   <div key={v} style={dropItem} onClick={() => {
                     setCsatFilter(prev => checked ? prev.filter(x => x !== v) : [...prev, v]);
                   }}>
-                    <span style={{ fontSize: 10 }}>{checked ? '☑' : '☐'}</span>
+                    <T.Check checked={checked} />
                     {csatLabel(v)}
                   </div>
                 );
@@ -559,34 +551,34 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
                     </td>
                     <td style={tdNum}>
                       {chat.iqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                           {chat.iqsScore}
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12, fontWeight: 500 }}>NIL</span>
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
                       )}
                     </td>
                     <td style={tdNum}>
                       {chat.botIqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 400, color: 'var(--faint)' }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 400, color: 'var(--faint)' }}>
                           {chat.botIqsScore}
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                       )}
                     </td>
                     <td style={td}>
                       {chat.callTranscriptStatus === 'transcribed' ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
-                          <span style={{ fontSize: 10 }}>✓</span> Transcribed
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
+                          <span style={{ fontSize: 11 }}>✓</span> Transcribed
                         </span>
                       ) : chat.callTranscriptStatus === 'pending' ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#ca8a04', fontWeight: 500 }} title="Transcribing/scoring call automatically on-the-fly when Evaluated">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#ca8a04', fontWeight: 500 }} title="Transcribing/scoring call automatically on-the-fly when Evaluated">
                           <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
                           Pending
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>No Call</span>
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>No Call</span>
                       )}
                     </td>
                     {showStatus && (
@@ -607,7 +599,7 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
                         onClick={e => { e.stopPropagation(); toggleExpand(chat.chatId); }}
                         style={{
                           background: 'none', border: 0, padding: 0,
-                          fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                          fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                           color: 'var(--qa-text)', cursor: 'pointer',
                           display: 'inline-flex', alignItems: 'center', gap: 4,
                         }}

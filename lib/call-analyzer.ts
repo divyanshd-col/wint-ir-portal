@@ -386,6 +386,7 @@ IR EXECUTIVE identification signal:
 
 TASK 2 — TRANSCRIPTION
 For each "turn" event in the structure above, transcribe the exact words spoken during that time window.
+CRITICAL COMPLETENESS: Transcribe every single turn through to the very last event in the structure. DO NOT STOP EARLY. Ensure the final instances of the call (closing pleasantries, wrap-up statements, 'thank you', 'take care', 'bye', and disconnection sign-offs) are fully transcribed.
 
 Language rules:
 - Auto-detect: English, Hindi, Hinglish, Tamil, Telugu, Kannada, Malayalam, Marathi and any other Indian language.

@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
-import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
+import { isSamePcgAgent, canonicalizePcgRmName, isPcgAm } from '@/lib/pcg/canonical-names';
+import { resolveParameterAttribution } from '@/lib/pcg/attribution';
 
 export type Period = '7' | '30' | 'custom';
 
@@ -13,10 +14,11 @@ export interface PcgMemberAnalyticsProps {
   selectedRm: string;
   onSelectRm: (rm: string) => void;
   availableRms: string[];
+  allTlNames?: string[];
   calls?: Array<{
     id: string;
     rmName: string;
-    iqsScore: number;
+    iqsScore: number | null;
     durationSeconds: number;
     isAnswered: boolean;
     category: string;
@@ -89,6 +91,7 @@ export default function PcgMemberAnalyticsDashboard({
   selectedRm,
   onSelectRm,
   availableRms,
+  allTlNames = [],
   calls = [],
   activePersona = 'tl',
   rmScorecards = [],
@@ -105,9 +108,8 @@ export default function PcgMemberAnalyticsDashboard({
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
-  const [showAgentDrop, setShowAgentDrop] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [agentSearch, setAgentSearch] = useState('');
-  const agentDropRef = useRef<HTMLDivElement>(null);
 
   // Sync internal period with external dateRange prop when it changes
   useEffect(() => {
@@ -117,27 +119,99 @@ export default function PcgMemberAnalyticsDashboard({
   }, [dateRange]);
 
   const [wowTab, setWowTab] = useState<'metrics' | 'params'>('metrics');
-  const [wowChannel, setWowChannel] = useState<'chats' | 'calls'>('calls');
+  const [wowChannel, setWowChannel] = useState<'calls' | 'chats' | 'emails'>('calls');
   const [wowCategory, setWowCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support'>('all');
-  const [aiChannel, setAiChannel] = useState<'chats' | 'calls'>('calls');
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+
+  const currentTl = useMemo(() => {
+    if (tlName && tlName.trim()) return tlName.trim();
+    if (activePersona === 'tl' && teamLeads && teamLeads.length > 0) {
+      const matched = teamLeads.find(t => (t.rms || []).some((r: string) => availableRms.some(a => isSamePcgAgent(a, r))));
+      if (matched) return matched.tlName;
+      return teamLeads[0].tlName;
+    }
+    return '';
+  }, [tlName, activePersona, teamLeads, availableRms]);
+
+  const mappedTeamRms = useMemo(() => {
+    return availableRms.filter(r => !isSamePcgAgent(r, currentTl));
+  }, [availableRms, currentTl]);
 
   const effectiveRm = useMemo(() => {
-    if (selectedRm && availableRms.some((r) => isSamePcgAgent(r, selectedRm))) {
+    if (
+      selectedRm &&
+      (availableRms.some((r) => isSamePcgAgent(r, selectedRm)) ||
+        (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, selectedRm))) ||
+        (currentTl && isSamePcgAgent(currentTl, selectedRm)))
+    ) {
       return selectedRm;
     }
-    return availableRms[0] || selectedRm || '';
-  }, [selectedRm, availableRms]);
+    return availableRms[0] || currentTl || selectedRm || '';
+  }, [selectedRm, availableRms, allTlNames, currentTl]);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (agentDropRef.current && !agentDropRef.current.contains(e.target as Node)) {
-        setShowAgentDrop(false);
+    if (effectiveRm) {
+      setAgentSearch(effectiveRm);
+    }
+  }, [effectiveRm]);
+
+  const isCurrentTl = useMemo(() => {
+    return (
+      (currentTl && isSamePcgAgent(currentTl, effectiveRm)) ||
+      (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, effectiveRm))) ||
+      (teamLeads && teamLeads.some((tl) => isSamePcgAgent(tl.tlName, effectiveRm))) ||
+      ['swetha', 'saiyam', 'dheeraj', 'sravanthi', 'tanisha'].some((tl) =>
+        effectiveRm.toLowerCase().includes(tl)
+      )
+    );
+  }, [allTlNames, teamLeads, effectiveRm, currentTl]);
+
+  const allSelectableMembers = useMemo(() => {
+    const list: Array<{ name: string; isTl: boolean; teamName: string }> = [];
+    const seen = new Set<string>();
+
+    if (currentTl) {
+      seen.add(currentTl.toLowerCase().trim());
+      list.push({ name: currentTl, isTl: true, teamName: 'Team Lead' });
+    }
+
+    // 1. Team Leads (for Admin view, or if allTlNames is passed)
+    if (activePersona === 'admin') {
+      const knownTls = (allTlNames && allTlNames.length > 0)
+        ? allTlNames
+        : (teamLeads && teamLeads.length > 0 ? teamLeads.map(t => t.tlName) : ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani', 'Sravanthi']);
+
+      knownTls.forEach((tl) => {
+        const lower = tl.toLowerCase().trim();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          list.push({ name: tl, isTl: true, teamName: 'Team Lead' });
+        }
+      });
+    }
+
+    // 2. Relationship Managers
+    availableRms.forEach((rm) => {
+      const lower = rm.toLowerCase().trim();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        const isTl = Boolean(
+          (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, rm))) ||
+          (teamLeads && teamLeads.some((tl) => isSamePcgAgent(tl.tlName, rm))) ||
+          (currentTl && isSamePcgAgent(currentTl, rm))
+        );
+        const foundTl = teamLeads.find((t) => (t.rms || []).some((r: string) => isSamePcgAgent(r, rm)));
+        list.push({
+          name: rm,
+          isTl,
+          teamName: isTl ? 'Team Lead' : (foundTl ? `Team ${foundTl.tlName}` : 'PCG RM'),
+        });
       }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    });
+
+    return list;
+  }, [activePersona, allTlNames, teamLeads, availableRms, currentTl]);
+
+
 
   const handlePeriod = (p: Period) => {
     if (p === 'custom') {
@@ -164,12 +238,332 @@ export default function PcgMemberAnalyticsDashboard({
   // Derive call analytics for this RM
   const rmScorecard = rmScorecards.find(s => isSamePcgAgent(s.rmName, effectiveRm));
   const rmCalls = calls.filter(c => isSamePcgAgent(c.rmName, effectiveRm));
-  const rmAnswered = rmCalls.filter(c => c.isAnswered);
+  const rmAnswered = rmCalls.filter(c => c.isAnswered && c.iqsScore != null);
   const rmAvgIqs = rmScorecard?.overallScore ?? (rmAnswered.length > 0
-    ? Math.round(rmAnswered.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnswered.length)
+    ? Math.round(rmAnswered.reduce((acc, c) => acc + (c.iqsScore ?? 0), 0) / rmAnswered.length)
     : 0);
   const callsVol = rmScorecard?.totalCalls ?? rmCalls.length;
   const callsIqs = rmAvgIqs;
+
+  // Fetch PCG chat evaluations for this RM
+  const [chats, setChats] = useState<any[]>([]);
+  const [loadingChats, setLoadingChats] = useState(false);
+
+  useEffect(() => {
+    if (!effectiveRm) return;
+    setLoadingChats(true);
+    const params = new URLSearchParams();
+    params.set('rm', effectiveRm);
+    params.set('limit', '500');
+    if (isCurrentTl) {
+      params.set('caller_role', 'tl');
+      params.set('my_chats', 'true');
+    }
+    if (activePersona) params.set('persona', activePersona);
+    if (tlName && activePersona !== 'admin') params.set('tl', tlName);
+
+    fetch(`/api/admin/pcg-chats?${params.toString()}`)
+      .then(res => res.json())
+      .then(data => {
+        setChats(Array.isArray(data.chats) ? data.chats : []);
+      })
+      .catch(err => {
+        console.error('[PcgMemberAnalyticsDashboard] Failed to fetch chats:', err);
+      })
+      .finally(() => {
+        setLoadingChats(false);
+      });
+  }, [effectiveRm, activePersona, tlName, isCurrentTl]);
+
+  const filteredChats = useMemo(() => {
+    if (!chats || chats.length === 0) return [];
+    const now = new Date();
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+
+    if (period === '7') {
+      minDate = new Date(now.getTime() - 7 * 86400000);
+    } else if (period === '30') {
+      minDate = new Date(now.getTime() - 30 * 86400000);
+    } else if (period === 'custom' && customFrom && customTo) {
+      minDate = new Date(customFrom + 'T00:00:00');
+      maxDate = new Date(customTo + 'T23:59:59.999Z');
+    }
+
+    const res = chats.filter(c => {
+      if (!c.chatClosedAt) return true;
+      const d = new Date(c.chatClosedAt);
+      if (minDate && d < minDate) return false;
+      if (maxDate && d > maxDate) return false;
+      return true;
+    });
+
+    if (res.length === 0 && chats.length > 0 && period !== 'custom') {
+      return chats;
+    }
+
+    return res;
+  }, [chats, period, customFrom, customTo]);
+
+  const chatCount = filteredChats.length;
+  const validIqsChats = filteredChats.filter(c => c.iqsScore != null);
+  const chatAvgIqs = validIqsChats.length > 0
+    ? Math.round((validIqsChats.reduce((acc, c) => acc + (c.iqsScore || 0), 0) / validIqsChats.length) * 10) / 10
+    : null;
+
+  // Fetch PCG email evaluations for this RM
+  const [emails, setEmails] = useState<any[]>([]);
+  const [loadingEmails, setLoadingEmails] = useState(false);
+
+  useEffect(() => {
+    if (!effectiveRm) return;
+    setLoadingEmails(true);
+    const params = new URLSearchParams();
+    params.set('rmName', effectiveRm);
+    if (isCurrentTl) {
+      params.set('caller_role', 'tl');
+      params.set('my_emails', 'true');
+    }
+    if (activePersona) params.set('persona', activePersona);
+    if (tlName && activePersona !== 'admin') params.set('tlName', tlName);
+
+    fetch(`/api/admin/pcg-emails?${params.toString()}`)
+      .then(res => res.json())
+      .then(data => {
+        setEmails(Array.isArray(data.emails) ? data.emails : []);
+      })
+      .catch(err => {
+        console.error('[PcgMemberAnalyticsDashboard] Failed to fetch emails:', err);
+      })
+      .finally(() => {
+        setLoadingEmails(false);
+      });
+  }, [effectiveRm, activePersona, tlName, isCurrentTl]);
+
+  const filteredEmails = useMemo(() => {
+    if (!emails || emails.length === 0) return [];
+    const now = new Date();
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+
+    if (period === '7') {
+      minDate = new Date(now.getTime() - 7 * 86400000);
+    } else if (period === '30') {
+      minDate = new Date(now.getTime() - 30 * 86400000);
+    } else if (period === 'custom' && customFrom && customTo) {
+      minDate = new Date(customFrom + 'T00:00:00');
+      maxDate = new Date(customTo + 'T23:59:59.999Z');
+    }
+
+    const res = emails.filter(e => {
+      const dateStr = e.evaluatedAt || e.sentAt;
+      if (!dateStr) return true;
+      const d = new Date(dateStr);
+      if (minDate && d < minDate) return false;
+      if (maxDate && d > maxDate) return false;
+      return true;
+    });
+
+    if (res.length === 0 && emails.length > 0 && period !== 'custom') {
+      return emails;
+    }
+
+    return res;
+  }, [emails, period, customFrom, customTo]);
+
+  const emailCount = filteredEmails.length;
+  const validIqsEmails = filteredEmails.filter(e => e.iqsScore != null && e.iqsScore > 0);
+  const emailAvgIqs = validIqsEmails.length > 0
+    ? Math.round((validIqsEmails.reduce((acc, e) => acc + (e.iqsScore || 0), 0) / validIqsEmails.length) * 10) / 10
+    : null;
+
+  // Derive chat parameter scores mapped to the 11 PCG quality parameters
+  const getChatParamScore = useCallback((callParamKey: string): number | null => {
+    if (filteredChats.length === 0) return null;
+
+    const paramMapping: Record<string, string[]> = {
+      CallOpening: ['GreetingClosing'],
+      CallClosing: ['GreetingClosing', 'PostCallRecap'],
+      TechnicalLegal: ['Accuracy'],
+      AllQuestions: ['QueryResolution'],
+      Expectation: ['ExpectationFollowThrough'],
+      Process: ['Personalisation', 'EscalationToCall', 'PostCallRecap'],
+      Grammar: ['ReadabilityTone'],
+      Fillers: [],
+      EnergyTone: ['ReadabilityTone'],
+      ActiveListening: ['Empathy', 'DissatisfactionHandling'],
+      Simplifying: ['SimplifyingConcepts'],
+    };
+
+    const chatKeys = paramMapping[callParamKey] || [];
+    if (chatKeys.length === 0) return null;
+
+    let earnedTotal = 0;
+    let maxTotal = 0;
+
+    filteredChats.forEach(chat => {
+      let params = chat.parameters;
+      if (typeof params === 'string') {
+        try { params = JSON.parse(params); } catch { }
+      }
+      if (!params || typeof params !== 'object') return;
+
+      const isCoHandled = Boolean(chat.precedingRmName);
+      const isAgentAm = isPcgAm(selectedRm);
+
+      chatKeys.forEach(ck => {
+        const p = Array.isArray(params) ? params.find((x: any) => x.id === ck) : params[ck];
+        if (!p) return;
+
+        let status = p.status;
+        if (isCoHandled) {
+          const rmName = isAgentAm ? (chat.precedingRmName || '') : selectedRm;
+          const amName = isAgentAm ? selectedRm : (chat.precedingRmName || '');
+          const turns = Array.isArray(chat.transcriptTurns) ? chat.transcriptTurns : undefined;
+          const attr = resolveParameterAttribution(p, turns, rmName, amName);
+
+          if (ck === 'QueryResolution' || attr === 'both') {
+            // Query resolution error is attributed to both RM and AM
+            status = p.status;
+          } else if (isAgentAm) {
+            // Viewing AM: if mistake was made by RM, AM is not penalized
+            if (attr === 'rm') {
+              status = 'Yes';
+            } else {
+              status = p.amStatus || p.status;
+            }
+          } else {
+            // Viewing RM: if mistake was made by AM, RM is not penalized
+            if (attr === 'am') {
+              status = 'Yes';
+            } else {
+              status = p.rmStatus || p.status;
+            }
+          }
+        }
+
+        if (status === 'NA' || status === 'N/A' || p.isApplicable === false) return;
+
+        const maxScore = p.maxScore || p.weight || 10;
+        maxTotal += maxScore;
+        if (status === 'Yes' || status === 'PASS' || status === 'Pass') earnedTotal += maxScore;
+        else if (status === 'Half') earnedTotal += maxScore * 0.5;
+        else if (status === 'No' || status === 'FAIL' || status === 'Fail') earnedTotal += 0;
+        else if (p.earnedScore != null) earnedTotal += p.earnedScore;
+      });
+    });
+
+    if (maxTotal === 0) return null;
+    return Math.round((earnedTotal / maxTotal) * 1000) / 10;
+  }, [filteredChats]);
+
+  // Derive email parameter scores mapped to the 11 PCG quality parameters
+  const getEmailParamScore = useCallback((callParamKey: string): number | null => {
+    if (filteredEmails.length === 0) return null;
+
+    const paramMapping: Record<string, string[]> = {
+      CallOpening: ['opening_and_closing', 'OpeningClosing'],
+      CallClosing: ['opening_and_closing', 'OpeningClosing'],
+      TechnicalLegal: ['accuracy', 'TechnicalLegal', 'TechnicallyLegal'],
+      AllQuestions: ['issue_resolution', 'AllQuestions', 'IssueResolution'],
+      Expectation: ['expectation_setting', 'Expectation', 'ExpectationSetting'],
+      Process: ['personalisation', 'Personalisation', 'Process'],
+      Grammar: ['sentences_simple_to_understand', 'Grammar', 'readability_and_tone'],
+      Fillers: [],
+      EnergyTone: ['sentences_simple_to_understand', 'EnergyTone'],
+      ActiveListening: ['empathy', 'ActiveListening', 'Empathy'],
+      Simplifying: ['sentences_simple_to_understand', 'Simplifying'],
+    };
+
+    const emailKeys = paramMapping[callParamKey] || [];
+    if (emailKeys.length === 0) return null;
+
+    let earnedTotal = 0;
+    let maxTotal = 0;
+
+    filteredEmails.forEach(email => {
+      let params = email.parameters;
+      if (typeof params === 'string') {
+        try { params = JSON.parse(params); } catch { }
+      }
+      if (!params || typeof params !== 'object') return;
+
+      emailKeys.forEach(ek => {
+        let p: any = null;
+        if (Array.isArray(params)) {
+          p = params.find((x: any) => x.id === ek || x.key === ek || x.name === ek);
+        } else {
+          p = params[ek];
+        }
+        if (!p) return;
+
+        const rawScore = (p.score || p.status || '').toString().toLowerCase();
+        if (rawScore === 'na' || rawScore === 'n/a' || p.isApplicable === false) return;
+
+        const maxScore = Number(p.maxScore ?? p.weight ?? 10);
+        maxTotal += maxScore;
+
+        if (rawScore === 'yes' || rawScore === 'pass') earnedTotal += maxScore;
+        else if (rawScore === 'half' || rawScore === 'partial') earnedTotal += maxScore * 0.5;
+        else if (rawScore === 'no' || rawScore === 'fail') earnedTotal += 0;
+        else if (p.earnedScore != null) earnedTotal += Number(p.earnedScore);
+      });
+    });
+
+    if (maxTotal === 0) return null;
+    return Math.round((earnedTotal / maxTotal) * 1000) / 10;
+  }, [filteredEmails]);
+
+  // Derive direct email parameter score for email-specific parameter views
+  const getEmailDirectParamScore = useCallback((emailKey: string): number | null => {
+    if (filteredEmails.length === 0) return null;
+
+    const keyAliases: Record<string, string[]> = {
+      accuracy: ['accuracy', 'TechnicalLegal', 'TechnicallyLegal'],
+      issue_resolution: ['issue_resolution', 'AllQuestions', 'IssueResolution', 'resolution'],
+      expectation_setting: ['expectation_setting', 'Expectation', 'ExpectationSetting'],
+      personalisation: ['personalisation', 'personalization', 'Personalisation', 'Personalization'],
+      empathy: ['empathy', 'ActiveListening', 'Empathy'],
+      sentences_simple_to_understand: ['sentences_simple_to_understand', 'sentences', 'Sentences', 'readability_and_tone', 'clarity'],
+      opening_and_closing: ['opening_and_closing', 'opening_closing_message', 'OpeningClosing', 'greeting_and_closing'],
+    };
+
+    const targetKeys = keyAliases[emailKey] || [emailKey];
+    let earnedTotal = 0;
+    let maxTotal = 0;
+
+    filteredEmails.forEach(email => {
+      let params = email.parameters;
+      if (typeof params === 'string') {
+        try { params = JSON.parse(params); } catch { }
+      }
+      if (!params || typeof params !== 'object') return;
+
+      targetKeys.forEach(k => {
+        let p: any = null;
+        if (Array.isArray(params)) {
+          p = params.find((x: any) => x.id === k || x.key === k || x.name === k);
+        } else {
+          p = params[k];
+        }
+        if (!p) return;
+
+        const rawScore = (p.score || p.status || '').toString().toLowerCase();
+        if (rawScore === 'na' || rawScore === 'n/a' || p.isApplicable === false) return;
+
+        const maxScore = Number(p.maxScore ?? p.weight ?? 10);
+        maxTotal += maxScore;
+
+        if (rawScore === 'yes' || rawScore === 'pass') earnedTotal += maxScore;
+        else if (rawScore === 'half' || rawScore === 'partial') earnedTotal += maxScore * 0.5;
+        else if (rawScore === 'no' || rawScore === 'fail') earnedTotal += 0;
+        else if (p.earnedScore != null) earnedTotal += Number(p.earnedScore);
+      });
+    });
+
+    if (maxTotal === 0) return null;
+    return Math.round((earnedTotal / maxTotal) * 1000) / 10;
+  }, [filteredEmails]);
 
   // Canonical 11 PCG Call Quality Parameters across 3 Skill Groups (Process Skills 50%, Communication 30%, Customer Service 20%)
   const PCG_PARAMETERS = [
@@ -235,8 +629,86 @@ export default function PcgMemberAnalyticsDashboard({
   const wowWeeks = ['2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'];
   const wowWeekLabels = ['SEP 21 – 27', 'SEP 28 – OCT 4', 'OCT 5 – 11', 'OCT 12 – 18', 'OCT 19 – 25'];
 
-  const wowMetrics = (() => {
-    if (wowChannel !== 'calls' || callsVol === 0 || callsIqs === 0) {
+  const wowMetrics = useMemo(() => {
+    if (wowChannel === 'emails') {
+      const iqsVals = wowWeeks.map(ws => {
+        const start = new Date(ws + 'T00:00:00Z').getTime();
+        const end = start + 7 * 86400000;
+        const weekEmails = emails.filter(e => {
+          const dateStr = e.evaluatedAt || e.sentAt;
+          if (!dateStr) return false;
+          const t = new Date(dateStr).getTime();
+          return t >= start && t < end && e.iqsScore != null && e.iqsScore > 0;
+        });
+        if (weekEmails.length === 0) return null;
+        return Math.round((weekEmails.reduce((acc, e) => acc + (e.iqsScore || 0), 0) / weekEmails.length) * 10) / 10;
+      });
+
+      const volVals = wowWeeks.map(ws => {
+        const start = new Date(ws + 'T00:00:00Z').getTime();
+        const end = start + 7 * 86400000;
+        const weekEmails = emails.filter(e => {
+          const dateStr = e.evaluatedAt || e.sentAt;
+          if (!dateStr) return false;
+          const t = new Date(dateStr).getTime();
+          return t >= start && t < end;
+        });
+        return weekEmails.length > 0 ? weekEmails.length : null;
+      });
+
+      const hasAnyVal = volVals.some(v => v !== null && v > 0);
+      if (!hasAnyVal && emailCount > 0) {
+        return [
+          { name: 'IQS', vals: [null, null, null, null, emailAvgIqs] as (number | null)[], isPct: true },
+          { name: 'Volume', vals: [null, null, null, null, emailCount] as (number | null)[], isPct: false },
+        ];
+      }
+
+      return [
+        { name: 'IQS', vals: iqsVals, isPct: true },
+        { name: 'Volume', vals: volVals, isPct: false },
+      ];
+    }
+
+    if (wowChannel === 'chats') {
+      const iqsVals = wowWeeks.map(ws => {
+        const start = new Date(ws + 'T00:00:00Z').getTime();
+        const end = start + 7 * 86400000;
+        const weekChats = chats.filter(c => {
+          if (!c.chatClosedAt) return false;
+          const t = new Date(c.chatClosedAt).getTime();
+          return t >= start && t < end && c.iqsScore != null;
+        });
+        if (weekChats.length === 0) return null;
+        return Math.round((weekChats.reduce((acc, c) => acc + (c.iqsScore || 0), 0) / weekChats.length) * 10) / 10;
+      });
+
+      const volVals = wowWeeks.map(ws => {
+        const start = new Date(ws + 'T00:00:00Z').getTime();
+        const end = start + 7 * 86400000;
+        const weekChats = chats.filter(c => {
+          if (!c.chatClosedAt) return false;
+          const t = new Date(c.chatClosedAt).getTime();
+          return t >= start && t < end;
+        });
+        return weekChats.length > 0 ? weekChats.length : null;
+      });
+
+      const hasAnyVal = volVals.some(v => v !== null && v > 0);
+      if (!hasAnyVal && chatCount > 0) {
+        return [
+          { name: 'IQS', vals: [null, null, null, null, chatAvgIqs] as (number | null)[], isPct: true },
+          { name: 'Volume', vals: [null, null, null, null, chatCount] as (number | null)[], isPct: false },
+        ];
+      }
+
+      return [
+        { name: 'IQS', vals: iqsVals, isPct: true },
+        { name: 'Volume', vals: volVals, isPct: false },
+      ];
+    }
+
+    if (callsVol === 0 || callsIqs === 0) {
       return [
         { name: 'IQS', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
         { name: 'Volume', vals: [null, null, null, null, null] as (number | null)[], isPct: false },
@@ -246,19 +718,49 @@ export default function PcgMemberAnalyticsDashboard({
       { name: 'IQS', vals: [null, null, null, null, callsIqs] as (number | null)[], isPct: true },
       { name: 'Volume', vals: [null, null, null, null, callsVol] as (number | null)[], isPct: false },
     ];
-  })();
+  }, [wowChannel, chats, chatCount, chatAvgIqs, emails, emailCount, emailAvgIqs, callsVol, callsIqs, wowWeeks]);
 
-  const wowParameters: Array<{ name: string; vals: (number | null)[] }> = (() => {
-    if (wowChannel !== 'calls') {
-      return [
-        { name: 'Technically / Legally Correct', vals: [null, null, null, null, null] },
-        { name: 'All Questions Addressed', vals: [null, null, null, null, null] },
-        { name: 'Expectation Setting', vals: [null, null, null, null, null] },
-        { name: 'Active Listening & Empathy', vals: [null, null, null, null, null] },
-        { name: 'Speech Clarity & Dead Air', vals: [null, null, null, null, null] },
-        { name: 'Call Opening & Closing', vals: [null, null, null, null, null] },
+  const wowParameters: Array<{ name: string; vals: (number | null)[] }> = useMemo(() => {
+    if (wowChannel === 'emails') {
+      const EMAIL_PARAMS = [
+        { key: 'accuracy', label: 'Accuracy & Compliance' },
+        { key: 'issue_resolution', label: 'Issue Resolution & Follow-through' },
+        { key: 'expectation_setting', label: 'Expectation Setting & TAT' },
+        { key: 'personalisation', label: 'Personalisation & Case Context' },
+        { key: 'empathy', label: 'Empathy & Natural Tone' },
+        { key: 'sentences_simple_to_understand', label: 'Clarity, Formatting & Grammar' },
+        { key: 'opening_and_closing', label: 'Opening & Closing Message' },
       ];
+
+      return EMAIL_PARAMS.map(p => {
+        const currentScore = getEmailDirectParamScore(p.key);
+        return {
+          name: p.label,
+          vals: [null, null, null, null, currentScore] as (number | null)[],
+        };
+      });
     }
+
+    if (wowChannel === 'chats') {
+      const CHAT_PARAMS = [
+        { key: 'TechnicalLegal', label: 'Technically / Legally Correct' },
+        { key: 'AllQuestions', label: 'All Questions / Query Resolution' },
+        { key: 'Expectation', label: 'Expectation & Follow-Through' },
+        { key: 'ActiveListening', label: 'Empathy & Dissatisfaction' },
+        { key: 'Simplifying', label: 'Simplifying Concepts' },
+        { key: 'Grammar', label: 'Readability & Professional Tone' },
+        { key: 'CallOpening', label: 'Greeting & Closing' },
+      ];
+
+      return CHAT_PARAMS.map(p => {
+        const currentScore = getChatParamScore(p.key);
+        return {
+          name: p.label,
+          vals: [null, null, null, null, currentScore] as (number | null)[],
+        };
+      });
+    }
+
     if (wowCategory === '13_pitching') {
       return [
         { name: 'Technically / Legally Correct', vals: [96.0, 99.0, 95.0, 98.0, 98.5] },
@@ -297,7 +799,7 @@ export default function PcgMemberAnalyticsDashboard({
       { name: 'Speech Clarity & Dead Air', vals: [91.0, 93.0, 89.0, 92.0, 91.5] },
       { name: 'Simplifying Answers', vals: [93.0, 96.0, 91.0, 94.0, 94.0] },
     ];
-  })();
+  }, [wowChannel, wowCategory, getChatParamScore, getEmailDirectParamScore]);
 
   const periodLabel = period === 'custom' && customFrom && customTo
     ? `${customFrom} – ${customTo}`
@@ -310,23 +812,6 @@ export default function PcgMemberAnalyticsDashboard({
     }).filter((p): p is typeof PCG_PARAMETERS[0] & { score: number } => p.score !== null);
   }, [effectiveRm, getAgentParamScore]);
 
-  const lowestParam = useMemo(() => {
-    if (scoredParams.length === 0) return null;
-    return [...scoredParams].sort((a, b) => a.score - b.score)[0];
-  }, [scoredParams]);
-
-  const strongParams = useMemo(() => {
-    if (scoredParams.length === 0) return [];
-    return [...scoredParams].filter(p => p.score >= 90);
-  }, [scoredParams]);
-
-  const handleRegenerateAi = () => {
-    setIsGeneratingAi(true);
-    setTimeout(() => {
-      setIsGeneratingAi(false);
-    }, 700);
-  };
-
   return (
     <div style={{ padding: '0 0 64px', maxWidth: 1100, margin: '0 auto', fontFamily: 'inherit' }}>
       {/* ── Page Header: Member Analytics + Viewing Dropdown + Period Switcher ── */}
@@ -336,197 +821,203 @@ export default function PcgMemberAnalyticsDashboard({
             {activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}
           </h1>
 
-          {/* Viewing Dropdown */}
-          <div ref={agentDropRef} style={{ position: 'relative' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)' }}>
-              <span>Viewing:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (activePersona !== 'agent') setShowAgentDrop(p => !p);
-                }}
-                disabled={activePersona === 'agent'}
+          {/* Member Selector: Dropdown for TL, Search for Admin */}
+          {activePersona === 'tl' ? (
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ position: 'relative' }}>
+                <select
+                  value={effectiveRm}
+                  onChange={(e) => {
+                    const chosen = e.target.value;
+                    onSelectRm(chosen);
+                    setAgentSearch(chosen);
+                  }}
+                  style={{
+                    height: 36,
+                    minWidth: 260,
+                    padding: '0 36px 0 12px',
+                    background: 'var(--qa-card, #ffffff)',
+                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: 'var(--qa-text, #111111)',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2371717A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {currentTl && (
+                    <optgroup label="Team Lead (Yourself)">
+                      <option value={currentTl}>
+                        {currentTl} (Team Lead)
+                      </option>
+                    </optgroup>
+                  )}
+                  <optgroup label={`Mapped Agents (${mappedTeamRms.length})`}>
+                    {mappedTeamRms.map((rm) => (
+                      <option key={rm} value={rm}>
+                        {rm}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Role indicator badge */}
+              <span
                 style={{
-                  height: 32,
-                  padding: '0 12px',
-                  background: 'var(--qa-card, #ffffff)',
-                  border: '1px solid var(--qa-border, #E4E4E7)',
-                  borderRadius: 8,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: 'var(--qa-text, #111111)',
-                  cursor: activePersona === 'agent' ? 'default' : 'pointer',
-                  fontFamily: 'inherit',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  background: isCurrentTl ? '#FEF3C7' : 'var(--qa-fill-light, #F4F4F5)',
+                  color: isCurrentTl ? '#92400E' : 'var(--qa-text-2, #52525B)',
+                  border: isCurrentTl ? '1px solid #FDE68A' : '1px solid var(--qa-border, #E4E4E7)',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
                 }}
               >
-                <span>{effectiveRm}</span>
-                {activePersona !== 'agent' && (
-                  <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 10 }}>▾</span>
-                )}
-              </button>
+                {isCurrentTl ? 'Team Lead' : 'RM'}
+              </span>
             </div>
-
-            {/* Dropdown Menu */}
-            {showAgentDrop && activePersona !== 'agent' && (
+          ) : activePersona === 'admin' ? (
+            <div style={{ position: 'relative', width: 340 }}>
               <div
                 style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 6px)',
-                  left: 0,
-                  zIndex: 50,
+                  display: 'flex',
+                  alignItems: 'center',
                   background: 'var(--qa-card, #ffffff)',
-                  border: '1px solid var(--qa-border, #E4E4E7)',
-                  borderRadius: 10,
-                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
-                  minWidth: 280,
-                  maxHeight: 'min(420px, calc(100vh - 220px))',
-                  overflowY: 'auto',
-                  overflowX: 'hidden',
-                  overscrollBehavior: 'contain',
+                  border: isSearchFocused ? '1px solid #10b981' : '1px solid var(--qa-border, #E4E4E7)',
+                  borderRadius: 8,
+                  padding: '0 10px',
+                  height: 36,
+                  gap: 8,
+                  boxShadow: isSearchFocused ? '0 0 0 2px rgba(16, 185, 129, 0.15)' : '0 1px 2px rgba(0,0,0,0.03)',
+                  transition: 'all 0.15s ease',
                 }}
               >
-                {/* Search Agent in Dropdown */}
-                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', background: '#FAFAFB', position: 'sticky', top: 0, zIndex: 10 }}>
-                  <input
-                    type="text"
-                    value={agentSearch}
-                    onChange={(e) => setAgentSearch(e.target.value)}
-                    placeholder={activePersona === 'tl' ? 'Search team member...' : 'Search agent across teams...'}
-                    style={{
-                      width: '100%',
-                      height: 28,
-                      padding: '0 8px',
-                      fontSize: 12,
-                      border: '1px solid var(--qa-border, #E4E4E7)',
-                      borderRadius: 6,
-                      outline: 'none',
-                      background: '#ffffff',
-                      boxSizing: 'border-box',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-
-                {/* Team Groups */}
-                {(() => {
-                  const groups: { teamName: string; agents: string[] }[] = [];
-
-                  if (activePersona === 'tl') {
-                    // For TL, strictly show ONLY this TL's team members
-                    const teamTitle = tlName ? `Team ${tlName}` : 'My Team';
-                    groups.push({ teamName: teamTitle, agents: availableRms });
-                  } else if (activePersona === 'admin') {
-                    if (teamLeads && teamLeads.length > 0) {
-                      teamLeads.forEach((tl) => {
-                        groups.push({ teamName: `Team ${tl.tlName}`, agents: tl.rms });
-                      });
-                    } else {
-                      groups.push({ teamName: 'All PCG Agents', agents: availableRms });
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ color: 'var(--qa-text-3, #A1A1AA)', flexShrink: 0 }}
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  value={agentSearch}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => {
+                    setIsSearchFocused(false);
+                    const s = agentSearch.trim().toLowerCase();
+                    if (s) {
+                      const match = allSelectableMembers.find(
+                        (m) => m.name.toLowerCase() === s || isSamePcgAgent(m.name, s) || m.name.toLowerCase().includes(s)
+                      );
+                      if (match) {
+                        onSelectRm(match.name);
+                        setAgentSearch(match.name);
+                      }
                     }
-                  } else {
-                    // Agent
-                    groups.push({ teamName: 'My Profile', agents: [effectiveRm] });
-                  }
-
-                  const s = agentSearch.trim().toLowerCase();
-
-                  return groups.map((g) => {
-                    const filteredAgents = g.agents.filter(a => !s || a.toLowerCase().includes(s));
-                    if (filteredAgents.length === 0) return null;
-
-                    return (
-                      <div key={g.teamName}>
-                        <div
-                          style={{
-                            padding: '6px 12px',
-                            fontSize: 10,
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            color: '#71717A',
-                            background: '#F4F4F5',
-                            borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                          }}
-                        >
-                          <span>{g.teamName}</span>
-                          <span style={{ fontSize: 9, fontWeight: 600, color: '#A1A1AA' }}>
-                            {filteredAgents.length} Agents
-                          </span>
-                        </div>
-                        {filteredAgents.map(a => (
-                          <button
-                            key={a}
-                            type="button"
-                            onClick={() => {
-                              onSelectRm(a);
-                              setShowAgentDrop(false);
-                              setAgentSearch('');
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              width: '100%',
-                              padding: '8px 12px',
-                              background: a.toLowerCase() === effectiveRm.toLowerCase() ? 'var(--qa-fill-light, #F4F4F5)' : 'transparent',
-                              border: 0,
-                              borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
-                              cursor: 'pointer',
-                              fontSize: 13,
-                              color: 'var(--qa-text, #111111)',
-                              fontFamily: 'inherit',
-                              textAlign: 'left',
-                              fontWeight: a.toLowerCase() === effectiveRm.toLowerCase() ? 600 : 400,
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span
-                                style={{
-                                  width: 26,
-                                  height: 26,
-                                  borderRadius: '50%',
-                                  background: a.toLowerCase() === effectiveRm.toLowerCase() ? '#18181b' : 'var(--qa-fill-med, #E4E4E7)',
-                                  color: a.toLowerCase() === effectiveRm.toLowerCase() ? '#ffffff' : 'var(--qa-text-2, #6B6B6B)',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {agentInitials(a)}
-                              </span>
-                              <span>{a}</span>
-                            </div>
-                            <span
-                              style={{
-                                fontSize: 10,
-                                padding: '2px 6px',
-                                borderRadius: 4,
-                                background: '#E4E4E7',
-                                color: '#52525B',
-                                fontWeight: 500,
-                              }}
-                            >
-                              {g.teamName.replace(/^Team\s+/i, '')}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  });
-                })()}
+                  }}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAgentSearch(val);
+                    const s = val.trim().toLowerCase();
+                    if (s) {
+                      const exact = allSelectableMembers.find(
+                        (m) => m.name.toLowerCase() === s || isSamePcgAgent(m.name, s)
+                      );
+                      if (exact) {
+                        onSelectRm(exact.name);
+                      }
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const s = agentSearch.trim().toLowerCase();
+                      const match = allSelectableMembers.find(
+                        (m) => m.name.toLowerCase() === s || isSamePcgAgent(m.name, s) || m.name.toLowerCase().includes(s)
+                      );
+                      if (match) {
+                        onSelectRm(match.name);
+                        setAgentSearch(match.name);
+                      }
+                    }
+                  }}
+                  placeholder="Search RM or TL name..."
+                  style={{
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--qa-text, #111111)',
+                    width: '100%',
+                    fontFamily: 'inherit',
+                  }}
+                />
+                {agentSearch && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAgentSearch('');
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--qa-text-3, #A1A1AA)',
+                      cursor: 'pointer',
+                      padding: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 12,
+                      lineHeight: 1,
+                    }}
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+                {/* Role indicator badge */}
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: isCurrentTl ? '#FEF3C7' : 'var(--qa-fill-light, #F4F4F5)',
+                    color: isCurrentTl ? '#92400E' : 'var(--qa-text-2, #52525B)',
+                    border: isCurrentTl ? '1px solid #FDE68A' : '1px solid var(--qa-border, #E4E4E7)',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {isCurrentTl ? 'Team Lead' : 'RM'}
+                </span>
               </div>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Time Range Switcher */}
@@ -590,46 +1081,58 @@ export default function PcgMemberAnalyticsDashboard({
           </div>
         </div>
 
-        {/* Chats Card (Blank - Not yet evaluated) */}
+        {/* Chats Card (Live PCG Chats Data) */}
         <div style={{ background: 'var(--qa-card, #ffffff)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 14, fontWeight: 600 }}>
             CHATS
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 24, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: chatAvgIqs != null ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)' }}>
+                {chatAvgIqs != null ? `${chatAvgIqs.toFixed(1)}%` : '—'}
+              </span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
             </div>
             <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 24, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: chatCount > 0 ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)' }}>
+                {chatCount}
+              </span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>VOLUME</span>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)', marginTop: 8, fontStyle: 'italic' }}>
-            Not yet evaluated
-          </div>
+          {chatCount === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)', marginTop: 8, fontStyle: 'italic' }}>
+              No evaluated chats
+            </div>
+          )}
         </div>
 
-        {/* Emails Card (Blank - Not yet evaluated) */}
+        {/* Emails Card (Live PCG Emails Data) */}
         <div style={{ background: 'var(--qa-card, #ffffff)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 14, fontWeight: 600 }}>
             EMAILS
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 24, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: emailAvgIqs != null ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)' }}>
+                {emailAvgIqs != null ? `${emailAvgIqs.toFixed(1)}%` : '—'}
+              </span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
             </div>
             <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 24, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: emailCount > 0 ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)' }}>
+                {emailCount > 0 ? emailCount : '—'}
+              </span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>VOLUME</span>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)', marginTop: 8, fontStyle: 'italic' }}>
-            Not yet evaluated
-          </div>
+          {emailCount === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)', marginTop: 8, fontStyle: 'italic' }}>
+              No evaluated emails
+            </div>
+          )}
         </div>
       </div>
 
@@ -638,13 +1141,13 @@ export default function PcgMemberAnalyticsDashboard({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <SectionTitle>IQS by Parameters</SectionTitle>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)', fontStyle: 'italic' }}>
-            {periodLabel} · 11 voice quality parameters evaluated for {effectiveRm}
+            {periodLabel} · 11 quality parameters evaluated for {effectiveRm}
           </span>
         </div>
         <Panel>
           <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
-              11 quality parameters · evaluated across calls
+              11 quality parameters · evaluated across calls, chats & emails
             </span>
           </div>
           <div style={{ overflowX: 'auto' }}>
@@ -683,6 +1186,8 @@ export default function PcgMemberAnalyticsDashboard({
               <tbody>
                 {PCG_PARAMETERS.map(param => {
                   const score = getAgentParamScore(effectiveRm, param.key, param.deptScore);
+                  const chatScore = getChatParamScore(param.key);
+                  const emailScore = getEmailParamScore(param.key);
                   return (
                     <tr
                       key={param.key}
@@ -715,11 +1220,29 @@ export default function PcgMemberAnalyticsDashboard({
                       <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
                         {fmtPct(score)}
                       </td>
-                      <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
-                        —
+                      <td
+                        style={{
+                          padding: '0 16px',
+                          borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+                          textAlign: 'right',
+                          fontFamily: chatScore !== null ? 'monospace' : 'inherit',
+                          fontSize: 13,
+                          color: chatScore !== null ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)',
+                        }}
+                      >
+                        {chatScore !== null ? fmtPct(chatScore) : '—'}
                       </td>
-                      <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
-                        —
+                      <td
+                        style={{
+                          padding: '0 16px',
+                          borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+                          textAlign: 'right',
+                          fontFamily: emailScore !== null ? 'monospace' : 'inherit',
+                          fontSize: 13,
+                          color: emailScore !== null ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)',
+                        }}
+                      >
+                        {emailScore !== null ? fmtPct(emailScore) : '—'}
                       </td>
                     </tr>
                   );
@@ -777,7 +1300,7 @@ export default function PcgMemberAnalyticsDashboard({
                   CHANNEL
                 </span>
                 <div style={{ display: 'inline-flex', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
-                  {(['calls', 'chats'] as const).map(ch => (
+                  {(['calls', 'chats', 'emails'] as const).map(ch => (
                     <button
                       key={ch}
                       type="button"
@@ -787,7 +1310,7 @@ export default function PcgMemberAnalyticsDashboard({
                         padding: '0 13px',
                         background: wowChannel === ch ? 'var(--qa-text, #111111)' : 'transparent',
                         border: 0,
-                        borderRight: ch === 'calls' ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
+                        borderRight: ch !== 'emails' ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
                         fontSize: 13,
                         fontFamily: 'inherit',
                         cursor: 'pointer',
@@ -795,7 +1318,7 @@ export default function PcgMemberAnalyticsDashboard({
                         fontWeight: wowChannel === ch ? 500 : 400,
                       }}
                     >
-                      {ch === 'calls' ? 'Calls' : 'Chats'}
+                      {ch === 'calls' ? 'Calls' : ch === 'chats' ? 'Chats' : 'Emails'}
                     </button>
                   ))}
                 </div>
@@ -964,232 +1487,6 @@ export default function PcgMemberAnalyticsDashboard({
             </div>
           )}
         </Panel>
-      </section>
-
-      {/* ── Section 4: AI Analysis ── */}
-      <section style={{ marginBottom: 32 }}>
-        <div style={{ marginBottom: 12 }}>
-          <SectionTitle>AI Analysis</SectionTitle>
-        </div>
-        <div style={{ background: 'var(--qa-card, #ffffff)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>AI Analysis</h3>
-            <button
-              type="button"
-              onClick={handleRegenerateAi}
-              disabled={isGeneratingAi}
-              style={{
-                height: 36,
-                padding: '0 16px',
-                borderRadius: 8,
-                fontFamily: 'inherit',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: isGeneratingAi ? 'not-allowed' : 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                border: '1px solid var(--qa-text, #111111)',
-                background: isGeneratingAi ? 'var(--qa-fill-med, #E4E4E7)' : 'var(--qa-text, #111111)',
-                color: isGeneratingAi ? 'var(--qa-text-3, #A1A1AA)' : '#ffffff',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
-              </svg>
-              <span>{isGeneratingAi ? 'Analyzing…' : '✦ Regenerate'}</span>
-            </button>
-          </div>
-
-          {/* Channel Tabs inside AI Analysis */}
-          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--qa-border, #E4E4E7)', marginBottom: 20 }}>
-            {(['calls', 'chats'] as const).map(ch => (
-              <button
-                key={ch}
-                type="button"
-                onClick={() => setAiChannel(ch)}
-                style={{
-                  height: 36,
-                  padding: '0 14px',
-                  background: 'transparent',
-                  border: 0,
-                  fontSize: 13,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                  color: aiChannel === ch ? 'var(--qa-text, #111111)' : 'var(--qa-text-2, #6B6B6B)',
-                  fontWeight: aiChannel === ch ? 600 : 400,
-                  borderBottom: aiChannel === ch ? '2px solid var(--qa-text, #111111)' : '2px solid transparent',
-                  marginBottom: -1,
-                }}
-              >
-                {ch === 'calls' ? 'Calls' : 'Chats'}
-              </button>
-            ))}
-            <button
-              type="button"
-              disabled
-              style={{
-                height: 36,
-                padding: '0 14px',
-                background: 'transparent',
-                border: 0,
-                fontSize: 13,
-                fontFamily: 'inherit',
-                cursor: 'not-allowed',
-                color: 'var(--qa-text-4, #C7C7CC)',
-                borderBottom: '2px solid transparent',
-                marginBottom: -1,
-              }}
-              title="Coming soon"
-            >
-              Emails
-            </button>
-          </div>
-
-          {aiChannel === 'chats' ? (
-            <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontStyle: 'italic' }}>
-              Chat quality evaluation is not yet implemented for PCG. AI insights will appear here once enabled.
-            </div>
-          ) : callsVol === 0 || callsIqs === 0 ? (
-            <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontStyle: 'italic' }}>
-              No evaluated call data available for {effectiveRm} in this time period. AI coaching insights will populate once calls are evaluated.
-            </div>
-          ) : (
-            <>
-              {/* AI Narrative Analysis Paragraph */}
-              <p style={{ fontSize: 14, color: 'var(--qa-text, #111111)', lineHeight: 1.6, margin: '0 0 18px', maxWidth: 860 }}>
-                {effectiveRm} achieved an overall IQS of {callsIqs.toFixed(1)}% across {callsVol} calls in this period.
-                {lowestParam
-                  ? ` Performance is highest across core communication and pre-checks, while ${lowestParam.label} was the lowest area at ${lowestParam.score.toFixed(1)}%.`
-                  : ' Consistent call structure and compliance maintained.'}
-              </p>
-
-              {/* Badges: STRENGTH, WATCH, TIP */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* Strength */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '14px 16px',
-                    background: 'var(--qa-card, #ffffff)',
-                    border: '1px solid var(--qa-border, #E4E4E7)',
-                    borderRadius: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      height: 20,
-                      padding: '0 8px',
-                      borderRadius: 999,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      background: 'var(--qa-text, #111111)',
-                      color: '#ffffff',
-                    }}
-                  >
-                    STRENGTH
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    {strongParams.length > 0
-                      ? `Achieved strong performance (90%+) in ${strongParams.slice(0, 3).map(p => p.label).join(', ')}.`
-                      : 'Professional greeting and structured closing maintained across evaluated calls.'}
-                  </span>
-                </div>
-
-                {/* Watch */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '14px 16px',
-                    background: 'var(--qa-card, #ffffff)',
-                    border: '1px solid var(--qa-border, #E4E4E7)',
-                    borderRadius: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      height: 20,
-                      padding: '0 8px',
-                      borderRadius: 999,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      background: 'var(--qa-fill-med, #E4E4E7)',
-                      color: 'var(--qa-text, #111111)',
-                    }}
-                  >
-                    WATCH
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    {lowestParam && lowestParam.score < 90
-                      ? `${lowestParam.label} was the lowest-performing parameter at ${lowestParam.score.toFixed(1)}% across evaluated calls.`
-                      : 'All quality parameters performing at or above target levels.'}
-                  </span>
-                </div>
-
-                {/* Tip */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '14px 16px',
-                    background: 'var(--qa-card, #ffffff)',
-                    border: '1px solid var(--qa-border, #E4E4E7)',
-                    borderRadius: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      height: 20,
-                      padding: '0 8px',
-                      borderRadius: 999,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      background: 'transparent',
-                      border: '1px solid var(--qa-border, #E4E4E7)',
-                      color: 'var(--qa-text, #111111)',
-                    }}
-                  >
-                    TIP
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                    {lowestParam && lowestParam.key.toLowerCase().includes('open')
-                      ? 'Ensure professional greeting with client name, self-introduction, and confirmation of availability upfront.'
-                      : lowestParam && lowestParam.key.toLowerCase().includes('clos')
-                      ? 'Summarize agreed next steps and establish a firm calendar callback slot before concluding the call.'
-                      : lowestParam && lowestParam.key.toLowerCase().includes('legal')
-                      ? 'Ensure mandatory regulatory disclosures and clear return vs risk positioning without promising guaranteed returns.'
-                      : 'Maintain clear pace, proactive expectation setting, and concise follow-ups.'}
-                  </span>
-                </div>
-              </div>
-
-              <p style={{ marginTop: 14, fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)', fontStyle: 'italic', marginBottom: 0 }}>
-                Generated from RM {agentInitials(effectiveRm)} {effectiveRm}'s evaluated calls · {periodLabel || '7 days'}
-              </p>
-            </>
-          )}
-        </div>
       </section>
     </div>
   );

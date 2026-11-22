@@ -28,62 +28,60 @@ test('sla-breach cron end to end against a real database', { skip }, async () =>
       chat_id VARCHAR(100), payload JSONB NOT NULL, headers JSONB, received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await pool.query('TRUNCATE email_conversations, robylon_webhook_payloads');
 
-    // now = 2026-10-01 09:45 IST. Trigger 1 window = 04:30Z..13:30Z on Oct 1 (breach = last customer message + 24h).
-    const T = (chat: string, extra = '', status = 'OPEN', created = '2026-09-30 08:00Z', frt = 'NULL', updated = created) =>
-      `('${chat}','${chat}','${chat}@example.com','${status}','${created}',${frt},'${updated}')`;
+    // now = 2026-10-01 09:45 IST (04:15Z). Trigger 1 window = 04:30Z..13:30Z on Oct 1. Breach = customer's last message + 24h; overdue = already past.
+    const T = (chat: string, status = 'OPEN', created = '2026-09-30 08:00Z', email = `${chat}@example.com`) =>
+      `('${chat}','${chat}','${email}','${status}','${created}','${created}')`;
     await pool.query(
-      `INSERT INTO email_conversations (id, chat_id, customer_email, status, created_at, first_response_at, updated_at) VALUES
+      `INSERT INTO email_conversations (id, chat_id, customer_email, status, created_at, updated_at) VALUES
        ${[
-         T('unanswered'),                                   // no events, no reply: anchor = created_at, in window
-         T('customer-last', '', 'OPEN', '2026-09-20 00:00Z', "'2026-09-20 01:00Z'", '2026-09-29 00:00Z'), // anchor = last message, not updated_at
-         T('agent-last'),                                   // last message from @wintwealth.com
-         T('repayment'),                                    // Chat Status = Repayment
-         T('repayment-ext'),                                // Chat Status = Repayment External Dependency
-         T('pending-status'),                               // Chat Status = PENDING (kept)
-         T('note-after'),                                   // customer message, then an internal note: still customer-last
-         T('closed', '', 'CLOSED'),
-         T('just-outside', '', 'OPEN', '2026-09-30 13:31Z'),
-         T('noreply', '', 'OPEN', '2026-09-30 09:00Z'),
+         T('unanswered'), T('customer-last'), T('agent-last'), T('repayment'), T('pending-status'), T('note-after'),
+         T('answered-stuck'), T('answered-quiet'), T('hold'), T('internal-start'), T('overdue', 'OPEN', '2026-09-28 08:00Z'),
+         T('no-events'), T('closed', 'CLOSED'), T('just-outside', 'OPEN', '2026-09-30 13:31Z'),
+         T('noreply', 'OPEN', '2026-09-30 09:00Z', 'noreply@example.com'),
        ].join(',\n       ')}`,
     );
-    await pool.query("UPDATE email_conversations SET customer_email = 'noreply@example.com' WHERE id = 'noreply'");
 
-    const ev = (chat: string, type: string, at: string, message?: { from: string; type: string; sentAt: string }, props: [string, string][] = []) => [
-      chat, type, at,
-      JSON.stringify({ data: {
-        ...(message ? { message: { from_email: message.from, message_type: message.type, created_at: message.sentAt } } : {}),
-        properties: props.map(([name, v]) => ({ name, selected_value: v, snapshot_value: v })),
-      } }),
-    ];
+    const msg = (from: string, type: string, at: string) => ({ from_email: from, message_type: type, created_at: at });
+    const ev = (chat: string, type: string, at: string, data: Record<string, unknown> = {}) => [chat, type, at, JSON.stringify({ data })];
+    const cust = (chat: string, at: string) => ev(chat, 'NEW_MESSAGE', at, { message: msg('cust@gmail.com', 'incoming', at) });
+    const reply = (chat: string, at: string) => ev(chat, 'REPLY_SENT', at, { message: msg('Sneha@WintWealth.com', 'reply', at) });
+    const status = (chat: string, at: string, s: string, props: [string, string][] = []) =>
+      ev(chat, 'STATUS_CHANGED', at, { new_status: s, properties: props.map(([name, v]) => ({ name, selected_value: v, snapshot_value: v })) });
+    const created = (chat: string, at: string) => ev(chat, 'TICKET_CREATED', at, { properties: [] });
     const rows = [
-      ev('customer-last', 'NEW_MESSAGE', '2026-09-30 09:00Z', { from: 'cust@gmail.com', type: 'incoming', sentAt: '2026-09-30 09:00Z' }),
-      ev('customer-last', 'REPLY_SENT', '2026-09-20 03:00Z', { from: 'hello@wintwealth.com', type: 'reply', sentAt: '2026-09-20 03:00Z' }),
-      ev('agent-last', 'NEW_MESSAGE', '2026-09-30 07:00Z', { from: 'cust@gmail.com', type: 'incoming', sentAt: '2026-09-30 07:00Z' }),
-      ev('agent-last', 'REPLY_SENT', '2026-09-30 08:00Z', { from: 'Sneha@WintWealth.com', type: 'reply', sentAt: '2026-09-30 08:00Z' }),
-      ev('repayment', 'STATUS_CHANGED', '2026-09-30 09:00Z', undefined, [['Chat Status', 'PENDING']]),
-      ev('repayment', 'STATUS_CHANGED', '2026-09-30 10:00Z', undefined, [['Chat Status', 'Repayment']]),       // latest wins
-      ev('repayment-ext', 'STATUS_CHANGED', '2026-09-30 10:00Z', undefined, [['Chat Status', 'Repayment External Dependency']]),
-      ev('pending-status', 'STATUS_CHANGED', '2026-09-30 10:00Z', undefined, [['Chat Status', 'PENDING'], ['Intents_L1', 'KYC']]),
-      ev('note-after', 'NEW_MESSAGE', '2026-09-30 08:00Z', { from: 'cust@gmail.com', type: 'incoming', sentAt: '2026-09-30 08:00Z' }),
-      ev('note-after', 'INTERNAL_NOTE_ADDED', '2026-09-30 09:00Z', { from: 'sneha@wintwealth.com', type: 'note', sentAt: '2026-09-30 09:00Z' }),
+      created('unanswered', '2026-09-30 08:00Z'),                                   // only the creation event: no reply, upcoming
+      reply('customer-last', '2026-09-20 03:00Z'), cust('customer-last', '2026-09-30 09:00Z'),   // customer wrote after the reply
+      cust('agent-last', '2026-09-30 07:00Z'), reply('agent-last', '2026-09-30 08:00Z'),         // agent last: not flagged
+      cust('repayment', '2026-09-30 08:00Z'), status('repayment', '2026-09-30 10:00Z', 'PENDING'), status('repayment', '2026-09-30 11:00Z', 'Repayment'), // latest wins
+      cust('pending-status', '2026-09-30 08:00Z'), status('pending-status', '2026-09-30 10:00Z', 'PENDING', [['Intents_L1', 'KYC']]),
+      cust('note-after', '2026-09-30 08:00Z'), ev('note-after', 'INTERNAL_NOTE_ADDED', '2026-09-30 09:00Z', { message: msg('sneha@wintwealth.com', 'note', '2026-09-30 09:00Z') }),
+      status('answered-stuck', '2026-09-30 06:00Z', 'Answered'), cust('answered-stuck', '2026-09-30 09:00Z'),   // customer wrote after Answered: still flagged
+      cust('answered-quiet', '2026-09-30 08:00Z'), status('answered-quiet', '2026-09-30 09:00Z', 'Answered'), // agent acted last by status
+      cust('hold', '2026-09-30 08:00Z'), status('hold', '2026-09-30 09:00Z', 'Hold'),
+      ev('internal-start', 'NEW_MESSAGE', '2026-09-30 08:00Z', { message: msg('compliance@wintwealth.com', 'incoming', '2026-09-30 08:00Z') }), // started by a Wint sender
+      cust('overdue', '2026-09-28 08:00Z'),                                                                      // 24h passed on Sep 29 08:00Z
+      created('just-outside', '2026-09-30 13:31Z'),
+      created('noreply', '2026-09-30 09:00Z'),
     ];
     for (const [chat, type, at, payload] of rows) {
       await pool.query(`INSERT INTO robylon_webhook_payloads (source, event_type, chat_id, payload, received_at) VALUES ('email',$1,$2,$3::jsonb,$4)`, [type, chat, payload, at]);
     }
     // a chat-source event for the same chat id must be ignored
-    await pool.query(`INSERT INTO robylon_webhook_payloads (source, event_type, chat_id, payload, received_at) VALUES ('chat','STATUS_CHANGED','pending-status',$1::jsonb,'2026-09-30 11:00Z')`,
-      [JSON.stringify({ data: { properties: [{ name: 'Chat Status', selected_value: 'Repayment', snapshot_value: 'Repayment' }] } })]);
+    await pool.query(`INSERT INTO robylon_webhook_payloads (source, event_type, chat_id, payload, received_at) VALUES ('chat','STATUS_CHANGED','pending-status',$1::jsonb,'2026-09-30 12:00Z')`,
+      [JSON.stringify({ data: { new_status: 'Repayment' } })]);
 
     const posted: string[] = [];
     const res = await runSlaBreachCron({
       authHeader: 'Bearer s', secret: 's', trigger: '1', now: new Date('2026-10-01T04:15:00Z'),
       fetchOpenTickets, post: async (p) => { posted.push(JSON.stringify(p)); },
     });
-    assert.deepEqual(res, { status: 200, body: { ok: true, count: 4, excluded: 1 } });
+    assert.deepEqual(res, { status: 200, body: { ok: true, count: 6, excluded: 1 } });
     const table = JSON.parse(posted[0]).blocks.find((b: { type: string }) => b.type === 'table');
-    const listed = table.rows.slice(1).map((r: { text: string }[]) => r[0].text).sort();
-    assert.deepEqual(listed, ['customer-last', 'note-after', 'pending-status', 'unanswered']);
+    const listed = table.rows.slice(1).map((r: { text: string }[]) => r[0].text);
+    assert.equal(listed[0], 'overdue'); // overdue first
+    assert.deepEqual([...listed].sort(), ['answered-stuck', 'customer-last', 'note-after', 'overdue', 'pending-status', 'unanswered']);
     assert.match(posted[0], /1 automated sender/);
+    assert.match(posted[0], /1 overdue/);
     // L1 still comes through for a ticket that has one
     const l1 = Object.fromEntries(table.rows.slice(1).map((r: { text: string }[]) => [r[0].text, r[1].text]));
     assert.equal(l1['pending-status'], 'KYC');

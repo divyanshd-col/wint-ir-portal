@@ -4,7 +4,14 @@ import { withLogging } from '@/lib/log';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { listUsers } from '@/lib/users';
-import { canonicalizePcgRmName, PCG_RM_TELEPHONY_TO_CANONICAL } from '@/lib/pcg/canonical-names';
+import { canonicalizePcgRmName, isSamePcgAgent, PCG_RM_TELEPHONY_TO_CANONICAL } from '@/lib/pcg/canonical-names';
+import { resolvePcgAgentSync, getPcgRmsForTl } from '@/lib/pcg/rm-directory';
+import { isPcgExcludedInternalPhone, pcgExcludedPhoneSql } from '@/lib/pcg/excluded-numbers';
+import {
+  normalizePcgCallParameters,
+  applyPanelOverridesToPcgParameters,
+  recalculatePcgCallScores,
+} from '@/lib/pcg/call-params';
 
 const ROUTE = 'admin/pcg-calls';
 
@@ -126,6 +133,9 @@ export const TL_TEAMS: Record<string, string[]> = {
     'Vaishnavi Naghat',
     'Vidisha Jaiswal',
     'Vishyata Tulsani',
+    'Aditi Verma',
+    'Arshnoor Kaur',
+    'Bhavnit Singh',
   ],
   'Saiyam Rastogi': [
     'Ayan Kumar Garg',
@@ -155,6 +165,18 @@ export const TL_TEAMS: Record<string, string[]> = {
     'Shrey Jain',
     'Yaashvi Arora',
   ],
+  Sravanthi: [
+    'Anurag Negi',
+    'Mahek Bihani',
+    'Mishra Richa Santoshkumar',
+    'Shreya Premkumar Mundada',
+    'Sreeram',
+    'Vidyul Kapoor',
+  ],
+  Admin: [
+    'Aboli Jawkhedkar',
+    'Pranav Sharma',
+  ],
 };
 
 function resolveTlName(rmName: string, evalTl?: string | null, customTeamMap?: Record<string, string>): string {
@@ -173,14 +195,20 @@ function resolveTlName(rmName: string, evalTl?: string | null, customTeamMap?: R
     return `Team ${customTeamMap[canonicalClean] || customTeamMap[cleanRm]}`;
   }
 
-  // 3. Static TL_TEAMS membership
+  // 3. Dynamic pcg_rm_directory lookup
+  const dirRes = resolvePcgAgentSync(rmName, customTeamMap);
+  if (dirRes.tl && dirRes.tl !== 'PCG Team') {
+    return dirRes.tl.startsWith('Team ') ? dirRes.tl : `Team ${dirRes.tl}`;
+  }
+
+  // 4. Static TL_TEAMS membership
   for (const [tl, members] of Object.entries(TL_TEAMS)) {
     if (members.some(n => n.toLowerCase() === cleanRm || n.toLowerCase() === canonicalClean)) {
       return `Team ${tl}`;
     }
   }
 
-  // 4. Stored evaluation TL (only if valid and not a system placeholder)
+  // 5. Stored evaluation TL (only if valid and not a system placeholder)
   if (evalTl && evalTl.trim()) {
     const cleanEvalTl = evalTl.replace(/^Team\s+/i, '').trim().toLowerCase();
     if (cleanEvalTl !== 'gokul' && cleanEvalTl !== 'vaishnavi' && cleanEvalTl !== 'triage pool' && cleanEvalTl !== 'pcg' && cleanEvalTl !== 'unknown') {
@@ -223,49 +251,60 @@ function mapRowToCall(r: any, customTeamMap?: Record<string, string>) {
     }
   }
 
-  // Determine call category
-  const rawCat = r.eval_call_category || r.call_category || '';
-  let categoryKey: '13_pitching' | 'upselling' | 'support' = 'support';
+  // Determine call category & evaluability
+  const isInternalExcludedPhone = isPcgExcludedInternalPhone(r.phone_number);
+  const isEvaluable = !isInternalExcludedPhone && r.is_evaluable !== false && r.verdict !== 'EXCLUDED_NON_CLIENT';
+  const exclusionReason = isInternalExcludedPhone
+    ? (r.exclusion_reason || r.rec_exclusion_reason || 'Internal company number')
+    : (r.exclusion_reason || r.rec_exclusion_reason || null);
+  const callNature = isInternalExcludedPhone ? 'non_client' : (r.call_nature || (isEvaluable ? 'client' : 'non_client'));
+
+  const rawCat = (r.eval_call_category || r.call_category || r.exclusion_reason || r.rec_exclusion_reason || '').toLowerCase();
+  let categoryKey:
+    | '13_pitching'
+    | 'upselling'
+    | 'support'
+    | 'hiring'
+    | 'telemarketing'
+    | 'delivery_logistics'
+    | 'wrong_number'
+    | 'internal_personal' = 'support';
   let category = 'General / Support';
-  if (rawCat.includes('13') || rawCat.toLowerCase().includes('pitch')) {
+
+  if (isInternalExcludedPhone) {
+    categoryKey = 'internal_personal';
+    category = 'Internal / Personal';
+  } else if (rawCat.includes('hiring') || rawCat.includes('recruit') || rawCat.includes('interview')) {
+    categoryKey = 'hiring';
+    category = 'Hiring & Recruitment';
+  } else if (rawCat.includes('delivery') || rawCat.includes('logistic') || rawCat.includes('courier') || rawCat.includes('parcel')) {
+    categoryKey = 'delivery_logistics';
+    category = 'Courier & Logistics';
+  } else if (rawCat.includes('wrong') || rawCat.includes('misdial')) {
+    categoryKey = 'wrong_number';
+    category = 'Wrong Number / Misdial';
+  } else if (rawCat.includes('internal') || rawCat.includes('personal') || rawCat.includes('colleague')) {
+    categoryKey = 'internal_personal';
+    category = 'Internal / Personal';
+  } else if (rawCat.includes('telemarket') || rawCat.includes('spam') || rawCat.includes('loan')) {
+    categoryKey = 'telemarketing';
+    category = 'Inbound Telemarketing / Spam';
+  } else if (rawCat.includes('13') || rawCat.includes('pitch')) {
     categoryKey = '13_pitching';
     category = '13% Club / Pitching';
-  } else if (rawCat.toLowerCase().includes('upsell')) {
+  } else if (rawCat.includes('upsell') || rawCat.includes('reinvest')) {
     categoryKey = 'upselling';
     category = 'Upselling Calls';
+  } else if (rawCat.includes('support') || rawCat.includes('general')) {
+    categoryKey = 'support';
+    category = 'General / Support';
+  } else if (!isEvaluable) {
+    categoryKey = 'internal_personal';
+    category = 'Excluded: Non-Client';
   }
 
-  // Parse parameters if available from evaluation
-  let parameters: any[] = [];
-  let rawParams = r.parameters;
-  if (typeof rawParams === 'string') {
-    try { rawParams = JSON.parse(rawParams); } catch { rawParams = []; }
-  }
-  if (rawParams && Array.isArray(rawParams)) {
-    parameters = rawParams.map((p: any) => {
-      const expl = p?.explanation || p?.reasoning || p?.quote || '';
-      return {
-        ...p,
-        quote: expl,
-        explanation: expl,
-        reasoning: expl,
-      };
-    });
-  } else if (rawParams && typeof rawParams === 'object') {
-    parameters = Object.entries(rawParams).map(([key, val]: [string, any]) => {
-      const expl = typeof val === 'object' ? (val?.explanation || val?.reasoning || val?.quote || '') : '';
-      return {
-        id: key,
-        name: val?.name || key,
-        maxScore: val?.maxScore || (key === 'TechnicallyLegal' || key === 'TechnicalLegal' ? 15 : 10),
-        earnedScore: val?.earnedScore ?? (val?.status === 'Yes' || val?.score === 'Yes' || val?.rating === 'Yes' ? (val?.maxScore || 10) : 0),
-        status: val?.status || val?.rating || val?.score || 'NA',
-        quote: expl,
-        explanation: expl,
-        reasoning: expl,
-      };
-    });
-  }
+  // Parse & normalize parameters (handles Array, named-key Object, and legacy numeric-key Object {"0": ...})
+  const parameters = normalizePcgCallParameters(r.parameters);
 
   // Parse transcript turns if available from evaluation
   let transcriptTurns: any[] = [];
@@ -352,10 +391,16 @@ function mapRowToCall(r: any, customTeamMap?: Record<string, string>) {
     categoryKey,
     secondaryCategories: r.secondary_categories || [],
     allCategories: [categoryKey],
-    aiCategoryReasoning: null,
-    iqsScore: iqsScore,
+    aiCategoryReasoning: exclusionReason,
+    iqsScore: isEvaluable ? iqsScore : null,
+    isEvaluable,
+    exclusionReason,
+    callNature,
+    verdict: isInternalExcludedPhone
+      ? 'EXCLUDED_NON_CLIENT'
+      : (r.verdict || (isEvaluable ? (complianceTripwire ? 'COMPLIANCE_BREACH' : 'PASS') : 'EXCLUDED_NON_CLIENT')),
     gates,
-    needsAttention,
+    needsAttention: isEvaluable ? needsAttention : false,
     unansweredBy,
     unansweredReason,
     parameters,
@@ -364,6 +409,7 @@ function mapRowToCall(r: any, customTeamMap?: Record<string, string>) {
     disputeStatus: r.dispute_status || 'none',
     disputeReason: r.dispute_reason || undefined,
     tlOverrideNote: r.tl_override_note || undefined,
+    sopTriggers: r.sop_triggers ? (typeof r.sop_triggers === 'string' ? JSON.parse(r.sop_triggers) : r.sop_triggers) : [],
   };
 }
 
@@ -376,9 +422,11 @@ export const HIDE_DATA_FOR_NOW = false;
 
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
+  let sessionUser: any = null;
   try {
-    const { response } = await requireRole(['admin', 'tl', 'agent', 'quality']);
+    const { response, session } = await requireRole(['admin', 'tl', 'agent', 'quality']);
     if (response) return response;
+    sessionUser = session?.user;
   } catch {
     // Permitted in local development
   }
@@ -392,29 +440,35 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const config = await readConfig().catch(() => null);
   const customTeamMap: Record<string, string> = config?.pcgTeamAssignments || {};
 
-  // If requesting a specific single call by call_id or id
-  const requestedCallId = searchParams.get('call_id')?.trim();
+  // If requesting a specific single call by call_id or id (support both call_id and callId)
+  const requestedCallId = (searchParams.get('call_id') || searchParams.get('callId'))?.trim();
   if (requestedCallId) {
     const cleanId = requestedCallId.replace(/^#/, '').replace(/^call-/, '').replace(/^runo-/, '').trim();
     const singleSql = `
       SELECT
-        r.id,
-        r.call_id,
+        COALESCE(r.id, 0) AS id,
+        COALESCE(r.call_id, e.call_id) AS call_id,
         r.called_by,
         r.agent_name,
-        r.phone_number,
+        COALESCE(r.phone_number, e.customer_phone) AS phone_number,
         r.call_type,
         r.tag,
-        r.duration_seconds,
+        COALESCE(r.duration_seconds, e.duration_seconds, 0) AS duration_seconds,
         r.start_time,
         r.recording_url,
-        r.call_category,
+        COALESCE(r.call_category, e.call_category) AS call_category,
+        r.call_nature,
+        r.exclusion_reason AS rec_exclusion_reason,
+        r.category_source,
         r.raw_payload,
         e.rm_name AS eval_rm_name,
         e.tl_name AS eval_tl_name,
         e.call_category AS eval_call_category,
         e.secondary_categories,
         e.iqs_score,
+        e.is_evaluable,
+        e.exclusion_reason,
+        e.verdict,
         e.parameters,
         e.compliance_tripwire,
         e.compliance_reason,
@@ -422,9 +476,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         e.transcript_turns,
         e.dispute_status,
         e.dispute_reason,
-        e.tl_override_note
+        e.tl_override_note,
+        e.sop_triggers
       FROM pcg_call_recordings r
-      LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
+      FULL OUTER JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE r.call_id = $1 
          OR r.call_id = $2
          OR r.call_id = $3
@@ -471,12 +526,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
   });
 
-  if (allTlNamesSet.size === 0) {
-    Object.keys(TL_TEAMS).forEach((tl) => allTlNamesSet.add(tl));
-  }
+  // Always guarantee standard PCG Team Leads are present
+  ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani', 'Sravanthi'].forEach((tl) => {
+    allTlNamesSet.add(tl);
+  });
 
-  // Canonical preferred TL order: Swetha, Saiyam Rastogi, Tanisha Mittal, Dheeraj Bhojwani
-  const preferredTlOrder = ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani'];
+  // Canonical preferred TL order: Swetha, Saiyam Rastogi, Tanisha Mittal, Dheeraj Bhojwani, Sravanthi
+  const preferredTlOrder = ['Swetha', 'Saiyam Rastogi', 'Tanisha Mittal', 'Dheeraj Bhojwani', 'Sravanthi'];
   const allTlNames = Array.from(allTlNamesSet).sort((a, b) => {
     const idxA = preferredTlOrder.findIndex((p) => p.toLowerCase() === a.toLowerCase());
     const idxB = preferredTlOrder.findIndex((p) => p.toLowerCase() === b.toLowerCase());
@@ -505,8 +561,20 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   for (const tl of allTlNames) {
-    if ((!dynamicTlTeams[tl] || dynamicTlTeams[tl].length === 0) && TL_TEAMS[tl]) {
-      dynamicTlTeams[tl] = [...TL_TEAMS[tl]];
+    if (!dynamicTlTeams[tl]) dynamicTlTeams[tl] = [];
+    if (TL_TEAMS[tl]) {
+      for (const member of TL_TEAMS[tl]) {
+        const canonical = canonicalizePcgRmName(member).toLowerCase();
+        // If explicitly reassigned to another TL in User Management, skip pulling into the old team
+        const customAssignedTl = customTeamMap[canonical] || customTeamMap[member.toLowerCase().trim()];
+        if (customAssignedTl && customAssignedTl.toLowerCase().trim() !== tl.toLowerCase().trim()) {
+          continue;
+        }
+        const exists = dynamicTlTeams[tl].some((m) => canonicalizePcgRmName(m).toLowerCase() === canonical);
+        if (!exists) {
+          dynamicTlTeams[tl].push(member);
+        }
+      }
     }
     if (dynamicTlTeams[tl]) {
       dynamicTlTeams[tl].sort((a, b) => a.localeCompare(b));
@@ -560,10 +628,77 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     });
   }
 
+  const userRole = sessionUser?.role;
+  const loggedInName = sessionUser?.name || '';
+  const loggedInEmail = sessionUser?.email || '';
+
+  const personaParam = searchParams.get('persona')?.trim();
+  const callerRoleParam = searchParams.get('caller_role')?.trim(); // 'tl' | 'rm' | 'team'
   const rmFilter = searchParams.get('rm_name')?.trim();
   const tlFilter = searchParams.get('tl_name')?.trim();
   const callStatusFilter = searchParams.get('status')?.trim(); // 'all' | 'answered' | 'unanswered' | 'needs_attention'
-  const categoryFilter = searchParams.get('category')?.trim(); // 'all' | '13_pitching' | 'upselling' | 'support' | 'coaching_available'
+  let categoryFilter = searchParams.get('category')?.trim() || 'all';
+
+  const isAgentPersona = userRole === 'agent' || personaParam === 'agent';
+  const isTlPersona = userRole === 'tl' || personaParam === 'tl';
+  const myCallsParam = searchParams.get('my_calls') === 'true' || (isTlPersona && callerRoleParam === 'tl');
+
+  // Strict TL Scoping:
+  // If the authenticated user is a TL, they MUST strictly be restricted to their own identity.
+  // Query parameters cannot override their TL identity.
+  let effectiveTl: string | null = null;
+  if (userRole === 'tl') {
+    effectiveTl = loggedInName || loggedInEmail || null;
+  } else if (isTlPersona) {
+    // Admin simulating TL view
+    effectiveTl = (tlFilter && tlFilter !== 'all') ? tlFilter : (allTlNames[0] || 'Swetha');
+  } else if (tlFilter && tlFilter !== 'all') {
+    effectiveTl = tlFilter;
+  }
+
+  // Strict Agent Scoping:
+  // If the authenticated user is an agent, they MUST strictly be restricted to their own identity.
+  let effectiveRm: string | null = null;
+  if (userRole === 'agent') {
+    effectiveRm = loggedInName || loggedInEmail || null;
+  } else if (isAgentPersona) {
+    effectiveRm = (rmFilter && rmFilter !== 'all') ? rmFilter : (loggedInName || null);
+  } else if (rmFilter && rmFilter !== 'all') {
+    effectiveRm = rmFilter;
+  }
+
+  // Resolve mapped members for effective TL
+  let mappedTeamMembers: string[] = [];
+  if (effectiveTl && effectiveTl !== 'all') {
+    mappedTeamMembers = await getPcgRmsForTl(effectiveTl);
+  }
+
+  const teamMemberSet = new Set<string>();
+  mappedTeamMembers.forEach((m) => {
+    const lower = m.toLowerCase().trim();
+    teamMemberSet.add(lower);
+    const can = canonicalizePcgRmName(m).toLowerCase().trim();
+    teamMemberSet.add(can);
+    for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+      if (c.toLowerCase().trim() === can || telName.toLowerCase().trim() === lower) {
+        teamMemberSet.add(telName.toLowerCase().trim());
+      }
+    }
+  });
+
+  // Exclude all TL names and Admin names from team member list
+  allTlNames.forEach((tl) => {
+    teamMemberSet.delete(tl.toLowerCase().trim());
+    teamMemberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+  });
+  Object.keys(TL_TEAMS).forEach((tl) => {
+    teamMemberSet.delete(tl.toLowerCase().trim());
+    teamMemberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
+  });
+  ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => teamMemberSet.delete(n));
+
+  const allTeamMembers = Array.from(teamMemberSet);
+
   const searchFilter = searchParams.get('search')?.trim();
   const dateFrom = searchParams.get('date_from')?.trim();
   const dateTo = searchParams.get('date_to')?.trim();
@@ -589,8 +724,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     startDate = thirtyDaysAgo < PCG_DATA_START ? PCG_DATA_START : thirtyDaysAgo;
   }
 
-
-
   const startDateIso = startDate.toISOString();
   const endDateIso = endDate.toISOString();
 
@@ -598,9 +731,77 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const scopeWhereClauses: string[] = ['r.start_time >= $1 AND r.start_time <= $2'];
   const scopeQueryParams: any[] = [startDateIso, endDateIso];
 
-  if (rmFilter && rmFilter !== 'all') {
-    const canonical = canonicalizePcgRmName(rmFilter);
-    const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
+  if (callerRoleParam === 'tl' || myCallsParam) {
+    // When querying for TL Call Quality: filter by specific selected agent or Team Lead names
+    let targetCallers: string[] = [];
+    if (rmFilter && rmFilter !== 'all') {
+      targetCallers = [rmFilter.trim()];
+    } else if (tlFilter && tlFilter !== 'all') {
+      targetCallers = [tlFilter.replace(/^Team\s+/i, '').trim()];
+    } else if (isTlPersona && effectiveTl) {
+      targetCallers = [effectiveTl.replace(/^Team\s+/i, '').trim()];
+    } else {
+      targetCallers = allTlNames;
+    }
+
+    const tlNamesSet = new Set<string>();
+    targetCallers.forEach((tl) => {
+      const lower = tl.toLowerCase().trim();
+      tlNamesSet.add(lower);
+      const can = canonicalizePcgRmName(tl).toLowerCase().trim();
+      tlNamesSet.add(can);
+      for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+        if (c.toLowerCase().trim() === can || telName.toLowerCase().trim() === lower) {
+          tlNamesSet.add(telName.toLowerCase().trim());
+        }
+      }
+      if (lower.includes('swetha') || can.includes('swetha')) {
+        tlNamesSet.add('swetha');
+        tlNamesSet.add('swetha jayakumar');
+      }
+    });
+
+    const uniqueTlCallers = Array.from(tlNamesSet);
+    if (uniqueTlCallers.length > 0) {
+      scopeQueryParams.push(uniqueTlCallers);
+      scopeWhereClauses.push(
+        `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
+      );
+    }
+  } else if (effectiveTl && effectiveTl !== 'all') {
+    // Scoped to a specific TL team (either authenticated TL or Admin viewing a TL team)
+    if (effectiveRm && effectiveRm !== 'all') {
+      const canonicalReq = canonicalizePcgRmName(effectiveRm);
+      const isMember = mappedTeamMembers.some((m) => isSamePcgAgent(m, canonicalReq));
+      if (isMember || userRole === 'admin') {
+        const variations = [effectiveRm.toLowerCase(), canonicalReq.toLowerCase()];
+        for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (can.toLowerCase() === canonicalReq.toLowerCase()) {
+            variations.push(telName.toLowerCase());
+          }
+        }
+        const uniqueVars = Array.from(new Set(variations));
+        scopeQueryParams.push(uniqueVars);
+        scopeWhereClauses.push(
+          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
+        );
+      } else {
+        scopeWhereClauses.push(`1 = 0`);
+      }
+    } else {
+      if (allTeamMembers.length > 0) {
+        scopeQueryParams.push(allTeamMembers);
+        scopeWhereClauses.push(
+          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
+        );
+      } else {
+        scopeWhereClauses.push(`1 = 0`);
+      }
+    }
+  } else if (effectiveRm && effectiveRm !== 'all') {
+    // Specific agent scope (either authenticated agent or Admin viewing an agent)
+    const canonical = canonicalizePcgRmName(effectiveRm);
+    const variations = [effectiveRm.toLowerCase(), canonical.toLowerCase()];
     for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
       if (can.toLowerCase() === canonical.toLowerCase()) {
         variations.push(telName.toLowerCase());
@@ -611,50 +812,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     scopeWhereClauses.push(
       `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
     );
-  }
-
-  if (tlFilter && tlFilter !== 'all') {
-    const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
-    const matchedTlKey = allTlNames.find((t) => t.toLowerCase() === cleanTl);
-    const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
-    const directRms = Object.entries(customTeamMap)
-      .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
-      .map(([rm]) => rm.toLowerCase());
-    const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
-
-    const memberSet = new Set<string>();
-    [...mappedRms, ...directRms, ...fallbackRms].forEach((m) => {
-      const lower = m.toLowerCase().trim();
-      memberSet.add(lower);
-      const can = canonicalizePcgRmName(m).toLowerCase().trim();
-      memberSet.add(can);
+  } else if (callerRoleParam === 'rm') {
+    // Admin viewing all genuine RMs: exclude TL callers
+    const tlNamesSet = new Set<string>();
+    allTlNames.forEach((tl) => {
+      tlNamesSet.add(tl.toLowerCase().trim());
+      tlNamesSet.add(canonicalizePcgRmName(tl).toLowerCase().trim());
       for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-        if (c.toLowerCase().trim() === can) {
-          memberSet.add(telName.toLowerCase().trim());
+        if (c.toLowerCase().trim() === tl.toLowerCase().trim() || telName.toLowerCase().trim() === tl.toLowerCase().trim()) {
+          tlNamesSet.add(telName.toLowerCase().trim());
         }
       }
     });
-
-    // Exclude other TLs and Admins so other TLs/Admins are NEVER included in a TL's team calls
-    allTlNames.forEach((tl) => {
-      memberSet.delete(tl.toLowerCase().trim());
-      memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-    });
-    Object.keys(TL_TEAMS).forEach((tl) => {
-      memberSet.delete(tl.toLowerCase().trim());
-      memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-    });
-    ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
-
-    const allTeamMembers = Array.from(memberSet);
-
-    if (allTeamMembers.length > 0) {
-      scopeQueryParams.push(allTeamMembers);
+    const uniqueTls = Array.from(tlNamesSet);
+    if (uniqueTls.length > 0) {
+      scopeQueryParams.push(uniqueTls);
       scopeWhereClauses.push(
-        `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length})`
+        `NOT (LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${scopeQueryParams.length}))`
       );
-    } else {
-      scopeWhereClauses.push(`1 = 0`);
     }
   }
 
@@ -666,6 +841,19 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const tableWhereClauses = [...scopeWhereClauses];
   const tableQueryParams = [...scopeQueryParams];
 
+  const isExcludedCategory = [
+    'excluded',
+    'hiring',
+    'telemarketing',
+    'delivery_logistics',
+    'wrong_number',
+    'internal_personal',
+  ].includes(categoryFilter || '');
+
+  const excludedPhoneSql = pcgExcludedPhoneSql('COALESCE(r.phone_number, e.customer_phone)');
+  const isExcludedCallSql = `(e.is_evaluable = false OR r.call_nature = 'non_client' OR e.verdict = 'EXCLUDED_NON_CLIENT' OR ${excludedPhoneSql})`;
+  const isValidClientCallSql = `((r.call_nature IS NULL OR r.call_nature != 'non_client') AND (e.is_evaluable IS NOT FALSE AND (e.verdict IS NULL OR e.verdict != 'EXCLUDED_NON_CLIENT')) AND NOT ${excludedPhoneSql})`;
+
   if (categoryFilter && categoryFilter !== 'all') {
     if (categoryFilter === 'coaching_available') {
       tableWhereClauses.push(`(e.ai_coaching_tip IS NOT NULL AND e.ai_coaching_tip != '')`);
@@ -675,7 +863,27 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       tableWhereClauses.push(`(e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%')`);
     } else if (categoryFilter === 'support') {
       tableWhereClauses.push(`(e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%')`);
+    } else if (categoryFilter === 'sop_breached') {
+      tableWhereClauses.push(`(e.sop_triggers IS NOT NULL AND jsonb_array_length(e.sop_triggers) > 0)`);
+    } else if (categoryFilter === 'excluded') {
+      tableWhereClauses.push(isExcludedCallSql);
+    } else if (categoryFilter === 'hiring') {
+      tableWhereClauses.push(`(e.call_category = 'hiring' OR r.exclusion_reason ILIKE '%hiring%' OR r.call_category ILIKE '%hiring%')`);
+    } else if (categoryFilter === 'telemarketing') {
+      tableWhereClauses.push(`(e.call_category = 'telemarketing' OR r.exclusion_reason ILIKE '%telemarket%' OR r.exclusion_reason ILIKE '%spam%' OR r.call_category ILIKE '%telemarket%')`);
+    } else if (categoryFilter === 'delivery_logistics') {
+      tableWhereClauses.push(`(e.call_category = 'delivery_logistics' OR r.exclusion_reason ILIKE '%delivery%' OR r.exclusion_reason ILIKE '%courier%' OR r.call_category ILIKE '%delivery%')`);
+    } else if (categoryFilter === 'wrong_number') {
+      tableWhereClauses.push(`(e.call_category = 'wrong_number' OR r.exclusion_reason ILIKE '%wrong%' OR r.call_category ILIKE '%wrong%')`);
+    } else if (categoryFilter === 'internal_personal') {
+      tableWhereClauses.push(`(e.call_category = 'internal_personal' OR r.exclusion_reason ILIKE '%internal%' OR r.exclusion_reason ILIKE '%personal%' OR r.call_category ILIKE '%internal%' OR ${excludedPhoneSql})`);
     }
+  }
+
+  // By default, the main evaluated audits table shows evaluable client calls.
+  // If an excluded category is explicitly chosen (by agent, TL, or admin), show excluded calls for that filter.
+  if (!isExcludedCategory && categoryFilter !== 'all_with_excluded') {
+    tableWhereClauses.push(isValidClientCallSql);
   }
 
   if (searchFilter) {
@@ -725,21 +933,86 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       SELECT
         COUNT(*)::int AS total_calls,
         COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
+        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed') AND ${isValidClientCallSql})::int AS evaluated_calls,
         COUNT(*) FILTER (WHERE r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed')::int AS unanswered_calls,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS unanswered_by_rm,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND NOT (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS unanswered_by_customer,
+
+        -- Valid Client Calls (all hours)
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql})::int AS client_total_calls,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
+        ROUND(
+          (
+            COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE ${isValidClientCallSql}), 0) * 100
+          ), 1
+        )::float AS client_pickup_rate,
+
+        -- Other category / unverified unanswered calls (spam, delivery, personal)
+        COUNT(*) FILTER (WHERE ${isExcludedCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
+
+        -- Non-Working Hours & Weekend Client Calls (Outside Mon-Fri 10:00 AM - 7:00 PM IST)
+        COUNT(*) FILTER (
+          WHERE ${isValidClientCallSql}
+          AND (
+            EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
+            OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
+            OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time >= '19:00:00'
+          )
+        )::int AS off_hours_client_total,
+        COUNT(*) FILTER (
+          WHERE ${isValidClientCallSql}
+          AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
+          AND (
+            EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
+            OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
+            OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time >= '19:00:00'
+          )
+        )::int AS off_hours_client_answered,
+        ROUND(
+          (
+            COUNT(*) FILTER (
+              WHERE ${isValidClientCallSql}
+              AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
+              AND (
+                EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
+                OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
+                OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time >= '19:00:00'
+              )
+            )::numeric
+            / NULLIF(
+              COUNT(*) FILTER (
+                WHERE ${isValidClientCallSql}
+                AND (
+                  EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
+                  OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
+                  OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time >= '19:00:00'
+                )
+              ), 0
+            ) * 100
+          ), 1
+        )::float AS off_hours_pickup_rate,
         COALESCE(SUM(r.duration_seconds), 0)::bigint AS total_duration_seconds,
         COUNT(DISTINCT COALESCE(NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM'))::int AS active_rms_count,
-        ROUND(AVG(e.iqs_score), 1)::float AS avg_iqs,
-        COUNT(*) FILTER (WHERE e.compliance_tripwire = true)::int AS compliance_flags_count,
-        COUNT(*) FILTER (WHERE e.compliance_tripwire = true OR (e.iqs_score IS NOT NULL AND e.iqs_score < 85))::int AS needs_attention_count,
+        ROUND(AVG(CASE WHEN ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS avg_iqs,
+        COUNT(*) FILTER (WHERE e.compliance_tripwire = true AND NOT ${excludedPhoneSql})::int AS compliance_flags_count,
+        COUNT(*) FILTER (WHERE (e.compliance_tripwire = true OR (e.iqs_score IS NOT NULL AND e.iqs_score < 85)) AND ${isValidClientCallSql})::int AS needs_attention_count,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.tag ILIKE '%unanswered%' OR r.tag ILIKE '%ring%' OR r.tag ILIKE '%rang%'))::int AS customer_rang_out,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND r.tag ILIKE '%busy%')::int AS customer_busy,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND r.tag ILIKE '%drop%')::int AS rm_dropped_early,
         COUNT(*) FILTER (WHERE (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%miss%'))::int AS rm_missed,
-        COUNT(*) FILTER (WHERE e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%')::int AS pitching_count,
-        COUNT(*) FILTER (WHERE e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%')::int AS upselling_count,
-        COUNT(*) FILTER (WHERE e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%')::int AS support_count
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND ${isValidClientCallSql} AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%'))::int AS pitching_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND ${isValidClientCallSql} AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%'))::int AS upselling_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') AND ${isValidClientCallSql})::int AS support_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND ${isExcludedCallSql})::int AS excluded_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'hiring' OR r.exclusion_reason ILIKE '%hiring%' OR r.call_category ILIKE '%hiring%'))::int AS hiring_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'telemarketing' OR r.exclusion_reason ILIKE '%telemarket%' OR r.exclusion_reason ILIKE '%spam%' OR r.call_category ILIKE '%telemarket%'))::int AS telemarketing_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'delivery_logistics' OR r.exclusion_reason ILIKE '%delivery%' OR r.exclusion_reason ILIKE '%courier%' OR r.call_category ILIKE '%delivery%'))::int AS delivery_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'wrong_number' OR r.exclusion_reason ILIKE '%wrong%' OR r.call_category ILIKE '%wrong%'))::int AS wrong_number_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND (e.call_category = 'internal_personal' OR r.exclusion_reason ILIKE '%internal%' OR r.exclusion_reason ILIKE '%personal%' OR r.call_category ILIKE '%internal%' OR ${excludedPhoneSql}))::int AS internal_personal_count,
+        COUNT(*) FILTER (WHERE (r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')) AND NOT ${excludedPhoneSql} AND (e.sop_triggers IS NOT NULL AND jsonb_array_length(e.sop_triggers) > 0))::int AS sop_breached_count
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE ${summaryWhereSql}
@@ -765,12 +1038,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         r.start_time,
         r.recording_url,
         r.call_category,
+        r.call_nature,
+        r.exclusion_reason AS rec_exclusion_reason,
+        r.category_source,
         r.raw_payload,
         e.rm_name AS eval_rm_name,
         e.tl_name AS eval_tl_name,
         e.call_category AS eval_call_category,
         e.secondary_categories,
         e.iqs_score,
+        e.is_evaluable,
+        e.exclusion_reason,
+        e.verdict,
         e.parameters,
         e.compliance_tripwire,
         e.compliance_reason,
@@ -778,7 +1057,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         e.transcript_turns,
         e.dispute_status,
         e.dispute_reason,
-        e.tl_override_note
+        e.tl_override_note,
+        e.sop_triggers
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE ${tableWhereSql}
@@ -807,13 +1087,69 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         COALESCE(NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM') AS rm_name,
         COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3)::int AS total_calls,
         COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 THEN e.iqs_score END), 1)::float AS avg_iqs,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 THEN e.iqs_score END), 1)::float AS current_iqs,
-        ROUND(AVG(CASE WHEN r.start_time >= $1 AND r.start_time < $2 THEN e.iqs_score END), 1)::float AS prev_iqs,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%') THEN e.iqs_score END), 1)::float AS pitch_score,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%') THEN e.iqs_score END), 1)::float AS upsell_score,
-        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') THEN e.iqs_score END), 1)::float AS support_score,
-        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND e.compliance_tripwire = true)::int AS compliance_flags
+
+        -- Client Calls Breakdown for RM
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql})::int AS client_total_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered_calls,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed') AND (r.call_type = 'missed' OR r.tag ILIKE '%drop%' OR r.tag ILIKE '%miss%'))::int AS client_unanswered_by_rm,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isExcludedCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered_calls,
+        ROUND(
+          (
+            COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}), 0) * 100
+          ), 1
+        )::float AS client_pickup_rate,
+
+        -- Off-Hours & Weekend Client Calls
+        COUNT(*) FILTER (
+          WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}
+          AND (
+            EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
+            OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
+            OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time >= '19:00:00'
+          )
+        )::int AS off_hours_client_total,
+        COUNT(*) FILTER (
+          WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}
+          AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
+          AND (
+            EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
+            OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
+            OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time >= '19:00:00'
+          )
+        )::int AS off_hours_client_answered,
+        ROUND(
+          (
+            COUNT(*) FILTER (
+              WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}
+              AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed')
+              AND (
+                EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
+                OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
+                OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time >= '19:00:00'
+              )
+            )::numeric
+            / NULLIF(
+              COUNT(*) FILTER (
+                WHERE r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql}
+                AND (
+                  EXTRACT(ISODOW FROM (r.start_time AT TIME ZONE 'Asia/Kolkata')) IN (6, 7)
+                  OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time < '10:00:00'
+                  OR (r.start_time AT TIME ZONE 'Asia/Kolkata')::time >= '19:00:00'
+                )
+              ), 0
+            ) * 100
+          ), 1
+        )::float AS off_hours_pickup_rate,
+
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS avg_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS current_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $1 AND r.start_time < $2 AND ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS prev_iqs,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (e.call_category = '13_pitching' OR r.call_category ILIKE '%13%' OR r.call_category ILIKE '%pitch%') THEN e.iqs_score END), 1)::float AS pitch_score,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (e.call_category = 'upselling' OR r.call_category ILIKE '%upsell%') THEN e.iqs_score END), 1)::float AS upsell_score,
+        ROUND(AVG(CASE WHEN r.start_time >= $2 AND r.start_time <= $3 AND ${isValidClientCallSql} AND (e.call_category = 'support' OR r.call_category ILIKE '%support%' OR r.call_category ILIKE '%general%') THEN e.iqs_score END), 1)::float AS support_score,
+        COUNT(*) FILTER (WHERE r.start_time >= $2 AND r.start_time <= $3 AND e.compliance_tripwire = true AND NOT ${excludedPhoneSql})::int AS compliance_flags
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE r.start_time >= $1 AND r.start_time <= $3
@@ -826,13 +1162,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       SELECT
         COUNT(*)::int AS total_calls,
         COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS answered_calls,
-        ROUND(AVG(e.iqs_score), 1)::float AS avg_iqs
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql})::int AS client_total,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::int AS client_answered,
+        COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS client_unanswered,
+        COUNT(*) FILTER (WHERE ${isExcludedCallSql} AND (r.duration_seconds = 0 OR r.tag = 'unanswered' OR r.call_type = 'missed'))::int AS other_unanswered,
+        ROUND(
+          (
+            COUNT(*) FILTER (WHERE ${isValidClientCallSql} AND r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed'))::numeric
+            / NULLIF(COUNT(*) FILTER (WHERE ${isValidClientCallSql}), 0) * 100
+          ), 1
+        )::float AS client_pickup_rate,
+        COUNT(*) FILTER (WHERE r.duration_seconds > 0 AND (r.tag IS NULL OR r.tag != 'unanswered') AND (r.call_type IS NULL OR r.call_type != 'missed') AND ${isValidClientCallSql})::int AS evaluated_calls,
+        ROUND(AVG(CASE WHEN ${isValidClientCallSql} THEN e.iqs_score END), 1)::float AS avg_iqs
       FROM pcg_call_recordings r
       LEFT JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE r.start_time >= $1 AND r.start_time <= $2
     `;
 
-    // Query parameter performance per RM and department (skipping NA parameters)
+    // Query parameter performance per RM and department (skipping NA parameters; supports both array and object JSONB)
     const rmParamSql = `
       SELECT
         COALESCE(NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM') AS rm_name,
@@ -841,13 +1188,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         SUM(CASE WHEN p->>'status' != 'NA' AND p->>'status' != 'N/A' THEN (p->>'maxScore')::numeric ELSE 0 END) AS max_sum
       FROM pcg_call_evaluations e
       JOIN pcg_call_recordings r ON r.call_id = e.call_id
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE
-          WHEN jsonb_typeof(e.parameters::jsonb) = 'array' THEN e.parameters::jsonb
-          ELSE '[]'::jsonb
-        END
-      ) AS p
+      CROSS JOIN LATERAL (
+        SELECT value AS p FROM jsonb_array_elements(
+          CASE WHEN jsonb_typeof(e.parameters::jsonb) = 'array' THEN e.parameters::jsonb ELSE '[]'::jsonb END
+        )
+        UNION ALL
+        SELECT value AS p FROM jsonb_each(
+          CASE WHEN jsonb_typeof(e.parameters::jsonb) = 'object' THEN e.parameters::jsonb ELSE '{}'::jsonb END
+        )
+      ) AS sub
       WHERE r.start_time >= $1 AND r.start_time <= $2
+        AND p->>'id' IS NOT NULL
+        AND ${isValidClientCallSql}
       GROUP BY 1, 2
     `;
 
@@ -857,9 +1209,89 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     ];
     const disputeQueryParams: any[] = [];
 
-    if (rmFilter && rmFilter !== 'all') {
-      const canonical = canonicalizePcgRmName(rmFilter);
-      const variations = [rmFilter.toLowerCase(), canonical.toLowerCase()];
+    if (callerRoleParam === 'tl' || myCallsParam) {
+      let targetTls: string[] = [];
+      if (rmFilter && rmFilter !== 'all') {
+        targetTls = [rmFilter.trim()];
+      } else if (tlFilter && tlFilter !== 'all') {
+        targetTls = [tlFilter.replace(/^Team\s+/i, '').trim()];
+      } else if (isTlPersona && effectiveTl) {
+        targetTls = [effectiveTl.replace(/^Team\s+/i, '').trim()];
+      } else {
+        targetTls = allTlNames;
+      }
+      const tlNamesSet = new Set<string>();
+      targetTls.forEach((tl) => {
+        const lower = tl.toLowerCase().trim();
+        tlNamesSet.add(lower);
+        const can = canonicalizePcgRmName(tl).toLowerCase().trim();
+        tlNamesSet.add(can);
+        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (c.toLowerCase().trim() === can || telName.toLowerCase().trim() === lower) {
+            tlNamesSet.add(telName.toLowerCase().trim());
+          }
+        }
+        if (lower.includes('swetha') || can.includes('swetha')) {
+          tlNamesSet.add('swetha');
+          tlNamesSet.add('swetha jayakumar');
+        }
+      });
+      const uniqueTlCallers = Array.from(tlNamesSet);
+      if (uniqueTlCallers.length > 0) {
+        disputeQueryParams.push(uniqueTlCallers);
+        disputeWhereClauses.push(
+          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+        );
+      }
+    } else if (effectiveTl && effectiveTl !== 'all') {
+      // Scoped to a specific TL team (either authenticated TL or Admin viewing a TL team)
+      if (effectiveRm && effectiveRm !== 'all') {
+        const canonicalReq = canonicalizePcgRmName(effectiveRm);
+        const isMember = mappedTeamMembers.some((m) => isSamePcgAgent(m, canonicalReq));
+        if (isMember || userRole === 'admin') {
+          const variations = [effectiveRm.toLowerCase(), canonicalReq.toLowerCase()];
+          for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+            if (can.toLowerCase() === canonicalReq.toLowerCase()) {
+              variations.push(telName.toLowerCase());
+            }
+          }
+          const uniqueVars = Array.from(new Set(variations));
+          disputeQueryParams.push(uniqueVars);
+          disputeWhereClauses.push(
+            `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+          );
+        } else {
+          disputeWhereClauses.push(`1 = 0`);
+        }
+      } else {
+        const teamWithTl = new Set(allTeamMembers);
+        const cleanTl = effectiveTl.replace(/^Team\s+/i, '').trim().toLowerCase();
+        const canTl = canonicalizePcgRmName(cleanTl).toLowerCase();
+        teamWithTl.add(cleanTl);
+        teamWithTl.add(canTl);
+        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (c.toLowerCase().trim() === canTl || telName.toLowerCase().trim() === cleanTl) {
+            teamWithTl.add(telName.toLowerCase().trim());
+          }
+        }
+        if (cleanTl.includes('swetha') || canTl.includes('swetha')) {
+          teamWithTl.add('swetha');
+          teamWithTl.add('swetha jayakumar');
+        }
+        const membersList = Array.from(teamWithTl);
+        if (membersList.length > 0) {
+          disputeQueryParams.push(membersList);
+          disputeWhereClauses.push(
+            `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+          );
+        } else {
+          disputeWhereClauses.push(`1 = 0`);
+        }
+      }
+    } else if (effectiveRm && effectiveRm !== 'all') {
+      // Specific agent scope (either authenticated agent or Admin viewing an agent)
+      const canonical = canonicalizePcgRmName(effectiveRm);
+      const variations = [effectiveRm.toLowerCase(), canonical.toLowerCase()];
       for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
         if (can.toLowerCase() === canonical.toLowerCase()) {
           variations.push(telName.toLowerCase());
@@ -870,48 +1302,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       disputeWhereClauses.push(
         `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
       );
-    } else if (tlFilter && tlFilter !== 'all') {
-      const cleanTl = tlFilter.replace(/^Team\s+/i, '').trim().toLowerCase();
-      const matchedTlKey = allTlNames.find((t) => t.toLowerCase() === cleanTl);
-      const mappedRms = matchedTlKey ? (dynamicTlTeams[matchedTlKey] || []) : [];
-      const directRms = Object.entries(customTeamMap)
-        .filter(([_, tl]) => tl.toLowerCase() === cleanTl)
-        .map(([rm]) => rm.toLowerCase());
-      const fallbackRms = (TL_TEAMS[matchedTlKey || ''] || []).map((r) => r.toLowerCase());
-
-      const memberSet = new Set<string>();
-      [...mappedRms, ...directRms, ...fallbackRms].forEach((m) => {
-        const lower = m.toLowerCase().trim();
-        memberSet.add(lower);
-        const can = canonicalizePcgRmName(m).toLowerCase().trim();
-        memberSet.add(can);
+    } else if (callerRoleParam === 'rm') {
+      // Admin viewing all genuine RMs: exclude TL callers
+      const tlNamesSet = new Set<string>();
+      allTlNames.forEach((tl) => {
+        tlNamesSet.add(tl.toLowerCase().trim());
+        tlNamesSet.add(canonicalizePcgRmName(tl).toLowerCase().trim());
         for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
-          if (c.toLowerCase().trim() === can) {
-            memberSet.add(telName.toLowerCase().trim());
+          if (c.toLowerCase().trim() === tl.toLowerCase().trim() || telName.toLowerCase().trim() === tl.toLowerCase().trim()) {
+            tlNamesSet.add(telName.toLowerCase().trim());
           }
         }
       });
-
-      // Exclude other TLs and Admins
-      allTlNames.forEach((tl) => {
-        memberSet.delete(tl.toLowerCase().trim());
-        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-      });
-      Object.keys(TL_TEAMS).forEach((tl) => {
-        memberSet.delete(tl.toLowerCase().trim());
-        memberSet.delete(canonicalizePcgRmName(tl).toLowerCase().trim());
-      });
-      ['aahan thaker', 'aahan', 'gokul', 'vaishnavi', 'unknown rm', 'test-pcg-admin', 'test-cx-tl'].forEach((n) => memberSet.delete(n));
-
-      const allTeamMembers = Array.from(memberSet);
-
-      if (allTeamMembers.length > 0) {
-        disputeQueryParams.push(allTeamMembers);
+      const uniqueTls = Array.from(tlNamesSet);
+      if (uniqueTls.length > 0) {
+        disputeQueryParams.push(uniqueTls);
         disputeWhereClauses.push(
-          `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
+          `NOT (LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length}))`
         );
-      } else {
-        disputeWhereClauses.push(`1 = 0`);
       }
     }
 
@@ -928,12 +1336,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         r.start_time,
         r.recording_url,
         r.call_category,
+        r.call_nature,
+        r.exclusion_reason AS rec_exclusion_reason,
+        r.category_source,
         r.raw_payload,
         e.rm_name AS eval_rm_name,
         e.tl_name AS eval_tl_name,
         e.call_category AS eval_call_category,
         e.secondary_categories,
         e.iqs_score,
+        e.is_evaluable,
+        e.exclusion_reason,
+        e.verdict,
         e.parameters,
         e.compliance_tripwire,
         e.compliance_reason,
@@ -941,7 +1355,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         e.transcript_turns,
         e.dispute_status,
         e.dispute_reason,
-        e.tl_override_note
+        e.tl_override_note,
+        e.sop_triggers
       FROM pcg_call_recordings r
       JOIN pcg_call_evaluations e ON r.call_id = e.call_id
       WHERE ${disputeWhereClauses.join(' AND ')}
@@ -973,14 +1388,51 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const sRow = summaryRows[0] || {};
     const total = countRows[0]?.total || 0;
     const calls = callsRows.map((r) => mapRowToCall(r, customTeamMap));
-    const disputes = (disputesRows || []).map((r) => mapRowToCall(r, customTeamMap));
+
+    const disputeIds = (disputesRows || []).flatMap((r: any) => [String(r.id), r.call_id]).filter(Boolean);
+    const commentsByFlagId = new Map<string, any[]>();
+    if (disputeIds.length > 0) {
+      try {
+        const commentRows = await query<any>(
+          `SELECT id, flag_id, author_name, role, content, created_at
+           FROM iqs_flag_comments
+           WHERE flag_id = ANY($1)
+           ORDER BY created_at ASC`,
+          [disputeIds]
+        );
+        for (const c of commentRows) {
+          const fid = String(c.flag_id);
+          if (!commentsByFlagId.has(fid)) commentsByFlagId.set(fid, []);
+          commentsByFlagId.get(fid)!.push({
+            id: c.id,
+            authorName: c.author_name,
+            authorRole: c.role,
+            content: c.content,
+            createdAt: c.created_at,
+          });
+        }
+      } catch (e) {}
+    }
+
+    const disputes = (disputesRows || []).map((r) => {
+      const call = mapRowToCall(r, customTeamMap);
+      const comments = commentsByFlagId.get(String(r.id)) || commentsByFlagId.get(r.call_id) || [];
+      return {
+        ...call,
+        disputeComments: comments,
+      };
+    });
 
     // Non-RM exclusion set: Admins, TLs, Quality users, placeholders
     const nonRmNames = new Set<string>();
     allUsers.forEach((u) => {
       if (u.role === 'admin' || u.role === 'tl' || u.role === 'quality' || u.is_super_admin) {
         nonRmNames.add(u.name.trim().toLowerCase());
-        nonRmNames.add(canonicalizePcgRmName(u.name).toLowerCase());
+        // Do NOT blindly canonicalize non-RM user names to prevent QA/admin users
+        // with names like "Nandani" from colliding with genuine RMs like "Nandini"
+        if (u.role === 'admin' || u.role === 'tl') {
+          nonRmNames.add(canonicalizePcgRmName(u.name).toLowerCase());
+        }
       }
     });
 
@@ -1007,6 +1459,43 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       'test-cx-tl',
       'test cx tl',
     ].forEach((n) => nonRmNames.add(n.toLowerCase()));
+
+    // Collect all genuine RMs and their telephony aliases so they are NEVER excluded
+    const activeRmNames = new Set<string>();
+    allUsers.forEach((u) => {
+      if (u.role === 'agent') {
+        const can = canonicalizePcgRmName(u.name).toLowerCase().trim();
+        activeRmNames.add(u.name.toLowerCase().trim());
+        activeRmNames.add(can);
+      }
+    });
+    Object.values(TL_TEAMS).flat().forEach((rm) => {
+      const can = canonicalizePcgRmName(rm).toLowerCase().trim();
+      activeRmNames.add(rm.toLowerCase().trim());
+      activeRmNames.add(can);
+    });
+    Object.values(dynamicTlTeams).flat().forEach((rm) => {
+      const can = canonicalizePcgRmName(rm).toLowerCase().trim();
+      activeRmNames.add(rm.toLowerCase().trim());
+      activeRmNames.add(can);
+    });
+    Object.keys(customTeamMap).forEach((rm) => {
+      const can = canonicalizePcgRmName(rm).toLowerCase().trim();
+      activeRmNames.add(rm.toLowerCase().trim());
+      activeRmNames.add(can);
+    });
+
+    // Also collect telephony aliases that map to active RMs
+    for (const [telName, can] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+      if (activeRmNames.has(can.toLowerCase().trim())) {
+        activeRmNames.add(telName.toLowerCase().trim());
+      }
+    }
+
+    // Exclude actual non-RMs, but NEVER active RMs or their aliases
+    activeRmNames.forEach((name) => {
+      nonRmNames.delete(name);
+    });
 
     // RM counts
     const rmsCountMap = new Map<string, number>();
@@ -1061,19 +1550,37 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       const cleanLower = canonicalName.toLowerCase();
       const rawLower = (r.rm_name || '').toLowerCase();
 
-      // Skip non-RMs (Admins, Team Leads, QA users, Unknown)
-      if (
-        nonRmNames.has(cleanLower) ||
-        nonRmNames.has(rawLower) ||
+      // Skip non-members (Admins, QA system accounts, Unknown)
+      const isExcludedNonMember =
         cleanLower.includes('admin') ||
-        cleanLower === 'unknown rm'
-      ) {
+        cleanLower.includes('test-') ||
+        cleanLower === 'unknown rm' ||
+        cleanLower === 'unknown' ||
+        ['aahan thaker', 'aahan', 'gokul', 'gokul_admin'].includes(cleanLower);
+
+      if (isExcludedNonMember) {
         continue;
       }
 
       const totalCalls = r.total_calls || 0;
       const answeredCalls = r.answered_calls || 0;
-      const connectRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
+      const clientTotalCalls = r.client_total_calls || 0;
+      const clientAnsweredCalls = r.client_answered_calls || 0;
+      const clientUnansweredCalls = r.client_unanswered_calls || 0;
+      const clientUnansweredByRm = r.client_unanswered_by_rm || 0;
+      const otherUnansweredCalls = r.other_unanswered_calls || 0;
+      const clientPickupRate = r.client_pickup_rate != null
+        ? Math.round(r.client_pickup_rate)
+        : (clientTotalCalls > 0 ? Math.round((clientAnsweredCalls / clientTotalCalls) * 100) : 0);
+      const rmPickupRate = (clientAnsweredCalls + clientUnansweredByRm) > 0
+        ? Math.round((clientAnsweredCalls / (clientAnsweredCalls + clientUnansweredByRm)) * 100)
+        : 100;
+      const offHoursClientTotal = r.off_hours_client_total || 0;
+      const offHoursClientAnswered = r.off_hours_client_answered || 0;
+      const offHoursPickupRate = r.off_hours_pickup_rate != null
+        ? Math.round(r.off_hours_pickup_rate)
+        : (offHoursClientTotal > 0 ? Math.round((offHoursClientAnswered / offHoursClientTotal) * 100) : 0);
+
       const overallScore = r.avg_iqs != null ? Math.round(r.avg_iqs) : 0;
       const currentIqs = r.current_iqs != null ? Math.round(r.current_iqs) : overallScore;
       const prevIqs = r.prev_iqs != null ? Math.round(r.prev_iqs) : currentIqs;
@@ -1117,12 +1624,34 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       if (scorecardsMap.has(canonicalName)) {
         const existing = scorecardsMap.get(canonicalName);
         const combinedCalls = existing.totalCalls + totalCalls;
-        const combinedAnswered = Math.round((existing.connectRate / 100) * existing.totalCalls) + answeredCalls;
+        const combinedAnswered = (existing.answeredCalls || 0) + answeredCalls;
+        const combinedClientTotal = (existing.clientTotalCalls || 0) + clientTotalCalls;
+        const combinedClientAnswered = (existing.clientAnsweredCalls || 0) + clientAnsweredCalls;
+        const combinedClientUnanswered = (existing.clientUnansweredCalls || 0) + clientUnansweredCalls;
+        const combinedClientUnansweredByRm = (existing.clientUnansweredByRm || 0) + clientUnansweredByRm;
+        const combinedOtherUnanswered = (existing.otherUnansweredCalls || 0) + otherUnansweredCalls;
+        const combinedOffHoursTotal = (existing.offHoursClientTotal || 0) + offHoursClientTotal;
+        const combinedOffHoursAnswered = (existing.offHoursClientAnswered || 0) + offHoursClientAnswered;
+
         const combinedIqs = (existing.overallScore > 0 && overallScore > 0)
           ? Math.round((existing.overallScore * existing.totalCalls + overallScore * totalCalls) / combinedCalls)
           : (existing.overallScore || overallScore);
+
         existing.totalCalls = combinedCalls;
-        existing.connectRate = combinedCalls > 0 ? Math.round((combinedAnswered / combinedCalls) * 100) : 0;
+        existing.answeredCalls = combinedAnswered;
+        existing.clientTotalCalls = combinedClientTotal;
+        existing.clientAnsweredCalls = combinedClientAnswered;
+        existing.clientUnansweredCalls = combinedClientUnanswered;
+        existing.clientUnansweredByRm = combinedClientUnansweredByRm;
+        existing.otherUnansweredCalls = combinedOtherUnanswered;
+        existing.clientPickupRate = combinedClientTotal > 0 ? Math.round((combinedClientAnswered / combinedClientTotal) * 100) : 0;
+        existing.rmPickupRate = (combinedClientAnswered + combinedClientUnansweredByRm) > 0
+          ? Math.round((combinedClientAnswered / (combinedClientAnswered + combinedClientUnansweredByRm)) * 100)
+          : 100;
+        existing.connectRate = existing.clientPickupRate;
+        existing.offHoursClientTotal = combinedOffHoursTotal;
+        existing.offHoursClientAnswered = combinedOffHoursAnswered;
+        existing.offHoursPickupRate = combinedOffHoursTotal > 0 ? Math.round((combinedOffHoursAnswered / combinedOffHoursTotal) * 100) : 0;
         existing.overallScore = combinedIqs;
         existing.complianceFlags += (r.compliance_flags || 0);
         existing.parameterScores = { ...existing.parameterScores, ...paramScores };
@@ -1130,7 +1659,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         scorecardsMap.set(canonicalName, {
           rmName: canonicalName,
           totalCalls,
-          connectRate,
+          answeredCalls,
+          clientTotalCalls,
+          clientAnsweredCalls,
+          clientUnansweredCalls,
+          clientUnansweredByRm,
+          otherUnansweredCalls,
+          clientPickupRate,
+          rmPickupRate,
+          connectRate: clientPickupRate,
+          offHoursClientTotal,
+          offHoursClientAnswered,
+          offHoursPickupRate,
           pitchScore: r.pitch_score != null ? Math.round(r.pitch_score) : 0,
           upsellScore: r.upsell_score != null ? Math.round(r.upsell_score) : 0,
           supportScore: r.support_score != null ? Math.round(r.support_score) : 0,
@@ -1154,10 +1694,22 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       const tlRmScorecards = rmScorecards.filter((sc) => rmsLower.has(canonicalizePcgRmName(sc.rmName).toLowerCase()));
       const totalCalls = tlRmScorecards.reduce((sum, sc) => sum + sc.totalCalls, 0);
       const answeredCalls = tlRmScorecards.reduce(
-        (sum, sc) => sum + Math.round((sc.connectRate / 100) * sc.totalCalls),
+        (sum, sc) => sum + (sc.answeredCalls || 0),
         0
       );
-      const connectRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
+      const clientTotalCalls = tlRmScorecards.reduce((sum, sc) => sum + (sc.clientTotalCalls || 0), 0);
+      const clientAnsweredCalls = tlRmScorecards.reduce((sum, sc) => sum + (sc.clientAnsweredCalls || 0), 0);
+      const clientUnansweredCalls = tlRmScorecards.reduce((sum, sc) => sum + (sc.clientUnansweredCalls || 0), 0);
+      const clientUnansweredByRm = tlRmScorecards.reduce((sum, sc) => sum + (sc.clientUnansweredByRm || 0), 0);
+      const otherUnansweredCalls = tlRmScorecards.reduce((sum, sc) => sum + (sc.otherUnansweredCalls || 0), 0);
+      const clientPickupRate = clientTotalCalls > 0 ? Math.round((clientAnsweredCalls / clientTotalCalls) * 100) : 0;
+      const rmPickupRate = (clientAnsweredCalls + clientUnansweredByRm) > 0
+        ? Math.round((clientAnsweredCalls / (clientAnsweredCalls + clientUnansweredByRm)) * 100)
+        : 100;
+      const offHoursClientTotal = tlRmScorecards.reduce((sum, sc) => sum + (sc.offHoursClientTotal || 0), 0);
+      const offHoursClientAnswered = tlRmScorecards.reduce((sum, sc) => sum + (sc.offHoursClientAnswered || 0), 0);
+      const offHoursPickupRate = offHoursClientTotal > 0 ? Math.round((offHoursClientAnswered / offHoursClientTotal) * 100) : 0;
+
       const scoredRms = tlRmScorecards.filter((sc) => sc.overallScore > 0);
       const avgScore =
         scoredRms.length > 0
@@ -1172,7 +1724,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         tlName,
         teamSize: rms.length,
         totalCalls,
-        connectRate,
+        answeredCalls,
+        clientTotalCalls,
+        clientAnsweredCalls,
+        clientUnansweredCalls,
+        clientUnansweredByRm,
+        otherUnansweredCalls,
+        connectRate: clientPickupRate,
+        clientPickupRate,
+        rmPickupRate,
+        offHoursClientTotal,
+        offHoursClientAnswered,
+        offHoursPickupRate,
         avgScore,
         callsUnder85,
         rms,
@@ -1183,16 +1746,26 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const dRow = (deptSummaryRows && deptSummaryRows[0]) || {};
     const deptTotal = dRow.total_calls || 0;
     const deptAnswered = dRow.answered_calls || 0;
+    const deptClientTotal = dRow.client_total || 0;
+    const deptClientAnswered = dRow.client_answered || 0;
     const departmentStats: {
       totalCalls: number;
       answeredCalls: number;
+      clientTotal: number;
+      clientAnswered: number;
+      clientUnanswered: number;
+      otherUnanswered: number;
       pickupRate: number;
       avgIqs: number | null;
       parameterScores: Record<string, number>;
     } = {
       totalCalls: deptTotal,
       answeredCalls: deptAnswered,
-      pickupRate: deptTotal > 0 ? Math.round((deptAnswered / deptTotal) * 100) : 0,
+      clientTotal: deptClientTotal,
+      clientAnswered: deptClientAnswered,
+      clientUnanswered: dRow.client_unanswered || 0,
+      otherUnanswered: dRow.other_unanswered || 0,
+      pickupRate: dRow.client_pickup_rate != null ? Math.round(dRow.client_pickup_rate) : (deptClientTotal > 0 ? Math.round((deptClientAnswered / deptClientTotal) * 100) : 0),
       avgIqs: dRow.avg_iqs != null ? dRow.avg_iqs : 0,
       parameterScores: {},
     };
@@ -1203,7 +1776,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
 
-    const defaultTl = teamLeads[0]?.tlName || allTlNames[0] || 'Swetha';
+    const defaultTl = (effectiveTl && effectiveTl !== 'all')
+      ? (teamLeads.find(t => isSamePcgAgent(t.tlName, effectiveTl || ''))?.tlName || effectiveTl)
+      : (teamLeads[0]?.tlName || allTlNames[0] || 'Swetha');
 
     return NextResponse.json({
       success: true,
@@ -1214,16 +1789,42 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       totalPages: Math.max(1, Math.ceil(total / limit)),
       rms,
       rmScorecards,
-      teamLeads,
+      teamLeads: userRole === 'tl'
+        ? teamLeads.filter(t => isSamePcgAgent(t.tlName, effectiveTl || ''))
+        : teamLeads,
       tlTeams: dynamicTlTeams,
       teamAssignments: customTeamMap,
+      tlAdminAssignments: config?.pcgTlAdminAssignments || {},
       departmentStats,
       summary: {
         totalCalls: sRow.total_calls || 0,
         answeredCalls: sRow.answered_calls || 0,
+        evaluatedCalls: sRow.evaluated_calls || 0,
         unansweredCalls: sRow.unanswered_calls || 0,
         unansweredByRm: sRow.unanswered_by_rm || 0,
         unansweredByCustomer: sRow.unanswered_by_customer || 0,
+
+        // Valid Client Calls & Off-Hours Responsiveness
+        clientTotalCalls: sRow.client_total_calls || 0,
+        clientAnsweredCalls: sRow.client_answered_calls || 0,
+        clientUnansweredCalls: sRow.client_unanswered_calls || 0,
+        clientUnansweredByRm: sRow.client_unanswered_by_rm || 0,
+        otherUnansweredCalls: sRow.other_unanswered_calls || 0,
+        otherCategoryCalls: Math.max(0, (sRow.total_calls || 0) - (sRow.client_total_calls || 0)),
+        rmPickupRate: (() => {
+          const ans = sRow.client_answered_calls || 0;
+          const missed = sRow.client_unanswered_by_rm || 0;
+          return (ans + missed) > 0 ? Math.round((ans / (ans + missed)) * 100) : 100;
+        })(),
+        clientPickupRate: sRow.client_pickup_rate != null
+          ? Math.round(sRow.client_pickup_rate)
+          : (sRow.client_total_calls > 0 ? Math.round((sRow.client_answered_calls / sRow.client_total_calls) * 100) : 0),
+        offHoursClientTotal: sRow.off_hours_client_total || 0,
+        offHoursClientAnswered: sRow.off_hours_client_answered || 0,
+        offHoursPickupRate: sRow.off_hours_pickup_rate != null
+          ? Math.round(sRow.off_hours_pickup_rate)
+          : (sRow.off_hours_client_total > 0 ? Math.round((sRow.off_hours_client_answered / sRow.off_hours_client_total) * 100) : 0),
+
         avgIqs: sRow.avg_iqs != null ? sRow.avg_iqs : null,
         totalDurationSeconds: Number(sRow.total_duration_seconds) || 0,
         activeRmsCount: sRow.active_rms_count || 0,
@@ -1231,6 +1832,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           pitching: sRow.pitching_count || 0,
           upselling: sRow.upselling_count || 0,
           support: sRow.support_count || 0,
+          excluded: sRow.excluded_count || 0,
+          hiring: sRow.hiring_count || 0,
+          telemarketing: sRow.telemarketing_count || 0,
+          delivery: sRow.delivery_count || 0,
+          wrongNumber: sRow.wrong_number_count || 0,
+          internalPersonal: sRow.internal_personal_count || 0,
+          sopBreached: sRow.sop_breached_count || 0,
         },
         unansweredBreakdown: {
           customerRangOut: sRow.customer_rang_out || 0,
@@ -1285,7 +1893,21 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
     if (response) return response;
 
     const body = await req.json();
-    const { action, callId, reason, challengedParams, agentName, status, tlOverrideNote, newScore, parameters } = body;
+    const {
+      action,
+      callId,
+      reason,
+      challengedParams,
+      agentName,
+      status,
+      tlOverrideNote,
+      newScore,
+      parameters,
+      scores,
+      reasoning,
+      gates,
+      callGateResult,
+    } = body;
 
     if (!callId) {
       return NextResponse.json({ error: 'callId is required' }, { status: 400 });
@@ -1351,53 +1973,196 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
       });
     }
 
-    // 2. Action: Resolve Dispute (TL Approve / Reject)
-    if (action === 'resolve_dispute') {
+    // 2 & 3. Action: Resolve Dispute or Override Parameters (TL Review / Override)
+    if (action === 'resolve_dispute' || action === 'override_parameters') {
       const reviewer = (session?.user as any)?.name || 'Team Leader';
-      const finalStatus = status || 'resolved';
-      const note = tlOverrideNote || (status === 'resolved' ? 'Dispute reviewed and resolved by TL.' : 'Dispute reviewed by TL.');
+      const finalStatus = action === 'override_parameters' ? 'overridden' : (status || 'resolved');
+      const note =
+        tlOverrideNote ||
+        (action === 'override_parameters'
+          ? 'TL parameter score override.'
+          : status === 'resolved'
+            ? 'Dispute reviewed and resolved by TL.'
+            : 'Dispute reviewed by TL.');
 
-      await query(
-        `UPDATE pcg_call_evaluations
-         SET
-           dispute_status = $1,
-           tl_override_note = $2,
-           iqs_score = COALESCE($3, iqs_score),
-           reviewed_by = $4,
-           reviewed_at = NOW(),
-           updated_at = NOW()
-         WHERE call_id = $5
-            OR call_id LIKE '%' || $5
-            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $5 OR call_id LIKE '%' || $5 OR id::text = $5 LIMIT 1)`,
-        [finalStatus, note, newScore != null ? Number(newScore) : null, reviewer, callId]
+      // Fetch existing row so we can merge parameter reasoning & recalculate scores deterministically
+      const existingRows = await query<{
+        call_id: string;
+        rm_name: string | null;
+        parameters: any;
+        compliance_tripwire: boolean | null;
+        compliance_reason: string | null;
+        verdict: string | null;
+      }>(
+        `SELECT call_id, rm_name, parameters, compliance_tripwire, compliance_reason, verdict
+         FROM pcg_call_evaluations
+         WHERE call_id = $1
+            OR call_id LIKE '%' || $1
+            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $1 OR call_id LIKE '%' || $1 OR id::text = $1 LIMIT 1)
+         LIMIT 1`,
+        [callId]
       );
+      const existingRow = existingRows[0];
+      const targetCallId = existingRow?.call_id || callId;
 
-      return NextResponse.json({ success: true, disputeStatus: finalStatus });
-    }
+      // Strict Authorization
+      const evalRm = existingRow?.rm_name || '';
+      const cleanRm = evalRm.trim().toLowerCase();
+      const isTlCall = Object.keys(TL_TEAMS).some((tl) => isSamePcgAgent(tl, evalRm));
 
-    // 3. Action: Override Parameters (TL Manual Override)
-    if (action === 'override_parameters') {
-      const reviewer = (session?.user as any)?.name || 'Team Leader';
-      const note = tlOverrideNote || 'TL parameter score override.';
-      const score = newScore != null ? Number(newScore) : null;
+      if ((session?.user as any)?.role === 'tl') {
+        const callerTl = (session?.user as any)?.name || (session?.user as any)?.email;
+        if (isSamePcgAgent(callerTl, evalRm) || isTlCall) {
+          return NextResponse.json(
+            { error: 'Forbidden: Team Leads cannot override scores for their own calls.' },
+            { status: 403 }
+          );
+        }
+        const allowedRms = await getPcgRmsForTl(callerTl);
+        const isAllowed = allowedRms.some((m) => isSamePcgAgent(m, evalRm));
+        if (!isAllowed) {
+          return NextResponse.json(
+            { error: 'Forbidden: You can only review disputes for agents in your assigned team.' },
+            { status: 403 }
+          );
+        }
+      } else if ((session?.user as any)?.role === 'admin') {
+        if (isTlCall) {
+          // TL call: only mapped Admin (or super admin) can override
+          const config = await readConfig().catch(() => null);
+          const mappedAdmin = config?.pcgTlAdminAssignments?.[cleanRm] || 'Aahan';
+          const isSuperAdmin = Boolean((session?.user as any)?.is_super_admin || (session?.user as any)?.isSuperAdmin);
+          const sessionName = (session?.user as any)?.name || '';
+          const isMappedAdmin = sessionName && (
+            sessionName.trim().toLowerCase() === mappedAdmin.trim().toLowerCase() ||
+            sessionName.toLowerCase().includes(mappedAdmin.toLowerCase()) ||
+            mappedAdmin.toLowerCase().includes(sessionName.toLowerCase())
+          );
+
+          if (!isSuperAdmin && !isMappedAdmin) {
+            return NextResponse.json(
+              { error: `Evaluation override for TL ${evalRm} is assigned to Admin ${mappedAdmin}.` },
+              { status: 403 }
+            );
+          }
+        } else {
+          // Regular RM call: Admin override restricted unless super admin
+          if (!(session?.user as any)?.is_super_admin) {
+            return NextResponse.json(
+              { error: 'Evaluation override for RM calls is restricted to Team Leads' },
+              { status: 403 }
+            );
+          }
+        }
+      }
+
+      // Normalize & merge parameters whenever either `parameters` or `scores` is provided
+      let finalParametersJson: string | null = null;
+      let computedScores: ReturnType<typeof recalculatePcgCallScores> | null = null;
+
+      if (scores && typeof scores === 'object' && Object.keys(scores).length > 0) {
+        const mergedParams = applyPanelOverridesToPcgParameters(
+          parameters ?? existingRow?.parameters,
+          scores,
+          reasoning
+        );
+        finalParametersJson = JSON.stringify(mergedParams);
+        computedScores = recalculatePcgCallScores(mergedParams);
+      } else if (parameters != null) {
+        const normalizedParams = normalizePcgCallParameters(parameters);
+        if (normalizedParams.length > 0) {
+          finalParametersJson = JSON.stringify(normalizedParams);
+          computedScores = recalculatePcgCallScores(normalizedParams);
+        }
+      }
+
+      // Compute compliance gate state if gates or callGateResult were submitted
+      let nextTripwire: boolean | null = null;
+      let nextComplianceReason: string | null = null;
+      let nextVerdict: string | null = null;
+      let updateGates = false;
+
+      if (gates && typeof gates === 'object') {
+        updateGates = true;
+        const gateEntries = [
+          { key: 'G1_no_advice', val: gates.G1_no_advice },
+          { key: 'G2_no_fabrication', val: gates.G2_no_fabrication },
+          { key: 'G3_identity_first', val: gates.G3_identity_first },
+        ];
+        const failedGates = gateEntries.filter((g) => {
+          const st = String(g.val?.status || '').toLowerCase();
+          return st === 'fail' || st === 'breach';
+        });
+        const gateResultFail = String(callGateResult || gates.call_gate_result || '').toUpperCase() === 'FAIL';
+        nextTripwire = failedGates.length > 0 || gateResultFail;
+        if (nextTripwire) {
+          const reasons = failedGates
+            .map((g) => String(g.val?.reasoning || '').trim())
+            .filter(Boolean);
+          nextComplianceReason =
+            reasons.join(' | ') || existingRow?.compliance_reason || 'Compliance gate breach marked by TL.';
+          nextVerdict = 'COMPLIANCE_BREACH';
+        } else {
+          nextComplianceReason = null;
+          nextVerdict = existingRow?.verdict === 'EXCLUDED_NON_CLIENT' ? 'EXCLUDED_NON_CLIENT' : 'PASS';
+        }
+      } else if (callGateResult) {
+        updateGates = true;
+        nextTripwire = String(callGateResult).toUpperCase() === 'FAIL';
+        nextComplianceReason = nextTripwire ? (existingRow?.compliance_reason || 'Compliance gate breach marked by TL.') : null;
+        nextVerdict = nextTripwire
+          ? 'COMPLIANCE_BREACH'
+          : (existingRow?.verdict === 'EXCLUDED_NON_CLIENT' ? 'EXCLUDED_NON_CLIENT' : 'PASS');
+      }
+
+      // Always prefer deterministically recalculated IQS from saved parameters so IQS can NEVER contradict parameters
+      const finalIqs = computedScores
+        ? computedScores.iqsScore
+        : (newScore != null && !Number.isNaN(Number(newScore)) ? Number(newScore) : null);
 
       await query(
         `UPDATE pcg_call_evaluations
          SET
            parameters = COALESCE($1::jsonb, parameters),
            iqs_score = COALESCE($2, iqs_score),
-           dispute_status = 'overridden',
-           tl_override_note = $3,
-           reviewed_by = $4,
+           applicable_weight = COALESCE($3, applicable_weight),
+           process_score = COALESCE($4, process_score),
+           communication_score = COALESCE($5, communication_score),
+           customer_service_score = COALESCE($6, customer_service_score),
+           compliance_tripwire = CASE WHEN $7::boolean THEN $8::boolean ELSE compliance_tripwire END,
+           compliance_reason = CASE WHEN $7::boolean THEN $9 ELSE compliance_reason END,
+           verdict = CASE WHEN $7::boolean THEN $10 ELSE verdict END,
+           dispute_status = $11,
+           tl_override_note = $12,
+           reviewed_by = $13,
            reviewed_at = NOW(),
            updated_at = NOW()
-         WHERE call_id = $5
-            OR call_id LIKE '%' || $5
-            OR call_id = (SELECT call_id FROM pcg_call_recordings WHERE call_id = $5 OR call_id LIKE '%' || $5 OR id::text = $5 LIMIT 1)`,
-        [parameters ? JSON.stringify(parameters) : null, score, note, reviewer, callId]
+         WHERE call_id = $14`,
+        [
+          finalParametersJson,
+          finalIqs,
+          computedScores?.applicableWeight ?? null,
+          computedScores?.processScore ?? null,
+          computedScores?.communicationScore ?? null,
+          computedScores?.customerServiceScore ?? null,
+          updateGates,
+          nextTripwire,
+          nextComplianceReason,
+          nextVerdict,
+          finalStatus,
+          note,
+          reviewer,
+          targetCallId,
+        ]
       );
 
-      return NextResponse.json({ success: true, disputeStatus: 'overridden' });
+      return NextResponse.json({
+        success: true,
+        disputeStatus: finalStatus,
+        iqsScore: finalIqs,
+        parameters: finalParametersJson ? JSON.parse(finalParametersJson) : undefined,
+        complianceTripwire: updateGates ? nextTripwire : undefined,
+      });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 const StarIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
   </svg>
 );
 
@@ -51,11 +52,26 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   // Copy Feedback State
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const searchParams = useSearchParams();
+  const urlAgentParam = searchParams?.get('agent')?.trim() || '';
+
   // Search Filter State
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedAgentFilter, setSelectedAgentFilter] = useState('all');
+  const [selectedAgentFilter, setSelectedAgentFilter] = useState(() => urlAgentParam || 'all');
   const [selectedWeekFilter, setSelectedWeekFilter] = useState('all');
   const [latestSystemWeek, setLatestSystemWeek] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (urlAgentParam) {
+      setSelectedAgentFilter(urlAgentParam);
+      if (reports && reports.length > 0) {
+        const match = reports.find((r: any) => r.agent_name?.toLowerCase().trim() === urlAgentParam.toLowerCase());
+        if (match) {
+          setActiveReportId(match.id);
+        }
+      }
+    }
+  }, [urlAgentParam, reports]);
 
   const fetchReports = async () => {
     try {
@@ -67,8 +83,19 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
       const data = await res.json();
       setReports(data.reports || []);
       setLatestSystemWeek(data.latestSystemWeek || null);
-      if (data.reports && data.reports.length > 0 && !activeReportId) {
-        setActiveReportId(data.reports[0].id);
+      if (data.reports && data.reports.length > 0) {
+        const urlAgent = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('agent') : null;
+        if (urlAgent) {
+          const match = data.reports.find((r: any) => r.agent_name?.toLowerCase() === urlAgent.toLowerCase());
+          if (match) {
+            setActiveReportId(match.id);
+            setSelectedAgentFilter(match.agent_name);
+          } else {
+            setActiveReportId(data.reports[0].id);
+          }
+        } else if (!activeReportId) {
+          setActiveReportId(data.reports[0].id);
+        }
       }
     } catch (err: any) {
       setError(err.message);
@@ -91,13 +118,13 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reportId: activeReport.id })
       })
-      .then(res => {
-        if (res.ok) {
-          // Update local status
-          setReports(prev => prev.map(r => r.id === activeReport.id ? { ...r, viewed_at: new Date().toISOString() } : r));
-        }
-      })
-      .catch(err => console.error('Failed to mark report as read:', err));
+        .then(res => {
+          if (res.ok) {
+            // Update local status
+            setReports(prev => prev.map(r => r.id === activeReport.id ? { ...r, viewed_at: new Date().toISOString() } : r));
+          }
+        })
+        .catch(err => console.error('Failed to mark report as read:', err));
     }
   }, [activeReportId, role]);
 
@@ -224,7 +251,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
     return (
       <div className="flex flex-col h-[70vh] items-center justify-center p-6 text-center bg-gray-50">
         <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
         </svg>
         <h3 className="text-lg font-bold text-gray-800">No Scorecards Available</h3>
         <p className="text-gray-500 mt-2 max-w-md font-medium text-sm leading-relaxed">
@@ -257,7 +284,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   let missingWeekAlert = null;
   if (latestSystemWeek) {
     const targetAgentName = role === 'agent' ? agentName : (selectedAgentFilter !== 'all' ? selectedAgentFilter : null);
-    
+
     if (targetAgentName) {
       const hasLatestReport = reports.some(r => {
         const isLatestWeek = r.week_start === latestSystemWeek;
@@ -270,7 +297,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         const end = new Date(start);
         end.setDate(start.getDate() + 6);
         const weekRangeLabel = `${formatDate(start.toISOString())} - ${formatDate(end.toISOString())}`;
-        
+
         missingWeekAlert = {
           weekRange: weekRangeLabel,
           agent: targetAgentName
@@ -283,7 +310,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   const numbers = scorecard?.numbers;
 
   return (
-    <div className="flex h-[calc(100dvh-64px)] overflow-hidden bg-[#F7F7F8]">
+    <div className="flex h-[calc(var(--vh100)_-_64px)] overflow-hidden bg-[#F7F7F8]">
       {/* Sidebar List */}
       <aside className="w-72 border-r border-[#E4E4E7] bg-white flex flex-col overflow-y-auto">
         <div className="p-4 border-b border-[#E4E4E7] bg-gray-50 flex items-center justify-between">
@@ -349,11 +376,10 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                 <button
                   key={r.id}
                   onClick={() => setActiveReportId(r.id)}
-                  className={`w-full text-left p-3 rounded-lg transition-all duration-200 flex items-center justify-between group ${
-                    isSelected
+                  className={`w-full text-left p-3 rounded-lg transition-all duration-200 flex items-center justify-between group ${isSelected
                       ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 shadow-sm'
                       : 'hover:bg-gray-50 border border-transparent text-gray-700'
-                  }`}
+                    }`}
                 >
                   <div className="truncate flex-1 pr-2">
                     <div className="flex items-center gap-1.5">
@@ -369,13 +395,12 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                     <span className="text-xs text-gray-500 font-medium block mt-0.5 truncate">{weekRange}</span>
                   </div>
                   {score !== null && score !== undefined && (
-                    <span className={`text-sm font-bold font-mono px-2 py-0.5 rounded-md ${
-                      score >= 85 
-                        ? 'bg-green-100 text-green-700 border border-green-200' 
-                        : score >= 70 
-                          ? 'bg-amber-100 text-amber-700 border border-amber-200' 
+                    <span className={`text-sm font-bold font-mono px-2 py-0.5 rounded-md ${score >= 85
+                        ? 'bg-green-100 text-green-700 border border-green-200'
+                        : score >= 70
+                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
                           : 'bg-red-100 text-red-700 border border-red-200'
-                    }`}>
+                      }`}>
                       {score}%
                     </span>
                   )}
@@ -391,7 +416,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         {missingWeekAlert && (
           <div className="max-w-4xl mx-auto mb-6 bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-start gap-3 shadow-sm animate-fade-in">
             <svg className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <div className="text-sm">
               <span className="font-semibold block text-amber-900">
@@ -406,11 +431,11 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
 
         {activeReport && scorecard && (
           <div className="max-w-4xl mx-auto space-y-8">
-            
+
             {/* Header info */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-6 border-b border-[#E4E4E7]">
               <div>
-                <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
                   IR Weekly Scorecard
                 </h1>
                 <p className="text-sm text-gray-500 font-medium mt-1">
@@ -432,7 +457,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-indigo-500 hover:text-indigo-600 bg-white text-gray-600 text-xs font-semibold shadow-sm transition-all"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                     General Notes
                   </button>
@@ -452,7 +477,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                 </h2>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                
+
                 {/* Chats Handled */}
                 <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Chats Handled</span>
@@ -462,13 +487,12 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                 {/* Average score */}
                 <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Avg IQS Score</span>
-                  <span className={`text-2xl font-extrabold font-mono mt-2 ${
-                    numbers?.averageScore !== null && numbers.averageScore >= 85 
-                      ? 'text-green-600' 
-                      : numbers?.averageScore !== null && numbers.averageScore >= 70 
-                        ? 'text-amber-600' 
+                  <span className={`text-2xl font-extrabold font-mono mt-2 ${numbers?.averageScore !== null && numbers.averageScore >= 85
+                      ? 'text-green-600'
+                      : numbers?.averageScore !== null && numbers.averageScore >= 70
+                        ? 'text-amber-600'
                         : 'text-red-600'
-                  }`}>
+                    }`}>
                     {numbers?.averageScore != null ? `${numbers.averageScore}%` : '—'}
                   </span>
                 </div>
@@ -497,14 +521,14 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                   </span>
                 </div>
               </div>
-              
+
             </div>
 
             {/* 2. What Went Well */}
             <div className="bg-green-50/50 border border-green-200/80 rounded-2xl p-6 relative overflow-hidden">
               <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none transform translate-y-4 translate-x-2">
                 <svg className="w-40 h-40 text-green-700" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2l3.09 6.26 6.91.97-5 4.89 1.18 6.88L12 17.77l-6.18 3.25L7 14.12 2 9.23l6.91-.97L12 2z"/>
+                  <path d="M12 2l3.09 6.26 6.91.97-5 4.89 1.18 6.88L12 17.77l-6.18 3.25L7 14.12 2 9.23l6.91-.97L12 2z" />
                 </svg>
               </div>
               <div className="flex items-center justify-between mb-3">
@@ -535,9 +559,8 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                     return (
                       <div
                         key={index}
-                        className={`bg-white rounded-2xl border shadow-sm p-6 space-y-4 transition-all hover:shadow-md ${
-                          theme.isBreach ? 'border-red-200 bg-red-50/10' : 'border-[#E4E4E7]'
-                        }`}
+                        className={`bg-white rounded-2xl border shadow-sm p-6 space-y-4 transition-all hover:shadow-md ${theme.isBreach ? 'border-red-200 bg-red-50/10' : 'border-[#E4E4E7]'
+                          }`}
                       >
                         {/* Theme Header */}
                         <div className="flex items-start justify-between gap-4">
@@ -580,11 +603,11 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                               >
                                 {copiedId === cid ? (
                                   <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
                                   </svg>
                                 ) : (
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1M8 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M8 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m0 0h2a2 2 0 0 1 2 2v3"/>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1M8 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M8 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m0 0h2a2 2 0 0 1 2 2v3" />
                                   </svg>
                                 )}
                               </button>
@@ -612,7 +635,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                   </h2>
                 </div>
                 <div className="bg-amber-50/90 border border-amber-300 text-amber-900 p-4 sm:p-5 rounded-2xl text-sm sm:text-base font-medium leading-relaxed shadow-sm flex items-start gap-3.5">
-                  
+
                   <div>
                     <strong className="font-bold text-amber-950">Note on compliance flags: </strong>
                     <span>These are flagged by the AI classifier for a human to review, not proven violations. The classifier over-fires on ordinary file sharing and Slack URLs.</span>
@@ -662,75 +685,86 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
             )}
 
             {/* 5. Full Evidence List */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
-                    {scorecard?.breaches && scorecard.breaches.length > 0 ? 4 : 3}
-                  </span>
-                  Full Evidence List (Low-Scoring Chats)
-                </h2>
-              </div>
+            {(() => {
+              const hasLowScoring = scorecard?.evidence?.some((ev: any) => Number(ev.score) < 85) ?? false;
+              const sectionTitle = hasLowScoring
+                ? 'Full Evidence List (Low-Scoring Chats)'
+                : 'Full Evidence List (Audited Chats)';
+              const summaryColumnTitle = hasLowScoring
+                ? 'Primary Coaching Point / Issue'
+                : 'Interaction Summary';
 
-              {scorecard?.evidence && scorecard.evidence.length > 0 ? (
-                <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-sm overflow-hidden">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-[#E4E4E7] text-xs text-gray-400 font-bold uppercase tracking-wider text-left">
-                        <th className="p-4">Chat ID</th>
-                        <th className="p-4 text-center">Score</th>
-                        <th className="p-4">Topic / Disposition</th>
-                        <th className="p-4">Primary Coaching Point / Issue</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E4E4E7] text-sm text-gray-700">
-                      {scorecard.evidence.map((ev: any, index: number) => (
-                        <tr key={ev.chatId} className="hover:bg-gray-50 transition-all">
-                          <td className="p-4 font-mono font-bold text-indigo-600 whitespace-nowrap">
-                            <div className="flex items-center gap-1">
-                              <a href={`https://app.robylon.ai/unified-inbox/share/${ev.chatId}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                                #{ev.chatId}
-                              </a>
-                              <button onClick={() => handleCopy(ev.chatId)} className="text-gray-400 hover:text-indigo-600">
-                                {copiedId === ev.chatId ? 'Copied' : 'Copy'}
-                              </button>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center whitespace-nowrap">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${
-                                ev.score >= 85 
-                                  ? 'bg-green-50 text-green-700 border border-green-200' 
-                                  : ev.score >= 70 
-                                    ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                    : 'bg-red-50 text-red-700 border border-red-200'
-                              }`}>
-                                {ev.score}%
-                              </span>
-                              {ev.isReviewed && (
-                                <span className="text-[10px] font-semibold text-green-700 bg-green-50 px-1.5 py-0.2 rounded border border-green-200" title={ev.reviewNote || 'Score updated by QA'}>
-                                  ✓ QA Updated
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-4 font-semibold text-gray-800 whitespace-nowrap">
-                            {ev.topic}
-                          </td>
-                          <td className="p-4 text-gray-600 font-medium">
-                            {ev.summary}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              return (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                      <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                        {scorecard?.breaches && scorecard.breaches.length > 0 ? 4 : 3}
+                      </span>
+                      {sectionTitle}
+                    </h2>
+                  </div>
+
+                  {scorecard?.evidence && scorecard.evidence.length > 0 ? (
+                    <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-sm overflow-hidden">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-[#E4E4E7] text-xs text-gray-400 font-bold uppercase tracking-wider text-left">
+                            <th className="p-4">Chat ID</th>
+                            <th className="p-4 text-center">Score</th>
+                            <th className="p-4">Topic / Disposition</th>
+                            <th className="p-4">{summaryColumnTitle}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#E4E4E7] text-sm text-gray-700">
+                          {scorecard.evidence.map((ev: any, index: number) => (
+                            <tr key={ev.chatId} className="hover:bg-gray-50 transition-all">
+                              <td className="p-4 font-mono font-bold text-indigo-600 whitespace-nowrap">
+                                <div className="flex items-center gap-1">
+                                  <a href={`https://app.robylon.ai/unified-inbox/share/${ev.chatId}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                    #{ev.chatId}
+                                  </a>
+                                  <button onClick={() => handleCopy(ev.chatId)} className="text-gray-400 hover:text-indigo-600">
+                                    {copiedId === ev.chatId ? 'Copied' : 'Copy'}
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="p-4 text-center whitespace-nowrap">
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${ev.score >= 85
+                                      ? 'bg-green-50 text-green-700 border border-green-200'
+                                      : ev.score >= 70
+                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                        : 'bg-red-50 text-red-700 border border-red-200'
+                                    }`}>
+                                    {ev.score}%
+                                  </span>
+                                  {ev.isReviewed && (
+                                    <span className="text-[10px] font-semibold text-green-700 bg-green-50 px-1.5 py-0.2 rounded border border-green-200" title={ev.reviewNote || 'Score updated by QA'}>
+                                      ✓ QA Updated
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-4 font-semibold text-gray-800 whitespace-nowrap">
+                                {ev.topic}
+                              </td>
+                              <td className="p-4 text-gray-600 font-medium">
+                                {ev.summary}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-500 font-medium">
+                      No audited chats to display this week.
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-500 font-medium">
-                  No low-scoring chats to display this week. Excellent!
-                </div>
-              )}
-            </div>
+              );
+            })()}
 
           </div>
         )}
@@ -830,11 +864,10 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         {targetComments.map(c => (
           <div
             key={c.id}
-            className={`p-4 rounded-xl border text-sm flex items-start justify-between gap-4 transition-all ${
-              c.highlighted
+            className={`p-4 rounded-xl border text-sm flex items-start justify-between gap-4 transition-all ${c.highlighted
                 ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-sm'
                 : 'bg-gray-50 border-gray-200 text-gray-700'
-            }`}
+              }`}
           >
             <div className="space-y-1">
               {c.highlighted && (

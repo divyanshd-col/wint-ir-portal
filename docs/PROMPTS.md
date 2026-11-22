@@ -11,7 +11,7 @@ This document inventories and details **every system and agent prompt** used acr
 2. [Chat Draft Generator](#2-chat-draft-generator)
 3. [Quality Evaluator (IQS) Scoring Prompts](#3-quality-evaluator-iqs-scoring-prompts)
 4. [Audio & Call Analytics Prompts](#4-audio--call-analytics-prompts)
-5. [Analytics Agent & Text-to-SQL Prompts](#5-analytics-agent--text-to-sql-prompts)
+5. [Analytics Agent & Text-to-SQL Prompts (removed)](#5-analytics-agent--text-to-sql-prompts)
 6. [Agent Coaching & Feedback Prompts](#6-agent-coaching--feedback-prompts)
 7. [Pipeline Meta-Prompt (Offline Review)](#7-pipeline-meta-prompt-offline-review)
 
@@ -339,89 +339,9 @@ Block 3 — Escalation: exact channel + POC + what to include
 
 ## 5. Analytics Agent & Text-to-SQL Prompts
 
-### A. Analytics Planner (Pass 1)
-
-| Variable | `PLANNER_PROMPT` | File | `lib/analytics/agent.ts` L10 |
-|---|---|---|---|
-
-**Purpose:** Translates conversational analyst queries into detailed SQL query plans. Defines date ranges, selects metrics (CSAT, IQS, volume), implements SQL safety rules, maps target chart types, and decides whether transcript retrieval is required.
-
-**Output format:**
-```json
-{
-  "action": "plan|clarify",
-  "intent": "intent description",
-  "sqls": [{ "sql": "...", "intent": "...", "output_shape": "..." }],
-  "needs_transcripts": false,
-  "output_shape": "single_number|bar_chart|line_chart|table|insight_summary|transcript_analysis|combined_analysis"
-}
-```
-
----
-
-### B. Analytics Synthesizer (Pass 2)
-
-| Variable | `SYNTHESIZER_PROMPT` | File | `lib/analytics/agent.ts` L162 |
-|---|---|---|---|
-
-**Purpose:** Synthesizes SQL query results and transcript summaries into stakeholder-ready analytical briefs. Surfaces insights, characterises metrics, identifies anomalies.
-
-**Output:** JSON with `action`, `title`, `answer_text`, `data_rows`, `finding`, `evidence`, `coverage`, `caveats`, `warnings`.
-
----
-
-### C. Intent Classifier
-
-| Function | `buildSystemPrompt()` | File | `lib/analytics/classifier.ts` L24 |
-|---|---|---|---|
-
-**Purpose:** Classifies natural language requests into aggregate query templates or qualitative theme extractions. Maps filters like dates, CSAT scores, agent names, teams.
-
-**Output:** JSON `{ "type": 1|2, "shape": "...", "templateId": "...", "entities": {...} }`
-
----
-
-### D. Qualitative Theme Summarizer
-
-| Function | `summarizeBatch()` | File | `lib/analytics/themes.ts` L104 |
-|---|---|---|---|
-
-**Purpose:** Summarizes batches of low-CSAT chats into short, one-sentence problem descriptions.
-
-**Output:** JSON array of strings.
-
----
-
-### E. Theme Clustering Scorer
-
-| Function | `clusterThemes()` | File | `lib/analytics/themes.ts` L140 |
-|---|---|---|---|
-
-**Purpose:** Consolidates one-sentence complaint summaries into at most 7 clustered problem themes.
-
-**Output:** JSON `{ "themes": [...] }`
-
----
-
-### F. Qualitative Batch Summarizer
-
-| Variable | `PROMPT` | File | `lib/analytics/summarizer.ts` L4 |
-|---|---|---|---|
-
-**Purpose:** Summarizes batches of conversations, focusing on sentiment triggers, agent handling, and resolution bottlenecks.
-
-**Output:** Plain text paragraph (5–8 sentences).
-
----
-
-### G. PostgreSQL Text-to-SQL Generator
-
-| Function | `buildPrompt()` | File | `lib/analytics/text-to-sql.ts` L101 |
-|---|---|---|---|
-
-**Purpose:** Generates a PostgreSQL query with chart presentation hints from a natural language question and metadata filters.
-
-**Output:** JSON `{ "kind": "sql|theme_extraction|cannot_answer", ... }`
+**Removed.** The in-app analytics agent (planner, synthesizer, intent classifier, theme summarisers, text-to-SQL) was replaced
+by the MCP connector on 2026-08-20 (commit `b68904f`) and its code and Settings entries have been deleted. Analytics questions
+are now answered by the user's own Claude client over `app/api/mcp/[transport]/route.ts`, so the app holds no analytics prompts.
 
 ---
 
@@ -492,15 +412,40 @@ Block 3 — Escalation: exact channel + POC + what to include
 | Call Disposition Extractor | CALL_DISPOSITION_PROMPT in lib/call-quality.ts | gemini | Yes |
 | Call Taxonomy Classifier | CALL_DISPOSITION_CLASSIFY_PROMPT in lib/call-quality.ts | gemini | Yes |
 | Call Chunk Splitter | CALL_CHUNK_PROMPT in lib/call-quality.ts | gemini | Yes |
+| Call Compliance Gates (live call scoring) | CALL_GATES_SYSTEM_PROMPT in lib/scoring/prompts/call.ts | gemini | Yes |
+| Call IQS Pass (live call scoring) | CALL_IQS_PASS_SYSTEM_PROMPT in lib/scoring/prompts/call.ts | gemini | Yes |
+| Email Evaluation | DEFAULT_EMAIL_PROMPT_INTRO / _COMPLIANCE + the 7 parameters in lib/email/context-builder.ts | gemini (batch) | Yes |
+| PCG Call Quality | PCG_QUALITY_SYSTEM_PROMPT in lib/scoring/prompts/pcg.ts | gemini | Yes |
+| PCG Call Classification | PCG_CLASSIFICATION_SYSTEM_PROMPT in lib/scoring/prompts/pcg.ts | gemini | Yes |
 | Audio Analyzer Pass 1 | PASS1_PROMPT in lib/call-analyzer.ts | gemini-3.5-flash | Yes |
 | Audio Analyzer Pass 2 | buildPass2Prompt() in lib/call-analyzer.ts | gemini-3.5-flash | Yes |
-| Analytics Planner | PLANNER_PROMPT in lib/analytics/agent.ts | gemini | Yes |
-| Analytics Synthesizer | SYNTHESIZER_PROMPT in lib/analytics/agent.ts | gemini | Yes |
-| Intent Classifier | buildSystemPrompt() in lib/analytics/classifier.ts | gemini | Yes |
-| Theme Summarizer | summarizeBatch() in lib/analytics/themes.ts | gemini | Yes |
-| Theme Clusterer | clusterThemes() in lib/analytics/themes.ts | gemini | Yes |
-| Batch Summarizer | PROMPT in lib/analytics/summarizer.ts | gemini | Yes |
-| Text-to-SQL Generator | buildPrompt() in lib/analytics/text-to-sql.ts | gemini | Yes |
 | TL Analytics Feedback | prompt in cx/tl/member-analytics/ai/route.ts | gemini-3.5-flash | Yes |
 | Agent Self-Analytics | systemPrompt in quality/my-analytics/ai/route.ts | claude-haiku-4-5 | Yes |
 | Pipeline Meta-Review | PROMPT_analysis_meta.txt | (external, manual) | No |
+
+### Editable in Settings
+
+Settings → Prompts lets an admin replace these; an empty value means the built-in text above is used. Prompts are shown per
+workspace: CX admins see the CX ones, PCG admins the PCG ones, and the save API enforces the same rule.
+
+| Workspace | Settings tab | Config field(s) |
+|---|---|---|
+| CX | Chat Assistant | `systemPrompt` |
+| CX | IQS Scoring (chat) | `iqsScoringPrompt` |
+| CX | Call: Compliance Gates | `callGatesPrompt` |
+| CX | Call: IQS Scoring | `callIqsPrompt` |
+| CX | Email: Evaluation (role and tasks, compliance rules) | `emailPromptIntro`, `emailPromptCompliance` |
+| PCG | PCG: Quality | `pcgQualityPrompt` |
+| PCG | PCG: Classification | `pcgClassificationPrompt` |
+
+The email prompt's seven parameters (name, weight, help text, evaluator instructions) are edited under Settings → Scoring Rubric
+(`emailRubric`). The per-email data and the JSON output format stay in code. Chat and call scoring weights are also still in code,
+so editing percentages written inside a prompt does not change the score arithmetic.
+
+### Change history
+
+Settings → Change History records every save of a prompt, the email scoring rubric and the quality thresholds: who changed it,
+when, and the value before and after (`settings_history` table in Postgres, migration `036`; the app also creates it on first use).
+Either version can be restored from that screen, and a restore is recorded too. If a change cannot be recorded, the save is
+refused. The live values still sit in the settings store (Redis); the history is a record, not the source of truth. History is
+split by workspace like the prompts, and API keys and other credentials are never recorded.

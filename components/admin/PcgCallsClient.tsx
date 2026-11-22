@@ -12,8 +12,18 @@ import PcgRmPerformanceDashboard from './PcgRmPerformanceDashboard';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
 import { ThemeToggle, AccountMenu } from '@/components/shell/TopBar';
-import { isSamePcgAgent } from '@/lib/pcg/canonical-names';
+import { isSamePcgAgent, isPcgAm, isPcgTl } from '@/lib/pcg/canonical-names';
+import {
+  formatPcgCallIqsScoresForPanel,
+  applyPanelOverridesToPcgParameters,
+  recalculatePcgCallScores,
+} from '@/lib/pcg/call-params';
 import SecuritySection from '@/components/settings/SecuritySection';
+import PcgQualityParametersView from './PcgQualityParametersView';
+import PcgTlCallsView from './PcgTlCallsView';
+import PcgPeriodFilter, { type PcgPeriod } from './PcgPeriodFilter';
+import PcgChatQualityView from './PcgChatQualityView';
+import PcgEmailQualityView from './PcgEmailQualityView';
 
 // Type definitions
 interface CallParameter {
@@ -29,6 +39,7 @@ interface CallParameter {
 }
 
 interface TranscriptTurn {
+  turnIndex?: number;
   speaker: 'RM' | 'Customer';
   text: string;
   time: string;
@@ -51,12 +62,24 @@ interface PCGCall {
   isAnswered: boolean;
   hasRecording: boolean;
   category: string;
-  categoryKey: '13_pitching' | 'upselling' | 'support';
+  categoryKey:
+  | '13_pitching'
+  | 'upselling'
+  | 'support'
+  | 'hiring'
+  | 'telemarketing'
+  | 'delivery_logistics'
+  | 'wrong_number'
+  | 'internal_personal';
   secondaryCategories?: string[];
   allCategories?: string[];
   aiCategoryReasoning?: string | null;
-  iqsScore: number;
-  gates: { status: 'PASS' | 'FAIL'; reason?: string; [key: string]: any };
+  iqsScore: number | null;
+  isEvaluable?: boolean;
+  exclusionReason?: string | null;
+  callNature?: string | null;
+  verdict?: string | null;
+  gates: { status: 'PASS' | 'FAIL'; reason?: string;[key: string]: any };
   needsAttention: boolean;
   unansweredBy: 'Customer' | 'RM' | null;
   unansweredReason: string | null;
@@ -66,12 +89,39 @@ interface PCGCall {
   disputeStatus: 'none' | 'pending' | 'resolved' | 'overridden';
   disputeReason?: string;
   tlOverrideNote?: string;
+  disputeComments?: Array<{
+    id: string;
+    authorName: string;
+    authorRole: string;
+    content: string;
+    createdAt: string;
+  }>;
+  sopTriggers?: Array<{
+    category: string;
+    severity: string;
+    direction: string;
+    signal: string;
+    timestamp: string;
+    turn_index?: number;
+    quote: string;
+  }>;
 }
 
 interface RmScorecard {
   rmName: string;
   totalCalls: number;
+  answeredCalls?: number;
   connectRate: number;
+  clientTotalCalls?: number;
+  clientAnsweredCalls?: number;
+  clientUnansweredCalls?: number;
+  clientUnansweredByRm?: number;
+  otherUnansweredCalls?: number;
+  clientPickupRate?: number;
+  rmPickupRate?: number;
+  offHoursClientTotal?: number;
+  offHoursClientAnswered?: number;
+  offHoursPickupRate?: number;
   pitchScore: number;
   upsellScore: number;
   supportScore: number;
@@ -88,13 +138,77 @@ interface TeamLeadSummary {
   tlName: string;
   teamSize: number;
   totalCalls: number;
+  answeredCalls?: number;
+  clientTotalCalls?: number;
+  clientAnsweredCalls?: number;
+  clientUnansweredCalls?: number;
+  clientUnansweredByRm?: number;
+  otherUnansweredCalls?: number;
   connectRate: number;
+  clientPickupRate?: number;
+  rmPickupRate?: number;
+  offHoursClientTotal?: number;
+  offHoursClientAnswered?: number;
+  offHoursPickupRate?: number;
   avgScore: number;
   callsUnder85: number;
   rms: string[];
 }
 
-export type PcgTab = 'calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security';
+export type PcgTab = 'calls' | 'chat_quality' | 'email_quality' | 'tl_calls' | 'team_analytics' | 'rm_performance' | 'member_analytics' | 'scorecard' | 'disputes' | 'security' | 'parameter_definitions';
+
+const PCG_FALLBACK_TL_TEAMS: Record<string, string[]> = {
+  Swetha: [
+    'Ankita Agarwal',
+    'Diya Sharma',
+    'Nishtha Veerwani',
+    'Sujal Dadwani',
+    'Suryansh Sharma',
+    'Vaishnavi N J',
+    'Vaishnavi Naghat',
+    'Vidisha Jaiswal',
+    'Vishyata Tulsani',
+    'Aditi Verma',
+    'Arshnoor Kaur',
+    'Bhavnit Singh',
+  ],
+  'Saiyam Rastogi': [
+    'Ayan Kumar Garg',
+    'Gaurav Nautiyal',
+    'Mahi Agarwal',
+    'Nandini',
+    'Rukmini Mundhara',
+    'Sahil Joshi',
+    'Shruti Sharma',
+    'Vishal Kumar Yadav',
+  ],
+  'Tanisha Mittal': [
+    'Antara Chakraborty',
+    'Deshna Dugar',
+    'Harshita Dhona',
+    'Keshvi Suresh Thacker',
+    'Maniyar Kriya Jignesh',
+    'Nischay Manish Jain',
+    'Samskrithi Rao N',
+  ],
+  'Dheeraj Bhojwani': [
+    'Ishaan Kapoor',
+    'Paritosh Ashiya',
+    'Ramita Kapoor',
+    'Sargun Singh',
+    'Shivam Kumar Baghel',
+    'Shrey Jain',
+    'Yaashvi Arora',
+  ],
+  Sravanthi: [
+    'Anurag Negi',
+    'Mahek Bihani',
+    'Mishra Richa Santoshkumar',
+    'Shreya Premkumar Mundada',
+    'Sreeram',
+    'Vidyul Kapoor',
+  ],
+};
 
 export const getRunoCallUrl = (callId: string | null | undefined) => {
   if (!callId) return 'https://app-call.runo.in';
@@ -107,97 +221,22 @@ export const formatCallId = (callId: string | null | undefined, fallbackId: stri
 };
 
 export const formatCallIqsScores = (call: PCGCall) => {
-  const scores: Record<string, string> = {
-    CallOpening: 'Yes',
-    CallClosing: 'Yes',
-    TechnicalLegal: 'Yes',
-    AllQuestions: 'Yes',
-    Expectation: 'Yes',
-    Process: 'Yes',
-    Grammar: 'Yes',
-    Fillers: 'Yes',
-    EnergyTone: 'Yes',
-    ActiveListening: 'Yes',
-    Simplifying: 'Yes',
-  };
-  const evidence: Record<string, string> = {};
-
-  if (Array.isArray(call.parameters) && call.parameters.length > 0) {
-    call.parameters.forEach((p, idx) => {
-      const pKey = p.id || `P${idx + 1}`;
-      const status = p.status || 'Yes';
-      const quote = (p as any).explanation || (p as any).reasoning || p.quote || '';
-
-      scores[pKey] = status;
-      if (quote) evidence[pKey] = quote;
-
-      // Map canonical parameter aliases so CallEvalPanel displays the real evaluation quote
-      if (pKey === 'TechnicallyLegal' || pKey === 'TechnicalLegal' || p.num === 3 || p.name?.includes('Technically')) {
-        scores['TechnicalLegal'] = status;
-        scores['TechnicallyLegal'] = status;
-        scores['P3'] = status;
-        if (quote) {
-          evidence['TechnicalLegal'] = quote;
-          evidence['TechnicallyLegal'] = quote;
-          evidence['P3'] = quote;
-        }
-      } else if (pKey === 'CallOpening' || p.num === 1) {
-        scores['CallOpening'] = status;
-        scores['P1'] = status;
-        if (quote) evidence['CallOpening'] = quote;
-      } else if (pKey === 'CallClosing' || p.num === 2) {
-        scores['CallClosing'] = status;
-        scores['P2'] = status;
-        if (quote) evidence['CallClosing'] = quote;
-      } else if (pKey === 'AllQuestions' || p.num === 4) {
-        scores['AllQuestions'] = status;
-        scores['P4'] = status;
-        if (quote) evidence['AllQuestions'] = quote;
-      } else if (pKey === 'Expectation' || p.num === 5) {
-        scores['Expectation'] = status;
-        scores['P5'] = status;
-        if (quote) evidence['Expectation'] = quote;
-      } else if (pKey === 'Process' || p.num === 6) {
-        scores['Process'] = status;
-        scores['P6'] = status;
-        if (quote) evidence['Process'] = quote;
-      } else if (pKey === 'VocabularyGrammar' || pKey === 'Grammar' || p.num === 7) {
-        scores['Grammar'] = status;
-        scores['VocabularyGrammar'] = status;
-        scores['P7'] = status;
-        if (quote) evidence['Grammar'] = quote;
-      } else if (pKey === 'FillersDeadAir' || pKey === 'Fillers' || p.num === 8) {
-        scores['Fillers'] = status;
-        scores['FillersDeadAir'] = status;
-        scores['P8'] = status;
-        if (quote) evidence['Fillers'] = quote;
-      } else if (pKey === 'EnergyTone' || p.num === 9) {
-        scores['EnergyTone'] = status;
-        scores['P9'] = status;
-        if (quote) evidence['EnergyTone'] = quote;
-      } else if (pKey === 'ActiveListening' || p.num === 10) {
-        scores['ActiveListening'] = status;
-        scores['P10'] = status;
-        if (quote) evidence['ActiveListening'] = quote;
-      } else if (pKey === 'Simplifying' || p.num === 11) {
-        scores['Simplifying'] = status;
-        scores['P11'] = status;
-        if (quote) evidence['Simplifying'] = quote;
-      }
-    });
-  }
-
-  return { scores, evidence };
+  return formatPcgCallIqsScoresForPanel(call.parameters);
 };
 
 export const formatCallSegments = (call: PCGCall) => {
   if (!call.transcriptTurns || call.transcriptTurns.length === 0) return [];
   const segments: any[] = [];
   call.transcriptTurns.forEach((turn, idx) => {
+    const matchingTrigger = (call.sopTriggers || []).find(
+      (st) => st.turn_index === (turn.turnIndex || idx + 1) || (turn.time && st.timestamp === turn.time) || (st.quote && turn.text && (turn.text.includes(st.quote) || st.quote.includes(turn.text)))
+    );
     segments.push({
       speaker: turn.speaker === 'RM' ? 'IR_EXECUTIVE' : 'INVESTOR',
       text: turn.text,
       ts: turn.time || `0:${(idx * 3 + 3).toString().padStart(2, '0')}`,
+      isSopTrigger: Boolean(matchingTrigger),
+      sopTrigger: matchingTrigger,
     });
     if (idx < call.transcriptTurns.length - 1) {
       segments.push({
@@ -207,6 +246,118 @@ export const formatCallSegments = (call: PCGCall) => {
     }
   });
   return segments;
+};
+
+const KNOWN_PCG_PARAM_KEYS: Record<string, string> = {
+  callopening: 'CallOpening',
+  callclosing: 'CallClosing',
+  technicallylegallycorrect: 'TechnicalLegal',
+  technicallegal: 'TechnicalLegal',
+  technical: 'TechnicalLegal',
+  allquestionsaddressed: 'AllQuestions',
+  allquestions: 'AllQuestions',
+  expectationsetting: 'Expectation',
+  expectation: 'Expectation',
+  processprecheck: 'Process',
+  precheck: 'Process',
+  process: 'Process',
+  vocabularysentencestructuregrammarpronunciations: 'Grammar',
+  grammar: 'Grammar',
+  fillersfumblingstammeringspeechclarityavoiddeadair: 'Fillers',
+  fillersdeadair: 'Fillers',
+  fillers: 'Fillers',
+  energylevelenthusiasmtonemodulation: 'EnergyTone',
+  energytone: 'EnergyTone',
+  activelisteninginterruptionsempathy: 'ActiveListening',
+  activelistening: 'ActiveListening',
+  simplifyinganswers: 'Simplifying',
+  simplifying: 'Simplifying',
+  p1: 'CallOpening',
+  p2: 'CallClosing',
+  p3: 'TechnicalLegal',
+  p4: 'AllQuestions',
+  p5: 'Expectation',
+  p6: 'Process',
+  p7: 'Grammar',
+  p8: 'Fillers',
+  p9: 'EnergyTone',
+  p10: 'ActiveListening',
+  p11: 'Simplifying',
+};
+
+export const normalizeParamKey = (rawKey: string, callParams?: CallParameter[]): string => {
+  const clean = (rawKey || '').trim();
+  const lowerNoSpaces = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  if (KNOWN_PCG_PARAM_KEYS[lowerNoSpaces]) {
+    return KNOWN_PCG_PARAM_KEYS[lowerNoSpaces];
+  }
+
+  if (callParams && callParams.length > 0) {
+    const matchedParam = callParams.find(p => {
+      const pIdClean = (p.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const pNameClean = (p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return pIdClean === lowerNoSpaces || pNameClean === lowerNoSpaces;
+    });
+    if (matchedParam) return matchedParam.id;
+  }
+
+  return clean;
+};
+
+export const getCallChallengedParams = (call: PCGCall): Array<{ param: string; note: string }> => {
+  const reason = (call.disputeReason || '').trim();
+  if (!reason) return [];
+
+  // 1. Try parsing JSON format
+  if (reason.startsWith('{') || reason.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(reason);
+      const list = Array.isArray(parsed) ? parsed : (parsed.challengedParams || parsed.params);
+      if (Array.isArray(list) && list.length > 0) {
+        const results: Array<{ param: string; note: string }> = [];
+        const seen = new Set<string>();
+        list.forEach((item: any) => {
+          const rawKey = typeof item === 'string' ? item : (item.param || item.id || item.name || '');
+          const normKey = normalizeParamKey(rawKey, call.parameters);
+          if (normKey && !seen.has(normKey)) {
+            seen.add(normKey);
+            const note = typeof item === 'object' ? (item.note || parsed.note || parsed.reason || '') : (parsed.note || parsed.reason || '');
+            results.push({ param: normKey, note });
+          }
+        });
+        return results;
+      }
+    } catch {}
+  }
+
+  // 2. Parse "Parameters challenged: Param1, Param2. Note..." format
+  const match = reason.match(/Parameters challenged:\s*([^.\n]+)/i);
+  if (match && match[1]) {
+    const paramNames = match[1].split(',').map((s) => s.trim()).filter(Boolean);
+
+    let noteText = '';
+    const noteMatch = reason.match(/Parameters challenged:\s*[^.\n]+\.?\s*([\s\S]*)/i);
+    if (noteMatch && noteMatch[1]) {
+      noteText = noteMatch[1].trim();
+    }
+
+    const results: Array<{ param: string; note: string }> = [];
+    const seen = new Set<string>();
+    paramNames.forEach((pName) => {
+      const canonicalKey = normalizeParamKey(pName, call.parameters);
+      if (canonicalKey && !seen.has(canonicalKey)) {
+        seen.add(canonicalKey);
+        const fallbackParam = (call.parameters || []).find(p => p.id === canonicalKey);
+        const note = noteText || fallbackParam?.quote || 'Challenged parameter score.';
+        results.push({ param: canonicalKey, note });
+      }
+    });
+
+    return results;
+  }
+
+  return [];
 };
 
 export default function PcgCallsClient() {
@@ -234,6 +385,9 @@ export default function PcgCallsClient() {
     userRole === 'tl' && loggedInUserName ? loggedInUserName : ''
   );
 
+  // TL Toggle: show only calls handled by the TL themselves
+  const [showMyCallsOnly, setShowMyCallsOnly] = useState(false);
+
   useEffect(() => {
     if (userRole === 'agent') {
       setActivePersona('agent');
@@ -246,11 +400,16 @@ export default function PcgCallsClient() {
     }
   }, [userRole, loggedInUserName]);
 
-  // For agent and tl, team_analytics and rm_performance are admin-only; security is TL & Admin only
   useEffect(() => {
-    if ((activePersona === 'agent' || activePersona === 'tl') && (activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
+    setShowMyCallsOnly(false);
+  }, [activePersona]);
+
+  // For agent and tl, team_analytics, rm_performance and tl_calls are admin-only; parameter_definitions is TL & Admin only
+  useEffect(() => {
+    if ((activePersona === 'agent' || activePersona === 'tl') && (activeTab === 'team_analytics' || activeTab === 'rm_performance' || activeTab === 'tl_calls')) {
       handleTabChange('calls');
-    } else if (activePersona === 'agent' && activeTab === 'security') {
+    }
+    if (activePersona === 'agent' && activeTab === 'parameter_definitions') {
       handleTabChange('calls');
     }
   }, [activePersona, activeTab]);
@@ -259,28 +418,53 @@ export default function PcgCallsClient() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
+      const personaParam = urlParams.get('persona');
+      if (personaParam === 'tl' || personaParam === 'agent' || personaParam === 'admin') {
+        setActivePersona(personaParam);
+      }
       const tabParam = urlParams.get('tab');
-      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security') {
+      const disputeTabParam = urlParams.get('disputeTab');
+      if (disputeTabParam === 'raised' || disputeTabParam === 'reviewed') {
+        setDisputeTab(disputeTabParam);
+      }
+      if (tabParam === 'disputes_raised') {
+        setActiveTab('disputes');
+        setDisputeTab('raised');
+      } else if (tabParam === 'disputes_reviewed') {
+        setActiveTab('disputes');
+        setDisputeTab('reviewed');
+      } else if (tabParam === 'tl_calls') {
+        setActiveTab('calls');
+        setActiveCohortToggle('tl');
+      } else if (tabParam === 'tl_chats') {
+        setActiveTab('chat_quality');
+      } else if (tabParam === 'scorecard' || tabParam === 'chat_quality' || tabParam === 'email_quality' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance' || tabParam === 'security' || tabParam === 'parameter_definitions') {
         if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
           setActiveTab('calls');
-        } else if (activePersona === 'agent' && tabParam === 'security') {
+        } else if (activePersona === 'agent' && tabParam === 'parameter_definitions') {
           setActiveTab('calls');
         } else {
           setActiveTab(tabParam as PcgTab);
         }
       }
-      const callIdParam = urlParams.get('callId');
+      const callIdParam = urlParams.get('callId') || urlParams.get('call_id') || urlParams.get('cid');
       if (callIdParam) {
         handleOpenCallById(callIdParam);
       }
     }
   }, [activePersona]);
 
-  const handleTabChange = (newTab: PcgTab) => {
+  const handleTabChange = (newTab: PcgTab, subTab?: 'raised' | 'reviewed') => {
     setActiveTab(newTab);
+    if (subTab) setDisputeTab(subTab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('tab', newTab);
+      if (subTab) {
+        url.searchParams.set('disputeTab', subTab);
+      } else {
+        url.searchParams.delete('disputeTab');
+      }
       window.history.pushState({}, '', url.toString());
     }
   };
@@ -296,12 +480,35 @@ export default function PcgCallsClient() {
   const [loading, setLoading] = useState(true);
 
   const activeTlName = activePersona === 'tl'
-    ? (loggedInUserName || selectedTl)
+    ? (userRole === 'tl' ? (loggedInUserName || selectedTl) : (selectedTl && selectedTl !== 'all' ? selectedTl : teamLeads[0]?.tlName || 'Saiyam Rastogi'))
     : selectedTl;
 
   const currentTlTeam = useMemo(() => {
     if (!activeTlName) return teamLeads[0] || null;
-    return teamLeads.find((t) => t.tlName.toLowerCase() === activeTlName.toLowerCase()) || null;
+    const cleanTl = activeTlName.replace(/^Team\s+/i, '').trim().toLowerCase();
+    const found = teamLeads.find((t) => {
+      const tLower = t.tlName.toLowerCase().trim();
+      return (
+        tLower === cleanTl ||
+        cleanTl.includes(tLower) ||
+        tLower.includes(cleanTl) ||
+        t.tlName.toLowerCase() === activeTlName.toLowerCase()
+      );
+    });
+    if (found) {
+      const fallback = PCG_FALLBACK_TL_TEAMS[found.tlName] || PCG_FALLBACK_TL_TEAMS[cleanTl] || [];
+      const combinedRms = Array.from(new Set([...found.rms, ...fallback])).sort((a, b) => a.localeCompare(b));
+      return { ...found, rms: combinedRms, teamSize: combinedRms.length };
+    }
+
+    // Fallback to static PCG_FALLBACK_TL_TEAMS so members are instantly available
+    for (const [tl, rms] of Object.entries(PCG_FALLBACK_TL_TEAMS)) {
+      const tlLower = tl.toLowerCase().trim();
+      if (tlLower === cleanTl || cleanTl.includes(tlLower) || tlLower.includes(cleanTl)) {
+        return { tlName: tl, teamSize: rms.length, rms };
+      }
+    }
+    return teamLeads[0] || null;
   }, [teamLeads, activeTlName]);
 
   const teamRms: string[] = useMemo(() => {
@@ -309,10 +516,26 @@ export default function PcgCallsClient() {
   }, [currentTlTeam]);
 
   // Common filters
-  const [selectedCategory, setSelectedCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support' | 'tl_analytics' | 'rm_performance' | 'ai_coaching_insights'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<
+    | 'all'
+    | 'sop_breached'
+    | '13_pitching'
+    | 'upselling'
+    | 'support'
+    | 'excluded'
+    | 'hiring'
+    | 'telemarketing'
+    | 'delivery_logistics'
+    | 'wrong_number'
+    | 'internal_personal'
+    | 'tl_analytics'
+    | 'rm_performance'
+    | 'ai_coaching_insights'
+  >('all');
+
   const [adminGridRmFilter, setAdminGridRmFilter] = useState<string>('all');
   const [adminBannerTlSelect, setAdminBannerTlSelect] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<'7d' | '30d' | 'custom'>('7d');
+  const [dateRange, setDateRange] = useState<PcgPeriod>('7d');
   const [customStartDate, setCustomStartDate] = useState(() => {
     const d = new Date(Date.now() - 7 * 86400000);
     return d.toISOString().split('T')[0];
@@ -320,8 +543,10 @@ export default function PcgCallsClient() {
   const [customEndDate, setCustomEndDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
   });
-  const [adminTlFilter, setAdminTlFilter] = useState<string>('all');
-  const [adminRmFilter, setAdminRmFilter] = useState<string>('all');
+  const [activeCohortToggle, setActiveCohortToggle] = useState<'rm' | 'tl' | 'team' | null>(null);
+  const [selectedRmName, setSelectedRmName] = useState<string>('all');
+  const [selectedTlName, setSelectedTlName] = useState<string>('all');
+  const [selectedTeamName, setSelectedTeamName] = useState<string>('all');
   const [minIqsFilter, setMinIqsFilter] = useState<string>('');
   const [maxIqsFilter, setMaxIqsFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'answered' | 'unanswered' | 'needs_attention'>('answered');
@@ -329,14 +554,24 @@ export default function PcgCallsClient() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCallsCount, setTotalCallsCount] = useState(0);
+  const [scorecardDefaultChannel, setScorecardDefaultChannel] = useState<'calls' | 'chats' | 'emails'>('calls');
 
   // Active call view state
   const [activeCallAudit, setActiveCallAudit] = useState<PCGCall | null>(null);
+  const activeCallAuditRef = useRef<PCGCall | null>(null);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
+  const [loadingCallById, setLoadingCallById] = useState<boolean>(false);
+  const [callNotFoundNotice, setCallNotFoundNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    activeCallAuditRef.current = activeCallAudit;
+  }, [activeCallAudit]);
 
   // Dispute Section Tab: 'raised' | 'reviewed'
   const [disputeTab, setDisputeTab] = useState<'raised' | 'reviewed'>('raised');
+  const [disputeSourceFilter, setDisputeSourceFilter] = useState<'all' | 'rm' | 'am' | 'tl'>('all');
+  const [tlAdminMap, setTlAdminMap] = useState<Record<string, string>>({});
 
   // Inline Agent Dispute state (in drawer below parameters)
   const [isRaisingDispute, setIsRaisingDispute] = useState(false);
@@ -363,7 +598,7 @@ export default function PcgCallsClient() {
       fetchData();
     }, 250);
     return () => clearTimeout(handler);
-  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, adminTlFilter, adminRmFilter, searchQuery, minIqsFilter, maxIqsFilter, activePersona]);
+  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, activeCohortToggle, selectedRmName, selectedTlName, selectedTeamName, searchQuery, minIqsFilter, maxIqsFilter, activePersona, loggedInUserName, showMyCallsOnly]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -374,6 +609,7 @@ export default function PcgCallsClient() {
         category: (selectedCategory === 'tl_analytics' || selectedCategory === 'rm_performance' || selectedCategory === 'ai_coaching_insights') ? 'all' : selectedCategory,
         status: statusFilter,
         date_range: dateRange,
+        persona: activePersona,
       });
       if (dateRange === 'custom') {
         p.set('date_from', customStartDate);
@@ -382,12 +618,39 @@ export default function PcgCallsClient() {
       if (activePersona === 'agent' && selectedRm) {
         p.set('rm_name', selectedRm);
       } else if (activePersona === 'tl') {
-        const tlQueryName = loggedInUserName || selectedTl;
-        if (tlQueryName) p.set('tl_name', tlQueryName);
-        if (adminRmFilter !== 'all') p.set('rm_name', adminRmFilter);
+        const rawTl = loggedInUserName || selectedTl || (session?.user as any)?.name || '';
+        const cleanTl = rawTl.replace(/^Team\s+/i, '').trim();
+        const matchedTl = teamLeads.find((t) => {
+          const tLower = t.tlName.toLowerCase().trim();
+          const cLower = cleanTl.toLowerCase().trim();
+          return tLower === cLower || cLower.includes(tLower) || tLower.includes(cLower);
+        })?.tlName || (
+            ['swetha', 'swetha jayakumar'].some((s) => cleanTl.toLowerCase() === s) ? 'Swetha' : cleanTl
+          );
+        if (matchedTl) p.set('tl_name', matchedTl);
+        if (showMyCallsOnly) {
+          p.set('caller_role', 'tl');
+          p.set('my_calls', 'true');
+        } else {
+          if (selectedRmName !== 'all') p.set('rm_name', selectedRmName);
+        }
       } else if (activePersona === 'admin') {
-        if (adminTlFilter !== 'all') p.set('tl_name', adminTlFilter);
-        if (adminRmFilter !== 'all') p.set('rm_name', adminRmFilter);
+        if (activeCohortToggle === 'rm') {
+          p.set('caller_role', 'rm');
+          if (selectedRmName !== 'all') {
+            p.set('rm_name', selectedRmName);
+          }
+        } else if (activeCohortToggle === 'tl') {
+          p.set('caller_role', 'tl');
+          if (selectedTlName !== 'all') {
+            p.set('tl_name', selectedTlName);
+          }
+        } else if (activeCohortToggle === 'team') {
+          p.set('caller_role', 'team');
+          if (selectedTeamName !== 'all') {
+            p.set('tl_name', selectedTeamName);
+          }
+        }
       }
       if (searchQuery.trim()) {
         p.set('search', searchQuery.trim());
@@ -404,12 +667,14 @@ export default function PcgCallsClient() {
       const data = await res.json();
       setCalls((prev) => {
         const loaded = data.calls || [];
-        if (activeCallAudit && !loaded.some((c: PCGCall) => c.id === activeCallAudit.id || c.callId === activeCallAudit.callId)) {
-          return [activeCallAudit, ...loaded];
+        const currentAudit = activeCallAuditRef.current || activeCallAudit;
+        if (currentAudit && !loaded.some((c: PCGCall) => c.id === currentAudit.id || c.callId === currentAudit.callId)) {
+          return [currentAudit, ...loaded];
         }
         return loaded;
       });
       setDisputes(data.disputes || []);
+      if (data.tlAdminAssignments) setTlAdminMap(data.tlAdminAssignments);
       setRmScorecards(data.rmScorecards || []);
       const leads = data.teamLeads || [];
       setTeamLeads(leads);
@@ -460,10 +725,13 @@ export default function PcgCallsClient() {
     }
   };
 
-  // Open Call View by ID (used by RM Scorecard evidence links)
+  // Open Call View by ID (used by RM Scorecard evidence links & Slack deep links)
   const handleOpenCallById = async (cid: string) => {
-    const cleanId = cid.replace('#', '').trim();
+    const cleanId = cid.replace(/^#/, '').replace(/^call-/, '').replace(/^runo-/, '').trim();
+    if (!cleanId) return;
+
     handleTabChange('calls');
+    setCallNotFoundNotice(null);
 
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -476,9 +744,9 @@ export default function PcgCallsClient() {
       (c) =>
         c.id === cleanId ||
         c.callId === cleanId ||
-        c.id.replace(/^call-/, '').replace(/^runo-/, '') === cleanId.replace(/^call-/, '').replace(/^runo-/, '') ||
-        c.callId?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId.replace(/^call-/, '').replace(/^runo-/, '') ||
-        c.id.includes(cleanId) ||
+        c.id?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId ||
+        c.callId?.replace(/^call-/, '').replace(/^runo-/, '') === cleanId ||
+        c.id?.includes(cleanId) ||
         c.callId?.includes(cleanId)
     );
 
@@ -488,6 +756,7 @@ export default function PcgCallsClient() {
       return;
     }
 
+    setLoadingCallById(true);
     try {
       const res = await fetch(`/api/admin/pcg-calls?call_id=${encodeURIComponent(cleanId)}`);
       if (res.ok) {
@@ -499,11 +768,16 @@ export default function PcgCallsClient() {
           ]);
           setExpandedCallId(data.call.id);
           handleOpenCallView(data.call);
+          setCallNotFoundNotice(null);
           return;
         }
       }
+      setCallNotFoundNotice(`Call evaluation for ID "${cleanId}" could not be found.`);
     } catch (err) {
       console.error('[PcgCallsClient] Failed to fetch call by ID:', err);
+      setCallNotFoundNotice(`Failed to load call evaluation for ID "${cleanId}".`);
+    } finally {
+      setLoadingCallById(false);
     }
   };
 
@@ -511,7 +785,8 @@ export default function PcgCallsClient() {
   const handleOpenCoachingChat = (opts: { rmName?: string; categoryKey?: '13_pitching' | 'upselling' | 'support' }) => {
     setSelectedCategory('all');
     if (opts.rmName) {
-      setAdminRmFilter(opts.rmName);
+      setSelectedRmName(opts.rmName);
+      setActiveCohortToggle('rm');
     }
     const match = calls.find(c => {
       const matchRm = !opts.rmName || c.rmName === opts.rmName;
@@ -630,7 +905,8 @@ export default function PcgCallsClient() {
   // Action: TL Resolves Dispute Inline
   const handleResolveDispute = async (approve: boolean) => {
     if (!activeCallAudit) return;
-    const newScore = approve ? Math.min(100, activeCallAudit.iqsScore + 8) : activeCallAudit.iqsScore;
+    const baseScore = activeCallAudit.iqsScore ?? 80;
+    const newScore = approve ? Math.min(100, baseScore + 8) : activeCallAudit.iqsScore;
     const note = approve ? 'Dispute approved by TL (+8 pts revised).' : 'Dispute reviewed and retained by TL.';
 
     try {
@@ -653,7 +929,7 @@ export default function PcgCallsClient() {
       ...activeCallAudit,
       disputeStatus: 'resolved',
       iqsScore: newScore,
-      needsAttention: newScore < 85,
+      needsAttention: newScore != null && newScore < 85,
       tlOverrideNote: note,
     };
 
@@ -671,65 +947,74 @@ export default function PcgCallsClient() {
     overrideData: {
       scores: Record<string, string>;
       reasoning: Record<string, string>;
+      gates?: any;
+      callGateResult?: string;
       note: string;
       iqsScore: number | null;
     }
   ) => {
-    const newIqs = overrideData.iqsScore != null ? overrideData.iqsScore : 88;
+    const existingCall =
+      calls.find(c => c.id === callId || c.callId === callId) ||
+      disputes.find(c => c.id === callId || c.callId === callId) ||
+      (activeCallAudit && (activeCallAudit.id === callId || activeCallAudit.callId === callId) ? activeCallAudit : undefined);
+
+    const updatedParams = applyPanelOverridesToPcgParameters(
+      existingCall?.parameters,
+      overrideData.scores,
+      overrideData.reasoning
+    );
+    const recalculated = recalculatePcgCallScores(updatedParams);
+    const newIqs = recalculated.iqsScore;
     const note = overrideData.note || 'TL score override from CallEvalPanel.';
 
-    try {
-      await fetch('/api/admin/pcg-calls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'resolve_dispute',
-          callId,
-          status: 'resolved',
-          newScore: newIqs,
-          tlOverrideNote: note,
-        }),
-      });
-    } catch (e) {
-      console.error('Failed to save panel override API:', e);
+    const res = await fetch('/api/admin/pcg-calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'resolve_dispute',
+        callId,
+        status: 'resolved',
+        newScore: newIqs,
+        parameters: updatedParams,
+        scores: overrideData.scores,
+        reasoning: overrideData.reasoning,
+        gates: overrideData.gates,
+        callGateResult: overrideData.callGateResult,
+        tlOverrideNote: note,
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to save evaluation override');
     }
 
-    const updatedCalls: PCGCall[] = calls.map(c => {
+    const applyUpdate = (c: PCGCall): PCGCall => {
       if (c.id === callId || c.callId === callId) {
-        const updatedParams: CallParameter[] = c.parameters.map(p => {
-          const newStatus = overrideData.scores[p.id];
-          if (newStatus) {
-            const earned = newStatus === 'Yes' ? p.maxScore : newStatus === 'Half' ? Math.round(p.maxScore / 2) : 0;
-            const validStatus: 'Yes' | 'Half' | 'No' = newStatus === 'Half' ? 'Half' : newStatus === 'No' ? 'No' : 'Yes';
-            return {
-              ...p,
-              status: validStatus,
-              earnedScore: earned,
-              quote: overrideData.reasoning[p.id] || p.explanation || p.quote,
-              explanation: overrideData.reasoning[p.id] || p.explanation || p.quote,
-              reasoning: overrideData.reasoning[p.id] || p.reasoning || p.quote,
-            };
-          }
-          return p;
-        });
-
-        const updatedCall: PCGCall = {
+        return {
           ...c,
           iqsScore: newIqs,
-          needsAttention: newIqs < 85,
+          needsAttention: newIqs < 85 || overrideData.callGateResult === 'FAIL',
           parameters: updatedParams,
+          gates: overrideData.gates
+            ? {
+                ...c.gates,
+                ...overrideData.gates,
+                status: overrideData.callGateResult === 'FAIL' ? 'FAIL' : 'PASS',
+              }
+            : c.gates,
           tlOverrideNote: note,
           disputeStatus: c.disputeStatus === 'pending' ? 'resolved' : 'overridden',
         };
-        return updatedCall;
       }
       return c;
-    });
+    };
 
+    const updatedCalls = calls.map(applyUpdate);
     setCalls(updatedCalls);
+    setDisputes(prev => prev.map(applyUpdate));
     if (activeCallAudit && (activeCallAudit.id === callId || activeCallAudit.callId === callId)) {
-      const updated = updatedCalls.find(c => c.id === callId || c.callId === callId);
-      if (updated) setActiveCallAudit(updated);
+      setActiveCallAudit(applyUpdate(activeCallAudit));
     }
     fetchData();
   };
@@ -752,6 +1037,98 @@ export default function PcgCallsClient() {
     );
   };
 
+  const getDisputeCommentNotification = (comments: any[] | undefined, rmName?: string, isTlCall?: boolean) => {
+    if (!Array.isArray(comments) || comments.length === 0) return null;
+
+    const isFromAdmin = (c: any) => {
+      const r = (c.authorRole || c.role || '').toLowerCase();
+      if (r === 'admin') return true;
+      const name = (c.authorName || '').toLowerCase();
+      if (name.includes('aahan') || name === 'id' || name.includes('admin')) return true;
+      return false;
+    };
+
+    const isFromTl = (c: any) => {
+      if (isFromAdmin(c)) return false;
+      const r = (c.authorRole || c.role || '').toLowerCase();
+      if (r === 'tl' || r === 'team lead') return true;
+      if (isPcgTl(c.authorName)) return true;
+      if (isTlCall && rmName && c.authorName && c.authorName.trim().toLowerCase() === rmName.trim().toLowerCase()) return true;
+      return false;
+    };
+
+    const isFromAgent = (c: any) => {
+      if (isFromAdmin(c) || isFromTl(c)) return false;
+      const r = (c.authorRole || c.role || '').toLowerCase();
+      if (r === 'agent' || r === 'rm' || r === 'ir') return true;
+      if (rmName && c.authorName && c.authorName.trim().toLowerCase() === rmName.trim().toLowerCase()) return true;
+      return false;
+    };
+
+    if (activePersona === 'agent') {
+      const incoming = comments.filter((c) => !isFromAgent(c));
+      if (incoming.length === 0) return null;
+      return {
+        count: incoming.length,
+        label: `${incoming.length} TL comment${incoming.length === 1 ? '' : 's'}`,
+      };
+    }
+
+    if (activePersona === 'tl') {
+      if (isTlCall) {
+        // For TL viewing their OWN dispute:
+        // Incoming comments are from the Admin!
+        const incoming = comments.filter((c) => isFromAdmin(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} Admin comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      } else {
+        // For TL reviewing team member's dispute (RM/AM):
+        // Incoming comments are from the RM
+        const incoming = comments.filter((c) => isFromAgent(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} RM comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      }
+    }
+
+    if (activePersona === 'admin') {
+      if (isTlCall) {
+        // In Admin DB on a TL dispute:
+        // Incoming comments are from the TL!
+        const incoming = comments.filter((c) => isFromTl(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} TL comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      } else {
+        // In Admin DB on an RM dispute:
+        const incoming = comments.filter((c) => isFromAgent(c));
+        if (incoming.length === 0) {
+          const tlComments = comments.filter((c) => isFromTl(c));
+          if (tlComments.length > 0) {
+            return {
+              count: tlComments.length,
+              label: `${tlComments.length} TL comment${tlComments.length === 1 ? '' : 's'}`,
+            };
+          }
+          return null;
+        }
+        return {
+          count: incoming.length,
+          label: `${incoming.length} RM comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      }
+    }
+
+    return null;
+  };
+
   const allDisputedCalls = useMemo(() => {
     const map = new Map<string, PCGCall>();
     (disputes || []).forEach(c => map.set(c.id, c));
@@ -760,31 +1137,69 @@ export default function PcgCallsClient() {
         map.set(c.id, c);
       }
     });
-    return Array.from(map.values());
-  }, [disputes, calls]);
+    let list = Array.from(map.values());
+
+    if (activePersona === 'tl') {
+      const allowedNames = [
+        ...teamRms,
+        activeTlName,
+        loggedInUserName,
+        currentTlTeam?.tlName,
+      ].filter(Boolean) as string[];
+
+      list = list.filter((c) => allowedNames.some((m) => isSamePcgAgent(m, c.rmName)));
+
+      if (disputeSourceFilter === 'tl') {
+        list = list.filter((c) => isPcgTl(c.rmName) || (activeTlName && isSamePcgAgent(activeTlName, c.rmName)));
+      } else if (disputeSourceFilter === 'am') {
+        list = list.filter((c) => isPcgAm(c.rmName));
+      } else if (disputeSourceFilter === 'rm') {
+        list = list.filter((c) => !isPcgTl(c.rmName) && !isPcgAm(c.rmName) && !(activeTlName && isSamePcgAgent(activeTlName, c.rmName)));
+      }
+
+      if (selectedRmName && selectedRmName !== 'all') {
+        list = list.filter(c => isSamePcgAgent(selectedRmName, c.rmName));
+      }
+    } else if (activePersona === 'agent') {
+      const agentTarget = selectedRm || loggedInUserName;
+      if (agentTarget) {
+        list = list.filter(c => isSamePcgAgent(agentTarget, c.rmName));
+      }
+    } else if (activePersona === 'admin') {
+      if (disputeSourceFilter === 'tl') {
+        list = list.filter(c => teamLeads.some(t => isSamePcgAgent(t.tlName, c.rmName)) || isPcgTl(c.rmName));
+      } else if (disputeSourceFilter === 'am') {
+        list = list.filter(c => isPcgAm(c.rmName));
+      } else if (disputeSourceFilter === 'rm') {
+        list = list.filter(c => !isPcgTl(c.rmName) && !isPcgAm(c.rmName) && !teamLeads.some(t => isSamePcgAgent(t.tlName, c.rmName)));
+      }
+      if (activeCohortToggle === 'tl') {
+        if (selectedTlName && selectedTlName !== 'all') {
+          list = list.filter(c => isSamePcgAgent(selectedTlName, c.rmName));
+        }
+      } else if (activeCohortToggle === 'rm') {
+        if (selectedRmName && selectedRmName !== 'all') {
+          list = list.filter(c => isSamePcgAgent(selectedRmName, c.rmName));
+        }
+      } else if (activeCohortToggle === 'team') {
+        if (selectedTeamName && selectedTeamName !== 'all') {
+          const matchedLead = teamLeads.find(t => isSamePcgAgent(t.tlName, selectedTeamName));
+          const leadRms = matchedLead?.rms || [];
+          if (leadRms.length > 0) {
+            list = list.filter(c => leadRms.some(m => isSamePcgAgent(m, c.rmName)));
+          }
+        }
+      }
+    }
+
+    return list;
+  }, [disputes, calls, activePersona, teamRms, selectedRmName, selectedRm, loggedInUserName, activeCohortToggle, selectedTlName, selectedTeamName, teamLeads, disputeSourceFilter]);
 
   const disputeRaisedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'pending');
   const disputeReviewedCalls = allDisputedCalls.filter((c) => c.disputeStatus === 'resolved' || c.disputeStatus === 'overridden');
 
-  // Filtered evaluated calls list based on Min and Max IQS filter
-  const displayedEvaluatedCalls = calls.filter((call) => {
-    if (!call.isAnswered) return false;
-    if (activePersona === 'agent' && selectedRm) {
-      if (!isSamePcgAgent(call.rmName, selectedRm)) return false;
-    }
-    if (activePersona === 'tl' && teamRms.length > 0) {
-      if (!teamRms.some((rm) => isSamePcgAgent(rm, call.rmName))) return false;
-    }
-    if (minIqsFilter.trim() !== '' && minIqsFilter !== 'all') {
-      const minVal = parseFloat(minIqsFilter);
-      if (!isNaN(minVal) && (call.iqsScore == null || call.iqsScore < minVal)) return false;
-    }
-    if (maxIqsFilter.trim() !== '' && maxIqsFilter !== 'all') {
-      const maxVal = parseFloat(maxIqsFilter);
-      if (!isNaN(maxVal) && (call.iqsScore == null || call.iqsScore > maxVal)) return false;
-    }
-    return true;
-  });
+  // Evaluated calls list for current page (server-filtered and paginated)
+  const displayedEvaluatedCalls = calls || [];
 
   // RM Scorecard lookups & real computed metrics for RM view
   // Metrics represent the selected date range & scope — NEVER the paginated table slice!
@@ -794,16 +1209,29 @@ export default function PcgCallsClient() {
     : (currentRmScorecard && currentRmScorecard.overallScore > 0 ? `${currentRmScorecard.overallScore}.0` : null);
 
   const rmTotalCallsCount = summary?.totalCalls ?? (currentRmScorecard?.totalCalls ?? 0);
-  const rmAnsweredCallsCount = summary?.answeredCalls ?? (currentRmScorecard ? Math.round((currentRmScorecard.connectRate / 100) * currentRmScorecard.totalCalls) : 0);
+  const rmAnsweredCallsCount = summary?.answeredCalls ?? (currentRmScorecard ? (currentRmScorecard.clientAnsweredCalls ?? Math.round((currentRmScorecard.connectRate / 100) * currentRmScorecard.totalCalls)) : 0);
   const rmUnansweredCallsCount = summary?.unansweredCalls ?? Math.max(0, rmTotalCallsCount - rmAnsweredCallsCount);
-  const rmUnansweredByAgentCount = summary?.unansweredByRm ?? 0;
-  const rmActionablePickupCalls = rmAnsweredCallsCount + rmUnansweredByAgentCount;
-  const rmPickupRate = rmActionablePickupCalls > 0
-    ? Math.round((rmAnsweredCallsCount / rmActionablePickupCalls) * 100)
-    : (rmTotalCallsCount > 0 ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100) : (currentRmScorecard?.connectRate ?? 0));
+  const rmClientTotalCalls = summary?.clientTotalCalls ?? currentRmScorecard?.clientTotalCalls ?? rmTotalCallsCount;
+  const rmClientAnsweredCalls = summary?.clientAnsweredCalls ?? currentRmScorecard?.clientAnsweredCalls ?? rmAnsweredCallsCount;
+  const rmClientUnansweredByRm = summary?.clientUnansweredByRm ?? currentRmScorecard?.clientUnansweredByRm ?? summary?.unansweredByRm ?? 0;
+  const rmOtherCallsCount = summary?.otherCategoryCalls ?? Math.max(0, rmTotalCallsCount - rmClientTotalCalls);
+
+  const rmActionablePickupCalls = rmClientAnsweredCalls + rmClientUnansweredByRm;
+  const rmCalculatedPickupRate = summary?.rmPickupRate ?? (rmActionablePickupCalls > 0
+    ? Math.round((rmClientAnsweredCalls / rmActionablePickupCalls) * 100)
+    : 100);
+  const rmPickupRate = rmCalculatedPickupRate;
   const rmConnectRate = rmTotalCallsCount > 0
     ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100)
     : (currentRmScorecard?.connectRate ?? 0);
+
+  // Client pickup rate & unanswered breakdown for RM (Filtered by Client Identity)
+  const rmClientPickupRate = summary?.clientPickupRate ?? currentRmScorecard?.clientPickupRate ?? currentRmScorecard?.connectRate ?? 0;
+  const rmClientUnansweredCalls = summary?.clientUnansweredCalls ?? currentRmScorecard?.clientUnansweredCalls ?? 0;
+  const rmOtherUnansweredCalls = summary?.otherUnansweredCalls ?? currentRmScorecard?.otherUnansweredCalls ?? 0;
+  const rmOffHoursPickupRate = summary?.offHoursPickupRate ?? currentRmScorecard?.offHoursPickupRate ?? 0;
+  const rmOffHoursClientAnswered = summary?.offHoursClientAnswered ?? currentRmScorecard?.offHoursClientAnswered ?? 0;
+  const rmOffHoursClientTotal = summary?.offHoursClientTotal ?? currentRmScorecard?.offHoursClientTotal ?? 0;
 
   const rmRankIndex = rmScorecards.findIndex(
     (s) => isSamePcgAgent(s.rmName, selectedRm)
@@ -811,6 +1239,13 @@ export default function PcgCallsClient() {
   const rmRankDisplay = rmRankIndex >= 0 ? `#${rmRankIndex + 1}` : '—';
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const handlePeriodChange = (range: PcgPeriod, from: string, to: string) => {
+    setDateRange(range);
+    setCustomStartDate(from);
+    setCustomEndDate(to);
+    setPage(1);
+  };
 
   const getDateRangeLabel = () => {
     const fmt = (d: Date) => {
@@ -832,6 +1267,13 @@ export default function PcgCallsClient() {
       return `${s.str} – ${e.str}`;
     };
 
+    if (dateRange === 'all') {
+      return {
+        full: 'All Time (Oct 13+)',
+        short: 'All Time',
+        datesOnly: 'Oct 13 onwards',
+      };
+    }
     if (dateRange === '7d') {
       const end = new Date();
       const start = new Date(Date.now() - 7 * 86400000);
@@ -881,31 +1323,34 @@ export default function PcgCallsClient() {
   const activeDateInfo = getDateRangeLabel();
 
   const dynamicTlAvgIqs = (() => {
-    const answeredCalls = calls.filter((c) => c.isAnswered && c.iqsScore > 0);
+    const answeredCalls = calls.filter((c) => c.isAnswered && c.iqsScore != null && c.iqsScore > 0);
     if (answeredCalls.length > 0) {
-      return (answeredCalls.reduce((acc, c) => acc + c.iqsScore, 0) / answeredCalls.length).toFixed(1);
+      return (answeredCalls.reduce((acc, c) => acc + (c.iqsScore || 0), 0) / answeredCalls.length).toFixed(1);
     }
     return '—';
   })();
 
   const allKnownRms: string[] = useMemo(() => {
     const set = new Set<string>();
-    teamLeads.forEach((t) => t.rms.forEach((r: string) => set.add(r)));
+    teamLeads.forEach((t) => {
+      if (t.tlName) set.add(t.tlName);
+      (t.rms || []).forEach((r: string) => set.add(r));
+    });
     rms.forEach((r) => set.add(r.name));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [teamLeads, rms]);
 
-  // When activePersona is 'tl' and teamRms is loaded, ensure selectedRm is set to a team member
+  // When activePersona is 'tl' and teamRms is loaded, ensure selectedRm is set to a team member or the TL themselves
   useEffect(() => {
     if (activePersona === 'tl' && teamRms.length > 0) {
       const isSelectedInTeam = teamRms.some(
         (name: string) => isSamePcgAgent(name, selectedRm)
-      );
+      ) || (activeTlName && isSamePcgAgent(activeTlName, selectedRm));
       if (!isSelectedInTeam) {
         setSelectedRm(teamRms[0]);
       }
     }
-  }, [activePersona, teamRms, selectedRm]);
+  }, [activePersona, teamRms, selectedRm, activeTlName]);
 
   const teamRmScorecards: RmScorecard[] = useMemo(() => {
     return rmScorecards.filter((r) =>
@@ -924,9 +1369,9 @@ export default function PcgCallsClient() {
       const combined = [...matchedRms, ...zeroCountRms];
       return combined.sort((a, b) => a.name.localeCompare(b.name));
     }
-    if (activePersona === 'admin' && adminTlFilter !== 'all') {
+    if (activePersona === 'admin' && activeCohortToggle === 'team' && selectedTeamName !== 'all') {
       const selectedAdminTeam = teamLeads.find(
-        (t) => t.tlName.toLowerCase() === adminTlFilter.toLowerCase()
+        (t) => t.tlName.toLowerCase() === selectedTeamName.toLowerCase()
       );
       if (selectedAdminTeam) {
         const set = new Set(selectedAdminTeam.rms.map((r: string) => r.toLowerCase()));
@@ -936,7 +1381,7 @@ export default function PcgCallsClient() {
       }
     }
     return rms.length > 0 ? rms : allKnownRms.map((name: string) => ({ name, count: 0 }));
-  }, [activePersona, teamRms, rms, allKnownRms, adminTlFilter, teamLeads]);
+  }, [activePersona, teamRms, rms, allKnownRms, activeCohortToggle, selectedTeamName, teamLeads]);
 
   const renderDisputesTable = () => (
     <div className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-sm">
@@ -944,46 +1389,43 @@ export default function PcgCallsClient() {
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-[#111111]">
-              {activePersona === 'agent' ? 'My Quality Disputes' : 'Team Quality Disputes'}
+              {activePersona === 'agent'
+                ? (disputeTab === 'raised' ? 'My Quality Disputes Raised' : 'My Quality Disputes Reviewed')
+                : (disputeTab === 'raised' ? 'Team Quality Disputes Raised' : 'Team Quality Disputes Reviewed')}
             </h3>
           </div>
           <p className="text-xs text-[#71717A] mt-0.5">
-            {activePersona === 'agent'
-              ? 'Track call evaluations you challenged and review decisions made by your Team Leader.'
-              : 'Review agent disputes challenging AI scores, audit evidence, and record override decisions.'}
+            {disputeTab === 'raised'
+              ? (activePersona === 'agent'
+                ? 'Track call evaluations you challenged and review decisions made by your Team Leader.'
+                : 'Review agent disputes challenging AI scores, audit evidence, and record override decisions.')
+              : (activePersona === 'agent'
+                ? 'Track call evaluations that were previously challenged and review decisions made by your Team Leader.'
+                : 'Review historical disputes that have been resolved or overridden.')}
           </p>
         </div>
 
-        {/* Status Tabs */}
-        <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
-          <button
-            onClick={() => setDisputeTab('raised')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${disputeTab === 'raised'
-              ? 'bg-white text-[#111111] shadow-sm font-bold'
-              : 'text-[#71717A] hover:text-[#111111]'
-              }`}
-          >
-            <span>Dispute Raised</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${disputeRaisedCalls.length > 0 ? 'bg-zinc-200 text-zinc-900 border border-zinc-300' : 'bg-zinc-200 text-zinc-600'
-              }`}>
-              {disputeRaisedCalls.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setDisputeTab('reviewed')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${disputeTab === 'reviewed'
-              ? 'bg-white text-[#111111] shadow-sm font-bold'
-              : 'text-[#71717A] hover:text-[#111111]'
-              }`}
-          >
-            <span>✓</span>
-            <span>Dispute Reviewed</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${disputeReviewedCalls.length > 0 ? 'bg-zinc-200 text-zinc-900 border border-zinc-300' : 'bg-zinc-200 text-zinc-600'
-              }`}>
-              {disputeReviewedCalls.length}
-            </span>
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Dispute Source Filter for Admins & Team Leads */}
+          {(activePersona === 'admin' || activePersona === 'tl') && (
+            <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
+              <span className="text-[11px] font-semibold text-[#71717A] px-2">Disputes:</span>
+              {(['all', 'rm', 'am', 'tl'] as const).map((src) => (
+                <button
+                  key={src}
+                  type="button"
+                  onClick={() => setDisputeSourceFilter(src)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                    disputeSourceFilter === src
+                      ? 'bg-white text-[#111111] shadow-sm font-bold'
+                      : 'text-[#71717A] hover:text-[#111111]'
+                  }`}
+                >
+                  {src === 'all' ? 'All' : src === 'rm' ? 'RMs' : src === 'am' ? 'AMs' : activePersona === 'tl' ? 'TLs (My Disputes)' : 'Team Leads'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1011,6 +1453,20 @@ export default function PcgCallsClient() {
               <tbody className="divide-y divide-[#F0F0F2]">
                 {disputeRaisedCalls.map((call) => {
                   const isExpanded = expandedDisputeId === call.id;
+                  const isTlCall = teamLeads.some(t => isSamePcgAgent(t.tlName, call.rmName)) || isPcgTl(call.rmName);
+                  const cleanRm = (call.rmName || '').trim().toLowerCase();
+                  const assignedAdmin = tlAdminMap[cleanRm] || 'Aahan';
+                  const isMappedAdmin = Boolean(
+                    loggedInUserName && (
+                      loggedInUserName.trim().toLowerCase() === assignedAdmin.trim().toLowerCase() ||
+                      loggedInUserName.toLowerCase().includes(assignedAdmin.toLowerCase()) ||
+                      assignedAdmin.toLowerCase().includes(loggedInUserName.toLowerCase())
+                    )
+                  );
+                  const canOverride = activePersona === 'tl'
+                    ? !isTlCall
+                    : (isTlCall && (isMappedAdmin || userRole === 'admin'));
+
                   return (
                     <React.Fragment key={call.id}>
                       <tr
@@ -1039,7 +1495,9 @@ export default function PcgCallsClient() {
                           </td>
                         )}
                         {activePersona !== 'agent' && (
-                          <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
+                          <td className="py-3 px-4">
+                            <div className="font-semibold text-zinc-800">{call.rmName}</div>
+                          </td>
                         )}
                         <td className="py-3 px-4">
                           <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
@@ -1054,12 +1512,28 @@ export default function PcgCallsClient() {
                           )}
                         </td>
                         <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                        <td className="py-3 px-4 text-zinc-800 font-medium max-w-xs truncate">
-                          "{call.disputeReason || 'Agent challenged parameter score.'}"
+                        <td className="py-3 px-4">
+                          <div className="text-zinc-800 font-medium max-w-xs truncate" title={call.disputeReason}>
+                            "{call.disputeReason || 'Agent challenged parameter score.'}"
+                          </div>
+                          {(() => {
+                            const notif = getDisputeCommentNotification(call.disputeComments, call.rmName, isTlCall);
+                            if (!notif) return null;
+                            return (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                  </svg>
+                                  <span>{notif.label}</span>
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-4">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
-                            Pending TL Review
+                            {isTlCall ? `Pending Review (${assignedAdmin})` : 'Pending TL Review'}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1069,7 +1543,7 @@ export default function PcgCallsClient() {
                             }}
                             className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1"
                           >
-                            <span>{isExpanded ? 'Hide' : activePersona === 'tl' ? 'Review' : 'View'}</span>
+                            <span>{isExpanded ? 'Hide' : canOverride ? 'Review & Override' : 'View Dispute'}</span>
                             <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>
                           </button>
                         </td>
@@ -1080,6 +1554,7 @@ export default function PcgCallsClient() {
                           callId={call.callId || call.id.toString()}
                           hideShowChat={true}
                           isPcg={true}
+                          sopTriggers={call.sopTriggers}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -1089,25 +1564,23 @@ export default function PcgCallsClient() {
                           iqsScores={formatCallIqsScores(call)}
                           initialSegments={formatCallSegments(call)}
                           initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                          mode={activePersona === 'tl' ? 'submit' : 'view'}
-                          allowReevaluate={activePersona === 'tl'}
+                          mode={canOverride ? 'submit' : 'view'}
+                          allowReevaluate={canOverride}
                           dispute={{
-                            flagId: call.id,
+                            flagId: call.callId || call.id,
                             agentName: call.rmName,
                             agentNote: call.disputeReason,
-                            raisedBy: 'agent',
+                            raisedBy: isTlCall ? 'TL' : 'agent',
+                            raisedByRole: isTlCall ? 'tl' : 'agent',
                             raisedByName: call.rmName,
                             raisedAt: call.startTime,
-                            challengedParams: (call.parameters || []).filter(p => p.status !== 'Yes').map(p => ({
-                              param: p.id,
-                              note: p.quote || 'Challenged parameter score.'
-                            }))
+                            challengedParams: getCallChallengedParams(call)
                           }}
                           colSpan={activePersona === 'agent' ? 6 : 8}
                           onDone={() => setExpandedDisputeId(null)}
                           onClose={() => setExpandedDisputeId(null)}
                           onOverrideSubmit={async (overrideData) => {
-                            handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
+                            await handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
                           }}
                         />
                       )}
@@ -1144,6 +1617,10 @@ export default function PcgCallsClient() {
               <tbody className="divide-y divide-[#F0F0F2]">
                 {disputeReviewedCalls.map((call) => {
                   const isExpanded = expandedDisputeId === call.id;
+                  const isTlCall = teamLeads.some(t => isSamePcgAgent(t.tlName, call.rmName)) || isPcgTl(call.rmName);
+                  const cleanRm = (call.rmName || '').trim().toLowerCase();
+                  const assignedAdmin = tlAdminMap[cleanRm] || 'Aahan';
+
                   return (
                     <React.Fragment key={call.id}>
                       <tr
@@ -1172,7 +1649,9 @@ export default function PcgCallsClient() {
                           </td>
                         )}
                         {activePersona !== 'agent' && (
-                          <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
+                          <td className="py-3 px-4">
+                            <div className="font-semibold text-zinc-800">{call.rmName}</div>
+                          </td>
                         )}
                         <td className="py-3 px-4">
                           <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
@@ -1187,8 +1666,24 @@ export default function PcgCallsClient() {
                           )}
                         </td>
                         <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                        <td className="py-3 px-4 text-zinc-700 font-medium max-w-xs truncate">
-                          "{call.tlOverrideNote || 'Dispute reviewed and resolved by Team Leader.'}"
+                        <td className="py-3 px-4">
+                          <div className="text-zinc-700 font-medium max-w-xs truncate" title={call.tlOverrideNote || call.disputeReason}>
+                            "{call.tlOverrideNote || call.disputeReason || 'Dispute reviewed and resolved.'}"
+                          </div>
+                          {(() => {
+                            const notif = getDisputeCommentNotification(call.disputeComments, call.rmName, isTlCall);
+                            if (!notif) return null;
+                            return (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                  </svg>
+                                  <span>{notif.label}</span>
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-4">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
@@ -1213,6 +1708,7 @@ export default function PcgCallsClient() {
                           callId={call.callId || call.id.toString()}
                           hideShowChat={true}
                           isPcg={true}
+                          sopTriggers={call.sopTriggers}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -1224,6 +1720,17 @@ export default function PcgCallsClient() {
                           initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
                           mode="view"
                           allowReevaluate={activePersona === 'tl'}
+                          dispute={{
+                            flagId: call.callId || call.id,
+                            agentName: call.rmName,
+                            agentNote: call.disputeReason,
+                            reviewNote: call.tlOverrideNote,
+                            raisedBy: isTlCall ? 'TL' : 'agent',
+                            raisedByRole: isTlCall ? 'tl' : 'agent',
+                            raisedByName: call.rmName,
+                            raisedAt: call.startTime,
+                            challengedParams: getCallChallengedParams(call)
+                          }}
                           colSpan={activePersona !== 'agent' ? 8 : 6}
                           onDone={() => setExpandedDisputeId(null)}
                           onClose={() => setExpandedDisputeId(null)}
@@ -1244,21 +1751,22 @@ export default function PcgCallsClient() {
   return (
     <div className="min-h-screen bg-[#f5f3ee] text-[#111111] flex flex-col font-sans">
       {/* ── TOP HEADER (GLOBAL) ─────────────────────────────────────────── */}
-      <header className="bg-white border-b border-[#e6e2d8] px-6 py-3.5 sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+      <header className="bg-[var(--tb-bg)] border-b border-[var(--tb-border)] px-6 py-3.5 sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-[#111111] flex items-center justify-center text-white font-bold text-sm">
             W
           </div>
           <div>
-            <h1 className="text-base font-bold text-[#111111] leading-none">PCG Call Quality</h1>
-            <p className="text-xs text-[#71717A] mt-0.5">PCG Team Voice Call Performance &amp; Quality Analytics</p>
+            <h1 className="text-base font-bold text-[#111111] leading-none">PCG Analytics</h1>
           </div>
         </div>
 
         {/* Global Date Selector, Workspace Switcher, User Profile */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Global Date Selector */}
-          {activeTab !== 'security' && (
+          {/* Calls and TL Calls have the period filter in the page itself, Team / Member Analytics their own period controls;
+              Scorecard, RM Performance, Security and Parameters do not use a date range. Only Disputes still relies on this one. */}
+          {activeTab === 'disputes' && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-[#71717A] font-semibold">Date Range:</span>
               <select
@@ -1300,13 +1808,6 @@ export default function PcgCallsClient() {
             </div>
           )}
 
-          {/* Workspace Switcher for Super Admins */}
-          {(isSuperAdmin || platformDomain === 'both') && (
-            <div className="mr-1">
-              <WorkspaceSwitcher compact={true} />
-            </div>
-          )}
-
           <div className="flex items-center gap-1.5 ml-2">
             <ThemeToggle />
             <AccountMenu
@@ -1320,16 +1821,23 @@ export default function PcgCallsClient() {
       </header>
 
       {/* ── BODY: SIDEBAR + MAIN CONTENT (EXACT CX TL REPLICATION) ───────── */}
-      <div className="flex flex-1 min-h-[calc(100vh-65px)] bg-[#f5f3ee]">
+      <div className="flex flex-1 min-h-[calc(var(--vh100)_-_65px)] bg-[#f5f3ee]">
         {/* Left Sidebar Panel (Replicated from CX TL with Call Quality & RM Scorecard) */}
         <aside
-          className="w-[220px] shrink-0 bg-[#f5f3ee] border-r border-[#e6e2d8] py-4 select-none"
+          className="w-[240px] shrink-0 bg-[var(--sb-bg)] border-r border-[var(--sb-border)] py-4 select-none"
         >
+          {/* Workspace switcher at the top of the sidebar (same spot as the CX sidebar) */}
+          {(isSuperAdmin || platformDomain === 'both') && (
+            <div className="pl-4 pr-3 pb-1">
+              <WorkspaceSwitcher />
+            </div>
+          )}
+
           {/* Section Title */}
           <div
-            className="text-[11px] uppercase tracking-[0.08em] text-[#71717a] px-4 pt-3 pb-2 font-semibold"
+            className="quality-shell-sidebar-title"
           >
-            {activePersona === 'admin' ? 'ADMIN' : activePersona === 'tl' ? 'TEAM LEAD' : 'AGENT'}
+            {activePersona === 'admin' ? 'Admin' : activePersona === 'tl' ? 'Team Lead' : 'Agent'}
           </div>
 
           {/* 1. Team Analytics Navigation Link (For Admin) */}
@@ -1337,22 +1845,16 @@ export default function PcgCallsClient() {
             <button
               type="button"
               onClick={() => handleTabChange('team_analytics')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'team_analytics'
-                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-                }`}
+              className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'team_analytics' ? ' active' : ''}`}
             >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'team_analytics' ? 'text-[#18181b]' : 'text-[#71717a]'
-                  }`}
-              >
+              <span>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="20" x2="18" y2="10" />
                   <line x1="12" y1="20" x2="12" y2="4" />
                   <line x1="6" y1="20" x2="6" y2="14" />
                 </svg>
               </span>
-              <span className="flex-1">Team Analytics</span>
+              <span className="quality-shell-sidebar-label">Team Analytics</span>
             </button>
           )}
 
@@ -1360,56 +1862,67 @@ export default function PcgCallsClient() {
           <button
             type="button"
             onClick={() => handleTabChange('member_analytics')}
-            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'member_analytics'
-              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'member_analytics' ? ' active' : ''}`}
           >
-            <span
-              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'member_analytics' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-            >
+            <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </span>
-            <span className="flex-1">{activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}</span>
+            <span className="quality-shell-sidebar-label">{activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}</span>
           </button>
 
           {/* 3. Call Quality Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('calls')}
-            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'calls' || activeTab === 'disputes'
-              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'calls' || activeTab === 'disputes' ? ' active' : ''}`}
           >
-            <span
-              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'calls' || activeTab === 'disputes' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-            >
+            <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3-8.63 2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
               </svg>
             </span>
-            <span className="flex-1">Call Quality</span>
+            <span className="quality-shell-sidebar-label">Call Quality</span>
+          </button>
+
+          {/* 3c. Chat Quality Navigation Link */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('chat_quality')}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'chat_quality' ? ' active' : ''}`}
+          >
+            <span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+            </span>
+            <span className="quality-shell-sidebar-label">Chat Quality</span>
+          </button>
+
+          {/* 3d. Email Quality Navigation Link */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('email_quality')}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'email_quality' ? ' active' : ''}`}
+          >
+            <span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+            </span>
+            <span className="quality-shell-sidebar-label">Email Quality</span>
           </button>
 
           {/* 4. RM Scorecard Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('scorecard')}
-            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'scorecard'
-              ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-              : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
+            className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'scorecard' ? ' active' : ''}`}
           >
-            <span
-              className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'scorecard' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-            >
+            <span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
@@ -1418,7 +1931,7 @@ export default function PcgCallsClient() {
                 <polyline points="10 9 9 9 8 9" />
               </svg>
             </span>
-            <span className="flex-1">{activePersona === 'agent' ? 'My Scorecard' : 'RM Scorecard'}</span>
+            <span className="quality-shell-sidebar-label">{activePersona === 'agent' ? 'My Scorecard' : 'RM Scorecard'}</span>
           </button>
 
           {/* 5. RM Performance Navigation Link */}
@@ -1426,15 +1939,9 @@ export default function PcgCallsClient() {
             <button
               type="button"
               onClick={() => handleTabChange('rm_performance')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'rm_performance'
-                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-                }`}
+              className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'rm_performance' ? ' active' : ''}`}
             >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'rm_performance' ? 'text-[#18181b]' : 'text-[#71717a]'
-                  }`}
-              >
+              <span>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
                   <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
@@ -1444,58 +1951,115 @@ export default function PcgCallsClient() {
                   <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
                 </svg>
               </span>
-              <span className="flex-1">RM Performance</span>
+              <span className="quality-shell-sidebar-label">RM Performance</span>
+            </button>
+          )}
+
+          {/* 6. Quality Parameter Definitions Navigation Link (For TL and Admin) */}
+          {(activePersona === 'admin' || activePersona === 'tl') && (
+            <button
+              type="button"
+              onClick={() => handleTabChange('parameter_definitions')}
+              className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'parameter_definitions' ? ' active' : ''}`}
+            >
+              <span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
+                  <path d="M8 7h8" />
+                  <path d="M8 11h8" />
+                  <path d="M8 15h5" />
+                </svg>
+              </span>
+              <span className="quality-shell-sidebar-label">Quality Parameters</span>
             </button>
           )}
 
           {/* Bottom section: Security & Settings */}
-          {(activePersona === 'admin' || activePersona === 'tl') && (
-            <div className="mt-4 pt-3 border-t border-[#e6e2d8]">
-              {/* Security Navigation Link (For TL and Admin) */}
+          <div className="mt-4 pt-3 border-t border-[var(--sb-border)]">
+            {/* Security Navigation Link (Agent and TL). Admins reach Security inside Settings, so it is not repeated for them. */}
+            {activePersona !== 'admin' && (
               <button
                 type="button"
                 onClick={() => handleTabChange('security')}
-                className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${activeTab === 'security'
-                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-                  }`}
+                className={`quality-shell-sidebar-link quality-shell-sidebar-btn${activeTab === 'security' ? ' active' : ''}`}
               >
-                <span
-                  className={`inline-flex items-center justify-center shrink-0 ${activeTab === 'security' ? 'text-[#18181b]' : 'text-[#71717a]'
-                    }`}
-                >
+                <span>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
                 </span>
-                <span className="flex-1">Security</span>
+                <span className="quality-shell-sidebar-label">Security</span>
               </button>
+            )}
 
-              {/* Settings Link (Admin Only) */}
-              {activePersona === 'admin' && (
-                <Link
-                  href="/settings?section=pcg-users"
-                  className="w-[calc(100%-24px)] mx-3 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]"
-                >
-                  <span className="inline-flex items-center justify-center shrink-0 text-[#71717a]">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                  </span>
-                  <span className="flex-1">Settings</span>
-                </Link>
-              )}
-            </div>
-          )}
+            {/* Settings Link (Admin Only) */}
+            {activePersona === 'admin' && (
+              <Link
+                href="/settings?section=pcg-users"
+                className="quality-shell-sidebar-link"
+              >
+                <span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </span>
+                <span className="quality-shell-sidebar-label">Settings</span>
+              </Link>
+            )}
+          </div>
         </aside>
 
         {/* Main Content Area */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto min-w-0 max-w-7xl">
+          {loadingCallById && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-sm flex items-center gap-2 animate-pulse">
+              <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin inline-block"></span>
+              <span>Loading requested call evaluation...</span>
+            </div>
+          )}
+          {callNotFoundNotice && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-sm flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{callNotFoundNotice}</span>
+              </div>
+              <button
+                onClick={() => setCallNotFoundNotice(null)}
+                className="text-amber-700 hover:text-amber-950 font-bold text-xs px-2 py-1 rounded hover:bg-amber-100"
+              >
+                ✕ Dismiss
+              </button>
+            </div>
+          )}
           {activeTab === 'security' ? (
             <div>
               <SecuritySection />
+            </div>
+          ) : activeTab === 'parameter_definitions' ? (
+            <div>
+              <PcgQualityParametersView />
+            </div>
+          ) : activeTab === 'chat_quality' ? (
+            <div>
+              <PcgChatQualityView
+                activePersona={activePersona}
+                selectedRm={activePersona === 'agent' ? selectedRm : undefined}
+                selectedTl={activePersona === 'tl' ? activeTlName : undefined}
+                loggedInUserName={loggedInUserName}
+                teamRms={teamRms}
+              />
+            </div>
+          ) : activeTab === 'email_quality' ? (
+            <div>
+              <PcgEmailQualityView
+                activePersona={activePersona}
+                selectedRm={activePersona === 'agent' ? selectedRm : undefined}
+                selectedTl={activePersona === 'tl' ? activeTlName : undefined}
+                loggedInUserName={loggedInUserName}
+                teamRms={teamRms}
+              />
             </div>
           ) : activeTab === 'scorecard' ? (
             <div>
@@ -1506,8 +2070,11 @@ export default function PcgCallsClient() {
                 selectedTl={activeTlName}
                 onSelectTl={(tl) => setSelectedTl(tl)}
                 onOpenCallView={(cid) => handleOpenCallById(cid)}
+                onOpenChatView={() => handleTabChange('chat_quality')}
                 onSwitchToCallsTab={() => handleTabChange('calls')}
+                onSwitchToChatQuality={() => handleTabChange('chat_quality')}
                 allowedRms={activePersona === 'tl' ? teamRms : undefined}
+                defaultChannel={scorecardDefaultChannel}
               />
             </div>
           ) : activeTab === 'team_analytics' ? (
@@ -1531,8 +2098,9 @@ export default function PcgCallsClient() {
                   setSelectedRm(rm);
                   handleTabChange('member_analytics');
                 }}
-                onOpenScorecard={(rm) => {
+                onOpenScorecard={(rm, ch) => {
                   setSelectedRm(rm);
+                  if (ch) setScorecardDefaultChannel(ch);
                   handleTabChange('scorecard');
                 }}
                 rmScorecards={rmScorecards}
@@ -1544,13 +2112,14 @@ export default function PcgCallsClient() {
               <PcgMemberAnalyticsDashboard
                 selectedRm={selectedRm}
                 onSelectRm={(rm) => setSelectedRm(rm)}
-                availableRms={activePersona === 'admin' ? allKnownRms : activePersona === 'tl' ? teamRms : [selectedRm]}
+                availableRms={activePersona === 'admin' ? allKnownRms : activePersona === 'tl' ? (activeTlName ? [activeTlName, ...teamRms] : teamRms) : [selectedRm]}
+                allTlNames={teamLeads.map((t) => t.tlName)}
                 calls={calls}
                 activePersona={activePersona}
                 rmScorecards={rmScorecards}
                 teamLeads={teamLeads}
                 tlName={activeTlName}
-                dateRange={dateRange}
+                dateRange={dateRange === 'all' ? '30d' : dateRange}
                 onDateRangeChange={(range, from, to) => {
                   setDateRange(range);
                   if (from && to) {
@@ -1560,34 +2129,98 @@ export default function PcgCallsClient() {
                 }}
               />
             </div>
+          ) : activeTab === 'tl_calls' ? (
+            <div>
+              <PcgTlCallsView
+                onOpenCallDrawer={(cid) => handleOpenCallById(cid)}
+                globalDateRange={dateRange}
+                globalCustomStartDate={customStartDate}
+                globalCustomEndDate={customEndDate}
+                onPeriodChange={handlePeriodChange}
+              />
+            </div>
+
           ) : (
             <div className="space-y-6">
-              {/* Call Quality View Header / Switcher: Evaluated Calls / Disputes */}
-              <div className="flex items-center justify-between pb-3 border-b border-[#E4E4E7]">
+              {/* Call Quality View Header / Switcher: Evaluated Calls / Disputes Raised / Disputes Reviewed */}
+              <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[#E4E4E7]">
                 <div className="flex items-center gap-2">
+                  {/* 1. Evaluated Calls */}
                   <button
-                    onClick={() => handleTabChange('calls')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${activeTab === 'calls'
-                      ? 'bg-zinc-900 text-white font-bold'
-                      : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
-                      }`}
+                    onClick={() => {
+                      handleTabChange('calls');
+                      setExpandedDisputeId(null);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                      activeTab === 'calls'
+                        ? 'bg-zinc-900 text-white font-bold shadow-sm'
+                        : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
+                    }`}
                   >
-                    Evaluated Calls
+                    <span>Evaluated Calls</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        activeTab === 'calls'
+                          ? 'bg-zinc-700 text-white'
+                          : 'bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      {totalCallsCount || summary?.evaluatedCalls || calls.length}
+                    </span>
                   </button>
+
+                  {/* 2. Disputes Raised */}
                   <button
-                    onClick={() => handleTabChange('disputes')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${activeTab === 'disputes'
-                      ? 'bg-zinc-900 text-white font-bold'
-                      : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
-                      }`}
+                    onClick={() => {
+                      handleTabChange('disputes', 'raised');
+                      setExpandedDisputeId(null);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                      activeTab === 'disputes' && disputeTab === 'raised'
+                        ? 'bg-zinc-900 text-white font-bold shadow-sm'
+                        : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
+                    }`}
                   >
-                    <span>Disputes</span>
-                    {disputeRaisedCalls.length > 0 && (
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'disputes' ? 'bg-zinc-700 text-white' : 'bg-zinc-200 text-zinc-800'
-                        }`}>
+                    <span>Disputes Raised</span>
+                    {disputeRaisedCalls.length > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
                         {disputeRaisedCalls.length}
                       </span>
+                    ) : (
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          activeTab === 'disputes' && disputeTab === 'raised'
+                            ? 'bg-zinc-700 text-white'
+                            : 'bg-zinc-100 text-zinc-700'
+                        }`}
+                      >
+                        0
+                      </span>
                     )}
+                  </button>
+
+                  {/* 3. Disputes Reviewed */}
+                  <button
+                    onClick={() => {
+                      handleTabChange('disputes', 'reviewed');
+                      setExpandedDisputeId(null);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                      activeTab === 'disputes' && disputeTab === 'reviewed'
+                        ? 'bg-zinc-900 text-white font-bold shadow-sm'
+                        : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-[#E4E4E7]'
+                    }`}
+                  >
+                    <span>Disputes Reviewed</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        activeTab === 'disputes' && disputeTab === 'reviewed'
+                          ? 'bg-zinc-700 text-white'
+                          : 'bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      {disputeReviewedCalls.length}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -1616,71 +2249,6 @@ export default function PcgCallsClient() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* ── 1. PERSONA CONTEXT HEADER (Only for Admin) ──────────────── */}
-                  {activePersona === 'admin' && (
-                    <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
-                            Executive Console
-                          </span>
-                          <h2 className="text-lg font-bold text-[#111111]">
-                            Organization PCG Analytics &amp; Administration
-                          </h2>
-                        </div>
-                        <p className="text-xs text-[#71717A] mt-1">
-                          Complete cross-team visibility across all RMs, Team Leads, and categories.
-                        </p>
-                      </div>
-
-                      {activePersona === 'admin' && (
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-[#71717A]">Team:</span>
-                            <select
-                              value={adminTlFilter}
-                              onChange={(e) => {
-                                setAdminTlFilter(e.target.value as any);
-                                setAdminRmFilter('all');
-                                setPage(1);
-                              }}
-                              className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
-                            >
-                              <option value="all">All Teams</option>
-                              {teamLeads.map((tl) => (
-                                <option key={tl.tlName} value={tl.tlName}>
-                                  Team {tl.tlName} ({tl.rms.length} RMs)
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-[#71717A]">RM:</span>
-                            <select
-                              value={adminRmFilter}
-                              onChange={(e) => { setAdminRmFilter(e.target.value); setPage(1); }}
-                              className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
-                            >
-                              <option value="all">All RMs ({rms.length})</option>
-                              {rms
-                                .filter((r) => {
-                                  if (adminTlFilter !== 'all') {
-                                    const selectedAdminTeam = teamLeads.find(t => t.tlName.toLowerCase() === adminTlFilter.toLowerCase());
-                                    return selectedAdminTeam ? selectedAdminTeam.rms.some(n => n.toLowerCase() === r.name.toLowerCase()) : true;
-                                  }
-                                  return true;
-                                })
-                                .map((r) => (
-                                  <option key={r.name} value={r.name}>{r.name} ({r.count})</option>
-                                ))}
-                            </select>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* ── 2. TOP METRIC CARDS ────────────────────────────────────────────── */}
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
@@ -1689,25 +2257,33 @@ export default function PcgCallsClient() {
                           ? 'My Call Quality Overview'
                           : activePersona === 'tl'
                             ? `Team ${activeTlName || 'Lead'} Performance Overview`
-                            : 'Organization Performance Overview'}
+                            : activeCohortToggle === 'rm'
+                              ? (selectedRmName !== 'all' ? `${selectedRmName} Performance Overview` : 'RM Performance Overview')
+                              : activeCohortToggle === 'tl'
+                                ? (selectedTlName !== 'all' ? `${selectedTlName} Performance Overview` : 'Team Leads Performance Overview')
+                                : activeCohortToggle === 'team'
+                                  ? (selectedTeamName !== 'all' ? `Team ${selectedTeamName} Performance Overview` : 'All Teams Performance Overview')
+                                  : 'Organization Performance Overview'}
                       </span>
-                      <div className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700 bg-white border border-[#E4E4E7] px-2.5 py-1 rounded-lg shadow-2xs">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                          <line x1="16" y1="2" x2="16" y2="6" />
-                          <line x1="8" y1="2" x2="8" y2="6" />
-                          <line x1="3" y1="10" x2="21" y2="10" />
-                        </svg>
-                        <span className="text-zinc-500 font-normal">Period:</span>
-                        <span className="font-semibold text-zinc-900">{activeDateInfo.full}</span>
-                      </div>
+                      <PcgPeriodFilter range={dateRange} start={customStartDate} end={customEndDate} onChange={handlePeriodChange} />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Card 1: Quality Score / IQS */}
                       <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
                         <div className="flex items-center justify-between">
                           <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                            {activePersona === 'agent' ? 'My Quality Score' : activePersona === 'tl' ? 'Team Avg IQS' : 'Org Avg IQS'}
+                            {activePersona === 'agent'
+                              ? 'My Quality Score'
+                              : activePersona === 'tl'
+                                ? 'Team Avg IQS'
+                                : activeCohortToggle === 'rm'
+                                  ? 'Agent Avg IQS'
+                                  : activeCohortToggle === 'tl'
+                                    ? 'TL Avg IQS'
+                                    : activeCohortToggle === 'team'
+                                      ? 'Team Avg IQS'
+                                      : 'Org Avg IQS'}
                           </p>
                           <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
                             {activeDateInfo.short}
@@ -1727,30 +2303,11 @@ export default function PcgCallsClient() {
                         </p>
                       </div>
 
+                      {/* Card 2: RM Pickup Rate */}
                       <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
                         <div className="flex items-center justify-between">
                           <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                            {activePersona === 'agent' ? 'My Total Calls' : 'Total Calls Attempted'}
-                          </p>
-                          <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
-                            {activeDateInfo.short}
-                          </span>
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                            {activePersona === 'agent' ? rmTotalCallsCount : (summary?.totalCalls ?? 0)}
-                          </span>
-                          <span className="text-xs text-[#71717A]">calls</span>
-                        </div>
-                        <p className="text-[11px] text-[#71717A] mt-1">
-                          {activePersona === 'agent' ? rmAnsweredCallsCount : (summary?.answeredCalls ?? 0)} connected · {activeDateInfo.datesOnly}
-                        </p>
-                      </div>
-
-                      <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                            Pickup Rate
+                            RM Pickup Rate
                           </p>
                           <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
                             {activeDateInfo.short}
@@ -1759,15 +2316,53 @@ export default function PcgCallsClient() {
                         <div className="flex items-baseline gap-2 mt-1">
                           <span className="text-2xl font-bold tabular-nums text-[#111111]">
                             {activePersona === 'agent'
-                              ? rmPickupRate
-                              : (summary?.totalCalls ? Math.round(((summary?.answeredCalls || 0) / summary.totalCalls) * 100) : 0)}%
+                              ? rmCalculatedPickupRate
+                              : (summary?.rmPickupRate ?? 100)}%
                           </span>
                           <span className="text-xs text-[#71717A]">pickup</span>
                         </div>
                         <p className="text-[11px] text-[#71717A] mt-1">
                           {activePersona === 'agent'
-                            ? `${rmUnansweredByAgentCount} unanswered · ${activeDateInfo.datesOnly}`
-                            : `${summary?.unansweredCalls ?? 0} unanswered · ${activeDateInfo.datesOnly}`}
+                            ? `${rmClientAnsweredCalls} valid client calls answered by RM · ${rmClientUnansweredByRm} valid client calls unanswered by RM`
+                            : `${summary?.clientAnsweredCalls ?? 0} valid client calls answered by RM · ${summary?.clientUnansweredByRm ?? 0} valid client calls unanswered by RM`}
+                        </p>
+                      </div>
+
+                      {/* Card 3: Off-Hours & Weekend Responsiveness */}
+                      <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+                            Off-Hours & Weekends
+                          </p>
+                          <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded" title="Mon–Fri before 10am / after 7pm & all day Sat/Sun">
+                            Off-Hours
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-1">
+                          {(activePersona === 'agent' ? rmOffHoursClientTotal : (summary?.offHoursClientTotal ?? 0)) > 0 ? (
+                            <>
+                              <span className="text-2xl font-bold tabular-nums text-[#111111]">
+                                {activePersona === 'agent'
+                                  ? rmOffHoursPickupRate
+                                  : (summary?.offHoursPickupRate ?? 0)}%
+                              </span>
+                              <span className="text-xs text-[#71717A]">answered</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-2xl font-bold tabular-nums text-[#71717A]">
+                                —
+                              </span>
+                              <span className="text-xs text-[#71717A]">no calls</span>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#71717A] mt-1">
+                          {(activePersona === 'agent' ? rmOffHoursClientTotal : (summary?.offHoursClientTotal ?? 0)) > 0
+                            ? (activePersona === 'agent'
+                              ? `${rmOffHoursClientAnswered} of ${rmOffHoursClientTotal} valid client calls answered`
+                              : `${summary?.offHoursClientAnswered ?? 0} of ${summary?.offHoursClientTotal ?? 0} valid client calls answered`)
+                            : 'No off-hours or weekend calls received'}
                         </p>
                       </div>
                     </div>
@@ -1776,72 +2371,7 @@ export default function PcgCallsClient() {
 
 
 
-                  {/* ── 5. PROPER RM SCORECARD SECTION (FOR TL) ────────────────── */}
 
-                  {/* 5B. TL VIEW: RM-STYLE AGENT SCORECARDS GRID & AGENT-WISE ANALYTICS */}
-                  {activePersona === 'tl' && (
-                    <div className="space-y-4">
-
-
-                      {/* Agent-Wise Analytics Table (Matching Quality Console Table) */}
-                      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">Agent Wise Analytics</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              IQS, Pickup Rate, and performance per agent · Team {selectedTl} · {activeDateInfo.full}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="bg-gray-50/60 border-b border-gray-100 text-[#6B6B6B] font-semibold">
-                                <th className="py-3 px-4 text-left">RM Name</th>
-                                <th className="py-3 px-4 text-right">Calls Handled</th>
-                                <th className="py-3 px-4 text-right">Pickup Rate</th>
-                                <th className="py-3 px-4 text-right">Avg IQS</th>
-                                <th className="py-3 px-4 text-center">Compliance</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {teamRmScorecards.length === 0 ? (
-                                <tr>
-                                  <td colSpan={5} className="py-8 text-center text-xs text-gray-500">
-                                    No RM call data recorded for Team {activeTlName || selectedTl} in this period.
-                                  </td>
-                                </tr>
-                              ) : (
-                                teamRmScorecards.map((rm: RmScorecard) => (
-                                  <tr key={rm.rmName} className="hover:bg-gray-50/50 transition-colors">
-                                    <td className="py-3 px-4 font-bold text-gray-900 flex items-center gap-2">
-                                      <span className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-800 flex items-center justify-center font-bold text-[11px]">
-                                        {rm.rmName.charAt(0)}
-                                      </span>
-                                      <span>{rm.rmName}</span>
-                                    </td>
-                                    <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">{rm.totalCalls}</td>
-                                    <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">{rm.connectRate}%</td>
-                                    <td className="py-3 px-4 text-right">
-                                      {getScoreBadge(rm.overallScore)}
-                                    </td>
-                                    <td className="py-3 px-4 text-center tabular-nums">
-                                      {rm.complianceFlags > 0 ? (
-                                        <span className="text-zinc-900 font-bold">{rm.complianceFlags} Flags</span>
-                                      ) : (
-                                        <span className="text-zinc-500 font-normal">0 Flags</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {/* 5C. ADMIN VIEW: ON-DEMAND OVERALL TEAM ANALYTICS, RM PERFORMANCE & AI COACHING */}
                   {activePersona === 'admin' && (
@@ -1907,17 +2437,21 @@ export default function PcgCallsClient() {
                                       </span>
                                     </div>
 
-                                    <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-zinc-200">
+                                    <div className="grid grid-cols-4 gap-2 text-center pt-1 border-t border-zinc-200">
                                       <div className="bg-white p-2 rounded-lg border border-zinc-100">
                                         <span className="text-[10px] uppercase font-bold text-zinc-400 block">Total Calls</span>
                                         <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.totalCalls}</span>
                                       </div>
                                       <div className="bg-white p-2 rounded-lg border border-zinc-100">
-                                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">Pickup Rate</span>
-                                        <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.connectRate}%</span>
+                                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">RM Pickup</span>
+                                        <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.rmPickupRate ?? tl.clientPickupRate ?? tl.connectRate}%</span>
                                       </div>
                                       <div className="bg-white p-2 rounded-lg border border-zinc-100">
-                                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">&lt;85% Attention</span>
+                                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">Off-Hours</span>
+                                        <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.offHoursPickupRate != null ? `${tl.offHoursPickupRate}%` : '—'}</span>
+                                      </div>
+                                      <div className="bg-white p-2 rounded-lg border border-zinc-100">
+                                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">&lt;85% Attn</span>
                                         <span className="text-sm font-bold tabular-nums text-zinc-900">
                                           {tl.callsUnder85}
                                         </span>
@@ -2019,7 +2553,7 @@ export default function PcgCallsClient() {
                                             Team {tlAssignment}
                                           </span>
                                         </div>
-                                        <p className="text-xs text-zinc-500 mt-0.5 tabular-nums">{rm.totalCalls} calls • {rm.connectRate}% connect</p>
+                                        <p className="text-xs text-zinc-500 mt-0.5 tabular-nums">{rm.totalCalls} calls • {rm.clientPickupRate ?? rm.connectRate}% pickup</p>
                                         <p className="text-[11px] text-zinc-700 font-medium truncate mt-1">
                                           Focus: {rm.topWeakness}
                                         </p>
@@ -2141,58 +2675,142 @@ export default function PcgCallsClient() {
 
 
                   {/* ── 4. CATEGORY FILTER PILLS ────────────────────────────────────────── */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#E4E4E7]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-[#71717A] font-semibold mr-1">Call Category:</span>
-                      <button
-                        onClick={() => {
-                          setSelectedCategory('all');
-                          setPage(1);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'all'
-                          ? 'bg-[#111111] text-white shadow-sm'
-                          : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-                          }`}
-                      >
-                        All Categories ({summary?.answeredCalls ?? summary?.totalCalls ?? totalCallsCount})
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedCategory('13_pitching');
-                          setPage(1);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === '13_pitching'
-                          ? 'bg-[#111111] text-white shadow-sm'
-                          : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-                          }`}
-                      >
-                        13% Club / Pitching
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedCategory('upselling');
-                          setPage(1);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'upselling'
-                          ? 'bg-[#111111] text-white shadow-sm'
-                          : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-                          }`}
-                      >
-                        Upselling Calls
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedCategory('support');
-                          setPage(1);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'support'
-                          ? 'bg-[#111111] text-white shadow-sm'
-                          : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-                          }`}
-                      >
-                        General / Support
-                      </button>
+                  <div className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-[#E4E4E7]">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-[#71717A] font-semibold mr-1">Call Category:</span>
+                        <button
+                          onClick={() => {
+                            setSelectedCategory('all');
+                            setPage(1);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'all'
+                            ? 'bg-[#111111] text-white shadow-sm'
+                            : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
+                            }`}
+                        >
+                          All Evaluated ({summary?.evaluatedCalls ?? summary?.answeredCalls ?? totalCallsCount})
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedCategory('13_pitching');
+                            setPage(1);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === '13_pitching'
+                            ? 'bg-[#111111] text-white shadow-sm'
+                            : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
+                            }`}
+                        >
+                          13% Club / Pitching {summary?.categoryCounts?.pitching ? `(${summary.categoryCounts.pitching})` : ''}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedCategory('upselling');
+                            setPage(1);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'upselling'
+                            ? 'bg-[#111111] text-white shadow-sm'
+                            : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
+                            }`}
+                        >
+                          Upselling Calls {summary?.categoryCounts?.upselling ? `(${summary.categoryCounts.upselling})` : ''}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedCategory('support');
+                            setPage(1);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedCategory === 'support'
+                            ? 'bg-[#111111] text-white shadow-sm'
+                            : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
+                            }`}
+                        >
+                          General / Support {summary?.categoryCounts?.support ? `(${summary.categoryCounts.support})` : ''}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedCategory('sop_breached');
+                            setPage(1);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${selectedCategory === 'sop_breached'
+                            ? 'bg-red-700 text-white shadow-sm font-bold'
+                            : 'bg-red-50 text-red-800 hover:bg-red-100 border border-red-200'
+                            }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${selectedCategory === 'sop_breached' ? 'bg-white' : 'bg-red-600'}`}></span>
+                          <span>SOP Breached</span>
+                          {summary?.categoryCounts?.sopBreached != null && summary.categoryCounts.sopBreached > 0 && (
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${selectedCategory === 'sop_breached' ? 'bg-red-900 text-white' : 'bg-red-200 text-red-900'}`}>
+                              {summary.categoryCounts.sopBreached}
+                            </span>
+                          )}
+                        </button>
+                        <div className="h-4 w-px bg-zinc-200 mx-1 hidden sm:block" />
+                        <button
+                          onClick={() => {
+                            setSelectedCategory('excluded');
+                            setMinIqsFilter('');
+                            setMaxIqsFilter('');
+                            setSearchQuery('');
+                            setPage(1);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)
+                            ? 'bg-amber-600 text-white shadow-sm font-bold'
+                            : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                            }`}
+                        >
+                          <span>Excluded Calls</span>
+                          {summary?.categoryCounts?.excluded != null && (
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-900'}`}>
+                              {summary.categoryCounts.excluded}
+                            </span>
+                          )}
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Excluded Sub-Category Filter Bar */}
+                    {['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) && (
+                      <div className="pt-2 border-t border-zinc-100 flex flex-wrap items-center gap-1.5 animate-in fade-in duration-200">
+                        <span className="text-[11px] text-zinc-500 font-medium mr-1">Filter Exclusion:</span>
+                        <button
+                          onClick={() => { setSelectedCategory('excluded'); setMinIqsFilter(''); setMaxIqsFilter(''); setSearchQuery(''); setPage(1); }}
+                          className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${selectedCategory === 'excluded' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                        >
+                          All Excluded ({summary?.categoryCounts?.excluded ?? 0})
+                        </button>
+                        <button
+                          onClick={() => { setSelectedCategory('hiring'); setMinIqsFilter(''); setMaxIqsFilter(''); setSearchQuery(''); setPage(1); }}
+                          className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${selectedCategory === 'hiring' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                        >
+                          Hiring / Interviews ({summary?.categoryCounts?.hiring ?? 0})
+                        </button>
+                        <button
+                          onClick={() => { setSelectedCategory('internal_personal'); setMinIqsFilter(''); setMaxIqsFilter(''); setSearchQuery(''); setPage(1); }}
+                          className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${selectedCategory === 'internal_personal' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                        >
+                          Internal / Colleague ({summary?.categoryCounts?.internalPersonal ?? 0})
+                        </button>
+                        <button
+                          onClick={() => { setSelectedCategory('delivery_logistics'); setMinIqsFilter(''); setMaxIqsFilter(''); setSearchQuery(''); setPage(1); }}
+                          className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${selectedCategory === 'delivery_logistics' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                        >
+                          Courier &amp; Delivery ({summary?.categoryCounts?.delivery ?? 0})
+                        </button>
+                        <button
+                          onClick={() => { setSelectedCategory('telemarketing'); setMinIqsFilter(''); setMaxIqsFilter(''); setSearchQuery(''); setPage(1); }}
+                          className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${selectedCategory === 'telemarketing' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                        >
+                          Telemarketing &amp; Spam ({summary?.categoryCounts?.telemarketing ?? 0})
+                        </button>
+                        <button
+                          onClick={() => { setSelectedCategory('wrong_number'); setMinIqsFilter(''); setMaxIqsFilter(''); setSearchQuery(''); setPage(1); }}
+                          className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${selectedCategory === 'wrong_number' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                        >
+                          Wrong Number ({summary?.categoryCounts?.wrongNumber ?? 0})
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* ── 6. CALLS AUDIT LIST ────────────────────────────────────────────── */}
@@ -2202,127 +2820,148 @@ export default function PcgCallsClient() {
                       <div className="p-4 border-b border-[#E4E4E7] flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <h3 className="text-sm font-bold text-[#111111]">
-                            {activePersona === 'agent'
-                              ? 'My Evaluated Calls'
-                              : statusFilter === 'needs_attention'
-                                ? 'Attention Queue (<85% IQS Calls)'
-                                : 'Evaluated Call Audits'}
+                            {['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory)
+                              ? 'Excluded Non-Client Calls (Zero IQS Penalty)'
+                              : activePersona === 'agent'
+                                ? 'My Evaluated Calls'
+                                : statusFilter === 'needs_attention'
+                                  ? 'Attention Queue (<85% IQS Calls)'
+                                  : 'Evaluated Call Audits'}
                           </h3>
-                          <p className="text-xs text-[#71717A] mt-0.5">
-                            Showing {displayedEvaluatedCalls.length} calls • Auto-categorised with separate quality parameters
-                          </p>
                         </div>
 
                         <div className="flex items-center gap-2.5 flex-wrap">
-                          {activePersona !== 'agent' && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-[#71717A] font-medium">{activePersona === 'tl' ? 'Team Member:' : 'Agent:'}</span>
-                              <select
-                                id="table-agent-filter"
-                                value={adminRmFilter}
-                                onChange={(e) => {
-                                  setAdminRmFilter(e.target.value);
+                          {/* Team Member filter strictly for Team Lead view (hidden for Admin) */}
+                          {activePersona === 'tl' && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                id="tl-my-calls-toggle"
+                                onClick={() => {
+                                  setShowMyCallsOnly((prev) => !prev);
                                   setPage(1);
                                 }}
-                                className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs focus:border-[#111111] cursor-pointer"
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer border ${
+                                  showMyCallsOnly
+                                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs font-bold'
+                                    : 'bg-white text-zinc-700 border-[#E4E4E7] hover:bg-zinc-50 hover:text-zinc-900 shadow-2xs'
+                                }`}
                               >
-                                <option value="all">
-                                  {activePersona === 'tl'
-                                    ? `All Team Members (${availableRmsForTable.length})`
-                                    : `All Agents (${availableRmsForTable.length})`}
-                                </option>
-                                {availableRmsForTable.map((r: { name: string; count: number }) => (
-                                  <option key={r.name} value={r.name}>
-                                    {r.name}
-                                  </option>
-                                ))}
-                              </select>
+                                My calls
+                              </button>
+
+                              {!showMyCallsOnly && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-[#71717A] font-medium">Team Member:</span>
+                                  <select
+                                    id="table-agent-filter"
+                                    value={selectedRmName}
+                                    onChange={(e) => {
+                                      setSelectedRmName(e.target.value);
+                                      setPage(1);
+                                    }}
+                                    className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs focus:border-[#111111] cursor-pointer"
+                                  >
+                                    <option value="all">All Team Members</option>
+                                    {availableRmsForTable.map((r: { name: string; count: number }) => (
+                                      <option key={r.name} value={r.name}>
+                                        {r.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
                             </div>
                           )}
 
-                          {/* Min IQS Input */}
-                          <input
-                            id="table-min-iqs-input"
-                            type="number"
-                            min={0}
-                            max={100}
-                            placeholder="Min IQS"
-                            value={minIqsFilter}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '') {
-                                setMinIqsFilter('');
-                                setPage(1);
-                              } else {
-                                const n = parseFloat(val);
-                                if (!isNaN(n)) {
-                                  if (n < 0) setMinIqsFilter('0');
-                                  else if (n > 100) setMinIqsFilter('100');
-                                  else setMinIqsFilter(val);
-                                  setPage(1);
-                                }
-                              }
-                            }}
-                            className={`w-24 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${minIqsFilter !== ''
-                              ? 'border-[#111111] ring-1 ring-[#111111]'
-                              : 'border-[#E4E4E7] focus:border-[#111111]'
-                              }`}
-                          />
+                          {/* Min IQS, Max IQS, and Search Filters (Evaluated Calls only - hidden on Excluded Calls) */}
+                          {!['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) && (
+                            <>
+                              {/* Min IQS Input */}
+                              <input
+                                id="table-min-iqs-input"
+                                type="number"
+                                min={0}
+                                max={100}
+                                placeholder="Min IQS"
+                                value={minIqsFilter}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === '') {
+                                    setMinIqsFilter('');
+                                    setPage(1);
+                                  } else {
+                                    const n = parseFloat(val);
+                                    if (!isNaN(n)) {
+                                      if (n < 0) setMinIqsFilter('0');
+                                      else if (n > 100) setMinIqsFilter('100');
+                                      else setMinIqsFilter(val);
+                                      setPage(1);
+                                    }
+                                  }
+                                }}
+                                className={`w-24 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${minIqsFilter !== ''
+                                  ? 'border-[#111111] ring-1 ring-[#111111]'
+                                  : 'border-[#E4E4E7] focus:border-[#111111]'
+                                  }`}
+                              />
 
-                          {/* Max IQS Input */}
-                          <input
-                            id="table-max-iqs-input"
-                            type="number"
-                            min={0}
-                            max={100}
-                            placeholder="Max IQS"
-                            value={maxIqsFilter}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '') {
-                                setMaxIqsFilter('');
-                                setPage(1);
-                              } else {
-                                const n = parseFloat(val);
-                                if (!isNaN(n)) {
-                                  if (n < 0) setMaxIqsFilter('0');
-                                  else if (n > 100) setMaxIqsFilter('100');
-                                  else setMaxIqsFilter(val);
-                                  setPage(1);
-                                }
-                              }
-                            }}
-                            className={`w-24 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${maxIqsFilter !== ''
-                              ? 'border-[#111111] ring-1 ring-[#111111]'
-                              : 'border-[#E4E4E7] focus:border-[#111111]'
-                              }`}
-                          />
+                              {/* Max IQS Input */}
+                              <input
+                                id="table-max-iqs-input"
+                                type="number"
+                                min={0}
+                                max={100}
+                                placeholder="Max IQS"
+                                value={maxIqsFilter}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === '') {
+                                    setMaxIqsFilter('');
+                                    setPage(1);
+                                  } else {
+                                    const n = parseFloat(val);
+                                    if (!isNaN(n)) {
+                                      if (n < 0) setMaxIqsFilter('0');
+                                      else if (n > 100) setMaxIqsFilter('100');
+                                      else setMaxIqsFilter(val);
+                                      setPage(1);
+                                    }
+                                  }
+                                }}
+                                className={`w-24 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${maxIqsFilter !== ''
+                                  ? 'border-[#111111] ring-1 ring-[#111111]'
+                                  : 'border-[#E4E4E7] focus:border-[#111111]'
+                                  }`}
+                              />
 
-                          {(minIqsFilter !== '' || maxIqsFilter !== '') && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMinIqsFilter('');
-                                setMaxIqsFilter('');
-                                setPage(1);
-                              }}
-                              title="Reset IQS filters"
-                              className="text-[11px] font-semibold text-zinc-600 hover:text-black underline px-1 py-1 cursor-pointer"
-                            >
-                              Reset IQS
-                            </button>
+                              {(minIqsFilter !== '' || maxIqsFilter !== '') && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMinIqsFilter('');
+                                    setMaxIqsFilter('');
+                                    setPage(1);
+                                  }}
+                                  title="Reset IQS filters"
+                                  className="text-[11px] font-semibold text-zinc-600 hover:text-black underline px-1 py-1 cursor-pointer"
+                                >
+                                  Reset IQS
+                                </button>
+                              )}
+
+                              <input
+                                type="text"
+                                placeholder={activePersona === 'agent' ? "Search Client Name..." : activeCohortToggle === 'tl' ? "Search Client or TL Name..." : "Search Client or RM Name..."}
+                                value={searchQuery}
+                                onChange={(e) => {
+                                  setSearchQuery(e.target.value);
+                                  setPage(1);
+                                }}
+                                className="text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 w-52 outline-none focus:border-[#111111] shadow-2xs bg-white"
+                              />
+                            </>
                           )}
-
-                          <input
-                            type="text"
-                            placeholder={activePersona === 'agent' ? "Search Client Name..." : "Search Client or RM Name..."}
-                            value={searchQuery}
-                            onChange={(e) => {
-                              setSearchQuery(e.target.value);
-                              setPage(1);
-                            }}
-                            className="text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 w-52 outline-none focus:border-[#111111] shadow-2xs bg-white"
-                          />
                         </div>
                       </div>
 
@@ -2335,11 +2974,11 @@ export default function PcgCallsClient() {
                           <table className="w-full text-left border-collapse text-xs">
                             <thead>
                               <tr className="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
-                                {activePersona !== 'agent' && <th className="py-3 px-4">RM Name</th>}
-                                <th className="py-3 px-4">Client Name</th>
+                                {activePersona !== 'agent' && <th className="py-3 px-4">{activeCohortToggle === 'tl' ? 'Team Lead' : activeCohortToggle === 'rm' ? 'RM Name' : activeCohortToggle === 'team' ? 'Team / RM' : 'Caller / RM'}</th>}
+                                <th className="py-3 px-4">{['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) ? 'Caller / Contact' : 'Client Name'}</th>
                                 <th className="py-3 px-4">Call Category</th>
-                                <th className="py-3 px-4">IQS Score</th>
-                                <th className="py-3 px-4">Compliance Mistake</th>
+                                <th className="py-3 px-4">{['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) ? 'Evaluation Status' : 'IQS Score'}</th>
+                                <th className="py-3 px-4">{['excluded', 'hiring', 'telemarketing', 'delivery_logistics', 'wrong_number', 'internal_personal'].includes(selectedCategory) ? 'Exclusion Reason / Quote' : 'Compliance Mistake'}</th>
                                 <th className="py-3 px-4 text-center">Action</th>
                               </tr>
                             </thead>
@@ -2357,7 +2996,14 @@ export default function PcgCallsClient() {
                                     >
                                       {activePersona !== 'agent' && (
                                         <td className="py-3 px-4 font-semibold text-zinc-800">
-                                          {call.rmName}
+                                          <div className="flex items-center gap-1.5">
+                                            <span>{call.rmName}</span>
+                                            {['tanisha mittal', 'swetha', 'sravanthi', 'dheeraj bhojwani', 'saiyam rastogi'].some(t => t.toLowerCase() === call.rmName?.toLowerCase()) && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                                                TL
+                                              </span>
+                                            )}
+                                          </div>
                                         </td>
                                       )}
 
@@ -2367,9 +3013,22 @@ export default function PcgCallsClient() {
 
                                       <td className="py-3 px-4">
                                         <div className="flex flex-col gap-1 items-start">
-                                          <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
+                                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold ${call.isEvaluable === false
+                                            ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                            : 'bg-zinc-100 text-zinc-800 border border-zinc-200'
+                                            }`}>
+                                            {call.isEvaluable === false && <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
                                             {call.category}
                                           </span>
+                                          {call.sopTriggers && call.sopTriggers.length > 0 && (
+                                            <span
+                                              title={`SOP Flag: ${call.sopTriggers[0].category} — "${call.sopTriggers[0].quote}"`}
+                                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200"
+                                            >
+                                              <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse"></span>
+                                              <span>{call.sopTriggers[0].category}</span>
+                                            </span>
+                                          )}
                                           {call.secondaryCategories && call.secondaryCategories.length > 0 && (
                                             <span
                                               title={call.aiCategoryReasoning || `Also discussed: ${call.secondaryCategories.join(', ')}`}
@@ -2383,11 +3042,21 @@ export default function PcgCallsClient() {
                                       </td>
 
                                       <td className="py-3 px-4">
-                                        {getScoreBadge(call.iqsScore)}
+                                        {call.isEvaluable === false ? (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200" title="Excluded from IQS quality scorecard">
+                                            Excluded
+                                          </span>
+                                        ) : (
+                                          getScoreBadge(call.iqsScore)
+                                        )}
                                       </td>
 
                                       <td className="py-3 px-4 font-semibold">
-                                        {call.gates.status === 'PASS' ? (
+                                        {call.isEvaluable === false ? (
+                                          <div className="text-xs font-normal text-zinc-600 max-w-xs truncate" title={call.exclusionReason || 'Non-client interaction'}>
+                                            {call.exclusionReason || 'Non-client interaction'}
+                                          </div>
+                                        ) : call.gates.status === 'PASS' ? (
                                           <span className="text-zinc-600 font-medium" title="No compliance mistake detected">No</span>
                                         ) : (
                                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold text-red-700 bg-red-50 border border-red-200" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
@@ -2402,7 +3071,7 @@ export default function PcgCallsClient() {
                                           }}
                                           className="px-3 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1.5"
                                         >
-                                          <span>{isExpanded ? 'Hide' : activePersona === 'tl' ? 'Review' : 'View Details'}</span>
+                                          <span>{isExpanded ? 'Hide' : (activePersona === 'tl' && !showMyCallsOnly) ? 'Review' : 'View Details'}</span>
                                           <span className="text-[10px] opacity-70">
                                             {isExpanded ? '▲' : '▼'}
                                           </span>
@@ -2411,40 +3080,116 @@ export default function PcgCallsClient() {
                                     </tr>
 
                                     {isExpanded && (
-                                      <CallEvalPanel
-                                        callId={call.callId || call.id.toString()}
-                                        hideShowChat={true}
-                                        isPcg={true}
-                                        mobileNumber={call.phoneNumber}
-                                        agentName={call.rmName}
-                                        iqsScore={call.iqsScore}
-                                        calledAt={call.startTime || '2026-10-18T14:04:00.000Z'}
-                                        disposition={call.category}
-                                        gates={call.gates}
-                                        iqsScores={formatCallIqsScores(call)}
-                                        initialSegments={formatCallSegments(call)}
-                                        initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                                        mode={activePersona === 'tl' ? 'submit' : 'view'}
-                                        allowRaiseDispute={activePersona === 'agent'}
-                                        allowReevaluate={activePersona === 'tl'}
-                                        colSpan={activePersona !== 'agent' ? 6 : 5}
-                                        onDone={() => setExpandedCallId(null)}
-                                        onClose={() => setExpandedCallId(null)}
-                                        onDisputeRaised={() => fetchData()}
-                                        onOverrideSubmit={async (overrideData) => {
-                                          handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
-                                          setExpandedCallId(null);
-                                        }}
-                                        onReevaluate={(cid, revisedIqs) => {
-                                          setCalls((prev) =>
-                                            prev.map((c) =>
-                                              c.id === call.id || c.callId === call.id
-                                                ? { ...c, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 }
-                                                : c
-                                            )
-                                          );
-                                        }}
-                                      />
+                                      call.isEvaluable === false ? (
+                                        <tr className="bg-zinc-50/80 border-b border-zinc-200">
+                                          <td colSpan={activePersona !== 'agent' ? 6 : 5} className="p-4">
+                                            <div className="bg-white rounded-xl border border-zinc-200 p-4 shadow-2xs space-y-3 max-w-3xl mx-auto">
+                                              {/* Top info row: Category badge, RM, Call ID, Close */}
+                                              <div className="flex items-center justify-between border-b border-zinc-100 pb-2.5">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                                    Excluded Non-Client Call • {call.category}
+                                                  </span>
+                                                  <span className="text-xs text-zinc-500 font-mono">
+                                                    ID: {call.callId}
+                                                  </span>
+                                                </div>
+                                                <button
+                                                  onClick={() => setExpandedCallId(null)}
+                                                  className="text-xs text-zinc-500 hover:text-zinc-900 font-semibold px-2 py-1 rounded hover:bg-zinc-100 transition-colors cursor-pointer"
+                                                >
+                                                  ✕ Close
+                                                </button>
+                                              </div>
+
+                                              {/* Call Recording Audio Player */}
+                                              <div className="bg-zinc-50 rounded-lg p-3.5 border border-zinc-200">
+                                                <div className="flex items-center justify-between mb-2">
+                                                  <span className="text-[11px] font-bold text-zinc-700 uppercase tracking-wider flex items-center gap-1.5">
+                                                    <span>🔊</span> Call Recording
+                                                  </span>
+                                                  <span className="text-xs text-zinc-500 font-mono">
+                                                    Duration: {formatDuration(call.durationSeconds)}
+                                                  </span>
+                                                </div>
+                                                <audio
+                                                  src={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
+                                                  controls
+                                                  className="w-full h-10 outline-none"
+                                                  preload="metadata"
+                                                />
+                                              </div>
+
+                                              {/* Reason & Exclusion Details */}
+                                              <div className="flex flex-col sm:flex-row gap-3 items-start justify-between text-xs pt-1">
+                                                <div className="space-y-1 flex-1">
+                                                  <div className="font-semibold text-zinc-700">Reason for Exclusion:</div>
+                                                  <div className="text-zinc-600 bg-amber-50/50 p-2.5 rounded-lg border border-amber-100 text-[11px] leading-relaxed">
+                                                    {call.exclusionReason || 'Identified as non-investor conversation during opening triage and excluded from quality evaluation.'}
+                                                  </div>
+                                                </div>
+                                                <div className="bg-zinc-50 p-2.5 rounded-lg border border-zinc-100 text-[11px] space-y-1 shrink-0 min-w-[200px]">
+                                                  <div><span className="text-zinc-400">Agent:</span> <span className="font-semibold text-zinc-800">{call.rmName}</span></div>
+                                                  <div><span className="text-zinc-400">Number:</span> <span className="font-mono text-zinc-800">{call.phoneNumber || '—'}</span></div>
+                                                  <div><span className="text-zinc-400">IQS Impact:</span> <span className="font-semibold text-emerald-600">None (Excluded)</span></div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ) : (
+                                        <CallEvalPanel
+                                          callId={call.callId || call.id.toString()}
+                                          hideShowChat={true}
+                                          isPcg={true}
+                                          sopTriggers={call.sopTriggers}
+                                          mobileNumber={call.phoneNumber}
+                                          agentName={call.rmName}
+                                          iqsScore={call.iqsScore ?? 0}
+                                          calledAt={call.startTime || '2026-10-18T14:04:00.000Z'}
+                                          disposition={call.category}
+                                          gates={call.gates}
+                                          iqsScores={formatCallIqsScores(call)}
+                                          initialSegments={formatCallSegments(call)}
+                                          initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
+                                          mode={activePersona === 'tl' && !showMyCallsOnly ? 'submit' : 'view'}
+                                          allowRaiseDispute={activePersona === 'agent' || (activePersona === 'tl' && showMyCallsOnly)}
+                                          allowReevaluate={activePersona === 'tl' && !showMyCallsOnly}
+                                          dispute={
+                                            call.disputeStatus && call.disputeStatus !== 'none'
+                                              ? {
+                                                  flagId: call.callId || call.id,
+                                                  agentName: call.rmName,
+                                                  agentNote: call.disputeReason,
+                                                  reviewNote: call.tlOverrideNote,
+                                                  raisedBy: (teamLeads.some(t => isSamePcgAgent(t.tlName, call.rmName)) || isPcgTl(call.rmName)) ? 'TL' : 'agent',
+                                                  raisedByRole: (teamLeads.some(t => isSamePcgAgent(t.tlName, call.rmName)) || isPcgTl(call.rmName)) ? 'tl' : 'agent',
+                                                  raisedByName: call.rmName,
+                                                  raisedAt: call.startTime,
+                                                  challengedParams: getCallChallengedParams(call),
+                                                }
+                                              : undefined
+                                          }
+                                          colSpan={activePersona !== 'agent' ? 6 : 5}
+                                          onDone={() => setExpandedCallId(null)}
+                                          onClose={() => setExpandedCallId(null)}
+                                          onDisputeRaised={() => fetchData()}
+                                          onOverrideSubmit={async (overrideData) => {
+                                            handleOverrideFromPanel(call.callId || call.id.toString(), overrideData);
+                                            setExpandedCallId(null);
+                                          }}
+                                          onReevaluate={(cid, revisedIqs) => {
+                                            setCalls((prev) =>
+                                              prev.map((c) =>
+                                                c.id === call.id || c.callId === call.id
+                                                  ? { ...c, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 }
+                                                  : c
+                                              )
+                                            );
+                                          }}
+                                        />
+                                      )
                                     )}
                                   </React.Fragment>
                                 );
@@ -2496,6 +3241,7 @@ export default function PcgCallsClient() {
                 callId={activeCallAudit.callId || activeCallAudit.id.toString()}
                 hideShowChat={true}
                 isPcg={true}
+                sopTriggers={activeCallAudit.sopTriggers}
                 mobileNumber={activeCallAudit.phoneNumber}
                 agentName={activeCallAudit.rmName}
                 iqsScore={activeCallAudit.iqsScore}
@@ -2505,14 +3251,29 @@ export default function PcgCallsClient() {
                 iqsScores={formatCallIqsScores(activeCallAudit)}
                 initialSegments={formatCallSegments(activeCallAudit)}
                 initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(activeCallAudit.id)}`}
-                mode={activePersona === 'tl' ? 'submit' : 'view'}
-                allowRaiseDispute={activePersona === 'agent'}
-                allowReevaluate={activePersona === 'tl'}
+                mode={activePersona === 'tl' && !showMyCallsOnly ? 'submit' : 'view'}
+                allowRaiseDispute={activePersona === 'agent' || (activePersona === 'tl' && showMyCallsOnly)}
+                allowReevaluate={activePersona === 'tl' && !showMyCallsOnly}
+                dispute={
+                  activeCallAudit.disputeStatus && activeCallAudit.disputeStatus !== 'none'
+                    ? {
+                        flagId: activeCallAudit.callId || activeCallAudit.id,
+                        agentName: activeCallAudit.rmName,
+                        agentNote: activeCallAudit.disputeReason,
+                        reviewNote: activeCallAudit.tlOverrideNote,
+                        raisedBy: (teamLeads.some(t => isSamePcgAgent(t.tlName, activeCallAudit.rmName)) || isPcgTl(activeCallAudit.rmName)) ? 'TL' : 'agent',
+                        raisedByRole: (teamLeads.some(t => isSamePcgAgent(t.tlName, activeCallAudit.rmName)) || isPcgTl(activeCallAudit.rmName)) ? 'tl' : 'agent',
+                        raisedByName: activeCallAudit.rmName,
+                        raisedAt: activeCallAudit.startTime,
+                        challengedParams: getCallChallengedParams(activeCallAudit),
+                      }
+                    : undefined
+                }
                 onDone={handleCloseCallAudit}
                 onClose={handleCloseCallAudit}
                 onDisputeRaised={() => fetchData()}
                 onOverrideSubmit={async (overrideData) => {
-                  handleOverrideFromPanel(activeCallAudit.callId || activeCallAudit.id.toString(), overrideData);
+                  await handleOverrideFromPanel(activeCallAudit.callId || activeCallAudit.id.toString(), overrideData);
                 }}
                 onReevaluate={(cid, revisedIqs) => {
                   setCalls((prev) =>

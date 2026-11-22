@@ -227,13 +227,13 @@ export default function AgentAnalyticsDashboard({}: Props) {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={S({ display: 'flex', minHeight: '100vh', fontFamily: 'var(--qa-sans, -apple-system, BlinkMacSystemFont, "Inter", sans-serif)', fontSize: 14, background: 'var(--qa-bg)', color: 'var(--qa-text)' })}>
+    <div style={S({ display: 'flex', minHeight: 'var(--vh100)', fontFamily: 'var(--qa-sans, -apple-system, BlinkMacSystemFont, "Inter", sans-serif)', fontSize: 14, background: 'var(--qa-bg)', color: 'var(--qa-text)' })}>
 
       {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
       <aside style={S({
         width: 220, flexShrink: 0,
         background: 'var(--qa-card)', borderRight: '1px solid var(--qa-border)',
-        padding: '16px 0', minHeight: '100vh', position: 'sticky', top: 0,
+        padding: '16px 0', minHeight: 'var(--vh100)', position: 'sticky', top: 0,
       })}>
         <div style={S({ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', padding: '12px 16px 6px' })}>
           Agent

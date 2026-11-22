@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
 import { PeriodRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
@@ -8,7 +9,7 @@ import ScoreRing from '@/components/quality/ScoreRing';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
-import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
+import { useEmailParameters } from '@/components/quality/useEmailParameters';
 import EmailMessageView, {
   CustomerSummaryBlock,
   CustomerCoreQueryCard,
@@ -20,7 +21,9 @@ import EmailMessageView, {
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import UISelect from '@/components/quality/UISelect';
 import EmailSplit from '@/components/quality/EmailSplit';
+import EmailEvaluationPage from '@/components/quality/EmailEvaluationPage';
 import { useSort, sortRows, SortTh } from '@/components/quality/sort';
+import * as T from '@/components/quality/tableStyles';
 
 
 interface AgentBreakdown {
@@ -61,52 +64,25 @@ interface EvaluationItem {
   updated_at?: string;
   reviewed_at?: string;
   internal_notes?: InternalNote[];
+  raised_by_role?: string;
+  flag_raised_at?: string | null;
+  flag_author_name?: string;
 }
 
 // ─── Design Tokens & Styles ───────────────────────────────────────────────────
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
-const th: React.CSSProperties = {
-  height: 40,
-  background: 'var(--qa-gray-50)',
-  borderBottom: '1px solid var(--qa-border)',
-  fontSize: 12,
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  color: 'var(--qa-text-2)',
-  fontWeight: 500,
-  textAlign: 'left',
-  padding: '0 16px',
-  whiteSpace: 'nowrap',
-};
+const th: React.CSSProperties = T.th;
 
-const td: React.CSSProperties = {
-  height: 50,
-  padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub)',
-  fontSize: 14,
-  color: 'var(--qa-text)',
-  verticalAlign: 'middle',
-};
+const td: React.CSSProperties = T.td;
 
-const tdMono: React.CSSProperties = {
-  ...td,
-  fontFamily: MONO,
-  fontSize: 13,
-  color: 'var(--qa-text-2)',
-};
+const tdMono: React.CSSProperties = T.tdMono;
 
-const tdNum: React.CSSProperties = {
-  ...td,
-  textAlign: 'right',
-  fontFamily: MONO,
-  fontSize: 13,
-};
+const tdNum: React.CSSProperties = T.tdNum;
 
 
 // ─── Disputes (same flow as Quality Chats: raised -> TL resolves or forwards to QA -> history) ──
-const dateOf = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 
 const actionBtn: React.CSSProperties = {
   height: 28, padding: '0 10px', borderRadius: 6, border: '1px solid var(--qa-border)',
@@ -114,6 +90,8 @@ const actionBtn: React.CSSProperties = {
 };
 
 function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: 'tl_pending' | 'tl_history'; period: PeriodState; onPeriod: (v: PeriodState) => void; onChanged: () => void }) {
+  const emailParams = useEmailParameters();
+  const { data: session } = useSession();
   const [rows, setRows] = useState<EvaluationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -121,6 +99,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const [error, setError] = useState<string | null>(null);
   const [topics, setTopics] = useState<string[]>([]);
   const [topicPick, setTopicPick] = useState<Record<string, string>>({});
+  // 'tl': this TL resolves IR disputes (with an updated score), no Forward to QA. 'qa': the old flow.
+  const [ownerTl, setOwnerTl] = useState(false);
   const [ticketSearch, setTicketSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('');
@@ -133,7 +113,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       const params = new URLSearchParams({ disputeQueue: queue, from, to, limit: '500' });
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
-      if (data.ok) setRows(data.items || []);
+      if (data.ok) { setRows(data.items || []); setOwnerTl(data.disputesOwner === 'tl'); }
     } catch (err) {
       console.error('Failed to load email disputes:', err);
     } finally {
@@ -192,15 +172,22 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const shown = rows.filter(r =>
     (!ticketSearch.trim() || String(r.chat_id ?? r.ticket_id ?? '').toLowerCase().includes(ticketSearch.trim().toLowerCase())) &&
     (!agentFilter || r.agent_name === agentFilter) &&
-    (!outcomeFilter || r.dispute_status === outcomeFilter));
+    (!outcomeFilter ||
+      (outcomeFilter === 'Raised' ? (r.dispute_status === 'Raised' || !r.dispute_status) :
+       outcomeFilter === 'Resolved' ? (r.dispute_status === 'Resolved' || r.dispute_status === 'TL_Resolved') :
+       r.dispute_status === outcomeFilter))
+  );
   const [sort, toggleSort] = useSort();
-  const sortedSrc = sortRows(shown, sort, { date: r => r.sent_at, agent: r => r.agent_name, iqs: r => r.effective_score ?? r.quality_score });
+  const sortedSrc = sortRows(shown, sort, { date: r => pending ? (r.flag_raised_at ?? r.updated_at) : (r.reviewed_at ?? r.updated_at), agent: r => r.agent_name, iqs: r => r.effective_score ?? r.quality_score });
   const paging = usePaging(sortedSrc, `${queue}|${ticketSearch}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
-  const colCount = pending ? 6 : 7;
+  const colCount = 7;
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
 
+  // TLs own disputes: resolve them right here with the full parameter-by-parameter panel (the one QA uses), not on another page.
+  if (pending && ownerTl) return <EmailEvaluationPage embedded onResolved={onChanged} />;
+
   return (
-    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
+    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, position: 'relative' }}>
       {error && (
         <div style={{ padding: '10px 16px', fontSize: 13, color: '#b91c1c', background: '#fef2f2', borderBottom: '1px solid var(--qa-border)' }}>{error}</div>
       )}
@@ -228,7 +215,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-3)' }}>Challenged:</span>
                 {modalItem.challenged_params.map(cp => {
-                  const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                  const def = emailParams.find(d => d.key === cp.param);
                   return (
                     <span key={cp.param} style={{
                       fontSize: 11, fontWeight: 600, background: 'var(--qa-fill-light, var(--qa-fill-light))', border: '1px solid var(--qa-border)',
@@ -302,12 +289,17 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
             {agentsInRows.map(a => <option key={a} value={a}>{a}</option>)}
           </UISelect>
         )}
-        {!pending && (
+        {pending ? (
+          <UISelect value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
+            <option value="">All Dispute Statuses</option>
+            <option value="Raised">Pending TL review</option>
+          </UISelect>
+        ) : (
           <UISelect value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
             <option value="">All Outcomes</option>
+            <option value="Resolved">Reviewed</option>
+            <option value="TL_Resolved">Reviewed by TL</option>
             <option value="Under_Review">Forwarded to QA</option>
-            <option value="TL_Resolved">Resolved by TL</option>
-            <option value="Resolved">Resolved by QA</option>
             <option value="Rejected">Rejected by QA</option>
           </UISelect>
         )}
@@ -327,22 +319,22 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 130 }} />
-          <col style={{ width: 135 }} />
+          <col style={{ width: 180 }} />
           <col />
-          <col style={{ width: 90 }} />
           <col style={{ width: 80 }} />
-          <col style={{ width: 120 }} />
-          {!pending && <col style={{ width: 170 }} />}
+          <col style={{ width: 130 }} />
+          <col style={{ width: 190 }} />
+          <col style={{ width: 100 }} />
         </colgroup>
         <thead>
           <tr>
             <th style={th}>Ticket ID</th>
-            <SortTh k="date" sort={sort} onSort={toggleSort} style={th}>Date & Time</SortTh>
             <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+            <th style={th}>Disposition</th>
             <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
-            <th style={th}>CSAT</th>
-            <th style={th}>{pending ? 'Raised' : 'Updated'}</th>
-            {!pending && <th style={th}>Outcome</th>}
+            <SortTh k="date" sort={sort} onSort={toggleSort} style={th}>{pending ? 'Raised' : 'Updated'}</SortTh>
+            <th style={th}>{pending ? 'Status' : 'Outcome'}</th>
+            <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -364,26 +356,14 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                   <td style={tdMono}>
                     <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
                   </td>
-                  {(() => {
-                    const dt = formatEmailDateTime(item.sent_at);
-                    return (
-                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                        <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
-                        {dt.time && (
-                          <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
-                            {dt.time}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })()}
-                  <td style={{ ...td, fontWeight: 500 }}>{item.agent_name || 'Unassigned'}</td>
+                  <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || 'Unassigned'}</td>
+                  <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{intentLabel(item.intent_l1)}</td>
                   <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
                     {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                   </td>
-                  <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
-                  <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>{dateOf(pending ? item.updated_at : (item.reviewed_at ?? item.updated_at))}</td>
-                  {!pending && <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status)}</td>}
+                  <td style={{ ...td, whiteSpace: 'nowrap', color: 'var(--qa-text-2)' }}><T.DateTime value={pending ? (item.flag_raised_at ?? item.updated_at) : (item.reviewed_at ?? item.updated_at)} /></td>
+                  <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status)}</td>
+                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>{isOpen ? 'Hide ▲' : 'Review ▼'}</span></td>
                 </tr>
                 {isOpen && (
                   <tr className="eval-panel-row">
@@ -394,8 +374,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                             flagId={item.flag_id || item.message_id}
                             agentNote={item.dispute_notes}
                             agentName={item.agent_name}
-                            raisedByRole="agent"
-                            raisedByName={item.agent_name}
+                            raisedByRole={item.raised_by_role || (item.dispute_status === 'Under_Review' ? 'tl' : 'agent')}
+                            raisedByName={item.flag_author_name || (item.raised_by_role === 'tl' ? (session?.user?.name || 'Team Lead') : item.agent_name)}
                             reviewedBy={item.reviewed_by}
                             qaName={(item as any).qa_name || item.reviewed_by}
                             reviewerRole={item.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
@@ -409,7 +389,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                           <div style={{ flex: '2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)' }}>Disputed Params</span>
                             {item.challenged_params.map(cp => {
-                              const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                              const def = emailParams.find(d => d.key === cp.param);
                               return (
                                 <span key={cp.param} title={cp.note} style={{
                                   fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
@@ -423,16 +403,18 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                         {pending && (
                           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
-                            {needsTopic(item) && (
+                            {!ownerTl && needsTopic(item) && (
                               <UISelect aria-label="Disposition" value={topicPick[item.message_id] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [item.message_id]: e.target.value }))} style={{ width: '100%' }}>
                                 <option value="">{intentLabel(item.intent_l1) !== '—' ? `${intentLabel(item.intent_l1)} (not assigned), choose` : 'Choose disposition'}</option>
                                 {topics.map(t => <option key={t} value={t}>{t}</option>)}
                               </UISelect>
                             )}
                             <button style={{ ...actionBtn, width: '100%', height: 32 }} disabled={actioning === item.message_id} onClick={() => openResolveModal(item)}>Resolve</button>
+                            {(!ownerTl || item.raised_by_role === 'tl') && (
                             <button style={{ ...actionBtn, width: '100%', height: 32, background: 'var(--qa-gray-700)', color: '#fff', border: 'none' }} disabled={actioning === item.message_id || (needsTopic(item) && !topicPick[item.message_id])} onClick={() => openForwardModal(item)}>
                               {actioning === item.message_id ? '…' : 'Forward to QA'}
                             </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -516,6 +498,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
 }
 
 export default function TLEmailQualityPage() {
+  const emailParams = useEmailParameters();
+  const { data: session } = useSession();
   const [agents, setAgents] = useState<AgentBreakdown[]>([]);
   const [availableAgents, setAvailableAgents] = useState<string[]>([]);
   const [replies, setReplies] = useState<EvaluationItem[]>([]);
@@ -526,6 +510,93 @@ export default function TLEmailQualityPage() {
   const [counts, setCounts] = useState<{ evaluated: number; raised: number; reviewed: number } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
+
+  // Raise Dispute state for TL
+  const [disputingId, setDisputingId] = useState<string | null>(null);
+  const [selectedParams, setSelectedParams] = useState<Set<string>>(new Set());
+  const [disputeNotes, setDisputeNotes] = useState<string>('');
+  const [submittingDispute, setSubmittingDispute] = useState<boolean>(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
+  const [disputeSuccessMsg, setDisputeSuccessMsg] = useState<string | null>(null);
+
+  const toggleParamPick = (paramKey: string) => {
+    setSelectedParams(prev => {
+      const next = new Set(prev);
+      if (next.has(paramKey)) next.delete(paramKey);
+      else next.add(paramKey);
+      return next;
+    });
+  };
+
+  const startDispute = (item: EvaluationItem) => {
+    setDisputingId(item.message_id);
+    setSelectedParams(new Set());
+    setDisputeNotes('');
+    setDisputeError(null);
+    setDisputeSuccessMsg(null);
+    if (expandedId !== item.message_id) setExpandedId(item.message_id);
+  };
+
+  const cancelDisputeComposition = () => {
+    setDisputingId(null);
+    setSelectedParams(new Set());
+    setDisputeNotes('');
+    setDisputeError(null);
+  };
+
+  const handleRaiseDispute = async (messageId: string) => {
+    if (!disputeNotes.trim()) {
+      setDisputeError('Please enter a reason for the dispute.');
+      return;
+    }
+    if (selectedParams.size === 0) {
+      setDisputeError('Please select at least one parameter to challenge.');
+      return;
+    }
+    setSubmittingDispute(true);
+    setDisputeError(null);
+    try {
+      const challenged = Array.from(selectedParams).map(p => ({
+        param: p,
+        note: disputeNotes.trim(),
+      }));
+      const res = await fetch('/api/email-evaluations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'raise_dispute',
+          messageId,
+          notes: disputeNotes.trim(),
+          challengedParams: challenged,
+          raisedByRole: 'tl',
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setDisputeSuccessMsg('Dispute raised and forwarded to QA for review.');
+        setDisputingId(null);
+        setSelectedParams(new Set());
+        setDisputeNotes('');
+        setReplies(prev => prev.map(r => r.message_id === messageId ? {
+          ...r,
+          dispute_status: 'Under_Review',
+          dispute_notes: disputeNotes.trim(),
+          flag_id: data.flagId,
+          challenged_params: challenged,
+          raised_by_role: 'tl',
+          flag_author_name: session?.user?.name || 'Team Lead',
+        } : r));
+        fetchData();
+        setTimeout(() => setDisputeSuccessMsg(null), 5000);
+      } else {
+        setDisputeError(data.error || 'Failed to raise dispute.');
+      }
+    } catch (e: any) {
+      setDisputeError(e?.message || 'Failed to raise dispute.');
+    } finally {
+      setSubmittingDispute(false);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -567,8 +638,27 @@ export default function TLEmailQualityPage() {
     : 0;
 
   const [sortR, toggleSortR] = useSort();
-  const sortedReplies = sortRows(replies, sortR, { date: r => r.sent_at, agent: r => r.agent_name, intent: r => r.intent_l1, iqs: r => r.effective_score ?? r.quality_score });
-  const paging = usePaging(sortedReplies, `${selectedAgent}|${period.period}|${period.customFrom}|${period.customTo}`);
+  const [disputeFilter, setDisputeFilter] = useState('');
+  const filteredReplies = replies.filter(r => {
+    if (disputeFilter) {
+      if (disputeFilter === 'forwarded_to_tl') {
+        if (r.dispute_status !== 'Raised') return false;
+      } else if (disputeFilter === 'reviewed') {
+        if (r.dispute_status !== 'Resolved' && r.dispute_status !== 'TL_Resolved') return false;
+      } else if (disputeFilter === 'none') {
+        if (r.dispute_status && r.dispute_status !== 'None') return false;
+      }
+    }
+    return true;
+  });
+  const sortedReplies = sortRows(filteredReplies, sortR, {
+    date: r => r.sent_at,
+    agent: r => r.agent_name,
+    intent: r => r.intent_l1,
+    iqs: r => r.effective_score ?? r.quality_score,
+    dispute: r => r.dispute_status ?? '',
+  });
+  const paging = usePaging(sortedReplies, `${selectedAgent}|${disputeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
 
   return (
     <div>
@@ -731,7 +821,7 @@ export default function TLEmailQualityPage() {
                     key={agent.agent_name}
                     style={{ background: isSelected ? 'var(--qa-gray-50)' : undefined }}
                   >
-                    <td style={{ ...td, fontWeight: 600 }}>
+                    <td style={{ ...td, fontWeight: 500 }}>
                       {agent.agent_name}
                     </td>
                     <td style={tdNum}>
@@ -770,7 +860,6 @@ export default function TLEmailQualityPage() {
         background: 'var(--qa-card)',
         border: '1px solid var(--qa-border)',
         borderRadius: 8,
-        overflow: 'hidden',
       }}>
         {/* Filter bar, same slots as the chat tables: filters left, count + rows per page right */}
         <div className="qfilters">
@@ -785,7 +874,17 @@ export default function TLEmailQualityPage() {
             ))}
           </UISelect>
           <PeriodRangeChip value={period} onChange={setPeriod} />
-          <button type="button" className="qf-chip" disabled={!(selectedAgent || period.period !== 'all')} onClick={() => { setSelectedAgent(''); setPeriod(DEFAULT_PERIOD); }}>
+          <UISelect
+            value={disputeFilter}
+            onChange={e => setDisputeFilter(e.target.value)}
+            style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: disputeFilter ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="">All Dispute Statuses</option>
+            <option value="forwarded_to_tl">Pending TL review</option>
+            <option value="reviewed">Reviewed Disputes</option>
+            <option value="none">No Dispute</option>
+          </UISelect>
+          <button type="button" className="qf-chip" disabled={!(selectedAgent || disputeFilter || period.period !== 'all')} onClick={() => { setSelectedAgent(''); setDisputeFilter(''); setPeriod(DEFAULT_PERIOD); }}>
               Reset Filters
             </button>
           <div style={{ flex: 1 }} />
@@ -797,21 +896,21 @@ export default function TLEmailQualityPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '12%' }} />
+              <col style={{ width: '17%' }} />
+              <col style={{ width: '28.4%' }} />
+              <col style={{ width: '8%' }} />
               <col style={{ width: '13%' }} />
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '16.4%' }} />
-              <col style={{ width: '14.2%' }} />
-              <col style={{ width: '14.2%' }} />
-              <col style={{ width: '14.2%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '8.6%' }} />
             </colgroup>
             <thead>
               <tr>
                 <th style={th}>Ticket ID</th>
-                <SortTh k="date" sort={sortR} onSort={toggleSortR} style={th}>Date & Time</SortTh>
                 <SortTh k="agent" sort={sortR} onSort={toggleSortR} style={th}>Agent</SortTh>
-                <SortTh k="intent" sort={sortR} onSort={toggleSortR} style={th}>Intent</SortTh>
+                <SortTh k="intent" sort={sortR} onSort={toggleSortR} style={th}>Disposition</SortTh>
                 <SortTh k="iqs" sort={sortR} onSort={toggleSortR} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
-                <th style={th}>CSAT</th>
+                <SortTh k="date" sort={sortR} onSort={toggleSortR} style={th}>Date</SortTh>
+                <SortTh k="dispute" sort={sortR} onSort={toggleSortR} style={th}>Status</SortTh>
                 <th style={{ ...th, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
@@ -845,6 +944,25 @@ export default function TLEmailQualityPage() {
                       >
                         <td style={tdMono}>
                           <TicketLinkButton id={reply.chat_id ?? reply.ticket_id} label={reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`} />
+                          {reply.dispute_status === 'Raised' && (
+                            <span style={{ display: 'block', fontSize: 10, color: '#b45309', fontWeight: 600, marginTop: 2 }}>
+                              Pending TL Review
+                            </span>
+                          )}
+                          {(reply.dispute_status === 'Resolved' || reply.dispute_status === 'TL_Resolved') && (
+                            <span style={{ display: 'block', fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 2 }}>
+                              Reviewed
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ ...td, fontWeight: 500 }}>
+                          {reply.agent_name || 'Unassigned'}
+                        </td>
+                        <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {intentLabel(reply.intent_l1)}
+                        </td>
+                        <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
+                          {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                         </td>
                         {(() => {
                           const dt = formatEmailDateTime(reply.sent_at);
@@ -859,18 +977,15 @@ export default function TLEmailQualityPage() {
                             </td>
                           );
                         })()}
-                        <td style={{ ...td, fontWeight: 500 }}>
-                          {reply.agent_name || 'Unassigned'}
+                        <td style={{ ...td, fontSize: 13 }}>
+                          {reply.dispute_status && reply.dispute_status !== 'None' ? (
+                            disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)
+                          ) : (
+                            <span style={{ color: 'var(--qa-text-3)' }}>—</span>
+                          )}
                         </td>
-                        <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {intentLabel(reply.intent_l1)}
-                        </td>
-                        <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
-                          {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
-                        </td>
-                        <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
                         <td style={{ ...td, textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
                             {isExpanded ? 'Hide ▲' : 'View ▼'}
                           </span>
                         </td>
@@ -985,12 +1100,275 @@ export default function TLEmailQualityPage() {
                                     />
                                   </div>
                                 </div>
+
+                                {/* ── Dispute Section (TL) ── */}
+                                <div style={{
+                                  border: '1px solid var(--qa-border)',
+                                  borderRadius: 8,
+                                  background: 'var(--qa-card)',
+                                  overflow: 'hidden',
+                                }}>
+                                  {disputeSuccessMsg && disputingId === null && expandedId === reply.message_id && (
+                                    <div
+                                      style={{
+                                        padding: '10px 14px',
+                                        fontSize: 12,
+                                        color: '#166534',
+                                        background: '#f0fdf4',
+                                        borderBottom: '1px solid #bbf7d0',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                      }}
+                                    >
+                                      ✓ {disputeSuccessMsg}
+                                    </div>
+                                  )}
+
+                                  {disputeError && disputingId === reply.message_id && (
+                                    <div
+                                      style={{
+                                        padding: '10px 14px',
+                                        fontSize: 12,
+                                        color: '#b91c1c',
+                                        background: '#fef2f2',
+                                        borderBottom: '1px solid #fecaca',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                      }}
+                                    >
+                                      ✕ {disputeError}
+                                    </div>
+                                  )}
+
+                                  {reply.dispute_status && reply.dispute_status !== 'None' ? (
+                                    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                      <div
+                                        style={{
+                                          background: reply.dispute_status === 'Resolved' ? '#f0fdf4' : (reply.dispute_status === 'Rejected' ? '#fef2f2' : 'var(--qa-fill-light)'),
+                                          border: `1px solid ${reply.dispute_status === 'Resolved' ? '#bbf7d0' : (reply.dispute_status === 'Rejected' ? '#fecaca' : 'var(--qa-border)')}`,
+                                          borderRadius: 8,
+                                          padding: '12px 14px',
+                                          fontSize: 12,
+                                          color: reply.dispute_status === 'Resolved' ? '#166534' : (reply.dispute_status === 'Rejected' ? '#991b1b' : 'var(--qa-text)'),
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                          <div style={{ fontWeight: 600, fontSize: 13 }}>
+                                            Dispute Status: {disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)}
+                                          </div>
+                                        </div>
+
+                                        {reply.challenged_params && reply.challenged_params.length > 0 && (
+                                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 6px' }}>
+                                            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--qa-text-2)' }}>
+                                              Challenged:
+                                            </span>
+                                            {reply.challenged_params.map(cp => {
+                                              const paramDef = emailParams.find(d => d.key === cp.param);
+                                              return (
+                                                <span
+                                                  key={cp.param}
+                                                  title={cp.note}
+                                                  style={{
+                                                    fontSize: 11, fontWeight: 600,
+                                                    background: 'var(--qa-card)',
+                                                    border: '1px solid var(--qa-border)',
+                                                    borderRadius: 4,
+                                                    padding: '2px 8px',
+                                                    color: 'var(--qa-text)',
+                                                  }}
+                                                >
+                                                  {paramDef?.name || cp.param}
+                                                </span>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+
+                                        {reply.dispute_notes && (
+                                          <div style={{ marginTop: 4, lineHeight: 1.4, color: 'var(--qa-text-2)' }}>
+                                            &ldquo;{reply.dispute_notes}&rdquo;
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Integrated Dispute Discussion Thread */}
+                                      <DisputeThread
+                                        flagId={reply.flag_id || reply.message_id}
+                                        agentNote={reply.dispute_notes}
+                                        agentName={reply.agent_name}
+                                        raisedByRole={reply.raised_by_role || (reply.dispute_status === 'Under_Review' ? 'tl' : 'agent')}
+                                        raisedByName={reply.flag_author_name || (reply.raised_by_role === 'tl' ? (session?.user?.name || 'Team Lead') : reply.agent_name)}
+                                        reviewedBy={reply.reviewed_by}
+                                        qaName={(reply as any).qa_name || reply.reviewed_by}
+                                        reviewerRole={reply.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
+                                        flaggedAt={reply.sent_at}
+                                        reviewedAt={reply.reviewed_at}
+                                        compact
+                                      />
+                                    </div>
+                                  ) : disputingId === reply.message_id ? (
+                                    <div style={{ padding: 16 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                          Raise Dispute to QA
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={cancelDisputeComposition}
+                                          style={{ fontSize: 12, color: 'var(--qa-text-2)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 8 }}>
+                                        Select the parameter(s) you wish to challenge:
+                                      </div>
+
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6, marginBottom: 12 }}>
+                                        {emailParams.map(param => {
+                                          const isSelected = selectedParams.has(param.key);
+                                          return (
+                                            <label
+                                              key={param.key}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 8,
+                                                padding: '6px 10px',
+                                                borderRadius: 6,
+                                                border: `1px solid ${isSelected ? 'var(--marker, #111111)' : 'var(--qa-border)'}`,
+                                                background: isSelected ? 'var(--qa-fill-light)' : 'var(--qa-card)',
+                                                cursor: 'pointer',
+                                                fontSize: 12,
+                                                fontWeight: 500,
+                                                color: 'var(--qa-text)',
+                                              }}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleParamPick(param.key)}
+                                                style={{ cursor: 'pointer' }}
+                                              />
+                                              {param.name}
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 4 }}>
+                                        Reason for dispute (required):
+                                      </div>
+                                      <textarea
+                                        rows={3}
+                                        placeholder="Explain specifically why you think the score should be adjusted for QA review..."
+                                        value={disputeNotes}
+                                        onChange={(e) => setDisputeNotes(e.target.value)}
+                                        style={{
+                                          width: '100%',
+                                          padding: '8px 12px',
+                                          border: '1px solid var(--qa-border)',
+                                          borderRadius: 6,
+                                          background: 'var(--qa-card)',
+                                          color: 'var(--qa-text)',
+                                          fontSize: 12,
+                                          fontFamily: SANS,
+                                          outline: 'none',
+                                          resize: 'vertical',
+                                          boxSizing: 'border-box',
+                                          marginBottom: 10,
+                                        }}
+                                      />
+                                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                                        <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginRight: 'auto' }}>
+                                          {selectedParams.size} parameter{selectedParams.size === 1 ? '' : 's'} selected
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={cancelDisputeComposition}
+                                          style={{
+                                            height: 32,
+                                            padding: '0 14px',
+                                            borderRadius: 6,
+                                            border: '1px solid var(--qa-border)',
+                                            background: 'var(--qa-card)',
+                                            color: 'var(--qa-text)',
+                                            fontSize: 12,
+                                            fontWeight: 500,
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRaiseDispute(reply.message_id)}
+                                          disabled={submittingDispute || !disputeNotes.trim() || selectedParams.size === 0}
+                                          style={{
+                                            height: 32,
+                                            padding: '0 16px',
+                                            border: 'none',
+                                            borderRadius: 6,
+                                            background: 'var(--ink, #111111)',
+                                            color: 'var(--ink-fg, #FFFFFF)',
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                            cursor: !disputeNotes.trim() || selectedParams.size === 0 || submittingDispute ? 'not-allowed' : 'pointer',
+                                            opacity: !disputeNotes.trim() || selectedParams.size === 0 || submittingDispute ? 0.5 : 1,
+                                            fontFamily: SANS,
+                                          }}
+                                        >
+                                          {submittingDispute ? 'Submitting…' : 'Submit Dispute to QA'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                                      <div>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                          Dispute this Score
+                                        </div>
+                                        <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>
+                                          Challenge specific parameter grades and submit directly to QA for review.
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => startDispute(reply)}
+                                        style={{
+                                          height: 34,
+                                          padding: '0 16px',
+                                          border: '1px solid var(--qa-border)',
+                                          borderRadius: 6,
+                                          background: 'var(--qa-card)',
+                                          color: 'var(--qa-text)',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          fontFamily: SANS,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 6,
+                                        }}
+                                      >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                                        </svg>
+                                        Raise Dispute
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                               </>}
                               scoring={<>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                  Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
+                                  Evaluator Feedback &amp; Parameters ({emailParams.length})
                                 </div>
                                 <div style={{
                                   border: '1px solid var(--qa-border)',
@@ -998,16 +1376,56 @@ export default function TLEmailQualityPage() {
                                   background: 'var(--qa-card)',
                                   overflow: 'hidden',
                                 }}>
-                                  <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
-                                    <ScoreRing score={reply.effective_score ?? reply.quality_score} />
-                                    <div>
-                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
-                                        <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
-                                        {' · '}
-                                        {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                  <div style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                      <ScoreRing score={reply.effective_score ?? reply.quality_score} />
+                                      <div>
+                                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
+                                          <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
+                                          {' · '}
+                                          {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                        </div>
                                       </div>
                                     </div>
+                                    {(!reply.dispute_status || reply.dispute_status === 'None') && disputingId !== reply.message_id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => startDispute(reply)}
+                                        style={{
+                                          height: 32,
+                                          padding: '0 12px',
+                                          borderRadius: 6,
+                                          border: '1px solid var(--qa-border)',
+                                          background: 'var(--qa-card)',
+                                          color: 'var(--qa-text)',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 6,
+                                        }}
+                                      >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                                        </svg>
+                                        Raise Dispute
+                                      </button>
+                                    )}
+                                    {reply.dispute_status && reply.dispute_status !== 'None' && (
+                                      <span style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: reply.dispute_status === 'Resolved' ? '#166534' : (reply.dispute_status === 'Rejected' ? '#991b1b' : 'var(--qa-text)'),
+                                        padding: '4px 8px',
+                                        borderRadius: 6,
+                                        background: 'var(--qa-fill-light)',
+                                        border: '1px solid var(--qa-border)',
+                                      }}>
+                                        {disputeLabel(reply.dispute_status, (reply as any).qa_name || reply.reviewed_by)}
+                                      </span>
+                                    )}
                                   </div>
                                   {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
                                     <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1017,9 +1435,10 @@ export default function TLEmailQualityPage() {
                                       {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
                                     </div>
                                   )}
-                                  {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                  {emailParams.map((def, idx) => {
                                     const scores = reply.parameter_scores;
                                     const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
+                                    const isDisputedParam = (reply.challenged_params?.some(cp => cp.param === def.key) ?? false) || (disputingId === reply.message_id && selectedParams.has(def.key));
                                     return (
                                       <ParamScoreRow
                                         key={def.key}
@@ -1029,7 +1448,8 @@ export default function TLEmailQualityPage() {
                                         allowNA={def.allowNA}
                                         weight={def.defaultWeight}
                                         reason={scores?.__reasoning?.[def.key]}
-                                        last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                        last={idx === emailParams.length - 1}
+                                        disputed={isDisputedParam}
                                       />
                                     );
                                   })}

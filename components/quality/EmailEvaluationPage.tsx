@@ -1,19 +1,23 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import DateRangePicker from './DateRangePicker';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import * as T from '@/components/quality/tableStyles';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
+import { getDisputeClassification } from '@/lib/quality';
 import {
-  DEFAULT_EMAIL_PARAMETERS,
+  emailWeightMap,
   ParameterScoreValue,
   calculateEmailIQS,
   normalizeParamScoreValue,
 } from '@/lib/email/context-builder';
+import { useEmailParameters } from '@/components/quality/useEmailParameters';
 import EmailMessageView, {
   CustomerSummaryBlock,
   CustomerCoreQueryCard,
@@ -35,6 +39,11 @@ interface EvaluationItem {
   chat_id?: string;
   intent_l1?: string | null;
   customer_email?: string;
+  customer_phone?: string | null;
+  raised_by_role?: 'ir' | 'tl' | null;
+  flag_raised_at?: string | null;
+  flag_author_name?: string | null;
+  flag_raiser_name?: string | null;
   agent_id?: string;
   agent_name?: string;
   sent_at: string;
@@ -61,6 +70,191 @@ interface EvaluationItem {
   effective_score?: number;
   qa_name?: string;
   internal_notes?: InternalNote[];
+}
+
+export const COMPLIANCE_GATES_LIST = [
+  { key: 'G1_no_advice', altKey: 'G1', label: 'G1: Advice (No Investment / Tax Advice)', shortLabel: 'G1 Advice' },
+  { key: 'G2_no_fabrication', altKey: 'G2', label: 'G2: Fabrication (No Fabricated Facts)', shortLabel: 'G2 Fabrication' },
+  { key: 'G3_identity_first', altKey: 'G3', label: 'G3: Identity (Identity Verified First)', shortLabel: 'G3 Identity' },
+];
+
+export interface GateParamState {
+  status: 'pass' | 'fail' | 'not_applicable';
+  reasoning: string;
+}
+
+function extractGateReasoning(item: any): string {
+  if (!item) return '';
+  if (typeof item === 'string') return item;
+  if (typeof item !== 'object') return String(item);
+
+  const parts: string[] = [];
+
+  if (item.reasoning && typeof item.reasoning === 'string' && item.reasoning.trim()) {
+    parts.push(item.reasoning.trim());
+  } else if (item.reason && typeof item.reason === 'string' && item.reason.trim()) {
+    parts.push(item.reason.trim());
+  } else if (item.note && typeof item.note === 'string' && item.note.trim()) {
+    parts.push(item.note.trim());
+  } else if (item.why && typeof item.why === 'string' && item.why.trim()) {
+    parts.push(item.why.trim());
+  }
+
+  if (item.reason_code && typeof item.reason_code === 'string') {
+    parts.push(`[Reason code: ${item.reason_code}]`);
+  }
+
+  if (Array.isArray(item.evidence) && item.evidence.length > 0) {
+    const evText = item.evidence
+      .map((ev: any) => {
+        if (!ev) return '';
+        if (typeof ev === 'string') return ev;
+        const turnStr = ev.turn !== undefined && ev.turn !== null ? `Turn ${ev.turn}: ` : '';
+        const quoteStr = ev.quote ? `"${ev.quote}"` : '';
+        const whyStr = ev.why || ev.note || '';
+        if (quoteStr && whyStr) return `${turnStr}${quoteStr} · Note: ${whyStr}`;
+        if (quoteStr) return `${turnStr}${quoteStr}`;
+        if (whyStr) return `${turnStr}Note: ${whyStr}`;
+        return typeof ev === 'object' ? JSON.stringify(ev) : String(ev);
+      })
+      .filter(Boolean)
+      .join('\n');
+    if (evText && !parts.some(p => p.includes(evText))) {
+      parts.push(evText);
+    }
+  } else if (item.evidence && typeof item.evidence === 'string' && item.evidence.trim()) {
+    parts.push(item.evidence.trim());
+  }
+
+  return parts.filter(Boolean).join('\n');
+}
+
+export function findEmailBreachesForGate(rawBreaches: any[], gateKey: string): string {
+  if (!Array.isArray(rawBreaches) || !rawBreaches.length) return '';
+
+  const matched = rawBreaches.filter(b => {
+    const t = typeof b === 'string'
+      ? b.toLowerCase()
+      : ((b.type || '') + ' ' + (b.breach_type || '') + ' ' + (b.category || '') + ' ' + (b.note || '') + ' ' + (b.why || '') + ' ' + (b.reason || '')).toLowerCase();
+
+    if (gateKey === 'G1_no_advice') {
+      return (
+        t.includes('advice') ||
+        t.includes('advisory') ||
+        t.includes('guarantee') ||
+        t.includes('return') ||
+        t.includes('tax') ||
+        t.includes('invest') ||
+        t.includes('prediction') ||
+        t.includes('disclaimer') ||
+        t.includes('recommend') ||
+        t.includes('c1') ||
+        t.includes('c4')
+      );
+    }
+    if (gateKey === 'G2_no_fabrication') {
+      return (
+        t.includes('fabricat') ||
+        t.includes('mislead') ||
+        t.includes('fact') ||
+        t.includes('false') ||
+        t.includes('inaccurat') ||
+        t.includes('timeline') ||
+        t.includes('withdrawal') ||
+        t.includes('maturity') ||
+        t.includes('sebi') ||
+        t.includes('settlement') ||
+        t.includes('c3')
+      );
+    }
+    if (gateKey === 'G3_identity_first') {
+      return (
+        t.includes('data') ||
+        t.includes('identity') ||
+        t.includes('privacy') ||
+        t.includes('kyc') ||
+        t.includes('statement') ||
+        t.includes('slack') ||
+        t.includes('sheet') ||
+        t.includes('pii') ||
+        t.includes('client') ||
+        t.includes('confidential') ||
+        t.includes('unverified') ||
+        t.includes('c2')
+      );
+    }
+    return false;
+  });
+
+  if (!matched.length) return '';
+
+  return matched.map(b => {
+    if (typeof b === 'string') {
+      const colonIdx = b.indexOf(':');
+      if (colonIdx > 0 && colonIdx < 30) {
+        return b.slice(colonIdx + 1).trim();
+      }
+      return b.trim();
+    }
+    const q = b.quote ? `"${b.quote}"` : '';
+    const n = b.note || b.why || b.reason || '';
+    if (q && n) return `${q} · Note: ${n}`;
+    return q || (n ? `Note: ${n}` : JSON.stringify(b));
+  }).filter(Boolean).join('\n');
+}
+
+export function resolveGateData(rawGates: any, gateKey: string, altKey?: string, complianceIssues?: string[], compliancePassed?: boolean): GateParamState {
+  if (rawGates && typeof rawGates === 'object') {
+    const item = rawGates[gateKey] || (altKey ? rawGates[altKey] : undefined) || rawGates[gateKey.toLowerCase()] || rawGates[gateKey.split('_')[0]];
+    if (item) {
+      let status: 'pass' | 'fail' | 'not_applicable' = 'pass';
+      if (typeof item === 'object') {
+        if (item.status === 'pass' || item.status === 'fail' || item.status === 'not_applicable') {
+          status = item.status;
+        } else if (item.score === 'Yes' || item.score === true || item.score === 1) {
+          status = 'pass';
+        } else if (item.score === 'No' || item.score === false || item.score === 0) {
+          status = 'fail';
+        } else if (item.score === 'NA' || item.score === 'not_applicable') {
+          status = 'not_applicable';
+        }
+      } else if (typeof item === 'string') {
+        const s = item.toLowerCase();
+        if (s === 'pass' || s === 'yes') status = 'pass';
+        else if (s === 'fail' || s === 'no') status = 'fail';
+        else if (s === 'na' || s === 'not_applicable') status = 'not_applicable';
+      } else if (typeof item === 'boolean') {
+        status = item ? 'pass' : 'fail';
+      }
+
+      let reasoning = extractGateReasoning(item);
+      if (!reasoning && status === 'fail' && complianceIssues) {
+        reasoning = findEmailBreachesForGate(complianceIssues, gateKey);
+      }
+      return { status, reasoning };
+    }
+  }
+
+  // If no gate object was previously saved, map from compliance_issues or compliance_passed
+  const issues = Array.isArray(complianceIssues) ? complianceIssues : [];
+  const breachReason = findEmailBreachesForGate(issues, gateKey);
+  if (breachReason) {
+    return { status: 'fail', reasoning: breachReason };
+  }
+
+  // If compliance was marked failed or there are unmatched issues, assign to G2 if no other gate matches
+  if ((compliancePassed === false || issues.length > 0) && gateKey === 'G2_no_fabrication') {
+    const g1Matched = findEmailBreachesForGate(issues, 'G1_no_advice');
+    const g3Matched = findEmailBreachesForGate(issues, 'G3_identity_first');
+    if (!g1Matched && !g3Matched) {
+      return {
+        status: 'fail',
+        reasoning: issues.length > 0 ? issues.join('\n') : 'Compliance breach detected',
+      };
+    }
+  }
+
+  return { status: 'pass', reasoning: '' };
 }
 
 // ─── Design Tokens & Styles (Consistent with ChatEvalTable / EvalPanel) ───────
@@ -128,6 +322,14 @@ const chipActive: React.CSSProperties = {
   background: 'var(--qa-gray-700)',
   color: '#fff',
   borderColor: 'var(--qa-gray-700)',
+};
+
+const fmtShort = (iso: string) => {
+  try {
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  } catch {
+    return iso;
+  }
 };
 
 
@@ -209,30 +411,48 @@ function formatReviewerName(raw?: string | null): string {
 }
 
 // Columns per tab, ordered like the chat tables (ID, Date & Time, Agent, ..., Action).
-type Col = 'ticket' | 'dateTime' | 'agent' | 'intent' | 'iqs' | 'csat' | 'dispute' | 'reviewedBy' | 'reviewedAt' | 'action';
+// E-mail has no CSAT yet, so there is no CSAT column. Disputes show when the dispute was raised, not when the e-mail was sent.
+type Col = 'ticket' | 'dateTime' | 'agent' | 'intent' | 'iqs' | 'raised' | 'dispute' | 'reviewedBy' | 'reviewedAt' | 'action';
 const TAB_COLS: Record<Tab, Col[]> = {
-  pending: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'action'],
-  reviewed: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'reviewedBy', 'reviewedAt', 'action'],
-  disputes: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'dispute', 'action'],
+  pending: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'action'],
+  reviewed: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'reviewedBy', 'reviewedAt', 'action'],
+  disputes: ['ticket', 'agent', 'intent', 'iqs', 'raised', 'dispute', 'action'],
   unscored: ['ticket', 'dateTime', 'agent', 'intent', 'action'],
 };
-const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', dateTime: 'Date & Time', agent: 'Agent', intent: 'Intent', iqs: 'IQS', csat: 'CSAT', dispute: 'Dispute', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
+const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', dateTime: 'Date & Time', agent: 'Agent', intent: 'Disposition', iqs: 'IQS', raised: 'Raised', dispute: 'Status', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
 const COL_WIDTH: Partial<Record<Col, number>> = {};
 // Column widths (%) put the ID, date and agent columns on the left of the panel split (57.4%), scores + action on the right.
 const TAB_WIDTHS: Record<Tab, number[]> = {
-  pending:  [12, 13, 16, 16.4, 14.2, 14.2, 14.2],
-  reviewed: [12, 12, 15, 18.4, 8, 8, 11, 8, 7.6],
-  disputes: [11, 12, 15, 19.4, 10, 10, 12, 10.6],
+  pending:  [12, 13, 16, 16.4, 21.3, 21.3],
+  reviewed: [12, 12, 15, 18.4, 10, 14, 10, 8.6],
+  disputes: [11, 16, 30.4, 8, 12, 14, 8.6],
   unscored: [14, 14, 22, 34, 16],
 };
 const RIGHT: Col[] = ['iqs', 'action'];
-type SortCol = 'dateTime' | 'agent' | 'intent' | 'iqs' | 'dispute' | 'reviewedBy' | 'reviewedAt';
-const SORTABLE: Col[] = ['dateTime', 'agent', 'intent', 'iqs', 'dispute', 'reviewedBy', 'reviewedAt']; // IDs and Action are not sortable; e-mail has no CSAT
+type SortCol = 'dateTime' | 'agent' | 'intent' | 'iqs' | 'raised' | 'dispute' | 'reviewedBy' | 'reviewedAt';
+const SORTABLE: Col[] = ['dateTime', 'agent', 'intent', 'iqs', 'raised', 'dispute', 'reviewedBy', 'reviewedAt']; // IDs and Action are not sortable; e-mail has no CSAT
 
-export default function EmailEvaluationPage() {
+/** `embedded`: rendered inside another page (the TL's Quality Emails → Disputes Raised). It shows only the disputes list, with no page title or
+ *  tab bar, and tells the host when a dispute was resolved so its counts refresh. */
+export default function EmailEvaluationPage({ embedded = false, onResolved }: { embedded?: boolean; onResolved?: () => void } = {}) {
+  const emailParams = useEmailParameters();
   const { data: session } = useSession();
   const isAdmin = (session?.user as any)?.role === 'admin' || Boolean((session?.user as any)?.isAdmin);
-  const [tab, setTab] = useState<Tab>('pending');
+  // A TL reviews disputes here (the same scoring panel QA uses) but cannot score undisputed emails: the server enforces it too.
+  const isTL = (session?.user as any)?.role === 'tl' && !isAdmin;
+  const [tab, setTab] = useState<Tab>(embedded ? 'disputes' : 'pending');
+  // Deep link from the TL dispute list: ?tab=disputes&search=<ticket>. A TL with no link lands on Disputes.
+  const urlParams = useSearchParams();
+  const urlApplied = useRef(false);
+  useEffect(() => {
+    if (embedded || urlApplied.current || !session) return;
+    urlApplied.current = true;
+    const t = urlParams.get('tab');
+    if (t === 'pending' || t === 'reviewed' || t === 'disputes') setTab(isTL && t === 'pending' ? 'disputes' : t);
+    else if (isTL) setTab('disputes');
+    const q = urlParams.get('search');
+    if (q) setSearch(q);
+  }, [embedded, session, isTL, urlParams]);
   const [items, setItems] = useState<EvaluationItem[]>([]);
   const [summary, setSummary] = useState<{
     pendingReviewCount?: number;
@@ -250,6 +470,7 @@ export default function EmailEvaluationPage() {
   const [search, setSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
   const [dispositionFilter, setDispositionFilter] = useState('');
+  const [disputeFilter, setDisputeFilter] = useState('');
   const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
   const [availableAgents, setAvailableAgents] = useState<string[]>([
     'Aman Sharma',
@@ -264,10 +485,10 @@ export default function EmailEvaluationPage() {
   const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' } | null>(null);
 
   // QA action state
-  const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
+  const [overrideScores, setOverrideScores] = useState<Record<string, number | null>>({});
   const [overrideParams, setOverrideParams] = useState<Record<string, Record<string, ParameterScoreValue>>>({});
   const [overrideReasoning, setOverrideReasoning] = useState<Record<string, Record<string, string>>>({});
-  const [overrideComplianceIssues, setOverrideComplianceIssues] = useState<Record<string, string[]>>({});
+  const [overrideGates, setOverrideGates] = useState<Record<string, Record<string, GateParamState>>>({});
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [submittingAction, setSubmittingAction] = useState(false);
@@ -276,8 +497,8 @@ export default function EmailEvaluationPage() {
     return normalizeParamScoreValue(val);
   };
 
-  const calculateIQS = (params: Record<string, ParameterScoreValue>): number => {
-    return calculateEmailIQS(params);
+  const calculateIQS = (params: Record<string, ParameterScoreValue>, intent?: string | null): number | null => {
+    return calculateEmailIQS(params, emailWeightMap(emailParams), intent);
   };
 
   const getParamsForItem = (item: EvaluationItem): Record<string, ParameterScoreValue> => {
@@ -286,7 +507,7 @@ export default function EmailEvaluationPage() {
     }
     const current = item.parameter_scores || {};
     const initial: Record<string, ParameterScoreValue> = {};
-    DEFAULT_EMAIL_PARAMETERS.forEach(def => {
+    emailParams.forEach(def => {
       let raw = current[def.key];
       if (raw === undefined && def.aliases) {
         for (const alias of def.aliases) {
@@ -308,7 +529,7 @@ export default function EmailEvaluationPage() {
     const current = (item.parameter_scores as any) || {};
     const existingReasoning = (current.__reasoning && typeof current.__reasoning === 'object') ? current.__reasoning : {};
     const initial: Record<string, string> = { ...existingReasoning };
-    DEFAULT_EMAIL_PARAMETERS.forEach(def => {
+    emailParams.forEach(def => {
       if (!initial[def.key] && def.aliases) {
         for (const alias of def.aliases) {
           if (existingReasoning[alias]) {
@@ -336,21 +557,70 @@ export default function EmailEvaluationPage() {
     }));
   };
 
-  const getComplianceIssuesForItem = (item: EvaluationItem): string[] => {
-    if (overrideComplianceIssues[item.message_id] !== undefined) {
-      return overrideComplianceIssues[item.message_id];
+  const getGatesForItem = (item: EvaluationItem): Record<string, GateParamState> => {
+    if (overrideGates[item.message_id]) {
+      return overrideGates[item.message_id];
     }
-    return item.compliance_issues || [];
+    const gatesData = (item.parameter_scores as any)?.__gates || (item.parameter_scores as any)?.gates;
+    const initial: Record<string, GateParamState> = {};
+    COMPLIANCE_GATES_LIST.forEach(g => {
+      initial[g.key] = resolveGateData(gatesData, g.key, g.altKey, item.compliance_issues, item.compliance_passed);
+    });
+    return initial;
   };
 
-  const handleComplianceIssueChange = (messageId: string, index: number, text: string) => {
+  const getGateFailForItem = (item: EvaluationItem): boolean => {
+    const gates = getGatesForItem(item);
+    return Object.values(gates).some(g => g.status === 'fail');
+  };
+
+  const getCompliancePassedForItem = (item: EvaluationItem): boolean => {
+    return !getGateFailForItem(item);
+  };
+
+  const getComplianceIssuesForItem = (item: EvaluationItem): string[] => {
+    const gates = getGatesForItem(item);
+    const hasFail = Object.values(gates).some(g => g.status === 'fail');
+    if (!hasFail) return [];
+
+    const issues: string[] = [];
+    COMPLIANCE_GATES_LIST.forEach(g => {
+      const gItem = gates[g.key];
+      if (gItem && gItem.status === 'fail') {
+        const text = (gItem.reasoning || '').trim();
+        issues.push(text || `${g.shortLabel}: Breach`);
+      }
+    });
+    return issues;
+  };
+
+  const handleGateStatusChange = (messageId: string, gateKey: string, status: 'pass' | 'fail' | 'not_applicable') => {
     const item = items.find(i => i.message_id === messageId);
-    const existing = overrideComplianceIssues[messageId] || (item ? getComplianceIssuesForItem(item) : []);
-    const updated = [...existing];
-    updated[index] = text;
-    setOverrideComplianceIssues(prev => ({
+    const existing = overrideGates[messageId] || (item ? getGatesForItem(item) : {});
+    setOverrideGates(prev => ({
       ...prev,
-      [messageId]: updated,
+      [messageId]: {
+        ...existing,
+        [gateKey]: {
+          ...(existing[gateKey] || { reasoning: '' }),
+          status,
+        },
+      },
+    }));
+  };
+
+  const handleGateReasoningChange = (messageId: string, gateKey: string, reasoning: string) => {
+    const item = items.find(i => i.message_id === messageId);
+    const existing = overrideGates[messageId] || (item ? getGatesForItem(item) : {});
+    setOverrideGates(prev => ({
+      ...prev,
+      [messageId]: {
+        ...existing,
+        [gateKey]: {
+          ...(existing[gateKey] || { status: 'pass' }),
+          reasoning,
+        },
+      },
     }));
   };
 
@@ -361,7 +631,8 @@ export default function EmailEvaluationPage() {
       ...existing,
       [paramKey]: val,
     };
-    const newIQS = calculateIQS(updated);
+    const isJunk = Boolean(item?.intent_l1 && item.intent_l1.toLowerCase().includes('junk'));
+    const newIQS = isJunk ? null : calculateIQS(updated);
 
     setOverrideParams(prev => ({
       ...prev,
@@ -373,7 +644,11 @@ export default function EmailEvaluationPage() {
     }));
   };
 
+  // Only the latest request may update the list: the 500-row Pending fetch is slower than Disputes (6 rows), and without
+  // this guard switching tabs let the stale Pending response land last and show Pending rows under the Disputes tab.
+  const fetchSeq = useRef(0);
   const fetchData = useCallback(async () => {
+    const seq = ++fetchSeq.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -383,11 +658,14 @@ export default function EmailEvaluationPage() {
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       if (from) params.set('from', from);
       if (to) params.set('to', to);
+      if (disputeFilter) params.set('disputeStatus', disputeFilter);
       params.set('tab', tab);
+      if (embedded) params.set('view', 'tl'); // inside the TL's Disputes Raised tab: the TL queue, for admins too
       params.set('limit', '500');
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
+      if (seq !== fetchSeq.current) return;
       if (data.ok) {
         if (data.summary) {
           setSummary(data.summary);
@@ -404,9 +682,9 @@ export default function EmailEvaluationPage() {
     } catch (err) {
       console.error('[email-eval] Failed to load data:', err);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeq.current) setLoading(false);
     }
-  }, [tab, search, agentFilter, dispositionFilter, period]);
+  }, [tab, search, agentFilter, dispositionFilter, disputeFilter, period, embedded]);
 
   useEffect(() => {
     fetchData();
@@ -416,6 +694,7 @@ export default function EmailEvaluationPage() {
   const handleTabChange = (nextTab: Tab) => {
     if (nextTab === 'unscored' && !isAdmin) return;
     setTab(nextTab);
+    setDisputeFilter('');
     setExpandedId(null);
   };
 
@@ -428,11 +707,23 @@ export default function EmailEvaluationPage() {
   const handleSubmitReview = async (item: EvaluationItem) => {
     const currentParams = getParamsForItem(item);
     const currentReasoning = getReasoningForItem(item);
+    const currentGates = getGatesForItem(item);
+    const isGateFail = getGateFailForItem(item);
     const currentComplianceIssues = getComplianceIssuesForItem(item);
-    const scoreVal = overrideScores[item.message_id] !== undefined
-      ? Number(overrideScores[item.message_id])
-      : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
+    const currentCompliancePassed = !isGateFail;
+    const isJunk = Boolean(item.intent_l1 && item.intent_l1.toLowerCase().includes('junk'));
+    const scoreVal = isJunk
+      ? null
+      : (overrideScores[item.message_id] !== undefined
+          ? (overrideScores[item.message_id] !== null ? Number(overrideScores[item.message_id]) : null)
+          : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams)));
     const notes = reviewNotes[item.message_id] ?? item.qa_notes ?? '';
+
+    const gatesPayload: Record<string, any> = {
+      ...((item.parameter_scores as any)?.__gates || {}),
+      ...currentGates,
+      gate_result: isGateFail ? 'FAIL' : 'PASS',
+    };
 
     setSubmittingAction(true);
     try {
@@ -447,13 +738,17 @@ export default function EmailEvaluationPage() {
           parameterScores: {
             ...currentParams,
             ...(Object.keys(currentReasoning).length > 0 ? { __reasoning: currentReasoning } : {}),
+            __gates: gatesPayload,
           },
           complianceIssues: currentComplianceIssues,
-          compliancePassed: currentComplianceIssues.length === 0,
+          compliancePassed: currentCompliancePassed,
         }),
       });
       const data = await res.json();
-      if (data.ok) {
+      if (!data.ok) {
+        // e.g. a TL outside their team, or a dispute that is no longer open: say so instead of doing nothing.
+        alert(data.error || 'Could not save the review');
+      } else {
         const isFromDisputeSection = tab === 'disputes' || Boolean(data.wasDispute) || item.dispute_status === 'Under_Review';
         setSuccessMessage(
           isFromDisputeSection
@@ -478,7 +773,7 @@ export default function EmailEvaluationPage() {
           delete next[item.message_id];
           return next;
         });
-        setOverrideComplianceIssues(prev => {
+        setOverrideGates(prev => {
           const next = { ...prev };
           delete next[item.message_id];
           return next;
@@ -489,7 +784,8 @@ export default function EmailEvaluationPage() {
           return next;
         });
         setExpandedId(null);
-        if (isFromDisputeSection && tab !== 'reviewed') {
+        onResolved?.();
+        if (isFromDisputeSection && tab !== 'reviewed' && !embedded) {
           setTab('reviewed');
         } else {
           fetchData();
@@ -505,12 +801,25 @@ export default function EmailEvaluationPage() {
   const handleResolveDispute = async (item: EvaluationItem, decision: 'Resolved' | 'Rejected') => {
     const currentParams = getParamsForItem(item);
     const currentReasoning = getReasoningForItem(item);
-    const scoreVal = overrideScores[item.message_id] !== undefined
-      ? Number(overrideScores[item.message_id])
-      : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
+    const currentGates = getGatesForItem(item);
+    const isGateFail = getGateFailForItem(item);
+    const currentComplianceIssues = getComplianceIssuesForItem(item);
+    const currentCompliancePassed = !isGateFail;
+    const isJunk = Boolean(item.intent_l1 && item.intent_l1.toLowerCase().includes('junk'));
+    const scoreVal = isJunk
+      ? null
+      : (overrideScores[item.message_id] !== undefined
+          ? (overrideScores[item.message_id] !== null ? Number(overrideScores[item.message_id]) : null)
+          : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams)));
     const qaNoteVal = reviewNotes[item.message_id] !== undefined
       ? reviewNotes[item.message_id]
       : (item.qa_notes || `Dispute marked as ${decision}`);
+
+    const gatesPayload: Record<string, any> = {
+      ...((item.parameter_scores as any)?.__gates || {}),
+      ...currentGates,
+      gate_result: isGateFail ? 'FAIL' : 'PASS',
+    };
 
     setSubmittingAction(true);
     try {
@@ -526,8 +835,10 @@ export default function EmailEvaluationPage() {
           parameterScores: decision === 'Resolved' ? {
             ...currentParams,
             ...(Object.keys(currentReasoning).length > 0 ? { __reasoning: currentReasoning } : {}),
+            __gates: gatesPayload,
           } : undefined,
-          complianceIssues: decision === 'Resolved' ? getComplianceIssuesForItem(item) : undefined,
+          complianceIssues: decision === 'Resolved' ? currentComplianceIssues : undefined,
+          compliancePassed: decision === 'Resolved' ? currentCompliancePassed : undefined,
         }),
       });
       const data = await res.json();
@@ -547,7 +858,7 @@ export default function EmailEvaluationPage() {
           delete next[item.message_id];
           return next;
         });
-        setOverrideComplianceIssues(prev => {
+        setOverrideGates(prev => {
           const next = { ...prev };
           delete next[item.message_id];
           return next;
@@ -575,7 +886,7 @@ export default function EmailEvaluationPage() {
     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
-  const hasFilters = Boolean(search || agentFilter || dispositionFilter || period.period !== 'all');
+  const hasFilters = Boolean(search || agentFilter || dispositionFilter || disputeFilter || period.period !== 'all');
   const cols = TAB_COLS[tab];
   const iqsOf = (i: EvaluationItem) => Number(i.effective_score ?? i.quality_score ?? -1);
   const sortKey = (i: EvaluationItem, col: SortCol): string | number => {
@@ -585,6 +896,7 @@ export default function EmailEvaluationPage() {
       case 'agent': return i.agent_name ?? '';
       case 'intent': return i.intent_l1 ?? '';
       case 'dispute': return i.dispute_status ?? '';
+      case 'raised': return new Date(i.flag_raised_at || 0).getTime();
       case 'reviewedBy': return i.reviewed_by ?? '';
       default: return i.reviewed_at ?? '';
     }
@@ -610,11 +922,13 @@ export default function EmailEvaluationPage() {
   return (
     <div>
       {/* ── Page Header ── */}
+      {!embedded && (
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
           Email Evaluation
         </h1>
       </div>
+      )}
 
       {/* ── Success Toast Banner ── */}
       {successMessage && (
@@ -639,6 +953,7 @@ export default function EmailEvaluationPage() {
       )}
 
       {/* ── Tab Bar (Matching ChatEvaluationPage) ── */}
+      {!embedded && (
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -651,6 +966,7 @@ export default function EmailEvaluationPage() {
           display: 'flex', gap: 4,
           borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
         }}>
+          {!isTL && (
           <button
             style={tabStyle(tab === 'pending')}
             onClick={() => handleTabChange('pending')}
@@ -666,6 +982,7 @@ export default function EmailEvaluationPage() {
               active={tab === 'pending'}
             />
           </button>
+          )}
           <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
             Disputes
             <CountBadge count={summary?.qaDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
@@ -683,13 +1000,13 @@ export default function EmailEvaluationPage() {
         </div>
 
       </div>
+      )}
 
       {/* ── One card: filter bar + table + pager (as in the chat tables) ── */}
       <div style={{
         background: 'var(--qa-card)',
         border: '1px solid var(--qa-border)',
         borderRadius: 8,
-        overflow: 'hidden',
       }}>
         <div style={{
           padding: '8px 16px',
@@ -700,6 +1017,7 @@ export default function EmailEvaluationPage() {
           alignItems: 'center',
           gap: 8,
           flexWrap: 'wrap',
+          borderRadius: '8px 8px 0 0',
         }}>
           {/* Search Input */}
           <div style={{ position: 'relative', width: 220 }}>
@@ -787,7 +1105,7 @@ export default function EmailEvaluationPage() {
               onClick={() => setShowFilterBarPicker((v) => !v)}
               title={
                 period.period === 'custom' && period.customFrom && period.customTo
-                  ? `${period.customFrom} to ${period.customTo}`
+                  ? `${fmtShort(period.customFrom)} to ${fmtShort(period.customTo)}`
                   : period.period === '7'
                   ? 'Last 7 days'
                   : period.period === '30'
@@ -812,7 +1130,7 @@ export default function EmailEvaluationPage() {
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
               {period.period === 'custom' && period.customFrom && period.customTo
-                ? `${period.customFrom} – ${period.customTo}`
+                ? (period.customFrom === period.customTo ? fmtShort(period.customFrom) : `${fmtShort(period.customFrom)} – ${fmtShort(period.customTo)}`)
                 : period.period === '7'
                 ? 'Last 7 days'
                 : period.period === '30'
@@ -822,6 +1140,9 @@ export default function EmailEvaluationPage() {
             </button>
             {showFilterBarPicker && (
               <DateRangePicker
+                align="left"
+                initialFrom={period.customFrom}
+                initialTo={period.customTo}
                 onApply={(from, to) => {
                   setPeriod({ period: 'custom', customFrom: from, customTo: to });
                   setShowFilterBarPicker(false);
@@ -831,6 +1152,30 @@ export default function EmailEvaluationPage() {
             )}
           </div>
 
+          {/* Dispute Status Filter Dropdown */}
+          <UISelect
+            value={disputeFilter}
+            onChange={(e) => setDisputeFilter(e.target.value)}
+            style={{
+              height: 32,
+              padding: '0 10px',
+              border: '1px solid var(--qa-border)',
+              borderRadius: 8,
+              background: 'var(--qa-card)',
+              color: disputeFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
+              fontSize: 13,
+              fontFamily: 'inherit',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="">{tab === 'disputes' ? 'All Disputes' : 'All Dispute Statuses'}</option>
+            <option value="forwarded_to_tl">Pending TL review</option>
+            <option value="forwarded_to_qa">Forwarded to QA</option>
+            <option value="reviewed">Reviewed Disputes</option>
+            {tab !== 'disputes' && <option value="none">No Dispute</option>}
+          </UISelect>
+
           {/* Reset Filters */}
           <button
             disabled={!hasFilters}
@@ -838,6 +1183,7 @@ export default function EmailEvaluationPage() {
               setSearch('');
               setAgentFilter('');
               setDispositionFilter('');
+              setDisputeFilter('');
               setPeriod({ period: 'all' });
             }}
             style={{
@@ -901,9 +1247,12 @@ export default function EmailEvaluationPage() {
                   const isExpanded = expandedId === item.message_id;
                   const itemParams = getParamsForItem(item);
                   const isSessionOverridden = overrideScores[item.message_id] !== undefined;
-                  const currentIQS = isSessionOverridden
-                    ? Number(overrideScores[item.message_id])
-                    : (item.effective_score ?? item.quality_score ?? calculateIQS(itemParams));
+                  const isJunk = Boolean(item.intent_l1 && item.intent_l1.toLowerCase().includes('junk'));
+                  const currentIQS = isJunk
+                    ? null
+                    : (isSessionOverridden
+                        ? (overrideScores[item.message_id] !== null ? Number(overrideScores[item.message_id]) : null)
+                        : (item.effective_score ?? item.quality_score ?? calculateIQS(itemParams)));
                   const hasOverride = item.qa_override_score !== null && item.qa_override_score !== undefined;
                   const cell: Record<Col, React.ReactNode> = {
                     ticket: (
@@ -939,7 +1288,7 @@ export default function EmailEvaluationPage() {
                           : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                       </td>
                     ),
-                    csat: <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>,
+                    raised: <td style={{ ...td, whiteSpace: 'nowrap', color: 'var(--qa-text-2)' }}><T.DateTime value={item.flag_raised_at} /></td>,
                     dispute: (
                       <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status, item.qa_name || item.reviewed_by)}</td>
                     ),
@@ -1071,8 +1420,8 @@ export default function EmailEvaluationPage() {
                                       flagId={item.flag_id || item.message_id}
                                       agentNote={item.dispute_notes}
                                       agentName={item.agent_name}
-                                      raisedByRole="agent"
-                                      raisedByName={item.agent_name}
+                                      raisedByRole={(item as any).raised_by_role || (item.dispute_status === 'Under_Review' ? 'tl' : 'agent')}
+                                      raisedByName={item.flag_raiser_name || item.flag_author_name || (item.raised_by_role === 'tl' ? 'Team Lead' : item.agent_name)}
                                       reviewedBy={item.reviewed_by}
                                       qaName={item.qa_name || item.reviewed_by}
                                       reviewerRole="quality"
@@ -1096,6 +1445,25 @@ export default function EmailEvaluationPage() {
                                         <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`}</span>
                                         {item.sent_at && (<><span>·</span><span>{new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></>)}
                                         {intentLabel(item.intent_l1) !== '—' && (<><span>·</span><span>{intentLabel(item.intent_l1)}</span></>)}
+                                        {item.customer_phone && (<><span>·</span><span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{item.customer_phone}</span></>)}
+                                        {/* Same "Disputed by IR/TL (name) · AGENT" line as the chat evaluation card; e-mail disputes are always agent-side. */}
+                                        {tab === 'disputes' && item.dispute_status && item.dispute_status !== 'None' && (() => {
+                                          const isTL = item.raised_by_role === 'tl' || (!item.raised_by_role && item.dispute_status === 'Under_Review');
+                                          const badge = getDisputeClassification(null, 'email');
+                                          return (
+                                            <>
+                                              <span>·</span>
+                                              <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
+                                                Disputed by {isTL ? 'TL' : 'IR'} ({item.flag_raiser_name || item.flag_author_name || (isTL ? 'Team Lead' : item.agent_name)})
+                                              </span>
+                                              <span style={{
+                                                fontSize: 10, fontWeight: 700, background: badge.badgeBg, color: badge.badgeText,
+                                                border: `1px solid ${badge.badgeBorder}`, borderRadius: 4, padding: '1px 6px', marginLeft: 4,
+                                                display: 'inline-block', verticalAlign: 'middle',
+                                              }}>{badge.label}</span>
+                                            </>
+                                          );
+                                        })()}
                                       </div>
                                       {isSessionOverridden && item.quality_score != null ? (
                                         <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 2 }}>Adjusted from {Math.round(Number(item.quality_score))}%</div>
@@ -1118,46 +1486,56 @@ export default function EmailEvaluationPage() {
                                 </div>
 
                                 <div className="eval-scroll-r" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                                {/* Compliance Issues Banner with editable reasons */}
+                                {/* Compliance Gates — identical to EvalPanel in chats */}
                                 {(() => {
-                                  const issues = getComplianceIssuesForItem(item);
-                                  if (!issues || issues.length === 0) return null;
+                                  const gates = getGatesForItem(item);
+                                  const gateFail = getGateFailForItem(item);
                                   return (
-                                    <div style={{
-                                      background: 'var(--fail-soft)',
-                                      border: '1px solid var(--fail)',
-                                      borderRadius: 8,
-                                      padding: '10px 14px',
-                                      margin: '16px 16px 0',
-                                    }}>
-                                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--fail)', textTransform: 'uppercase', marginBottom: 6 }}>
-                                        Reason for Compliance Breach:
+                                    <div className={`eval-gates${gateFail ? ' failed' : ''}`}>
+                                      <div className="eval-ghead">
+                                        <span className="eval-gtitle">Compliance Gates</span>
+                                        <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
                                       </div>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                        {issues.map((iss, idx) => (
-                                          <AutoTextarea
-                                            key={idx}
-                                            value={iss}
-                                            onChange={e => handleComplianceIssueChange(item.message_id, idx, e.target.value)}
-                                            placeholder="Specify reason / citation for this compliance breach…"
-                                            rows={2}
-                                            style={{
-                                              width: '100%',
-                                              boxSizing: 'border-box',
-                                              resize: 'vertical',
-                                              border: '1px solid var(--fail)',
-                                              borderRadius: 6,
-                                              padding: '6px 8px',
-                                              fontSize: 12.5,
-                                              color: 'var(--qa-text)',
-                                              lineHeight: 1.45,
-                                              fontFamily: 'inherit',
-                                              background: 'var(--qa-card)',
-                                              outline: 'none',
-                                            }}
-                                          />
-                                        ))}
-                                      </div>
+                                      {COMPLIANCE_GATES_LIST.map(g => {
+                                        const gItem = gates[g.key] || { status: 'pass', reasoning: '' };
+                                        return (
+                                          <div key={g.key} className="eval-gate">
+                                            <div style={{ minWidth: 0 }}>
+                                              <b>{g.shortLabel}</b>
+                                              <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
+                                            </div>
+                                            <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
+                                              {([
+                                                { label: 'Pass', val: 'pass' as const },
+                                                { label: 'Breach', val: 'fail' as const },
+                                                { label: 'NA', val: 'not_applicable' as const },
+                                              ]).map(opt => (
+                                                <button
+                                                  key={opt.val} type="button" data-v={opt.val}
+                                                  aria-pressed={gItem.status === opt.val}
+                                                  onClick={() => handleGateStatusChange(item.message_id, g.key, opt.val)}
+                                                >
+                                                  {opt.label}
+                                                </button>
+                                              ))}
+                                            </div>
+
+                                            {/* Reason for compliance gate (shown only in case of breach) */}
+                                            {gItem.status === 'fail' && (
+                                              <div className="eval-gate-extra">
+                                                <div className="eval-reason-label">Reason for Breach:</div>
+                                                <AutoTextarea
+                                                  className="eval-reason-input"
+                                                  value={gItem.reasoning || ''}
+                                                  onChange={e => handleGateReasoningChange(item.message_id, g.key, e.target.value)}
+                                                  placeholder="Specify reason / citation for this compliance breach…"
+                                                  rows={2}
+                                                />
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   );
                                 })()}
@@ -1165,7 +1543,7 @@ export default function EmailEvaluationPage() {
                                 <div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                     <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})
+                                      Parameter Scores ({emailParams.length})
                                     </div>
                                   </div>
 
@@ -1175,7 +1553,7 @@ export default function EmailEvaluationPage() {
                                     background: 'var(--qa-card)',
                                     overflow: 'hidden',
                                   }}>
-                                    {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                    {emailParams.map((def, idx) => {
                                       const currentParams = getParamsForItem(item);
                                       const currentReasoning = getReasoningForItem(item);
                                       const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
@@ -1191,7 +1569,7 @@ export default function EmailEvaluationPage() {
                                           reason={currentReasoning[def.key] ?? ''}
                                           onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
                                           onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
-                                          last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                          last={idx === emailParams.length - 1}
                                         />
                                       );
                                     })}
@@ -1201,29 +1579,33 @@ export default function EmailEvaluationPage() {
                                 </div>
 
                                 {/* Sticky commit footer: score, compliance, submit */}
-                                <div className={`eval-foot${item.compliance_passed === false ? ' failed' : ''}`}>
-                                  <div className="eval-status">
-                                    <div className="eval-big">
-                                      <span style={{ fontFamily: 'ui-monospace, monospace' }}>IQS {currentIQS != null ? `${Math.round(Number(currentIQS))}%` : '—'}</span>
-                                      {item.compliance_passed !== null && item.compliance_passed !== undefined && (
-                                        <span className={`eval-chip ${item.compliance_passed === false ? 'fail' : 'pass'}`}>{item.compliance_passed === false ? 'NON-COMPLIANT' : 'COMPLIANT'}</span>
-                                      )}
+                                {(() => {
+                                  const isCompliant = getCompliancePassedForItem(item);
+                                  return (
+                                    <div className={`eval-foot${!isCompliant ? ' failed' : ''}`}>
+                                      <div className="eval-status">
+                                        <div className="eval-big">
+                                          <span style={{ fontFamily: 'ui-monospace, monospace' }}>IQS {currentIQS != null ? `${Math.round(Number(currentIQS))}%` : '—'}</span>
+                                          <span className={`eval-chip ${!isCompliant ? 'fail' : 'pass'}`}>{!isCompliant ? 'NON-COMPLIANT' : 'COMPLIANT'}</span>
+                                        </div>
+                                        <div className="eval-small">
+                                          {item.review_status === 'reviewed' && item.reviewed_by
+                                            ? <>Reviewed by {formatReviewerName(item.reviewed_by)}{item.reviewed_at ? ` on ${new Date(item.reviewed_at).toLocaleDateString('en-GB')}` : ''}</>
+                                            : 'Check the score before you submit'}
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className={`eval-submit${!isCompliant ? ' danger' : ''}`}
+                                        onClick={() => handleSubmitReview(item)}
+                                        disabled={submittingAction || (isTL && tab !== 'disputes')}
+                                        title={isTL && tab !== 'disputes' ? 'TLs change scores only to resolve an open dispute' : undefined}
+                                      >
+                                        {submittingAction ? (item.review_status === 'reviewed' ? 'Updating…' : 'Submitting…') : item.review_status === 'reviewed' ? 'Update Review' : 'Submit Evaluation Score'}
+                                      </button>
                                     </div>
-                                    <div className="eval-small">
-                                      {item.review_status === 'reviewed' && item.reviewed_by
-                                        ? <>Reviewed by {formatReviewerName(item.reviewed_by)}{item.reviewed_at ? ` on ${new Date(item.reviewed_at).toLocaleDateString('en-GB')}` : ''}</>
-                                        : 'Check the score before you submit'}
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className={`eval-submit${item.compliance_passed === false ? ' danger' : ''}`}
-                                    onClick={() => handleSubmitReview(item)}
-                                    disabled={submittingAction}
-                                  >
-                                    {submittingAction ? (item.review_status === 'reviewed' ? 'Updating…' : 'Submitting…') : item.review_status === 'reviewed' ? 'Update Review' : 'Submit Evaluation Score'}
-                                  </button>
-                                </div>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </td>

@@ -1,4 +1,6 @@
 import { storeGetConfig, storeSetConfig } from './store';
+import type { QualityThresholds } from './quality-thresholds';
+import type { EmailRubric } from './email/context-builder';
 
 export type UserRole = 'agent' | 'admin' | 'quality' | 'tl';
 
@@ -37,14 +39,31 @@ export interface PortalConfig {
   iqsAnthropicApiKey?: string; // dedicated Anthropic key for IQS scoring (if provider = claude)
   // ── Editable prompts (empty = use hardcoded default) ────────────────────────
   iqsScoringPrompt?: string;
-  analyticsPlannerPrompt?: string;
-  analyticsSynthesizerPrompt?: string;
+  // Settings → Prompts: call / email / PCG scoring prompts (absent or empty = built-in default)
+  callGatesPrompt?: string;
+  callIqsPrompt?: string;
+  emailPromptIntro?: string;
+  emailPromptCompliance?: string;
+  pcgQualityPrompt?: string;
+  pcgClassificationPrompt?: string;
   pcgTeamAssignments?: Record<string, string>;
+  pcgTlAdminAssignments?: Record<string, string>;
   // ── QA disposition mapping ───────────────────────────────────────────────
   qaDispositionMap?: QADispositionEntry[];
   // ── KB document display names (Drive ID → human-readable name) ──────────────
   knowledgeBaseDocNames?: Record<string, string>;
   pyannoteApiKey?: string;
+  // ── QA review thresholds (absent = 85 for every channel) ────────────────────
+  qualityThresholds?: QualityThresholds;
+  // ── Who resolves CX disputes: 'tl' = the agent's TL (QA audits at/below the threshold); absent or 'qa' = TL forwards to QA ──
+  disputeOwner?: 'qa' | 'tl';
+  // ── Robylon email inboxes that belong to PCG: their events go to pcg_webhook_payloads, not the CX email pipeline.
+  //    Absent = the built-in default list (lib/email/inbox.ts); a saved list, even an empty one, replaces it ──
+  pcgEmailInboxes?: string[];
+  // ── Email scoring rubric edits (only what differs from DEFAULT_EMAIL_PARAMETERS) ─
+  emailRubric?: EmailRubric;
+  // ── CSAT bifurcation mapping (solvable vs unsolvable dispositions) ─────────
+  csatBifurcationMap?: Array<{ disposition: string; subDisposition: string; type: 'solvable' | 'unsolvable' }>;
 }
 
 export interface QADispositionEntry {

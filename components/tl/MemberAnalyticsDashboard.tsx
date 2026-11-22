@@ -1,34 +1,36 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DateRangePicker from '@/components/quality/DateRangePicker';
+import DropdownSearch, { matchesSearch } from '@/components/shell/DropdownSearch';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Period = '7' | '30' | 'custom';
 
-interface StatValues   { csat_pct: number|null; iqs: number|null; volume: number; }
-interface WowWeek      { week_start: string; csat_pct: number|null; iqs: number|null; volume: number; params: Record<string, number|null>; }
+interface StatValues { csat_pct: number | null; solvable_csat_pct?: number | null; unsolvable_csat_pct?: number | null; iqs: number | null; volume: number; }
+interface WowWeek { week_start: string; csat_pct: number | null; iqs: number | null; volume: number; params: Record<string, number | null>; }
 
 interface CatSub {
   sub_disposition: string;
-  chats_iqs: number|null; chats_volume: number; chats_resolution_seconds: number|null;
-  calls_iqs: number|null; calls_volume: number;
+  chats_iqs: number | null; chats_volume: number; chats_resolution_seconds: number | null;
+  calls_iqs: number | null; calls_volume: number;
 }
 interface CatRow {
   disposition: string;
-  chats_iqs: number|null; chats_volume: number; chats_resolution_seconds: number|null;
-  calls_iqs: number|null; calls_volume: number;
+  chats_iqs: number | null; chats_volume: number; chats_resolution_seconds: number | null;
+  calls_iqs: number | null; calls_volume: number;
   subs: CatSub[];
 }
-interface ChannelData  { stats: StatValues; categories: CatRow[]; wow: WowWeek[]; }
+interface ChannelData { stats: StatValues; categories: CatRow[]; wow: WowWeek[]; }
 interface MemberData {
   agentName: string; agents: string[];
   dateFrom: string; dateTo: string; wowWeekStarts: string[];
   channels: { chats: ChannelData; calls: ChannelData; emails: ChannelData | null; };
   cxAverage?: { chats: CxAvg | null; calls: CxAvg | null; emails: CxAvg | null };
 }
-interface CxAvg { csat_pct: number|null; iqs: number|null; volume: number|null; }
-interface AiResult     { summary: string; items: Array<{ type: string; text: string }>; }
+interface CxAvg { csat_pct: number | null; iqs: number | null; volume: number | null; }
+interface AiResult { summary: string; items: Array<{ type: string; text: string }>; }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const PERIOD_LABELS: Record<Period, string> = { '7': '7 days', '30': '30 days', custom: '' };
@@ -38,37 +40,37 @@ interface ParamItem { key: string; label: string; altKey?: string; }
 // Keys are the canonical v4 db keys the member-analytics API now aggregates under
 // (see PASCAL_TO_DB in lib/param-keys.ts) — must stay in lockstep with that route.
 const CHAT_PARAM_DEFS: ParamItem[] = [
-  { key: 'issue_resolution',           label: 'Issue Resolution' },
-  { key: 'accuracy',                   label: 'Accuracy' },
+  { key: 'issue_resolution', label: 'Issue Resolution' },
+  { key: 'accuracy', label: 'Accuracy' },
   { key: 'expectation_follow_through', label: 'Expectation Setting & Follow-Through' },
-  { key: 'dissatisfactionhandling',    label: 'Dissatisfaction Handling' },
-  { key: 'personalization',            label: 'Personalization' },
-  { key: 'empathy',                    label: 'Empathy' },
-  { key: 'escalation_decision',        label: 'Call Escalation Decision' },
-  { key: 'readability',                label: 'Readability & Tone' },
-  { key: 'greeting_handover',          label: 'Greeting & Handover' },
-  { key: 'post_call_recap',            label: 'Post-Call Recap' },
+  { key: 'dissatisfactionhandling', label: 'Dissatisfaction Handling' },
+  { key: 'personalization', label: 'Personalization' },
+  { key: 'empathy', label: 'Empathy' },
+  { key: 'escalation_decision', label: 'Call Escalation Decision' },
+  { key: 'readability', label: 'Readability & Tone' },
+  { key: 'greeting_handover', label: 'Greeting & Handover' },
+  { key: 'post_call_recap', label: 'Post-Call Recap' },
 ];
 
 const CALL_PARAM_DEFS: ParamItem[] = [
-  { key: 'call_opening',     altKey: 'opening',     label: 'Call Opening' },
-  { key: 'call_closing',     altKey: 'follow_up',   label: 'Call Closing' },
-  { key: 'technical',        altKey: 'technical',   label: 'Technically / Legally Correct' },
-  { key: 'all_questions',    altKey: 'all_questions',label: 'All Questions Addressed' },
-  { key: 'expectation',      altKey: 'expectation', label: 'Expectation Setting' },
-  { key: 'process',          altKey: 'process',     label: 'Process' },
-  { key: 'grammar',          altKey: 'grammar',     label: 'Vocabulary & Grammar' },
-  { key: 'fillers',          altKey: 'fillers',     label: 'Fillers & Speech Clarity' },
-  { key: 'energy_tone',      altKey: 'sentences',   label: 'Energy Level & Tone' },
-  { key: 'active_listening', altKey: 'empathy',     label: 'Active Listening & Empathy' },
-  { key: 'simplifying',      altKey: 'simplifying', label: 'Simplifying Answers' },
+  { key: 'call_opening', altKey: 'opening', label: 'Call Opening' },
+  { key: 'call_closing', altKey: 'follow_up', label: 'Call Closing' },
+  { key: 'technical', altKey: 'technical', label: 'Technically / Legally Correct' },
+  { key: 'all_questions', altKey: 'all_questions', label: 'All Questions Addressed' },
+  { key: 'expectation', altKey: 'expectation', label: 'Expectation Setting' },
+  { key: 'process', altKey: 'process', label: 'Process' },
+  { key: 'grammar', altKey: 'grammar', label: 'Vocabulary & Grammar' },
+  { key: 'fillers', altKey: 'fillers', label: 'Fillers & Speech Clarity' },
+  { key: 'energy_tone', altKey: 'sentences', label: 'Energy Level & Tone' },
+  { key: 'active_listening', altKey: 'empathy', label: 'Active Listening & Empathy' },
+  { key: 'simplifying', altKey: 'simplifying', label: 'Simplifying Answers' },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const fmtPct = (v: number|null) => v == null ? '—' : `${v.toFixed(1)}%`;
-const fmtVol = (v: number)       => v.toLocaleString('en-IN');
+const fmtPct = (v: number | null | undefined) => v == null ? '—' : `${v.toFixed(1)}%`;
+const fmtVol = (v: number) => v.toLocaleString('en-IN');
 
-function fmtResolution(sec: number|null): string {
+function fmtResolution(sec: number | null): string {
   if (sec == null || sec === 0) return '—';
   const m = Math.floor(sec / 60), s = Math.round(sec % 60);
   return s > 0 ? `${m}m ${s}s` : `${m}m`;
@@ -77,7 +79,7 @@ function fmtResolution(sec: number|null): string {
 function fmtWeekLabel(ws: string): string {
   const d = new Date(ws + 'T00:00:00Z');
   const e = new Date(d); e.setUTCDate(e.getUTCDate() + 6);
-  const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const sm = MO[d.getUTCMonth()], em = MO[e.getUTCMonth()];
   return sm === em
     ? `${sm} ${d.getUTCDate()} – ${e.getUTCDate()}`
@@ -109,23 +111,43 @@ function Panel({ children, style }: { children: React.ReactNode; style?: React.C
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function MemberAnalyticsDashboard() {
-  const [period, setPeriod]           = useState<Period>('7');
-  const [customFrom, setCustomFrom]   = useState('');
-  const [customTo, setCustomTo]       = useState('');
-  const [showPicker, setShowPicker]   = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState('');
-  const [agents, setAgents]           = useState<string[]>([]);
-  const [data, setData]               = useState<MemberData | null>(null);
-  const [loading, setLoading]         = useState(true);
-  const [wowChannel, setWowChannel]   = useState<'chats' | 'calls'>('chats');
-  const [wowTab, setWowTab]           = useState<'metrics' | 'params'>('metrics');
+  const searchParams = useSearchParams();
+  const urlAgent = searchParams?.get('agent')?.trim() || '';
+  const urlChannel = searchParams?.get('channel')?.trim() || '';
+
+  const [period, setPeriod] = useState<Period>('7');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState(() => urlAgent);
+  const [agents, setAgents] = useState<string[]>([]);
+  const [data, setData] = useState<MemberData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [wowChannel, setWowChannel] = useState<'chats' | 'calls'>(() => (urlChannel === 'calls' ? 'calls' : 'chats'));
+  const [wowTab, setWowTab] = useState<'metrics' | 'params'>('metrics');
   const [showAgentDrop, setShowAgentDrop] = useState(false);
+  const [agentSearch, setAgentSearch] = useState('');
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
-  const [aiStates, setAiStates]       = useState<Record<string, 'empty'|'loading'|'insights'>>({ chats: 'empty', calls: 'empty' });
-  const [aiResults, setAiResults]     = useState<Record<string, AiResult|null>>({ chats: null, calls: null });
-  const [aiChannel, setAiChannel]     = useState<'chats' | 'calls'>('chats');
+  const [aiStates, setAiStates] = useState<Record<string, 'empty' | 'loading' | 'insights'>>({ chats: 'empty', calls: 'empty' });
+  const [aiResults, setAiResults] = useState<Record<string, AiResult | null>>({ chats: null, calls: null });
+  const [aiChannel, setAiChannel] = useState<'chats' | 'calls'>(() => (urlChannel === 'calls' ? 'calls' : 'chats'));
 
   const agentDropRef = useRef<HTMLDivElement>(null);
+
+  // Sync state if URL query params change
+  useEffect(() => {
+    if (urlAgent && urlAgent !== selectedAgent) {
+      setSelectedAgent(urlAgent);
+      setExpandedCats(new Set());
+    }
+  }, [urlAgent]);
+
+  useEffect(() => {
+    if (urlChannel === 'calls' || urlChannel === 'chats') {
+      setWowChannel(urlChannel);
+      setAiChannel(urlChannel);
+    }
+  }, [urlChannel]);
 
   // ── Data fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -134,7 +156,8 @@ export default function MemberAnalyticsDashboard() {
     let cancelled = false;
     setLoading(true);
     const qs = new URLSearchParams({ period });
-    if (selectedAgent) qs.set('agent', selectedAgent);
+    const targetAgent = selectedAgent || urlAgent;
+    if (targetAgent) qs.set('agent', targetAgent);
     if (period === 'custom' && customFrom && customTo) { qs.set('from', customFrom); qs.set('to', customTo); }
 
     fetch(`/api/cx/tl/member-analytics?${qs}`)
@@ -153,7 +176,7 @@ export default function MemberAnalyticsDashboard() {
         }
         setData(json);
         if (json.agents?.length) setAgents(json.agents);
-        if (!selectedAgent && json.agentName) {
+        if (!selectedAgent && !urlAgent && json.agentName) {
           setSelectedAgent(json.agentName);
         }
         setLoading(false);
@@ -164,7 +187,7 @@ export default function MemberAnalyticsDashboard() {
       });
 
     return () => { cancelled = true; };
-  }, [selectedAgent, period, customFrom, customTo]);
+  }, [selectedAgent, urlAgent, period, customFrom, customTo]);
 
   // ── Click outside agent dropdown ───────────────────────────────────────────────
   useEffect(() => {
@@ -199,6 +222,7 @@ export default function MemberAnalyticsDashboard() {
   const handleAgentSelect = (name: string) => {
     setSelectedAgent(name);
     setShowAgentDrop(false);
+    setAgentSearch('');
     setExpandedCats(new Set());
   };
 
@@ -231,17 +255,17 @@ export default function MemberAnalyticsDashboard() {
   }, [aiChannel, period, selectedAgent, customFrom, customTo]);
 
   // ── Derived data ───────────────────────────────────────────────────────────────
-  const chats   = data?.channels?.chats;
-  const calls   = data?.channels?.calls;
+  const chats = data?.channels?.chats;
+  const calls = data?.channels?.calls;
   const wowData = (wowChannel === 'chats' ? chats : calls)?.wow ?? [];
   const wowWeeks = data?.wowWeekStarts ?? [];
   const categories = chats?.categories ?? [];
 
   const periodLabel = period === 'custom' && customFrom && customTo
     ? (() => {
-        const fmtD = (s: string) => new Date(s + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-        return `${fmtD(customFrom)} – ${fmtD(customTo)}`;
-      })()
+      const fmtD = (s: string) => new Date(s + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+      return `${fmtD(customFrom)} – ${fmtD(customTo)}`;
+    })()
     : PERIOD_LABELS[period];
 
   // ── Render ──────────────────────────────────────────────────────────────────────
@@ -292,7 +316,11 @@ export default function MemberAnalyticsDashboard() {
                 // long agent lists scroll inside the panel instead of running off the page
                 maxHeight: 'min(360px, calc(100vh - 220px))', overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain',
               }}>
-                {agents.map(a => (
+                <DropdownSearch value={agentSearch} onChange={setAgentSearch} count={agents.length} placeholder="Search agent…" />
+                {agents.filter(a => matchesSearch(agentSearch, a)).length === 0 && (
+                  <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--qa-text-3)' }}>No agents match “{agentSearch}”</div>
+                )}
+                {agents.filter(a => matchesSearch(agentSearch, a)).map(a => (
                   <button
                     key={a}
                     onClick={() => handleAgentSelect(a)}
@@ -362,14 +390,14 @@ export default function MemberAnalyticsDashboard() {
                 <Skeleton w={60} h={32} /><Skeleton w={60} h={32} /><Skeleton w={60} h={32} />
               </div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
                 {[
-                  { cap: 'CSAT',   val: cd?.stats ? fmtPct(cd.stats.csat_pct) : '—', empty: !cd?.stats },
-                  { cap: 'IQS',    val: cd?.stats ? fmtPct(cd.stats.iqs)      : '—', empty: !cd?.stats },
-                  { cap: 'Volume', val: cd?.stats ? fmtVol(cd.stats.volume)    : '—', empty: !cd?.stats },
+                  { cap: 'CSAT', val: cd?.stats ? fmtPct(cd.stats.csat_pct) : '—', empty: !cd?.stats },
+                  { cap: 'IQS', val: cd?.stats ? fmtPct(cd.stats.iqs) : '—', empty: !cd?.stats },
+                  { cap: 'Volume', val: cd?.stats ? fmtVol(cd.stats.volume) : '—', empty: !cd?.stats },
                 ].map((item, i) => (
-                  <div key={item.cap} style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
-                    {i > 0 && <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--qa-border)', marginBottom: 2, marginLeft: 0 }} />}
+                  <div key={item.cap} style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+                    {i > 0 && <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--qa-border)', marginTop: 4, marginBottom: 4, marginLeft: 0 }} />}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: i > 0 ? '0 16px' : '0 16px 0 0', lineHeight: 1.1 }}>
                       <span style={{
                         fontSize: 24, fontWeight: 700, lineHeight: 1,
@@ -377,6 +405,22 @@ export default function MemberAnalyticsDashboard() {
                         fontVariantNumeric: 'tabular-nums',
                       }}>{item.val}</span>
                       <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)', marginTop: 6 }}>{item.cap}</span>
+                      {item.cap === 'CSAT' && label === 'Chats' && (
+                        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, lineHeight: 1.3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                            <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>Solvable:</span>
+                            <span style={{ fontWeight: 600, color: cd?.stats?.solvable_csat_pct != null ? 'var(--qa-text)' : 'var(--qa-text-4)' }}>
+                              {fmtPct(cd?.stats?.solvable_csat_pct)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                            <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>Unsolvable:</span>
+                            <span style={{ fontWeight: 600, color: cd?.stats?.unsolvable_csat_pct != null ? 'var(--qa-text)' : 'var(--qa-text-4)' }}>
+                              {fmtPct(cd?.stats?.unsolvable_csat_pct)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -581,9 +625,9 @@ export default function MemberAnalyticsDashboard() {
                     ))
                   ) : (
                     ([
-                      { name: 'CSAT %',  key: 'csat_pct', fmt: fmtPct },
-                      { name: 'IQS',     key: 'iqs',      fmt: fmtPct },
-                      { name: 'Volume',  key: 'volume',   fmt: (v: number|null) => v == null ? '—' : fmtVol(v as number) },
+                      { name: 'CSAT %', key: 'csat_pct', fmt: fmtPct },
+                      { name: 'IQS', key: 'iqs', fmt: fmtPct },
+                      { name: 'Volume', key: 'volume', fmt: (v: number | null) => v == null ? '—' : fmtVol(v as number) },
                     ] as { name: string; key: keyof WowWeek; fmt: (v: any) => string }[]).map(row => (
                       <tr key={row.name}>
                         <td style={tdStyle(false, false, true)}>{row.name}</td>
@@ -668,7 +712,7 @@ export default function MemberAnalyticsDashboard() {
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z"/>
+                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
               </svg>
               {aiStates[aiChannel] === 'insights' ? 'Regenerate' : 'Generate Analysis'}
             </button>
@@ -708,7 +752,7 @@ export default function MemberAnalyticsDashboard() {
           {aiStates[aiChannel] === 'empty' && (
             <div style={{ minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--qa-text-4)" stroke="none">
-                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z"/>
+                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
               </svg>
               <p style={{ fontSize: 13, color: 'var(--qa-text-3)', margin: 0, maxWidth: 340 }}>
                 Click <strong>Generate Analysis</strong> to get AI-powered performance insights.

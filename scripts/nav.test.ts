@@ -4,9 +4,9 @@ import { topTabs, activeTab, isAuthPath, hasNavSkill } from '../lib/nav';
 
 const labels = (role: string, skills?: string[]) => topTabs(role, skills).map((t) => t.label);
 
-test('admin sees four tabs, Chat first, Roster last (Settings moved to the account menu)', () => {
+test('admin sees every tab, Chat first (the top bar shows MCP and Settings as icons, not tabs)', () => {
   assert.deepEqual(topTabs('admin', []).map((t) => [t.label, t.href]), [
-    ['Chat', '/chat'], ['MCP', '/analytics'], ['Quality', '/quality'], ['Roster', '/roster'], ['Leave', '/leave'],
+    ['Chat', '/chat'], ['MCP', '/analytics'], ['Quality', '/quality'], ['Roster', '/roster'], ['Leave', '/leave'], ['Settings', '/settings'],
   ]);
 });
 
@@ -26,7 +26,7 @@ test('quality analyst gets Roster; agent does not (the Roster switch is off for 
 
 test('explicit skills override the role defaults', () => {
   assert.deepEqual(labels('agent', ['chat:access']), ['Chat']);
-  assert.deepEqual(labels('agent', ['analytics:access', 'settings:manage:access']), ['MCP']); // Settings is no longer a tab
+  assert.deepEqual(labels('agent', ['analytics:access', 'settings:manage:access']), ['MCP', 'Settings']);
   assert.deepEqual(labels('agent', ['analytics:access', 'roster:view:access']), ['MCP', 'Roster']);
 });
 

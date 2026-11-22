@@ -1,64 +1,79 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { uiZoom } from '@/lib/ui-zoom';
+import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 
-export default function WorkspaceSwitcher({ compact = false }: { compact?: boolean }) {
+type Domain = 'cx' | 'pcg';
+
+// Workspace glyphs, traced from the supplied PNGs with potrace (512 grid, y-up; the transform flips it).
+const GLYPHS: Record<Domain, string> = {
+  cx: 'M70 446c-51-13-66-78-25-112 41-33 104-3 104 50 0 41-39 72-79 62zM241 447c-70-14-94-98-43-147 38-35 100-28 129 16 24 36 16 88-19 114-8 6-22 13-31 15-9 3-28 3-36 2zM413 446c-23-4-43-24-48-47-11-46 29-87 75-77 40 8 62 53 44 90-13 27-42 41-71 34zM56 298c-25-4-45-20-53-43-2-8-2-9-3-38 0-24 0-30 1-35 5-17 18-29 35-32 10-2 49-1 49 0 0 46 27 97 64 121 3 2 6 5 6 5 0 1-11 11-16 14-13 7-18 8-50 9-16 0-31-1-33-1zM396 298c-12-2-24-8-33-16-4-3-6-6-6-6 0 0 4-3 9-6 34-26 56-65 60-107 1-7 1-12 1-13 0-1 39-2 49 0 17 3 30 15 35 32 1 5 1 11 1 35-1 29-1 30-3 37-8 21-24 37-44 43-7 1-59 3-69 1zM217 254c-39-7-71-34-84-71-6-19-7-60-2-75 7-20 21-34 41-41l8-2 76 0 77 0 7 2c20 7 34 22 41 41 3 9 4 41 2 55-7 48-42 83-88 91-12 3-67 2-78 0z',
+  pcg: 'M139 426c-71-9-100-97-48-146 62-60 162 0 140 84-10 40-51 67-92 62zM331 426c-71-9-100-97-48-146 62-60 162 0 140 84-10 40-51 67-92 62zM127 234c-56-6-99-50-105-106-2-21-1-29 6-36 7-7 6-7 70-7 52 0 55 0 55 2-4 11-4 19-3 33 4 39 19 76 45 102 2 3 4 5 4 5-1 2-20 6-28 7-11 1-33 1-44 0zM310 234c-61-6-108-50-117-109-3-21 0-30 9-36l5-3 132-1c149 0 139-1 146 8 5 6 6 11 5 25-6 57-45 102-102 114-8 2-13 2-42 2-18 1-34 1-36 0z',
+};
+
+const WORKSPACES: { id: Domain; name: string; desc: string; home: string }[] = [
+  { id: 'cx',  name: 'Wint CX',  desc: 'Customer Excellence',  home: '/quality' },
+  { id: 'pcg', name: 'Wint PCG', desc: 'Private Client Group', home: '/admin/pcg-calls' },
+];
+
+export function WorkspaceIcon({ domain, size = 24 }: { domain: Domain; size?: number }) {
+  return (
+    <span className={`ws-tile ws-${domain}`} style={{ width: size, height: size }} aria-hidden>
+      <svg viewBox="0 0 512 512" width={Math.round(size * 0.62)} height={Math.round(size * 0.62)} fill="currentColor">
+        <path transform="translate(0 512) scale(1 -1)" d={GLYPHS[domain]} />
+      </svg>
+    </span>
+  );
+}
+
+/** Workspace switcher for Super Admins and users with access to both workspaces. Sits at the top of the sidebar, like
+ *  Todoist's profile button. The menu is portalled to <body>: the sticky sidebar is its own stacking context and
+ *  clips overflow, so a menu inside it would sit under the page content. */
+export default function WorkspaceSwitcher({ collapsed = false }: { collapsed?: boolean }) {
   const { data: session, update } = useSession();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { const t = e.target as Node; if (!rootRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); btnRef.current?.focus(); } };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
 
-  const isSuperAdmin = Boolean(session?.user?.isSuperAdmin);
-  const platformDomain = session?.user?.platformDomain;
+  const user = session?.user;
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+  if (!isSuperAdmin && user?.platformDomain !== 'both') return null;
 
-  // Only render switcher for Super Admins or users with access to 'both'
-  if (!isSuperAdmin && platformDomain !== 'both') {
-    return null;
-  }
+  const activeDomain: Domain = user?.activeDomain === 'pcg' ? 'pcg' : 'cx';
+  const active = WORKSPACES.find(w => w.id === activeDomain) ?? WORKSPACES[0];
 
-  const activeDomain = session?.user?.activeDomain || 'cx';
+  const toggle = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) { const z = uiZoom(); setPos({ top: r.bottom / z + 6, left: r.left / z }); }
+    setOpen(o => !o);
+  };
 
-  const handleSwitch = async (targetDomain: 'cx' | 'pcg') => {
-    if (targetDomain === activeDomain || loading) {
-      setOpen(false);
-      return;
-    }
-
+  const handleSwitch = async (target: Domain) => {
+    if (target === activeDomain || loading) { setOpen(false); return; }
     try {
       setLoading(true);
       const res = await fetch('/api/auth/switch-domain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: targetDomain }),
+        body: JSON.stringify({ domain: target }),
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to switch workspace profile');
-      }
-
-      // Update NextAuth client session
-      await update({ activeDomain: targetDomain });
-
-      // Navigate to respective workspace home
-      if (targetDomain === 'pcg') {
-        window.location.href = '/admin/pcg-calls';
-      } else {
-        window.location.href = '/quality';
-      }
+      if (!res.ok) throw new Error('Failed to switch workspace profile');
+      await update({ activeDomain: target });
+      window.location.href = WORKSPACES.find(w => w.id === target)!.home;
     } catch (err) {
       console.error('[WorkspaceSwitcher] Error switching domain:', err);
       setLoading(false);
@@ -67,153 +82,49 @@ export default function WorkspaceSwitcher({ compact = false }: { compact?: boole
   };
 
   return (
-    <div className="relative inline-block text-left w-full" ref={dropdownRef}>
-      {/* Switcher Trigger Button */}
+    <div className="ws-root" ref={rootRef}>
       <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        disabled={loading}
-        className={`w-full flex items-center justify-between gap-2.5 rounded-xl border transition-all text-left group ${
-          compact
-            ? 'px-2.5 py-1.5 text-xs bg-zinc-900/90 border-zinc-700/80 text-zinc-100 hover:border-zinc-500'
-            : activeDomain === 'pcg'
-            ? 'px-3.5 py-2.5 bg-gradient-to-r from-emerald-950/40 via-zinc-900 to-zinc-900 border-emerald-500/30 hover:border-emerald-500/60 text-white shadow-sm'
-            : 'px-3.5 py-2.5 bg-gradient-to-r from-blue-950/40 via-zinc-900 to-zinc-900 border-blue-500/30 hover:border-blue-500/60 text-white shadow-sm'
-        }`}
+        ref={btnRef} type="button" className={`ws-trigger${collapsed ? ' collapsed' : ''}`} onClick={toggle} disabled={loading}
+        aria-haspopup="menu" aria-expanded={open} aria-label={`Workspace: ${active.name}. Switch workspace`} title={collapsed ? active.name : undefined}
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div
-            className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-transform group-hover:scale-105 ${
-              activeDomain === 'pcg'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                : 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-            }`}
-          >
-            {activeDomain === 'pcg' ? '📈' : '🏢'}
-          </div>
-          <div className="min-w-0 leading-tight">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold tracking-tight truncate text-zinc-100">
-                {activeDomain === 'pcg' ? 'Wint PCG' : 'Wint CX'}
-              </span>
-              <span
-                className={`text-[9px] font-semibold px-1 py-0.2 rounded uppercase tracking-wider ${
-                  activeDomain === 'pcg'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                }`}
-              >
-                Profile
-              </span>
-            </div>
-            {!compact && (
-              <p className="text-[10px] text-zinc-400 truncate mt-0.5">
-                {activeDomain === 'pcg' ? 'Private Client Group' : 'Customer Experience'}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 text-zinc-400 group-hover:text-zinc-200">
-          {loading ? (
-            <svg className="animate-spin h-3.5 w-3.5 text-zinc-400" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-            </svg>
-          ) : (
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-            >
-              <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </div>
+        <WorkspaceIcon domain={active.id} />
+        {!collapsed && <span className="ws-trigger-name">{active.name}</span>}
+        {!collapsed && (loading ? (
+          <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none"><circle opacity=".25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path opacity=".75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
+        ) : (
+          <svg className={`ws-chevron${open ? ' open' : ''}`} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4" /></svg>
+        ))}
       </button>
 
-      {/* Netflix-Style Profile Dropdown Menu */}
-      {open && (
-        <div className="absolute left-0 mt-2 w-72 rounded-2xl bg-[#141416] border border-zinc-700/80 shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl">
-          <div className="px-2.5 py-2 border-b border-zinc-800/80 mb-1 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-              Switch Workspace Profile
-            </span>
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
-              Super Admin
-            </span>
+      {open && createPortal(
+        <div ref={menuRef} className="ws-menu" role="menu" aria-label="Switch workspace" style={{ top: pos.top, left: pos.left }}>
+          <div className="ws-menu-head">
+            <WorkspaceIcon domain={active.id} size={32} />
+            <div className="ws-menu-head-text">
+              <div className="ws-menu-title">{active.name}</div>
+              <div className="ws-menu-sub">{active.desc}</div>
+            </div>
+            {isSuperAdmin && <span className="ws-menu-hint">Super Admin</span>}
           </div>
-
-          <div className="space-y-1">
-            {/* CX Profile Option */}
+          <div className="ws-menu-sep" />
+          <div className="ws-menu-label">Switch workspace</div>
+          {WORKSPACES.map(w => (
             <button
-              type="button"
-              onClick={() => handleSwitch('cx')}
-              className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all text-left ${
-                activeDomain === 'cx'
-                  ? 'bg-blue-600/15 border border-blue-500/40 text-white'
-                  : 'hover:bg-zinc-800/60 text-zinc-300 hover:text-white border border-transparent'
-              }`}
+              key={w.id} type="button" role="menuitemradio" aria-checked={w.id === activeDomain}
+              className={`ws-menu-item${w.id === activeDomain ? ' active' : ''}`} onClick={() => handleSwitch(w.id)}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-sm">
-                  🏢
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-white">Wint CX</p>
-                    {activeDomain === 'cx' && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {activeDomain === 'cx' && (
-                <span className="text-xs text-blue-400 font-bold">✓</span>
+              <WorkspaceIcon domain={w.id} size={22} />
+              <span className="ws-menu-item-name">{w.name}</span>
+              <span className="ws-menu-item-desc">{w.desc}</span>
+              {w.id === activeDomain && (
+                <svg className="ws-check" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5" /></svg>
               )}
             </button>
-
-            {/* PCG Profile Option */}
-            <button
-              type="button"
-              onClick={() => handleSwitch('pcg')}
-              className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all text-left ${
-                activeDomain === 'pcg'
-                  ? 'bg-emerald-600/15 border border-emerald-500/40 text-white'
-                  : 'hover:bg-zinc-800/60 text-zinc-300 hover:text-white border border-transparent'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-sm">
-                  📈
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-white">Wint PCG</p>
-                    {activeDomain === 'pcg' && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {activeDomain === 'pcg' && (
-                <span className="text-xs text-emerald-400 font-bold">✓</span>
-              )}
-            </button>
-          </div>
-
-          <div className="mt-2 pt-2 border-t border-zinc-800/80 px-2.5 pb-1">
-            <p className="text-[10px] text-zinc-500 leading-tight">
-              Switching profiles changes your navigation, analytics, and available dashboards.
-            </p>
-          </div>
-        </div>
+          ))}
+          <div className="ws-menu-sep" />
+          <p className="ws-menu-note">Switching changes your navigation, analytics and dashboards.</p>
+        </div>,
+        document.body,
       )}
     </div>
   );

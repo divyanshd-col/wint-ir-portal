@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
+import DropdownSearch, { matchesSearch } from '@/components/shell/DropdownSearch';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -115,24 +116,24 @@ function ParamRow({ p }: { p: ParamData }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 16,
-      padding: '8px 0', borderBottom: '1px solid var(--qa-border-sub)',
+      padding: '9px 0', borderBottom: '1px solid var(--qa-border-sub)',
     }}>
-      <span style={{ width: 230, flexShrink: 0, fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
+      <span style={{ width: 300, flexShrink: 0, fontSize: 13.5, fontWeight: 500, color: 'var(--qa-text)' }}>
         {p.label}
       </span>
       <span style={{ width: 44, flexShrink: 0, fontSize: 12, color: 'var(--qa-text-3)', fontFamily: 'ui-monospace, monospace', textAlign: 'right' }}>
         {p.weight}%
       </span>
-      <span style={{ flex: 1, height: 10, background: 'var(--qa-fill-med)', borderRadius: 999, position: 'relative' }}>
+      <span style={{ flex: 1, height: 6, background: 'var(--qa-fill-med)', borderRadius: 999, position: 'relative' }}>
         <span style={{ display: 'block', height: '100%', width: `${team}%`, background: 'var(--qa-gray-700)', borderRadius: 999 }} />
         {p.cx_score != null && (
           <span
-            style={{ position: 'absolute', top: -4, left: `${cx}%`, width: 0, height: 18, borderLeft: '2px dashed var(--qa-text-2)', transform: 'translateX(-1px)' }}
+            style={{ position: 'absolute', top: -4, left: `${cx}%`, width: 0, height: 14, borderLeft: '2px dashed var(--qa-text-2)', transform: 'translateX(-1px)' }}
             title={`Dept avg ${cx}%`}
           />
         )}
       </span>
-      <span style={{ width: 44, flexShrink: 0, textAlign: 'right', fontSize: 14, fontWeight: 600, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text)' }}>
+      <span style={{ width: 44, flexShrink: 0, textAlign: 'right', fontSize: 13, fontWeight: 600, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text)' }}>
         {p.team_score != null ? `${Math.round(p.team_score)}%` : '—'}
       </span>
     </div>
@@ -159,6 +160,7 @@ export default function TLTeamAnalyticsDashboard() {
   const [breakdownCh, setBreakdownCh]       = useState<Channel>('chats');
   const [selectedTL, setSelectedTL]         = useState<string>('');
   const [showTLDrop, setShowTLDrop]         = useState<boolean>(false);
+  const [tlSearch, setTLSearch]             = useState('');
   const tlDropRef                           = useRef<HTMLDivElement>(null);
 
   const [data,    setData]    = useState<AnalyticsData | null>(null);
@@ -249,14 +251,20 @@ export default function TLTeamAnalyticsDashboard() {
                 <div style={{
                   position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40,
                   background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.1)', minWidth: 180, overflow: 'hidden',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.1)', minWidth: 220,
+                  maxHeight: 'min(360px, calc(100vh - 220px))', overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain',
                 }}>
-                  {data.tls.map(tl => (
+                  <DropdownSearch value={tlSearch} onChange={setTLSearch} count={data.tls.length} placeholder="Search TL…" />
+                  {data.tls.filter(tl => matchesSearch(tlSearch, tl)).length === 0 && (
+                    <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--qa-text-3)' }}>No TLs match “{tlSearch}”</div>
+                  )}
+                  {data.tls.filter(tl => matchesSearch(tlSearch, tl)).map(tl => (
                     <button
                       key={tl}
                       onClick={() => {
                         setSelectedTL(tl);
                         setShowTLDrop(false);
+                        setTLSearch('');
                       }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10,

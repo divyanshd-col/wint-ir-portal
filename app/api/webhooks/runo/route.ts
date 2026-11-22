@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { savePcgWebhookPayload } from '@/lib/pcg/db';
 import { query } from '@/lib/cx/db';
+import { isPcgExcludedInternalPhone } from '@/lib/pcg/excluded-numbers';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -193,7 +194,9 @@ export async function POST(req: NextRequest) {
       headers: headers,
     });
   } catch (err: any) {
-    console.warn('[runo-webhook] Non-critical warning saving raw payload:', err.message);
+    // Not stored: answer 500 so Runo can retry rather than lose the call event.
+    console.error('[runo-webhook] Failed to store raw payload:', err?.message || err);
+    return NextResponse.json({ error: 'Failed to store payload' }, { status: 500 });
   }
 
   // 2. Process & Upsert into dedicated `pcg_call_recordings` table
@@ -210,6 +213,25 @@ export async function POST(req: NextRequest) {
     const startTime    = parseEpochTime(body.startTime);
     const createdAtTime = parseEpochTime(body.createdAt);
 
+    // Identify if call is from a known internal excluded number or an unverified unanswered non-client
+    const isInternalExcluded = isPcgExcludedInternalPhone(phoneNumber);
+    const isUnanswered = (duration === 0) || tag === 'unanswered' || callType === 'missed';
+    let determinedCallNature = isInternalExcluded ? 'non_client' : 'client';
+    if (!isInternalExcluded && isUnanswered) {
+      if (customerId) {
+        determinedCallNature = 'client';
+      } else if (phoneNumber) {
+        const cleanPhone = phoneNumber.replace(/\+/g, '').trim();
+        const contactCheck = await query(`SELECT 1 FROM contacts WHERE phone = $1 LIMIT 1`, [cleanPhone]);
+        determinedCallNature = contactCheck.length > 0 ? 'client' : 'non_client';
+      } else {
+        determinedCallNature = 'non_client';
+      }
+    }
+    const effectiveCallCategory = isInternalExcluded ? 'internal_personal' : callCategory;
+    const effectiveExclusionReason = isInternalExcluded ? 'Internal company number' : null;
+    const effectiveCategorySource = isInternalExcluded ? 'internal_number_rule' : null;
+
     if (recordingUrl) {
       // Audio Recording URL Payload (can also include duration, calledBy, etc.)
       await query(`
@@ -217,12 +239,12 @@ export async function POST(req: NextRequest) {
           call_id, recording_url, call_category, raw_payload,
           caller_id, called_by, agent_name, customer_id, phone_number,
           user_phone, process_id, call_type, tag, duration_seconds,
-          start_time, created_at_time
+          start_time, created_at_time, call_nature, exclusion_reason, category_source
         )
-        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         ON CONFLICT (call_id) DO UPDATE SET
           recording_url    = EXCLUDED.recording_url,
-          call_category    = COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category),
+          call_category    = CASE WHEN EXCLUDED.category_source = 'internal_number_rule' THEN 'internal_personal' ELSE COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category) END,
           caller_id        = COALESCE(EXCLUDED.caller_id, pcg_call_recordings.caller_id),
           called_by        = COALESCE(EXCLUDED.called_by, pcg_call_recordings.called_by),
           agent_name       = COALESCE(EXCLUDED.agent_name, pcg_call_recordings.agent_name),
@@ -236,11 +258,14 @@ export async function POST(req: NextRequest) {
           start_time       = COALESCE(EXCLUDED.start_time, pcg_call_recordings.start_time),
           created_at_time  = COALESCE(EXCLUDED.created_at_time, pcg_call_recordings.created_at_time),
           raw_payload      = pcg_call_recordings.raw_payload || EXCLUDED.raw_payload,
+          call_nature      = CASE WHEN EXCLUDED.category_source = 'internal_number_rule' THEN 'non_client' ELSE COALESCE(pcg_call_recordings.call_nature, EXCLUDED.call_nature) END,
+          exclusion_reason = COALESCE(EXCLUDED.exclusion_reason, pcg_call_recordings.exclusion_reason),
+          category_source  = COALESCE(EXCLUDED.category_source, pcg_call_recordings.category_source),
           updated_at       = NOW()
       `, [
         callId,
         String(recordingUrl).trim(),
-        callCategory,
+        effectiveCallCategory,
         JSON.stringify(body),
         callerId,
         calledBy,
@@ -254,6 +279,9 @@ export async function POST(req: NextRequest) {
         duration,
         startTime,
         createdAtTime,
+        determinedCallNature,
+        effectiveExclusionReason,
+        effectiveCategorySource,
       ]);
 
       console.log(`[runo-webhook] S3 Recording URL and call metadata saved for PCG call ${callId}`);
@@ -263,8 +291,9 @@ export async function POST(req: NextRequest) {
         INSERT INTO pcg_call_recordings (
           call_id, caller_id, called_by, agent_name, customer_id,
           phone_number, user_phone, process_id, call_type, tag,
-          duration_seconds, start_time, created_at_time, call_category, raw_payload
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
+          duration_seconds, start_time, created_at_time, call_category, raw_payload,
+          call_nature, exclusion_reason, category_source
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17, $18)
         ON CONFLICT (call_id) DO UPDATE SET
           caller_id        = COALESCE(EXCLUDED.caller_id, pcg_call_recordings.caller_id),
           called_by        = COALESCE(EXCLUDED.called_by, pcg_call_recordings.called_by),
@@ -278,8 +307,11 @@ export async function POST(req: NextRequest) {
           duration_seconds = CASE WHEN EXCLUDED.duration_seconds > 0 THEN EXCLUDED.duration_seconds ELSE pcg_call_recordings.duration_seconds END,
           start_time       = COALESCE(EXCLUDED.start_time, pcg_call_recordings.start_time),
           created_at_time  = COALESCE(EXCLUDED.created_at_time, pcg_call_recordings.created_at_time),
-          call_category    = COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category),
+          call_category    = CASE WHEN EXCLUDED.category_source = 'internal_number_rule' THEN 'internal_personal' ELSE COALESCE(EXCLUDED.call_category, pcg_call_recordings.call_category) END,
           raw_payload      = pcg_call_recordings.raw_payload || EXCLUDED.raw_payload,
+          call_nature      = CASE WHEN EXCLUDED.category_source = 'internal_number_rule' THEN 'non_client' ELSE COALESCE(pcg_call_recordings.call_nature, EXCLUDED.call_nature) END,
+          exclusion_reason = COALESCE(EXCLUDED.exclusion_reason, pcg_call_recordings.exclusion_reason),
+          category_source  = COALESCE(EXCLUDED.category_source, pcg_call_recordings.category_source),
           updated_at       = NOW()
       `, [
         callId,
@@ -295,8 +327,11 @@ export async function POST(req: NextRequest) {
         duration,
         startTime,
         createdAtTime,
-        callCategory,
+        effectiveCallCategory,
         JSON.stringify(body),
+        determinedCallNature,
+        effectiveExclusionReason,
+        effectiveCategorySource,
       ]);
 
       console.log(`[runo-webhook] Call event (${callType}) stored for PCG call ${callId}`);

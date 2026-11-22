@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { normalizeScore } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
@@ -97,29 +97,30 @@ export const PCG_PARAM_ALIASES: Record<string, string[]> = {
 };
 
 export interface CallEvalPanelProps {
-  callId:            string;
-  chatId?:           string | null;
-  mobileNumber?:     string | null;
-  durationSeconds?:  number | null;
-  agentName:         string;
-  iqsScore:          number;
-  calledAt?:         string | null;
-  disposition?:      string | null;
-  gates?:            any;
-  iqsScores?:        any;
-  mode?:             'submit' | 'view' | 'review' | 'resolve';
-  dispute?:          any;
+  callId: string;
+  chatId?: string | null;
+  mobileNumber?: string | null;
+  durationSeconds?: number | null;
+  agentName: string;
+  iqsScore: number | null;
+  calledAt?: string | null;
+  disposition?: string | null;
+  gates?: any;
+  iqsScores?: any;
+  mode?: 'submit' | 'view' | 'review' | 'resolve';
+  dispute?: any;
   allowRaiseDispute?: boolean;
-  allowReevaluate?:  boolean;
-  onDisputeRaised?:  () => void;
-  onDone:            () => void;
-  onClose:           () => void;
-  colSpan?:          number;
-  initialSegments?:  any[];
+  allowReevaluate?: boolean;
+  onDisputeRaised?: () => void;
+  onDone: () => void;
+  onClose: () => void;
+  colSpan?: number;
+  initialSegments?: any[];
   initialRecordingUrl?: string | null;
-  standalone?:       boolean;
-  hideShowChat?:     boolean;
-  isPcg?:            boolean;
+  standalone?: boolean;
+  hideShowChat?: boolean;
+  isPcg?: boolean;
+  sopTriggers?: any[];
   onOverrideSubmit?: (data: {
     callId: string;
     scores: Record<string, string>;
@@ -236,8 +237,12 @@ function resolveParamData(raw: any, pKey: string, aliasMap: Record<string, strin
 
 export function calculateCallIqs(
   paramState: Record<string, { score: string; reasoning?: string }>,
-  weights: Record<string, number> = CALL_IQS_WEIGHTS
+  weights: Record<string, number> = CALL_IQS_WEIGHTS,
+  disposition?: string | null
 ): number | null {
+  if (disposition && disposition.toLowerCase().includes('junk')) {
+    return null;
+  }
   let earned = 0;
   let applicable = 0;
   for (const [param, weight] of Object.entries(weights)) {
@@ -412,7 +417,7 @@ export default function CallEvalPanel({
   allowRaiseDispute = false,
   allowReevaluate = false,
   onDisputeRaised,
-  onDone = () => {},
+  onDone = () => { },
   onClose,
   colSpan = 6,
   initialSegments,
@@ -420,6 +425,7 @@ export default function CallEvalPanel({
   standalone = false,
   hideShowChat = false,
   isPcg = false,
+  sopTriggers,
   onOverrideSubmit,
   onReevaluate,
 }: CallEvalPanelProps) {
@@ -430,6 +436,15 @@ export default function CallEvalPanel({
   const [segments, setSegments] = useState<any[]>(initialSegments || []);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(initialRecordingUrl || null);
   const [durationSecs, setDurationSecs] = useState<number | null>(durationSeconds ?? null);
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handlePlaybackRateChange = (rate: number) => {
+    setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
   const [loading, setLoading] = useState(!initialSegments || initialSegments.length === 0);
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
@@ -440,14 +455,20 @@ export default function CallEvalPanel({
   const [paramState, setParamState] = useState<Record<string, { score: string; reasoning: string }>>({});
   const [hasUserEditedParams, setHasUserEditedParams] = useState(false);
 
+  const isJunkCall = Boolean(
+    (disposition && disposition.toLowerCase().includes('junk')) ||
+    (dispute?.disposition && dispute.disposition.toLowerCase().includes('junk'))
+  );
+
   const displayedIqs = useMemo(() => {
+    if (isJunkCall) return null;
     if (hasUserEditedParams) {
-      return calculateCallIqs(paramState, activeWeights);
+      return calculateCallIqs(paramState, activeWeights, disposition);
     }
     return currentIqs != null && !isNaN(currentIqs)
       ? currentIqs
       : (iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
-  }, [hasUserEditedParams, paramState, currentIqs, iqsScore, activeWeights]);
+  }, [isJunkCall, hasUserEditedParams, paramState, currentIqs, iqsScore, activeWeights, disposition]);
 
   // Compliance Gates state
   const [gateState, setGateState] = useState<Record<string, GateParamState>>(() => {
@@ -518,7 +539,7 @@ export default function CallEvalPanel({
   useEffect(() => {
     let raw = currentIqsScores || dispute?.parameters || iqsScores;
     if (typeof raw === 'string') {
-      try { raw = JSON.parse(raw); } catch {}
+      try { raw = JSON.parse(raw); } catch { }
     }
     const state: Record<string, { score: string; reasoning: string }> = {};
 
@@ -571,19 +592,78 @@ export default function CallEvalPanel({
           setCurrentIqs(parseFloat(d.iqsPercent));
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [callId, initialSegments, initialRecordingUrl, durationSeconds]);
 
+  const effectiveChallengedParams = useMemo(() => {
+    if (dispute?.challengedParams && Array.isArray(dispute.challengedParams) && dispute.challengedParams.length > 0) {
+      return dispute.challengedParams;
+    }
+    const noteText = dispute?.agentNote || dispute?.disputeReason || '';
+    if (typeof noteText === 'string' && noteText.trim()) {
+      const raw = noteText.trim();
+      if (raw.startsWith('{') || raw.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(raw);
+          const list = Array.isArray(parsed) ? parsed : (parsed.challengedParams || parsed.params);
+          if (Array.isArray(list) && list.length > 0) {
+            return list.map((item: any) => ({
+              param: typeof item === 'string' ? item : (item.param || item.id || item.name || ''),
+              note: typeof item === 'object' ? (item.note || parsed.note || '') : '',
+            }));
+          }
+        } catch {}
+      }
+      const match = raw.match(/Parameters challenged:\s*([^.\n]+)/i);
+      if (match && match[1]) {
+        const paramNames = match[1].split(',').map((s: string) => s.trim()).filter(Boolean);
+        let extractedNote = '';
+        const noteMatch = raw.match(/Parameters challenged:\s*[^.\n]+\.?\s*([\s\S]*)/i);
+        if (noteMatch && noteMatch[1]) extractedNote = noteMatch[1].trim();
+        return paramNames.map((pName: string) => ({
+          param: pName,
+          note: extractedNote || 'Challenged parameter score.'
+        }));
+      }
+    }
+    return [];
+  }, [dispute]);
+
   const challengedMap = useMemo(() => {
     const map = new Map<string, string>();
-    if (dispute?.challengedParams && Array.isArray(dispute.challengedParams)) {
-      for (const cp of dispute.challengedParams) {
-        if (cp.param) map.set(cp.param, cp.note || '');
+    if (effectiveChallengedParams && Array.isArray(effectiveChallengedParams)) {
+      for (const cp of effectiveChallengedParams) {
+        if (!cp.param) continue;
+        const note = cp.note || '';
+        const raw = String(cp.param).trim();
+        map.set(raw, note);
+        map.set(raw.toLowerCase(), note);
+        map.set(raw.toLowerCase().replace(/[^a-z0-9]/g, ''), note);
+
+        // Also map through activeAliases
+        for (const [key, aliases] of Object.entries(activeAliases)) {
+          const keyClean = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const rawClean = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (
+            keyClean === rawClean ||
+            aliases.some(a => a.toLowerCase().replace(/[^a-z0-9]/g, '') === rawClean)
+          ) {
+            map.set(key, note);
+          }
+        }
+        // Also map through activeNames
+        for (const [key, name] of Object.entries(activeNames)) {
+          const nameClean = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const rawClean = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (nameClean === rawClean) {
+            map.set(key, note);
+          }
+        }
       }
     }
     return map;
-  }, [dispute]);
+  }, [effectiveChallengedParams, activeAliases, activeNames]);
 
   const handleScoreChange = (param: string, val: string) => {
     setHasUserEditedParams(true);
@@ -592,7 +672,7 @@ export default function CallEvalPanel({
         ...prev,
         [param]: { ...(prev[param] || { reasoning: '' }), score: val }
       };
-      const newScore = calculateCallIqs(next);
+      const newScore = calculateCallIqs(next, activeWeights);
       setCurrentIqs(newScore);
       return next;
     });
@@ -675,11 +755,12 @@ export default function CallEvalPanel({
       // 2. Re-evaluate quality scores using corrected transcript
       setIsReevaluating(true);
       let evalDone = false;
+      let evalErrorMsg = '';
       try {
         const evalRes = await fetch('/api/call-quality/evaluate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ callId, forceTranscript: false })
+          body: JSON.stringify({ callId, forceTranscript: false, isPcg })
         });
         const data = await evalRes.json();
         if (evalRes.ok && data.ok) {
@@ -705,34 +786,20 @@ export default function CallEvalPanel({
             }
           }
           setHasUserEditedParams(false);
-          onReevaluate?.(callId, parsedIqs || 88);
+          if (parsedIqs != null) {
+            onReevaluate?.(callId, parsedIqs);
+          }
           alert('Transcript saved and call quality re-evaluated successfully! (Re-evaluation limit: 1 of 1 used)');
+        } else {
+          evalErrorMsg = data?.error || `HTTP ${evalRes.status}`;
         }
-      } catch (e) {
+      } catch (e: any) {
         console.warn('Evaluate call network error:', e);
+        evalErrorMsg = e?.message || 'Network error';
       }
 
-      // If backend evaluation was not available (e.g., prototype/mock call ID), simulate score update
       if (!evalDone) {
-        setHasReevaluated(true);
-        setIsTranscriptModified(false);
-        const revisedIqs = Math.min(100, Math.max(88, Math.round((currentIqs || iqsScore || 78) * 1.12)));
-        setCurrentIqs(revisedIqs);
-        setParamState(prev => {
-          const updated = { ...prev };
-          Object.keys(updated).forEach(k => {
-            if (updated[k].score === 'No' || updated[k].score === 'Half') {
-              updated[k] = {
-                score: 'Yes',
-                reasoning: 'Re-evaluated after speaker swap: RM properly addressed customer queries and set clear follow-through.'
-              };
-            }
-          });
-          return updated;
-        });
-        setHasUserEditedParams(true);
-        onReevaluate?.(callId, revisedIqs);
-        alert('Transcript saved and call quality re-evaluated successfully with corrected speaker roles! (Re-evaluation limit: 1 of 1 used)');
+        alert(`Re-evaluation could not complete: ${evalErrorMsg || 'Backend evaluation failed'}. No scores were altered.`);
       }
     } catch (err: any) {
       alert(`Error saving and re-evaluating: ${err.message}`);
@@ -752,7 +819,7 @@ export default function CallEvalPanel({
       const res = await fetch('/api/call-quality/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callId, forceTranscript: false })
+        body: JSON.stringify({ callId, forceTranscript: false, isPcg })
       });
       const data = await res.json();
       if (res.ok && data.ok) {
@@ -835,6 +902,7 @@ export default function CallEvalPanel({
     };
 
     if (onOverrideSubmit) {
+      const computedIqs = calculateCallIqs(paramState, activeWeights) ?? displayedIqs;
       try {
         await onOverrideSubmit({
           callId,
@@ -843,7 +911,7 @@ export default function CallEvalPanel({
           gates: gatesPayload,
           callGateResult: overallGateResult,
           note,
-          iqsScore: displayedIqs,
+          iqsScore: computedIqs,
         });
         onDone();
         return;
@@ -953,8 +1021,8 @@ export default function CallEvalPanel({
     ? pathname.startsWith('/agent')
       ? `/agent/quality-chats?chatId=${encodeURIComponent(effectiveChatId)}`
       : pathname.startsWith('/tl')
-      ? `/tl/quality-chats?chatId=${encodeURIComponent(effectiveChatId)}`
-      : `/quality/chat-evaluation?chatId=${encodeURIComponent(effectiveChatId)}&tab=${qaChatTab}`
+        ? `/tl/quality-chats?chatId=${encodeURIComponent(effectiveChatId)}`
+        : `/quality/chat-evaluation?chatId=${encodeURIComponent(effectiveChatId)}&tab=${qaChatTab}`
     : '#';
 
   const callDateStr = calledAt
@@ -969,37 +1037,51 @@ export default function CallEvalPanel({
     background: 'var(--qa-card)',
     margin: '16px auto', boxSizing: 'border-box',
   };
-  const hasBanners = Boolean((dispute?.challengedParams && dispute.challengedParams.length > 0) || dispute?.flagId || raisingDispute);
+  const hasBanners = Boolean((effectiveChallengedParams && effectiveChallengedParams.length > 0) || dispute?.flagId || raisingDispute);
 
   const panelContent = (
     <>
       {hasBanners && (
         <div style={{ padding: '16px 16px 0' }}>
           {/* Disputed Params banner */}
-          {dispute?.challengedParams && dispute.challengedParams.length > 0 && (
+          {effectiveChallengedParams && effectiveChallengedParams.length > 0 && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
               <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)' }}>
                 Disputed Params:
               </span>
-              {dispute.challengedParams.map((cp: any) => (
-                <span
-                  key={cp.param}
-                  title={cp.note}
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: '0.02em',
-                    background: 'var(--qa-fill-light)',
-                    border: '1px solid var(--qa-border)',
-                    borderRadius: 4,
-                    padding: '2px 8px',
-                    color: 'var(--qa-text-2)',
-                    cursor: cp.note ? 'help' : 'default',
-                  }}
-                >
-                  {activeNames[cp.param] ? `${cp.param}: ${activeNames[cp.param]}` : cp.param}
-                </span>
-              ))}
+              {effectiveChallengedParams.map((cp: any) => {
+                const resolvedName = activeNames[cp.param] || (function () {
+                  const rawClean = String(cp.param).toLowerCase().replace(/[^a-z0-9]/g, '');
+                  for (const [k, v] of Object.entries(activeNames)) {
+                    if (k.toLowerCase().replace(/[^a-z0-9]/g, '') === rawClean) return v;
+                  }
+                  for (const [k, aliases] of Object.entries(activeAliases)) {
+                    if (aliases.some(a => a.toLowerCase().replace(/[^a-z0-9]/g, '') === rawClean)) {
+                      return activeNames[k] || k;
+                    }
+                  }
+                  return cp.param;
+                })();
+                return (
+                  <span
+                    key={cp.param}
+                    title={cp.note}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      letterSpacing: '0.02em',
+                      background: 'var(--qa-fill-light)',
+                      border: '1px solid var(--qa-border)',
+                      borderRadius: 4,
+                      padding: '2px 8px',
+                      color: 'var(--qa-text-2)',
+                      cursor: cp.note ? 'help' : 'default',
+                    }}
+                  >
+                    {resolvedName && resolvedName !== cp.param ? `${cp.param}: ${resolvedName}` : cp.param}
+                  </span>
+                );
+              })}
             </div>
           )}
 
@@ -1146,17 +1228,57 @@ export default function CallEvalPanel({
               gap: 4,
               flexShrink: 0,
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
-                {durationSecs != null && (
-                  <span style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)', fontWeight: 500 }}>
-                    {fmtDuration(durationSecs)}
-                  </span>
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
+                  {durationSecs != null && (
+                    <span style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)', fontWeight: 500 }}>
+                      {fmtDuration(durationSecs)}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 10, color: 'var(--qa-text-3)', fontWeight: 600, marginRight: 2 }}>SPEED:</span>
+                  {([1, 1.5, 2] as const).map(rate => {
+                    const active = playbackRate === rate;
+                    return (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => handlePlaybackRateChange(rate)}
+                        style={{
+                          height: 22,
+                          padding: '0 6px',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          borderRadius: 4,
+                          border: `1px solid ${active ? 'var(--marker, #111111)' : 'var(--qa-border)'}`,
+                          background: active ? 'var(--ink, #111111)' : 'var(--qa-card)',
+                          color: active ? 'var(--ink-fg, #ffffff)' : 'var(--qa-text-2)',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {rate}x
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <audio
+                ref={audioRef}
                 src={recordingUrl.startsWith('/') ? recordingUrl : `/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
                 controls
+                preload="metadata"
+                onPlay={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+                }}
+                onLoadedMetadata={() => {
+                  if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+                }}
                 style={{ width: '100%', height: 32 }}
               />
             </div>
@@ -1222,13 +1344,37 @@ export default function CallEvalPanel({
                       </div>
                     );
                   }
-                  
+
                   const textContent = (seg.text || seg.message || seg.translation || seg.content || '').trim();
                   if (!textContent) return null;
 
                   const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.speaker || '').toLowerCase() === 'rm' || (seg.role || '').toLowerCase() === 'agent' || seg.sender === 'agent';
+                  const isSopTurn = Boolean(seg.isSopTrigger || (sopTriggers && sopTriggers.some((st: any) => st.timestamp === seg.ts || (st.quote && textContent && (textContent.includes(st.quote) || st.quote.includes(textContent))))));
+                  const matchedTrigger = seg.sopTrigger || (sopTriggers && sopTriggers.find((st: any) => st.timestamp === seg.ts || (st.quote && textContent && (textContent.includes(st.quote) || st.quote.includes(textContent)))));
+
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                      {isSopTurn && (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '3px 8px',
+                          marginBottom: 4,
+                          borderRadius: 6,
+                          background: '#FEF2F2',
+                          border: '1px solid #FECACA',
+                          color: '#DC2626',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          alignSelf: isIR ? 'flex-end' : 'flex-start',
+                        }}>
+                          <span>⚡ SOP Trigger: {matchedTrigger?.category || 'Monitoring Alert'}</span>
+                          <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#DC2626', color: '#fff', textTransform: 'uppercase' }}>
+                            {matchedTrigger?.severity || 'CRITICAL'}
+                          </span>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
                         <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>
                           {isIR ? (isPcg ? 'RM' : 'IR EXECUTIVE') : 'INVESTOR'} · {seg.ts || seg.timestamp || ''}
@@ -1255,8 +1401,10 @@ export default function CallEvalPanel({
                       <div style={{
                         padding: '10px 14px',
                         borderRadius: 12,
-                        background: isIR ? 'var(--ink)' : 'var(--qa-fill-light)',
-                        color: isIR ? 'var(--ink-fg)' : 'var(--qa-text)',
+                        background: isSopTurn ? '#FFF1F2' : (isIR ? 'var(--bubble-self-bg)' : 'var(--qa-fill-light)'),
+                        color: isSopTurn ? '#991B1B' : (isIR ? 'var(--bubble-self-fg)' : 'var(--qa-text)'),
+                        border: isSopTurn ? '2px solid #EF4444' : undefined,
+                        boxShadow: isSopTurn ? '0 0 0 2px rgba(239, 68, 68, 0.15)' : undefined,
                         fontSize: 13,
                         lineHeight: '18px'
                       }}>
@@ -1300,6 +1448,77 @@ export default function CallEvalPanel({
           </div>
 
           <div className="eval-scroll-s" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
+            {/* SOP Communication Alert Card */}
+            {sopTriggers && sopTriggers.length > 0 && (
+              <div style={{
+                marginBottom: 20,
+                padding: 14,
+                borderRadius: 10,
+                background: '#FEF2F2',
+                border: '1.5px solid #F87171',
+                boxShadow: '0 2px 6px rgba(220, 38, 38, 0.08)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626', display: 'inline-block' }}></span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#991B1B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      SOP Communication Alert
+                    </span>
+                  </div>
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: 9999,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    background: sopTriggers[0]?.severity === 'CRITICAL' ? '#DC2626' : sopTriggers[0]?.severity === 'MEDIUM' ? '#D97706' : '#6B7280',
+                    color: '#FFFFFF',
+                    letterSpacing: '0.05em'
+                  }}>
+                    {sopTriggers[0]?.severity || 'CRITICAL'}
+                  </span>
+                </div>
+
+                {sopTriggers.map((trig: any, tIdx: number) => (
+                  <div key={tIdx} style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{ fontWeight: 600, color: '#991B1B', minWidth: 90 }}>Category:</span>
+                      <span style={{ fontWeight: 700, color: '#111827' }}>{trig.category}</span>
+                    </div>
+                    {trig.signal && (
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontWeight: 600, color: '#991B1B', minWidth: 90 }}>Signal:</span>
+                        <span style={{ color: '#374151' }}>{trig.signal}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{ fontWeight: 600, color: '#991B1B', minWidth: 90 }}>Direction:</span>
+                      <span style={{ fontWeight: 700, color: '#1E40AF', background: '#DBEAFE', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>
+                        {trig.direction || (trig.speaker === 'Customer' ? 'Customer said this to RM' : 'RM said this to customer')}
+                      </span>
+                    </div>
+                    <div style={{
+                      marginTop: 6,
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: '#FFFFFF',
+                      border: '1px solid #FECACA',
+                      fontSize: 12,
+                      fontStyle: 'italic',
+                      color: '#1F2937',
+                      lineHeight: '18px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontWeight: 700, fontStyle: 'normal', color: '#DC2626', fontSize: 11 }}>
+                          Turn {trig.turn_index || ''} · {trig.timestamp || ''}
+                        </span>
+                      </div>
+                      "{trig.quote}"
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Compliance Gates */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1422,7 +1641,7 @@ export default function CallEvalPanel({
 
                           {isChallenged && (
                             <div style={{ margin: '4px 0', padding: '4px 6px', background: 'var(--sunk)', border: '1px solid var(--line-strong)', borderRadius: 4, fontSize: 11, color: 'var(--qa-text)' }}>
-                              <strong>Challenged by Agent:</strong> {challengedNote || 'No specific note'}
+                              <strong>Challenged by {dispute?.raisedByRole === 'tl' || dispute?.raisedBy === 'TL' ? 'Team Lead' : 'Agent'}:</strong> {challengedNote || 'No specific note'}
                             </div>
                           )}
 
@@ -1502,7 +1721,7 @@ export default function CallEvalPanel({
 
                       {isChallenged && (
                         <div style={{ margin: '4px 0', padding: '4px 6px', background: 'var(--sunk)', border: '1px solid var(--line-strong)', borderRadius: 4, fontSize: 11, color: 'var(--qa-text)' }}>
-                          <strong>Challenged by Agent:</strong> {challengedNote || 'No specific note'}
+                          <strong>Challenged by {dispute?.raisedByRole === 'tl' || dispute?.raisedBy === 'TL' ? 'Team Lead' : 'Agent'}:</strong> {challengedNote || 'No specific note'}
                         </div>
                       )}
 

@@ -5,6 +5,9 @@ import DateRangePicker from './DateRangePicker';
 import type { CallToReviewRow } from '@/app/api/cx/qa/calls-to-review/route';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { useSort, sortRows, SortTh } from './sort';
+import DropdownSearch, { matchesSearch } from '@/components/shell/DropdownSearch';
+import * as T from './tableStyles';
+import { isJunkDisposition } from '@/lib/quality';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -92,9 +95,13 @@ const CallEvalRow = React.memo(function CallEvalRow({
           )}
         </td>
         <td style={tdNum}>
-          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-            {call.iqsScore ?? '—'}
-          </span>
+          {(!isJunkDisposition(call.disposition) && call.iqsScore !== null) ? (
+            <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+              {call.iqsScore}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
+          )}
         </td>
         <td style={td}>{call.reviewedBy || 'System'}</td>
         <td style={tdAct}>
@@ -102,7 +109,7 @@ const CallEvalRow = React.memo(function CallEvalRow({
             onClick={e => { e.stopPropagation(); onToggleExpand(call.callId); }}
             style={{
               background: 'none', border: 0, padding: 0,
-              fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+              fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
               color: 'var(--qa-text)', cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 4,
             }}
@@ -150,6 +157,7 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
   const [mobileSearch, setMobileSearch] = useState(initialMobile || '');
   const [debouncedMobile, setDebouncedMobile] = useState(initialMobile || '');
   const [dispFilter, setDispFilter] = useState<string[]>([]);
+  const [dispSearch, setDispSearch] = useState('');
   const [iqsMin, setIqsMin] = useState('');
   const [iqsMax, setIqsMax] = useState('');
   const [customFrom, setCustomFrom] = useState('');
@@ -231,18 +239,11 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
     by: c => c.reviewedBy,
   });
 
-  const th: React.CSSProperties = {
-    height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-    fontWeight: 500, textAlign: 'left', padding: '0 12px', whiteSpace: 'nowrap',
-  };
-  const td: React.CSSProperties = {
-    height: 48, padding: '0 12px', borderBottom: '1px solid var(--qa-border-sub)',
-    fontSize: 13, color: 'var(--qa-text)', verticalAlign: 'middle',
-  };
-  const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, monospace', fontSize: 12, color: 'var(--qa-text-2)' };
-  const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 12 };
-  const tdAct: React.CSSProperties  = { ...td, textAlign: 'right', width: 100 };
+  const th: React.CSSProperties = T.th;
+  const td: React.CSSProperties = T.td;
+  const tdMono: React.CSSProperties = T.tdMono;
+  const tdNum: React.CSSProperties  = T.tdNum;
+  const tdAct: React.CSSProperties  = { ...T.tdAct, width: 100 };
 
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
@@ -282,12 +283,13 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
           </button>
           {openDrop === 'disp' && (
             <div style={dropdown} onClick={e => e.stopPropagation()}>
+              <DropdownSearch value={dispSearch} onChange={setDispSearch} count={dispositions.length} placeholder="Search dispositions…" />
               <div style={dropItem} onClick={() => setDispFilter([])}>Clear</div>
-              {dispositions.map(d => {
+              {dispositions.filter(d => matchesSearch(dispSearch, d)).map(d => {
                 const checked = dispFilter.includes(d);
                 return (
                   <div key={d} style={dropItem} onClick={() => setDispFilter(prev => checked ? prev.filter(x => x !== d) : [...prev, d])}>
-                    <span style={{ fontSize: 10 }}>{checked ? '☑' : '☐'}</span> {d}
+                    <T.Check checked={checked} /> {d}
                   </div>
                 );
               })}

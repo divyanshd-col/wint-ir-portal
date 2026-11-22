@@ -58,12 +58,31 @@ const MailIcon = () => (
   </svg>
 );
 
+const TrophyIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+    <path d="M4 22h16" />
+    <path d="M10 14.66V17c0 .55-.45 1-1 1H7" />
+    <path d="M14 14.66V17c0 .55.45 1 1 1h2" />
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+  </svg>
+);
+
+const ClockIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+  </svg>
+);
+
 export const NAV_ALL: NavItem[] = [
   { label: 'Analytics',        href: '/quality',                icon: StarIcon,       roles: ['admin', 'quality', 'tl', 'agent'], skill: 'quality:analytics:access' },
+  { label: 'IR Performance',   href: '/tl/ir-performance',      icon: TrophyIcon,     roles: ['admin'],                           skill: 'tl:team_analytics:access' },
+  { label: 'SLA / TAT Analytics', href: '/tl/sla-analytics',   icon: ClockIcon,      roles: ['admin'] },
   { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'],                skill: 'quality:chat_eval:access', section: 'QA' },
   { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'],                skill: 'quality:call_eval:access', section: 'QA' },
   { label: 'Email Evaluation', href: '/quality/email-evaluation', icon: MailIcon,      roles: ['admin', 'quality'],                section: 'QA' },
-  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin'],                           skill: 'tl:team_analytics:access', section: 'TL' },
+  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin', 'tl'],                     skill: 'tl:team_analytics:access', section: 'TL' },
   { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,       roles: ['admin', 'tl'],                     skill: 'tl:member_analytics:access', section: 'TL' },
   { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['admin', 'tl'],                     skill: 'tl:quality_chats:access', section: 'TL' },
   { label: 'Quality Calls',    href: '/tl/quality-calls',       icon: PhoneIcon,      roles: ['admin', 'tl'],                     skill: 'tl:quality_calls:access', section: 'TL' },

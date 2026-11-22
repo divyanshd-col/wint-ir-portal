@@ -114,7 +114,7 @@ export default function QADashboard() {
       {/* Header + date range */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-stone-800">Quality Overview</h1>
+          <h1 className="text-2xl font-semibold text-stone-800">Quality Overview</h1>
           <p className="text-sm text-stone-500 mt-0.5">IQS scores &amp; conversation quality analysis</p>
         </div>
         <div className="flex items-center gap-2 text-sm">
