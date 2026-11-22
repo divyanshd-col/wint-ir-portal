@@ -13,6 +13,7 @@ interface Props {
   onDisputeUpdate?: () => void;
   userRole?: 'admin' | 'tl' | 'agent';
   allowRaiseDispute?: boolean;
+  canOverride?: boolean;
 }
 
 interface EmailBlock {
@@ -260,6 +261,7 @@ export default function PcgEmailEvalPanel({
   onDisputeUpdate,
   userRole = 'admin',
   allowRaiseDispute = false,
+  canOverride,
 }: Props) {
   // Currently viewed reply (defaults to the evaluated reply)
   const [selectedReplyId, setSelectedReplyId] = useState<string>(email.messageId);
@@ -270,8 +272,8 @@ export default function PcgEmailEvalPanel({
   const [disputeNotes, setDisputeNotes] = useState('');
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
 
-  // Inline Edit Evaluation state (matching PCG Chat Quality — TL only)
-  const canEditEvaluation = userRole === 'tl';
+  // Inline Edit Evaluation state: authorized reviewer can edit
+  const canEditEvaluation = canOverride !== undefined ? canOverride : userRole === 'tl';
   const [isEditing, setIsEditing] = useState(false);
   const [draftParams, setDraftParams] = useState<PcgEmailEvaluation['parameters']>(() => ({ ...email.parameters }));
   const [draftGates, setDraftGates] = useState<PcgEmailEvaluation['complianceFlags']>(() => [...email.complianceFlags]);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { withLogging } from '@/lib/log';
 import { query } from '@/lib/cx/db';
+import { readConfig } from '@/lib/config';
 import { canonicalizePcgRmName, isSamePcgAgent, isPcgAm, ALL_TL_NAMES, isPcgTl } from '@/lib/pcg/canonical-names';
 import { isExcludedFromPcgEmailEvaluation } from '@/lib/pcg/email-db';
 import { getPcgRmsForTl } from '@/lib/pcg/rm-directory';
@@ -53,6 +54,7 @@ export interface PcgEmailEvaluation {
   tlName: string;
   isTl?: boolean;
   isAm?: boolean;
+  assignedAdmin?: string;
   sentAt: string;
   evaluatedAt: string;
   evaluationStatus: 'Pending' | 'Completed' | 'Failed';
@@ -208,25 +210,25 @@ function mapDbEvalRowToPcgEmailEvaluation(row: any): PcgEmailEvaluation {
       Array.isArray(row.compliance_flags) && row.compliance_flags.length > 0
         ? row.compliance_flags
         : [
-            {
-              gate: 'G1_no_advice',
-              label: 'G1: Advice (No Investment / Tax Advice)',
-              status: 'PASS',
-              reason: 'Factual information provided without unauthorized advisory.'
-            },
-            {
-              gate: 'G2_no_fabrication',
-              label: 'G2: Fabrication (No Fabricated Facts)',
-              status: 'PASS',
-              reason: 'Verified against official product operational records.'
-            },
-            {
-              gate: 'G3_identity_first',
-              label: 'G3: Identity (Identity First Verification)',
-              status: 'PASS',
-              reason: 'Verified client identity credentials.'
-            }
-          ],
+          {
+            gate: 'G1_no_advice',
+            label: 'G1: Advice (No Investment / Tax Advice)',
+            status: 'PASS',
+            reason: 'Factual information provided without unauthorized advisory.'
+          },
+          {
+            gate: 'G2_no_fabrication',
+            label: 'G2: Fabrication (No Fabricated Facts)',
+            status: 'PASS',
+            reason: 'Verified against official product operational records.'
+          },
+          {
+            gate: 'G3_identity_first',
+            label: 'G3: Identity (Identity First Verification)',
+            status: 'PASS',
+            reason: 'Verified client identity credentials.'
+          }
+        ],
     parameters: row.parameters && Object.keys(row.parameters).length > 0 ? row.parameters : {},
     strengths: Array.isArray(row.strengths) ? row.strengths : ['Clear and prompt communication'],
     areasForImprovement: Array.isArray(row.areas_for_improvement) ? row.areas_for_improvement : [],
@@ -323,6 +325,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const section = searchParams.get('section') || 'all';
   const searchQuery = (searchParams.get('search') || '').toLowerCase().trim();
   const verdictFilter = searchParams.get('verdict') || 'all';
+  const startDate = searchParams.get('startDate')?.trim();
+  const endDate = searchParams.get('endDate')?.trim();
+  const minIqsParam = searchParams.get('min_iqs')?.trim();
+  const maxIqsParam = searchParams.get('max_iqs')?.trim();
+  const pageParam = searchParams.get('page');
+  const limitParam = searchParams.get('limit');
+  const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
+  const limit = limitParam ? Math.min(500, Math.max(1, parseInt(limitParam, 10))) : 0;
 
   // 1. Fetch completed evaluations from pcg_email_evaluations
   // PCG emails are 100% evaluated by the Bot, matching PCG chats and calls.
@@ -384,28 +394,40 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   list = list.filter((e) => !isExcludedFromPcgEmailEvaluation(e.rmName));
 
   // 1. Scoping by Persona:
-  // - TL Persona: Every TL strictly only sees their mapped RMs and AMs.
+  // - TL Persona: Every TL strictly only sees their mapped RMs and AMs by default.
+  //   When my_emails=true is passed, they strictly see their own emails.
   //   Under the dispute section, they will only see disputes raised by their mapped RMs or AMs.
-  //   TL-handled emails are excluded from TL view (TLs don't QA themselves, TLs QA their team).
   // - Admin Persona: Sees all emails across all teams, including emails handled by TLs!
   // - Agent Persona: Strictly only sees emails handled by that agent.
   let mappedMembersForTl: string[] = [];
+  const myEmailsParam = searchParams.get('my_emails') === 'true' || searchParams.get('caller_role') === 'tl';
   if (persona === 'tl') {
     const effectiveTl = tlNameFilter && tlNameFilter !== 'all' ? tlNameFilter : (sessionUser?.name || 'Swetha');
     mappedMembersForTl = await getPcgRmsForTl(effectiveTl);
 
-    list = list.filter((e) => {
-      // Exclude TL-handled emails from TL view (TLs QA their team, not themselves)
-      if (ALL_TL_NAMES.some((tl) => isSamePcgAgent(tl, e.rmName)) || isPcgTl(e.rmName) || e.isTl) return false;
+    if (myEmailsParam) {
+      list = list.filter((e) => isSamePcgAgent(e.rmName, effectiveTl) || (e.isTl && isSamePcgAgent(e.rmName, effectiveTl)));
+    } else {
+      list = list.filter((e) => {
+        // Allow TL's own disputed emails so they can track them under dispute sections!
+        const isDispute = e.disputeStatus === 'pending' || e.disputeStatus === 'resolved' || e.disputeStatus === 'overridden';
+        const isTheTlThemselves = isSamePcgAgent(e.rmName, effectiveTl);
+        if (isTheTlThemselves && isDispute) {
+          return true;
+        }
 
-      // Strictly include ONLY the RMs and AMs mapped against this TL
-      const isMember = mappedMembersForTl.some((m) => isSamePcgAgent(m, e.rmName));
-      return isMember;
-    });
+        // Exclude TL-handled emails from standard TL QA view (TLs QA their team, not themselves)
+        if (ALL_TL_NAMES.some((tl) => isSamePcgAgent(tl, e.rmName)) || isPcgTl(e.rmName) || e.isTl) return false;
 
-    // If TL specifies a specific RM or AM filter from their team dropdown
-    if (rmNameFilter && rmNameFilter !== 'all') {
-      list = list.filter((e) => isSamePcgAgent(e.rmName, rmNameFilter));
+        // Strictly include ONLY the RMs and AMs mapped against this TL
+        const isMember = mappedMembersForTl.some((m) => isSamePcgAgent(m, e.rmName));
+        return isMember;
+      });
+
+      // If TL specifies a specific RM or AM filter from their team dropdown
+      if (rmNameFilter && rmNameFilter !== 'all') {
+        list = list.filter((e) => isSamePcgAgent(e.rmName, rmNameFilter));
+      }
     }
   } else if (persona === 'agent') {
     const effectiveAgentName = (rmNameFilter && rmNameFilter !== 'all') ? rmNameFilter : sessionUser?.name;
@@ -445,6 +467,36 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         (Array.isArray(e.threadReplies) &&
           e.threadReplies.some((r) => r.authorName && r.authorName.toLowerCase().includes(searchQuery)))
     );
+  }
+
+  // Date range filtering
+  if (startDate) {
+    const startMs = new Date(startDate).getTime();
+    if (!isNaN(startMs)) {
+      list = list.filter((e) => {
+        const itemMs = new Date(e.sentAt || e.evaluatedAt || 0).getTime();
+        return itemMs >= startMs;
+      });
+    }
+  }
+  if (endDate) {
+    const endMs = new Date(endDate).getTime();
+    if (!isNaN(endMs)) {
+      list = list.filter((e) => {
+        const itemMs = new Date(e.sentAt || e.evaluatedAt || 0).getTime();
+        return itemMs <= endMs;
+      });
+    }
+  }
+
+  // Min / Max IQS
+  if (minIqsParam) {
+    const minVal = parseFloat(minIqsParam);
+    if (!isNaN(minVal)) list = list.filter((e) => (e.iqsScore ?? 0) >= minVal);
+  }
+  if (maxIqsParam) {
+    const maxVal = parseFloat(maxIqsParam);
+    if (!isNaN(maxVal)) list = list.filter((e) => (e.iqsScore ?? 0) <= maxVal);
   }
 
   // Snapshot base filtered list (before section/verdict split) so KPIs & tab counts reflect searched member/team
@@ -574,8 +626,26 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       ? Math.round((evaluatedItems.filter((e) => e.compliancePassed).length / evaluatedItems.length) * 100)
       : 100;
 
+  const config = await readConfig().catch(() => null);
+  const tlAdminMap = config?.pcgTlAdminAssignments || {};
+
+  const total = list.length;
+  const totalPages = limit > 0 ? (Math.ceil(total / limit) || 1) : 1;
+  const pagedList = limit > 0 ? list.slice((page - 1) * limit, (page - 1) * limit + limit) : list;
+
+  const mappedEmails = pagedList.map((item) => {
+    const isTl = Boolean(item.isTl || isPcgTl(item.rmName));
+    const cleanRm = (item.rmName || '').trim().toLowerCase();
+    const assignedAdmin = tlAdminMap[cleanRm] || 'Aahan';
+    return {
+      ...item,
+      isTl,
+      assignedAdmin,
+    };
+  });
+
   return NextResponse.json({
-    emails: list,
+    emails: mappedEmails,
     summary: {
       totalCount,
       avgIqs,
@@ -586,13 +656,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     sectionCounts,
     availableRms,
     availableTls,
-    page: 1,
-    total: list.length,
-    totalPages: 1
+    tlAdminAssignments: tlAdminMap,
+    page,
+    limit: limit > 0 ? limit : total,
+    total,
+    totalPages
   });
 });
 
 export const POST = withLogging(ROUTE, async (req: NextRequest) => {
+  let sessionUser: any = null;
+  try {
+    const { response, session } = await requireRole(['admin', 'tl', 'agent', 'quality']);
+    if (response) return response;
+    sessionUser = session?.user;
+  } catch {
+    // Permitted in local development
+  }
+
   try {
     const body = await req.json();
     const action = body.action;
@@ -631,7 +712,7 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
           ]),
           String(emailId)
         ]
-      ).catch(() => {});
+      ).catch(() => { });
 
       if (email) {
         return NextResponse.json({ success: true, email });
@@ -640,6 +721,55 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
     }
 
     if (action === 'resolve_dispute' || action === 'override') {
+      const targetEmail = dummyEmailsStore.find((e) => e.id === emailId || e.ticketId === emailId);
+      let agentName = targetEmail?.rmName || '';
+      if (!agentName) {
+        const row = await query<{ rm_name?: string; agent_name?: string }>(
+          `SELECT rm_name, agent_name FROM pcg_email_evaluations WHERE id::text = $1 OR message_id = $1 OR ticket_id = $1 LIMIT 1`,
+          [String(emailId)]
+        ).catch(() => []);
+        agentName = row[0]?.rm_name || row[0]?.agent_name || '';
+      }
+      const cleanAgent = agentName.trim().toLowerCase();
+      const isTlEmail = isPcgTl(agentName) || ALL_TL_NAMES.some((t) => t.toLowerCase() === cleanAgent);
+
+      if (isTlEmail) {
+        // TL email: only mapped Admin (or super admin) can override
+        const config = await readConfig().catch(() => null);
+        const mappedAdmin = config?.pcgTlAdminAssignments?.[cleanAgent] || 'Aahan';
+        const isSuperAdmin = Boolean((sessionUser as any)?.is_super_admin || (sessionUser as any)?.isSuperAdmin);
+        const sessionName = sessionUser?.name || '';
+        const isMappedAdmin = sessionName && (
+          sessionName.trim().toLowerCase() === mappedAdmin.trim().toLowerCase() ||
+          sessionName.toLowerCase().includes(mappedAdmin.toLowerCase()) ||
+          mappedAdmin.toLowerCase().includes(sessionName.toLowerCase())
+        );
+
+        if (!isSuperAdmin && (!isMappedAdmin || sessionUser?.role !== 'admin')) {
+          return NextResponse.json(
+            { error: `Evaluation override for TL ${agentName} is assigned to Admin ${mappedAdmin}.` },
+            { status: 403 }
+          );
+        }
+      } else {
+        // RM email: restricted to Team Leads (unless super admin)
+        if (sessionUser?.role === 'admin' && !(sessionUser as any)?.is_super_admin) {
+          return NextResponse.json(
+            { error: 'Evaluation override for RM emails is restricted to Team Leads' },
+            { status: 403 }
+          );
+        }
+        if (sessionUser?.role === 'tl') {
+          const reviewerName = sessionUser?.name || sessionUser?.email || 'Team Lead';
+          if (isSamePcgAgent(reviewerName, agentName) || isTlEmail) {
+            return NextResponse.json(
+              { error: 'Forbidden: Team Leads cannot override scores for their own emails.' },
+              { status: 403 }
+            );
+          }
+        }
+      }
+
       const newStatus = action === 'override' ? 'overridden' : 'resolved';
       const email = dummyEmailsStore.find((e) => e.id === emailId || e.ticketId === emailId);
       if (email) {
@@ -701,7 +831,7 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
             : null,
           String(emailId)
         ]
-      ).catch(() => {});
+      ).catch(() => { });
 
       if (email) {
         return NextResponse.json({ success: true, email });

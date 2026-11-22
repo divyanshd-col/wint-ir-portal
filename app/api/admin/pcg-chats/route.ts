@@ -3,10 +3,11 @@ import { randomUUID } from 'crypto';
 import { requireRole } from '@/lib/api-guard';
 import { withLogging } from '@/lib/log';
 import { query } from '@/lib/cx/db';
-import { canonicalizePcgRmName, isSamePcgAgent, PCG_AM_NAMES, isPcgAm } from '@/lib/pcg/canonical-names';
+import { canonicalizePcgRmName, isSamePcgAgent, PCG_AM_NAMES, isPcgAm, ALL_TL_NAMES, isPcgTl } from '@/lib/pcg/canonical-names';
 import { getPcgRmsForTl } from '@/lib/pcg/rm-directory';
 import { detectPcgChatCategories } from '@/lib/pcg/chat-category';
 import { pcgExcludedPhoneSql } from '@/lib/pcg/excluded-numbers';
+import { readConfig } from '@/lib/config';
 
 const ROUTE = 'admin/pcg-chats';
 
@@ -59,6 +60,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       verdict: s.verdict,
     }));
 
+    const config = await readConfig().catch(() => null);
+    const tlAdminMap = config?.pcgTlAdminAssignments || {};
+    const isTlChat = ALL_TL_NAMES.some((t) => t.toLowerCase() === (r.rm_name || '').trim().toLowerCase());
+    const assignedAdmin = isTlChat ? (tlAdminMap[(r.rm_name || '').trim().toLowerCase()] || 'Aahan') : undefined;
+
     const singleChat = {
       id: String(r.id),
       customerPhone: r.customer_phone,
@@ -94,6 +100,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       reviewedAt: r.reviewed_at,
       isAm: Boolean(r.is_am),
       precedingRmName: r.preceding_rm_name || null,
+      isTlChat,
+      assignedAdmin,
     };
     return NextResponse.json({
       chat: {
@@ -126,27 +134,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const params: any[] = [];
   let paramIdx = 1;
 
-  const ALL_TL_NAMES = [
-    'Swetha',
-    'Swetha Jayakumar',
-    'swetha',
-    'Saiyam Rastogi',
-    'Saiyam',
-    'saiyam',
-    'Tanisha Mittal',
-    'Tanisha',
-    'tanisha',
-    'Dheeraj Bhojwani',
-    'Dheeraj',
-    'dheeraj',
-    'Sravanthi',
-    'sravanthi',
-  ];
-
   // Resolve effective TL for scoping:
   const userRole = sessionUser?.role;
   const isAgentPersona = personaParam === 'agent' || userRole === 'agent';
   const isTlPersona = personaParam === 'tl' || userRole === 'tl';
+  const myChatsParam = searchParams.get('my_chats') === 'true' || (isTlPersona && callerRole === 'tl');
   const effectiveTl = (userRole === 'tl')
     ? (sessionUser?.name || sessionUser?.email)
     : (isTlPersona
@@ -158,14 +150,25 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     mappedMembers = await getPcgRmsForTl(effectiveTl);
   }
 
-  // TL chats are strictly visible to Admin only.
-  // In Team Lead view (or non-admin personas), all TL-handled chats must be excluded.
-  if (personaParam !== 'admin') {
-    conditions.push(`(is_tl = false OR is_tl IS NULL)`);
-    conditions.push(`NOT (LOWER(TRIM(rm_name)) = ANY($${paramIdx}::text[]))`);
-    conditions.push(`(preceding_rm_name IS NULL OR NOT (LOWER(TRIM(preceding_rm_name)) = ANY($${paramIdx}::text[])))`);
-    params.push(ALL_TL_NAMES.map(n => n.toLowerCase()));
-    paramIdx++;
+  // TL chats are strictly visible to Admin, or to the TL themselves when viewing "My chats", or when viewing disputes.
+  // In Team Lead view (or non-admin personas), TL-handled chats must be excluded unless viewing My chats or disputes.
+  const isDisputeSection = sectionFilter === 'disputes_pending' || sectionFilter === 'disputes_reviewed' || sectionFilter === 'disputes_raised';
+  if (!myChatsParam && personaParam !== 'admin') {
+    if (isDisputeSection && isTlPersona && effectiveTl) {
+      const cleanTl = effectiveTl.replace(/^Team\s+/i, '').trim().toLowerCase();
+      conditions.push(`(
+        ((is_tl = false OR is_tl IS NULL) AND NOT (LOWER(TRIM(rm_name)) = ANY($${paramIdx}::text[])))
+        OR (LOWER(TRIM(rm_name)) = $${paramIdx + 1} AND (dispute_status IS NOT NULL AND dispute_status != 'none' AND dispute_status != ''))
+      )`);
+      params.push(ALL_TL_NAMES.map(n => n.toLowerCase()), cleanTl);
+      paramIdx += 2;
+    } else {
+      conditions.push(`(is_tl = false OR is_tl IS NULL)`);
+      conditions.push(`NOT (LOWER(TRIM(rm_name)) = ANY($${paramIdx}::text[]))`);
+      conditions.push(`(preceding_rm_name IS NULL OR NOT (LOWER(TRIM(preceding_rm_name)) = ANY($${paramIdx}::text[])))`);
+      params.push(ALL_TL_NAMES.map(n => n.toLowerCase()));
+      paramIdx++;
+    }
   }
 
   // Check if requested filter is targeting a Team Lead
@@ -182,17 +185,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // Target cohort resolution:
   const effectiveCohort = isAgentPersona
     ? null
-    : (callerRole === 'tl' || roleFilter === 'tl' || isTargetTl)
-    ? 'tl'
-    : (callerRole === 'dual' || roleFilter === 'dual' || dualFilter === 'true' || dualFilter === 'dual')
-    ? 'dual'
-    : (callerRole === 'am' || roleFilter === 'am' || (amFilter && amFilter !== 'all'))
-    ? 'am'
-    : (callerRole === 'rm' || roleFilter === 'rm' || (rmFilter && rmFilter !== 'all'))
-    ? 'rm'
-    : (callerRole === 'team')
-    ? 'team'
-    : null;
+    : (callerRole === 'tl' || roleFilter === 'tl' || isTargetTl || myChatsParam)
+      ? 'tl'
+      : (callerRole === 'dual' || roleFilter === 'dual' || dualFilter === 'true' || dualFilter === 'dual')
+        ? 'dual'
+        : (callerRole === 'am' || roleFilter === 'am' || (amFilter && amFilter !== 'all'))
+          ? 'am'
+          : (callerRole === 'rm' || roleFilter === 'rm' || (rmFilter && rmFilter !== 'all'))
+            ? 'rm'
+            : (callerRole === 'team')
+              ? 'team'
+              : null;
 
   if (isAgentPersona) {
     // When an agent views their own chat quality, show all chats they handled or co-handled
@@ -218,7 +221,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     params.push(ALL_TL_NAMES.map(n => n.toLowerCase()));
     paramIdx++;
 
-    const effectiveHandler = (tlFilter && tlFilter !== 'all') ? tlFilter : (rmFilter && rmFilter !== 'all') ? rmFilter : null;
+    const effectiveHandler = (tlFilter && tlFilter !== 'all')
+      ? tlFilter
+      : (myChatsParam && effectiveTl)
+        ? effectiveTl
+        : (rmFilter && rmFilter !== 'all')
+          ? rmFilter
+          : null;
     if (effectiveHandler) {
       const cleanTl = effectiveHandler.replace(/^Team\s+/i, '').trim().toLowerCase();
       const canonicalTl = canonicalizePcgRmName(cleanTl).toLowerCase();
@@ -474,14 +483,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   // Section Filtering for TL / Admin / Agent:
   if (sectionFilter && sectionFilter !== 'all') {
-    if (sectionFilter === 'pending_evaluation') {
-      conditions.push(`(status != 'reviewed' OR status IS NULL) AND reviewed_by IS NULL AND (dispute_status != 'pending' OR dispute_status IS NULL)`);
-    } else if (sectionFilter === 'evaluated') {
-      if (isAgentPersona) {
-        conditions.push(`(dispute_status != 'pending' OR dispute_status IS NULL) AND (dispute_reason IS NULL OR dispute_reason = '' OR dispute_status = 'none')`);
-      } else {
-        conditions.push(`(status = 'reviewed' OR reviewed_by IS NOT NULL) AND (dispute_status != 'pending' OR dispute_status IS NULL) AND (dispute_reason IS NULL OR dispute_reason = '' OR dispute_status = 'none')`);
-      }
+    if (sectionFilter === 'pending_evaluation' || sectionFilter === 'evaluated') {
+      conditions.push(`(dispute_status != 'pending' OR dispute_status IS NULL) AND (dispute_reason IS NULL OR dispute_reason = '' OR dispute_status = 'none')`);
     } else if (sectionFilter === 'disputes_pending' || sectionFilter === 'disputes_raised') {
       conditions.push(`dispute_status = 'pending'`);
     } else if (sectionFilter === 'disputes_reviewed') {
@@ -515,8 +518,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     `, scopeParams),
     query<any>(`
       SELECT
-        COUNT(CASE WHEN (status != 'reviewed' OR status IS NULL) AND reviewed_by IS NULL AND (dispute_status != 'pending' OR dispute_status IS NULL) THEN 1 END) AS pending_evaluation_count,
-        COUNT(CASE WHEN ${isAgentPersona ? "(dispute_status != 'pending' OR dispute_status IS NULL) AND (dispute_reason IS NULL OR dispute_reason = '' OR dispute_status = 'none')" : "(status = 'reviewed' OR reviewed_by IS NOT NULL) AND (dispute_status != 'pending' OR dispute_status IS NULL) AND (dispute_reason IS NULL OR dispute_reason = '' OR dispute_status = 'none')"} THEN 1 END) AS evaluated_count,
+        COUNT(CASE WHEN (dispute_status != 'pending' OR dispute_status IS NULL) AND (dispute_reason IS NULL OR dispute_reason = '' OR dispute_status = 'none') THEN 1 END) AS evaluated_count,
         COUNT(CASE WHEN dispute_status = 'pending' THEN 1 END) AS disputes_pending_count,
         COUNT(CASE WHEN (dispute_status IN ('resolved', 'overridden') OR (status = 'reviewed' AND reviewed_by IS NOT NULL)) AND (dispute_reason IS NOT NULL AND dispute_reason != '') AND dispute_status != 'pending' THEN 1 END) AS disputes_reviewed_count
       FROM pcg_chat_evaluations
@@ -531,7 +533,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const summary = summaryRows[0] || {};
   const sectionCounts = {
-    pendingEvaluation: Number(sectionCountsRows[0]?.pending_evaluation_count || 0),
+    pendingEvaluation: Number(sectionCountsRows[0]?.evaluated_count || 0),
     evaluated: Number(sectionCountsRows[0]?.evaluated_count || 0),
     disputesPending: Number(sectionCountsRows[0]?.disputes_pending_count || 0),
     disputesReviewed: Number(sectionCountsRows[0]?.disputes_reviewed_count || 0),
@@ -693,7 +695,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
   }
 
+  const config = await readConfig().catch(() => null);
+  const tlAdminMap = config?.pcgTlAdminAssignments || {};
+
   let chats = chatRows.map(r => {
+    const isTlChat = ALL_TL_NAMES.some((t) => t.toLowerCase() === (r.rm_name || '').trim().toLowerCase());
+    const assignedAdmin = isTlChat ? (tlAdminMap[(r.rm_name || '').trim().toLowerCase()] || 'Aahan') : undefined;
+
     const chatObj = {
       id: String(r.id),
       conversationId: r.conversation_id ? String(r.conversation_id) : null,
@@ -730,6 +738,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       reviewedAt: r.reviewed_at,
       isAm: Boolean(r.is_am),
       precedingRmName: r.preceding_rm_name || null,
+      isTlChat,
+      assignedAdmin,
     };
     return {
       ...chatObj,
@@ -765,7 +775,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         count: c,
       });
     }
-  } catch {}
+  } catch { }
 
   return NextResponse.json({
     chats,
@@ -898,8 +908,46 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   if (action === 'override_evaluation') {
-    if (sessionUser?.role === 'admin') {
-      return NextResponse.json({ error: 'Evaluation override is restricted to Team Leads' }, { status: 403 });
+    // Determine whether this chat was handled by a Team Lead or an RM
+    const chatRow = await query<{ rm_name: string }>(
+      `SELECT rm_name FROM pcg_chat_evaluations WHERE id = $1 LIMIT 1`,
+      [chatId]
+    );
+    const chatRm = chatRow[0]?.rm_name || '';
+    const cleanRm = chatRm.trim().toLowerCase();
+    const isTlChat = ALL_TL_NAMES.some((t) => t.toLowerCase() === cleanRm) || isPcgTl(chatRm);
+
+    if (isTlChat) {
+      // It is a TL chat. Only the mapped Admin (or Super Admin) can override it.
+      const config = await readConfig().catch(() => null);
+      const mappedAdmin = config?.pcgTlAdminAssignments?.[cleanRm] || 'Aahan';
+      const isSuperAdmin = Boolean((sessionUser as any)?.is_super_admin || (sessionUser as any)?.isSuperAdmin);
+      const isMappedAdmin = sessionUser?.name && (
+        sessionUser.name.trim().toLowerCase() === mappedAdmin.trim().toLowerCase() ||
+        sessionUser.name.toLowerCase().includes(mappedAdmin.toLowerCase()) ||
+        mappedAdmin.toLowerCase().includes(sessionUser.name.toLowerCase())
+      );
+
+      if (!isSuperAdmin && (!isMappedAdmin || sessionUser?.role !== 'admin')) {
+        return NextResponse.json(
+          { error: `Evaluation override for TL ${chatRm} is assigned to Admin ${mappedAdmin}.` },
+          { status: 403 }
+        );
+      }
+    } else {
+      // RM chat: restricted to Team Leads (or Super Admin)
+      if (sessionUser?.role === 'admin' && !(sessionUser as any)?.is_super_admin) {
+        return NextResponse.json({ error: 'Evaluation override for RM chats is restricted to Team Leads' }, { status: 403 });
+      }
+      if (sessionUser?.role === 'tl') {
+        const reviewerName = sessionUser?.name || sessionUser?.email || 'Team Lead';
+        if (isSamePcgAgent(reviewerName, chatRm) || isTlChat) {
+          return NextResponse.json(
+            { error: 'Forbidden: Team Leads cannot override scores for their own chats.' },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     const {

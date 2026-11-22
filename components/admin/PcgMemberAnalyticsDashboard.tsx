@@ -119,19 +119,34 @@ export default function PcgMemberAnalyticsDashboard({
   }, [dateRange]);
 
   const [wowTab, setWowTab] = useState<'metrics' | 'params'>('metrics');
-  const [wowChannel, setWowChannel] = useState<'chats' | 'calls'>('calls');
+  const [wowChannel, setWowChannel] = useState<'calls' | 'chats' | 'emails'>('calls');
   const [wowCategory, setWowCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support'>('all');
+
+  const currentTl = useMemo(() => {
+    if (tlName && tlName.trim()) return tlName.trim();
+    if (activePersona === 'tl' && teamLeads && teamLeads.length > 0) {
+      const matched = teamLeads.find(t => (t.rms || []).some((r: string) => availableRms.some(a => isSamePcgAgent(a, r))));
+      if (matched) return matched.tlName;
+      return teamLeads[0].tlName;
+    }
+    return '';
+  }, [tlName, activePersona, teamLeads, availableRms]);
+
+  const mappedTeamRms = useMemo(() => {
+    return availableRms.filter(r => !isSamePcgAgent(r, currentTl));
+  }, [availableRms, currentTl]);
 
   const effectiveRm = useMemo(() => {
     if (
       selectedRm &&
       (availableRms.some((r) => isSamePcgAgent(r, selectedRm)) ||
-        (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, selectedRm))))
+        (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, selectedRm))) ||
+        (currentTl && isSamePcgAgent(currentTl, selectedRm)))
     ) {
       return selectedRm;
     }
-    return availableRms[0] || selectedRm || '';
-  }, [selectedRm, availableRms, allTlNames]);
+    return availableRms[0] || currentTl || selectedRm || '';
+  }, [selectedRm, availableRms, allTlNames, currentTl]);
 
   useEffect(() => {
     if (effectiveRm) {
@@ -141,17 +156,23 @@ export default function PcgMemberAnalyticsDashboard({
 
   const isCurrentTl = useMemo(() => {
     return (
+      (currentTl && isSamePcgAgent(currentTl, effectiveRm)) ||
       (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, effectiveRm))) ||
       (teamLeads && teamLeads.some((tl) => isSamePcgAgent(tl.tlName, effectiveRm))) ||
       ['swetha', 'saiyam', 'dheeraj', 'sravanthi', 'tanisha'].some((tl) =>
         effectiveRm.toLowerCase().includes(tl)
       )
     );
-  }, [allTlNames, teamLeads, effectiveRm]);
+  }, [allTlNames, teamLeads, effectiveRm, currentTl]);
 
   const allSelectableMembers = useMemo(() => {
     const list: Array<{ name: string; isTl: boolean; teamName: string }> = [];
     const seen = new Set<string>();
+
+    if (currentTl) {
+      seen.add(currentTl.toLowerCase().trim());
+      list.push({ name: currentTl, isTl: true, teamName: 'Team Lead' });
+    }
 
     // 1. Team Leads (for Admin view, or if allTlNames is passed)
     if (activePersona === 'admin') {
@@ -173,8 +194,11 @@ export default function PcgMemberAnalyticsDashboard({
       const lower = rm.toLowerCase().trim();
       if (!seen.has(lower)) {
         seen.add(lower);
-        const isTl = (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, rm))) ||
-          (teamLeads && teamLeads.some((tl) => isSamePcgAgent(tl.tlName, rm)));
+        const isTl = Boolean(
+          (allTlNames && allTlNames.some((tl) => isSamePcgAgent(tl, rm))) ||
+          (teamLeads && teamLeads.some((tl) => isSamePcgAgent(tl.tlName, rm))) ||
+          (currentTl && isSamePcgAgent(currentTl, rm))
+        );
         const foundTl = teamLeads.find((t) => (t.rms || []).some((r: string) => isSamePcgAgent(r, rm)));
         list.push({
           name: rm,
@@ -185,7 +209,7 @@ export default function PcgMemberAnalyticsDashboard({
     });
 
     return list;
-  }, [activePersona, allTlNames, teamLeads, availableRms]);
+  }, [activePersona, allTlNames, teamLeads, availableRms, currentTl]);
 
 
 
@@ -233,6 +257,7 @@ export default function PcgMemberAnalyticsDashboard({
     params.set('limit', '500');
     if (isCurrentTl) {
       params.set('caller_role', 'tl');
+      params.set('my_chats', 'true');
     }
     if (activePersona) params.set('persona', activePersona);
     if (tlName && activePersona !== 'admin') params.set('tl', tlName);
@@ -284,6 +309,72 @@ export default function PcgMemberAnalyticsDashboard({
   const validIqsChats = filteredChats.filter(c => c.iqsScore != null);
   const chatAvgIqs = validIqsChats.length > 0
     ? Math.round((validIqsChats.reduce((acc, c) => acc + (c.iqsScore || 0), 0) / validIqsChats.length) * 10) / 10
+    : null;
+
+  // Fetch PCG email evaluations for this RM
+  const [emails, setEmails] = useState<any[]>([]);
+  const [loadingEmails, setLoadingEmails] = useState(false);
+
+  useEffect(() => {
+    if (!effectiveRm) return;
+    setLoadingEmails(true);
+    const params = new URLSearchParams();
+    params.set('rmName', effectiveRm);
+    if (isCurrentTl) {
+      params.set('caller_role', 'tl');
+      params.set('my_emails', 'true');
+    }
+    if (activePersona) params.set('persona', activePersona);
+    if (tlName && activePersona !== 'admin') params.set('tlName', tlName);
+
+    fetch(`/api/admin/pcg-emails?${params.toString()}`)
+      .then(res => res.json())
+      .then(data => {
+        setEmails(Array.isArray(data.emails) ? data.emails : []);
+      })
+      .catch(err => {
+        console.error('[PcgMemberAnalyticsDashboard] Failed to fetch emails:', err);
+      })
+      .finally(() => {
+        setLoadingEmails(false);
+      });
+  }, [effectiveRm, activePersona, tlName, isCurrentTl]);
+
+  const filteredEmails = useMemo(() => {
+    if (!emails || emails.length === 0) return [];
+    const now = new Date();
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+
+    if (period === '7') {
+      minDate = new Date(now.getTime() - 7 * 86400000);
+    } else if (period === '30') {
+      minDate = new Date(now.getTime() - 30 * 86400000);
+    } else if (period === 'custom' && customFrom && customTo) {
+      minDate = new Date(customFrom + 'T00:00:00');
+      maxDate = new Date(customTo + 'T23:59:59.999Z');
+    }
+
+    const res = emails.filter(e => {
+      const dateStr = e.evaluatedAt || e.sentAt;
+      if (!dateStr) return true;
+      const d = new Date(dateStr);
+      if (minDate && d < minDate) return false;
+      if (maxDate && d > maxDate) return false;
+      return true;
+    });
+
+    if (res.length === 0 && emails.length > 0 && period !== 'custom') {
+      return emails;
+    }
+
+    return res;
+  }, [emails, period, customFrom, customTo]);
+
+  const emailCount = filteredEmails.length;
+  const validIqsEmails = filteredEmails.filter(e => e.iqsScore != null && e.iqsScore > 0);
+  const emailAvgIqs = validIqsEmails.length > 0
+    ? Math.round((validIqsEmails.reduce((acc, e) => acc + (e.iqsScore || 0), 0) / validIqsEmails.length) * 10) / 10
     : null;
 
   // Derive chat parameter scores mapped to the 11 PCG quality parameters
@@ -366,6 +457,114 @@ export default function PcgMemberAnalyticsDashboard({
     return Math.round((earnedTotal / maxTotal) * 1000) / 10;
   }, [filteredChats]);
 
+  // Derive email parameter scores mapped to the 11 PCG quality parameters
+  const getEmailParamScore = useCallback((callParamKey: string): number | null => {
+    if (filteredEmails.length === 0) return null;
+
+    const paramMapping: Record<string, string[]> = {
+      CallOpening: ['opening_and_closing', 'OpeningClosing'],
+      CallClosing: ['opening_and_closing', 'OpeningClosing'],
+      TechnicalLegal: ['accuracy', 'TechnicalLegal', 'TechnicallyLegal'],
+      AllQuestions: ['issue_resolution', 'AllQuestions', 'IssueResolution'],
+      Expectation: ['expectation_setting', 'Expectation', 'ExpectationSetting'],
+      Process: ['personalisation', 'Personalisation', 'Process'],
+      Grammar: ['sentences_simple_to_understand', 'Grammar', 'readability_and_tone'],
+      Fillers: [],
+      EnergyTone: ['sentences_simple_to_understand', 'EnergyTone'],
+      ActiveListening: ['empathy', 'ActiveListening', 'Empathy'],
+      Simplifying: ['sentences_simple_to_understand', 'Simplifying'],
+    };
+
+    const emailKeys = paramMapping[callParamKey] || [];
+    if (emailKeys.length === 0) return null;
+
+    let earnedTotal = 0;
+    let maxTotal = 0;
+
+    filteredEmails.forEach(email => {
+      let params = email.parameters;
+      if (typeof params === 'string') {
+        try { params = JSON.parse(params); } catch { }
+      }
+      if (!params || typeof params !== 'object') return;
+
+      emailKeys.forEach(ek => {
+        let p: any = null;
+        if (Array.isArray(params)) {
+          p = params.find((x: any) => x.id === ek || x.key === ek || x.name === ek);
+        } else {
+          p = params[ek];
+        }
+        if (!p) return;
+
+        const rawScore = (p.score || p.status || '').toString().toLowerCase();
+        if (rawScore === 'na' || rawScore === 'n/a' || p.isApplicable === false) return;
+
+        const maxScore = Number(p.maxScore ?? p.weight ?? 10);
+        maxTotal += maxScore;
+
+        if (rawScore === 'yes' || rawScore === 'pass') earnedTotal += maxScore;
+        else if (rawScore === 'half' || rawScore === 'partial') earnedTotal += maxScore * 0.5;
+        else if (rawScore === 'no' || rawScore === 'fail') earnedTotal += 0;
+        else if (p.earnedScore != null) earnedTotal += Number(p.earnedScore);
+      });
+    });
+
+    if (maxTotal === 0) return null;
+    return Math.round((earnedTotal / maxTotal) * 1000) / 10;
+  }, [filteredEmails]);
+
+  // Derive direct email parameter score for email-specific parameter views
+  const getEmailDirectParamScore = useCallback((emailKey: string): number | null => {
+    if (filteredEmails.length === 0) return null;
+
+    const keyAliases: Record<string, string[]> = {
+      accuracy: ['accuracy', 'TechnicalLegal', 'TechnicallyLegal'],
+      issue_resolution: ['issue_resolution', 'AllQuestions', 'IssueResolution', 'resolution'],
+      expectation_setting: ['expectation_setting', 'Expectation', 'ExpectationSetting'],
+      personalisation: ['personalisation', 'personalization', 'Personalisation', 'Personalization'],
+      empathy: ['empathy', 'ActiveListening', 'Empathy'],
+      sentences_simple_to_understand: ['sentences_simple_to_understand', 'sentences', 'Sentences', 'readability_and_tone', 'clarity'],
+      opening_and_closing: ['opening_and_closing', 'opening_closing_message', 'OpeningClosing', 'greeting_and_closing'],
+    };
+
+    const targetKeys = keyAliases[emailKey] || [emailKey];
+    let earnedTotal = 0;
+    let maxTotal = 0;
+
+    filteredEmails.forEach(email => {
+      let params = email.parameters;
+      if (typeof params === 'string') {
+        try { params = JSON.parse(params); } catch { }
+      }
+      if (!params || typeof params !== 'object') return;
+
+      targetKeys.forEach(k => {
+        let p: any = null;
+        if (Array.isArray(params)) {
+          p = params.find((x: any) => x.id === k || x.key === k || x.name === k);
+        } else {
+          p = params[k];
+        }
+        if (!p) return;
+
+        const rawScore = (p.score || p.status || '').toString().toLowerCase();
+        if (rawScore === 'na' || rawScore === 'n/a' || p.isApplicable === false) return;
+
+        const maxScore = Number(p.maxScore ?? p.weight ?? 10);
+        maxTotal += maxScore;
+
+        if (rawScore === 'yes' || rawScore === 'pass') earnedTotal += maxScore;
+        else if (rawScore === 'half' || rawScore === 'partial') earnedTotal += maxScore * 0.5;
+        else if (rawScore === 'no' || rawScore === 'fail') earnedTotal += 0;
+        else if (p.earnedScore != null) earnedTotal += Number(p.earnedScore);
+      });
+    });
+
+    if (maxTotal === 0) return null;
+    return Math.round((earnedTotal / maxTotal) * 1000) / 10;
+  }, [filteredEmails]);
+
   // Canonical 11 PCG Call Quality Parameters across 3 Skill Groups (Process Skills 50%, Communication 30%, Customer Service 20%)
   const PCG_PARAMETERS = [
     { key: 'CallOpening', label: 'Call Opening', weight: 5, deptScore: 95 },
@@ -431,6 +630,46 @@ export default function PcgMemberAnalyticsDashboard({
   const wowWeekLabels = ['SEP 21 – 27', 'SEP 28 – OCT 4', 'OCT 5 – 11', 'OCT 12 – 18', 'OCT 19 – 25'];
 
   const wowMetrics = useMemo(() => {
+    if (wowChannel === 'emails') {
+      const iqsVals = wowWeeks.map(ws => {
+        const start = new Date(ws + 'T00:00:00Z').getTime();
+        const end = start + 7 * 86400000;
+        const weekEmails = emails.filter(e => {
+          const dateStr = e.evaluatedAt || e.sentAt;
+          if (!dateStr) return false;
+          const t = new Date(dateStr).getTime();
+          return t >= start && t < end && e.iqsScore != null && e.iqsScore > 0;
+        });
+        if (weekEmails.length === 0) return null;
+        return Math.round((weekEmails.reduce((acc, e) => acc + (e.iqsScore || 0), 0) / weekEmails.length) * 10) / 10;
+      });
+
+      const volVals = wowWeeks.map(ws => {
+        const start = new Date(ws + 'T00:00:00Z').getTime();
+        const end = start + 7 * 86400000;
+        const weekEmails = emails.filter(e => {
+          const dateStr = e.evaluatedAt || e.sentAt;
+          if (!dateStr) return false;
+          const t = new Date(dateStr).getTime();
+          return t >= start && t < end;
+        });
+        return weekEmails.length > 0 ? weekEmails.length : null;
+      });
+
+      const hasAnyVal = volVals.some(v => v !== null && v > 0);
+      if (!hasAnyVal && emailCount > 0) {
+        return [
+          { name: 'IQS', vals: [null, null, null, null, emailAvgIqs] as (number | null)[], isPct: true },
+          { name: 'Volume', vals: [null, null, null, null, emailCount] as (number | null)[], isPct: false },
+        ];
+      }
+
+      return [
+        { name: 'IQS', vals: iqsVals, isPct: true },
+        { name: 'Volume', vals: volVals, isPct: false },
+      ];
+    }
+
     if (wowChannel === 'chats') {
       const iqsVals = wowWeeks.map(ws => {
         const start = new Date(ws + 'T00:00:00Z').getTime();
@@ -479,9 +718,29 @@ export default function PcgMemberAnalyticsDashboard({
       { name: 'IQS', vals: [null, null, null, null, callsIqs] as (number | null)[], isPct: true },
       { name: 'Volume', vals: [null, null, null, null, callsVol] as (number | null)[], isPct: false },
     ];
-  }, [wowChannel, chats, chatCount, chatAvgIqs, callsVol, callsIqs, wowWeeks]);
+  }, [wowChannel, chats, chatCount, chatAvgIqs, emails, emailCount, emailAvgIqs, callsVol, callsIqs, wowWeeks]);
 
   const wowParameters: Array<{ name: string; vals: (number | null)[] }> = useMemo(() => {
+    if (wowChannel === 'emails') {
+      const EMAIL_PARAMS = [
+        { key: 'accuracy', label: 'Accuracy & Compliance' },
+        { key: 'issue_resolution', label: 'Issue Resolution & Follow-through' },
+        { key: 'expectation_setting', label: 'Expectation Setting & TAT' },
+        { key: 'personalisation', label: 'Personalisation & Case Context' },
+        { key: 'empathy', label: 'Empathy & Natural Tone' },
+        { key: 'sentences_simple_to_understand', label: 'Clarity, Formatting & Grammar' },
+        { key: 'opening_and_closing', label: 'Opening & Closing Message' },
+      ];
+
+      return EMAIL_PARAMS.map(p => {
+        const currentScore = getEmailDirectParamScore(p.key);
+        return {
+          name: p.label,
+          vals: [null, null, null, null, currentScore] as (number | null)[],
+        };
+      });
+    }
+
     if (wowChannel === 'chats') {
       const CHAT_PARAMS = [
         { key: 'TechnicalLegal', label: 'Technically / Legally Correct' },
@@ -540,7 +799,7 @@ export default function PcgMemberAnalyticsDashboard({
       { name: 'Speech Clarity & Dead Air', vals: [91.0, 93.0, 89.0, 92.0, 91.5] },
       { name: 'Simplifying Answers', vals: [93.0, 96.0, 91.0, 94.0, 94.0] },
     ];
-  }, [wowChannel, wowCategory, getChatParamScore]);
+  }, [wowChannel, wowCategory, getChatParamScore, getEmailDirectParamScore]);
 
   const periodLabel = period === 'custom' && customFrom && customTo
     ? `${customFrom} – ${customTo}`
@@ -562,8 +821,75 @@ export default function PcgMemberAnalyticsDashboard({
             {activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}
           </h1>
 
-          {/* Member Search Bar (Replaces Dropdown Toggle) */}
-          {activePersona !== 'agent' ? (
+          {/* Member Selector: Dropdown for TL, Search for Admin */}
+          {activePersona === 'tl' ? (
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ position: 'relative' }}>
+                <select
+                  value={effectiveRm}
+                  onChange={(e) => {
+                    const chosen = e.target.value;
+                    onSelectRm(chosen);
+                    setAgentSearch(chosen);
+                  }}
+                  style={{
+                    height: 36,
+                    minWidth: 260,
+                    padding: '0 36px 0 12px',
+                    background: 'var(--qa-card, #ffffff)',
+                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: 'var(--qa-text, #111111)',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2371717A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {currentTl && (
+                    <optgroup label="Team Lead (Yourself)">
+                      <option value={currentTl}>
+                        {currentTl} (Team Lead)
+                      </option>
+                    </optgroup>
+                  )}
+                  <optgroup label={`Mapped Agents (${mappedTeamRms.length})`}>
+                    {mappedTeamRms.map((rm) => (
+                      <option key={rm} value={rm}>
+                        {rm}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Role indicator badge */}
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  background: isCurrentTl ? '#FEF3C7' : 'var(--qa-fill-light, #F4F4F5)',
+                  color: isCurrentTl ? '#92400E' : 'var(--qa-text-2, #52525B)',
+                  border: isCurrentTl ? '1px solid #FDE68A' : '1px solid var(--qa-border, #E4E4E7)',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {isCurrentTl ? 'Team Lead' : 'RM'}
+              </span>
+            </div>
+          ) : activePersona === 'admin' ? (
             <div style={{ position: 'relative', width: 340 }}>
               <div
                 style={{
@@ -635,7 +961,7 @@ export default function PcgMemberAnalyticsDashboard({
                       }
                     }
                   }}
-                  placeholder={activePersona === 'admin' ? 'Search RM or TL name...' : 'Search team member...'}
+                  placeholder="Search RM or TL name..."
                   style={{
                     border: 'none',
                     outline: 'none',
@@ -782,25 +1108,31 @@ export default function PcgMemberAnalyticsDashboard({
           )}
         </div>
 
-        {/* Emails Card (Blank - Not yet evaluated) */}
+        {/* Emails Card (Live PCG Emails Data) */}
         <div style={{ background: 'var(--qa-card, #ffffff)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 14, fontWeight: 600 }}>
             EMAILS
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 24, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: emailAvgIqs != null ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)' }}>
+                {emailAvgIqs != null ? `${emailAvgIqs.toFixed(1)}%` : '—'}
+              </span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
             </div>
             <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 24, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: emailCount > 0 ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)' }}>
+                {emailCount > 0 ? emailCount : '—'}
+              </span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>VOLUME</span>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)', marginTop: 8, fontStyle: 'italic' }}>
-            Not yet evaluated
-          </div>
+          {emailCount === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)', marginTop: 8, fontStyle: 'italic' }}>
+              No evaluated emails
+            </div>
+          )}
         </div>
       </div>
 
@@ -815,7 +1147,7 @@ export default function PcgMemberAnalyticsDashboard({
         <Panel>
           <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
-              11 quality parameters · evaluated across calls & chats
+              11 quality parameters · evaluated across calls, chats & emails
             </span>
           </div>
           <div style={{ overflowX: 'auto' }}>
@@ -855,6 +1187,7 @@ export default function PcgMemberAnalyticsDashboard({
                 {PCG_PARAMETERS.map(param => {
                   const score = getAgentParamScore(effectiveRm, param.key, param.deptScore);
                   const chatScore = getChatParamScore(param.key);
+                  const emailScore = getEmailParamScore(param.key);
                   return (
                     <tr
                       key={param.key}
@@ -899,8 +1232,17 @@ export default function PcgMemberAnalyticsDashboard({
                       >
                         {chatScore !== null ? fmtPct(chatScore) : '—'}
                       </td>
-                      <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
-                        —
+                      <td
+                        style={{
+                          padding: '0 16px',
+                          borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+                          textAlign: 'right',
+                          fontFamily: emailScore !== null ? 'monospace' : 'inherit',
+                          fontSize: 13,
+                          color: emailScore !== null ? 'var(--qa-text, #111111)' : 'var(--qa-text-4, #C7C7CC)',
+                        }}
+                      >
+                        {emailScore !== null ? fmtPct(emailScore) : '—'}
                       </td>
                     </tr>
                   );
@@ -958,7 +1300,7 @@ export default function PcgMemberAnalyticsDashboard({
                   CHANNEL
                 </span>
                 <div style={{ display: 'inline-flex', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
-                  {(['calls', 'chats'] as const).map(ch => (
+                  {(['calls', 'chats', 'emails'] as const).map(ch => (
                     <button
                       key={ch}
                       type="button"
@@ -968,7 +1310,7 @@ export default function PcgMemberAnalyticsDashboard({
                         padding: '0 13px',
                         background: wowChannel === ch ? 'var(--qa-text, #111111)' : 'transparent',
                         border: 0,
-                        borderRight: ch === 'calls' ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
+                        borderRight: ch !== 'emails' ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
                         fontSize: 13,
                         fontFamily: 'inherit',
                         cursor: 'pointer',
@@ -976,7 +1318,7 @@ export default function PcgMemberAnalyticsDashboard({
                         fontWeight: wowChannel === ch ? 500 : 400,
                       }}
                     >
-                      {ch === 'calls' ? 'Calls' : 'Chats'}
+                      {ch === 'calls' ? 'Calls' : ch === 'chats' ? 'Chats' : 'Emails'}
                     </button>
                   ))}
                 </div>

@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   try {
     const config = await readConfig().catch(() => null);
     const customTeamMap = config?.pcgTeamAssignments || {};
+    const customTlAdminMap = config?.pcgTlAdminAssignments || {};
     const allUsers = await listUsers();
 
     // Get all PCG users
@@ -22,6 +23,19 @@ export async function GET(req: NextRequest) {
     const teamLeads = pcgUsers
       .filter((u) => u.role === 'tl' && u.status !== 'disabled')
       .map((u) => u.name);
+
+    // Dynamic Admins: users in DB with role === 'admin' or is_super_admin
+    const admins = pcgUsers
+      .filter((u) => (u.role === 'admin' || u.is_super_admin) && u.status !== 'disabled')
+      .map((u) => u.name);
+
+    const adminNameSet = new Set(admins.map((a) => a.toLowerCase().trim()));
+    if (!adminNameSet.has('aahan') && !adminNameSet.has('aahan thaker')) {
+      admins.unshift('Aahan Thaker');
+    }
+    if (!adminNameSet.has('id')) {
+      admins.push('ID');
+    }
 
     // Identify RMs (agents)
     const rms = pcgUsers.filter((u) => u.role === 'agent');
@@ -39,10 +53,24 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Build TL to Admin assignment map (defaults to Aahan if not set)
+    const tlAssignments: { tlName: string; adminName: string }[] = [];
+    for (const tl of teamLeads) {
+      const clean = tl.trim().toLowerCase();
+      const assignedAdmin = customTlAdminMap[clean] || 'Aahan';
+      tlAssignments.push({
+        tlName: tl,
+        adminName: assignedAdmin,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       teamLeads,
+      admins,
       assignments,
+      tlAssignments,
+      pcgTlAdminAssignments: customTlAdminMap,
     });
   } catch (err: any) {
     console.error('[pcg/admin/teams] GET failed:', err?.message);
@@ -57,13 +85,18 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const updates: Record<string, string> = body.assignments || {};
+    const tlUpdates: Record<string, string> = body.tlAdminAssignments || body.tlAssignments || {};
 
     if (body.rmName && body.tlName !== undefined) {
       updates[body.rmName.trim().toLowerCase()] = body.tlName;
     }
+    if (body.tlName && body.adminName !== undefined) {
+      tlUpdates[body.tlName.trim().toLowerCase()] = body.adminName;
+    }
 
     const config = await readConfig();
     const currentMap = { ...(config.pcgTeamAssignments || {}) };
+    const currentTlAdminMap = { ...(config.pcgTlAdminAssignments || {}) };
 
     for (const [rm, tl] of Object.entries(updates)) {
       const key = rm.toLowerCase().trim();
@@ -91,9 +124,26 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    await writeConfig({ ...config, pcgTeamAssignments: currentMap });
+    for (const [tl, adm] of Object.entries(tlUpdates)) {
+      const key = tl.toLowerCase().trim();
+      if (!adm || adm === 'Unassigned') {
+        delete currentTlAdminMap[key];
+      } else {
+        currentTlAdminMap[key] = adm;
+      }
+    }
 
-    return NextResponse.json({ success: true, pcgTeamAssignments: currentMap });
+    await writeConfig({
+      ...config,
+      pcgTeamAssignments: currentMap,
+      pcgTlAdminAssignments: currentTlAdminMap,
+    });
+
+    return NextResponse.json({
+      success: true,
+      pcgTeamAssignments: currentMap,
+      pcgTlAdminAssignments: currentTlAdminMap,
+    });
   } catch (err: any) {
     console.error('[pcg/admin/teams] PATCH failed:', err?.message);
     return NextResponse.json({ error: 'Failed to update team assignments.' }, { status: 500 });

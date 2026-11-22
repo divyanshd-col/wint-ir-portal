@@ -5,7 +5,7 @@ import ScoreRing from '@/components/quality/ScoreRing';
 import AutoTextarea from '@/components/quality/AutoTextarea';
 import { normalizeScore } from '@/lib/quality';
 import { PcgProductCategory, detectPcgChatCategories } from '@/lib/pcg/chat-category';
-import { isPcgAm } from '@/lib/pcg/canonical-names';
+import { isPcgAm, isPcgTl, isSamePcgAgent } from '@/lib/pcg/canonical-names';
 import { resolveParameterAttribution } from '@/lib/pcg/attribution';
 
 export interface PcgChatEvaluation {
@@ -113,7 +113,9 @@ interface Props {
   onDisputeUpdate?: (opts?: { close?: boolean }) => void;
   onSelectChat?: (chatId: string) => void;
   userRole?: string;
+  loggedInUserName?: string;
   allowRaiseDispute?: boolean;
+  canOverride?: boolean;
   colSpan?: number;
   standalone?: boolean;
 }
@@ -183,12 +185,19 @@ export default function PcgChatEvalPanel({
   onDisputeUpdate,
   onSelectChat,
   userRole,
+  loggedInUserName,
   allowRaiseDispute,
+  canOverride,
   colSpan = 8,
   standalone = false,
 }: Props) {
   const [chat, setChat] = useState<PcgChatEvaluation | null>(initialChat);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
+
+  const isTlDispute = Boolean(
+    (chat as any)?.isTlChat ||
+    (chat?.rmName && isPcgTl(chat.rmName))
+  );
 
   useEffect(() => {
     setChat(initialChat);
@@ -215,8 +224,8 @@ export default function PcgChatEvalPanel({
     }
   };
 
-  // Only Team Leads can submit evaluation override; Admins and Agents view evaluations in read-only mode
-  const canSubmitOverride = userRole === 'tl';
+  // Only authorized reviewer can submit evaluation override
+  const canSubmitOverride = canOverride !== undefined ? canOverride : userRole === 'tl';
   const [isEditing, setIsEditing] = useState(false);
   const isReadOnly = !canSubmitOverride || !isEditing;
   const canRaiseDispute = allowRaiseDispute ?? (userRole === 'agent');
@@ -507,14 +516,20 @@ export default function PcgChatEvalPanel({
   };
 
   const handlePostComment = async () => {
-    if (!tlCommentText.trim() || isPostingComment) return;
+    if (!tlCommentText.trim() || isPostingComment || !chat) return;
     setIsPostingComment(true);
     try {
-      const authorName = userRole === 'agent'
-        ? (chat.rmName || 'RM')
+      const authorRole = userRole === 'admin'
+        ? 'admin'
         : userRole === 'tl'
-          ? (chat.tlName || 'Team Lead')
-          : 'Admin';
+          ? 'tl'
+          : 'agent';
+
+      const authorName = userRole === 'admin'
+        ? (loggedInUserName || 'Admin')
+        : userRole === 'tl'
+          ? (loggedInUserName || chat.rmName || chat.tlName || 'Team Lead')
+          : (loggedInUserName || chat.rmName || 'RM');
 
       const res = await fetch('/api/admin/pcg-chats', {
         method: 'POST',
@@ -524,7 +539,7 @@ export default function PcgChatEvalPanel({
           chatId: chat.id,
           content: tlCommentText.trim(),
           authorName,
-          authorRole: userRole,
+          authorRole,
         }),
       });
       const data = await res.json();
@@ -693,7 +708,7 @@ export default function PcgChatEvalPanel({
     boxSizing: 'border-box',
   };
 
-  const hasDisputeBanner = Boolean(chat.disputeStatus && chat.disputeStatus !== 'none');
+  const hasDisputeBanner = Boolean((chat.disputeStatus && chat.disputeStatus !== 'none') || comments.length > 0 || chat.disputeReason);
   const hasBanners = Boolean(hasDisputeBanner || raisingDispute);
 
   const panelContent = (
@@ -890,7 +905,7 @@ export default function PcgChatEvalPanel({
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)' }}>
-                  Dispute raised by RM {chat.rmName}
+                  {isTlDispute ? `Dispute raised by Team Lead ${chat.rmName}` : `Dispute raised by RM ${chat.rmName}`}
                 </span>
                 {chat.disputeStatus === 'pending' && (
                   <span
@@ -904,7 +919,9 @@ export default function PcgChatEvalPanel({
                       border: '1px solid #e4e4e7',
                     }}
                   >
-                    Assigned to TL {chat.tlName}
+                    {isTlDispute
+                      ? `Assigned to Admin ${(chat as any).assignedAdmin || 'Aahan'}`
+                      : `Assigned to TL ${chat.tlName}`}
                   </span>
                 )}
                 {chat.disputeStatus === 'resolved' && (
@@ -919,7 +936,9 @@ export default function PcgChatEvalPanel({
                       border: '1px solid #a7f3d0',
                     }}
                   >
-                    Resolved by TL {chat.reviewedBy || chat.tlName}
+                    {isTlDispute
+                      ? `Resolved by Admin ${chat.reviewedBy || (chat as any).assignedAdmin || 'Aahan'}`
+                      : `Resolved by TL ${chat.reviewedBy || chat.tlName}`}
                   </span>
                 )}
               </div>
@@ -991,8 +1010,11 @@ export default function PcgChatEvalPanel({
                 {comments.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
                     {comments.map((c) => {
-                      const isTl = c.authorRole === 'tl' || c.authorRole === 'team lead';
-                      const isAgent = c.authorRole === 'agent' || c.authorRole === 'rm';
+                      const r = (c.authorRole || '').toLowerCase();
+                      const author = (c.authorName || '').toLowerCase();
+                      const isAdmin = r === 'admin' || ['aahan', 'id'].some((a) => author.includes(a));
+                      const isTl = !isAdmin && (r === 'tl' || r === 'team lead' || isPcgTl(c.authorName) || (isTlDispute && isSamePcgAgent(c.authorName, chat.rmName)));
+                      const isAgent = !isAdmin && !isTl;
                       const timeStr = c.createdAt
                         ? new Date(c.createdAt).toLocaleString('en-IN', {
                           day: 'numeric',
@@ -1006,8 +1028,8 @@ export default function PcgChatEvalPanel({
                         <div
                           key={c.id}
                           style={{
-                            background: isAgent ? '#f0fdf4' : '#f8fafc',
-                            border: `1px solid ${isAgent ? '#dcfce7' : 'var(--qa-border)'}`,
+                            background: isAdmin ? '#eff6ff' : isTl ? '#fefce8' : '#f0fdf4',
+                            border: `1px solid ${isAdmin ? '#bfdbfe' : isTl ? '#fef08a' : '#dcfce7'}`,
                             borderRadius: 6,
                             padding: '8px 12px',
                             boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
@@ -1024,12 +1046,12 @@ export default function PcgChatEvalPanel({
                                 textTransform: 'uppercase',
                                 padding: '1px 5px',
                                 borderRadius: 3,
-                                background: isTl ? '#eff6ff' : isAgent ? '#ecfdf5' : '#f4f4f5',
-                                color: isTl ? '#1d4ed8' : isAgent ? '#047857' : '#52525b',
-                                border: `1px solid ${isTl ? '#bfdbfe' : isAgent ? '#a7f3d0' : '#e4e4e7'}`,
+                                background: isAdmin ? '#dbeafe' : isTl ? '#fef9c3' : '#d1fae5',
+                                color: isAdmin ? '#1e40af' : isTl ? '#854d0e' : '#047857',
+                                border: `1px solid ${isAdmin ? '#93c5fd' : isTl ? '#fde047' : '#a7f3d0'}`,
                               }}
                             >
-                              {isTl ? 'Team Lead' : isAgent ? 'RM' : 'Admin'}
+                              {isAdmin ? 'Admin' : isTl ? 'Team Lead' : 'RM'}
                             </span>
                             {timeStr && (
                               <span style={{ fontSize: 10.5, color: 'var(--qa-text-3)', marginLeft: 'auto' }}>
@@ -1057,11 +1079,13 @@ export default function PcgChatEvalPanel({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <AutoTextarea
                     placeholder={
-                      userRole === 'agent'
-                        ? 'Add a follow-up comment or clarification for your Team Lead… (Cmd+Enter to post)'
+                      userRole === 'admin'
+                        ? 'Add an Admin review comment or decision note for the Team Lead… (Cmd+Enter to post)'
                         : userRole === 'tl'
-                          ? 'Add a Team Lead comment or dispute justification note… (Cmd+Enter to post)'
-                          : 'Add a comment or dispute note… (Cmd+Enter to post)'
+                          ? (isTlDispute
+                              ? 'Add a follow-up comment or clarification for Admin… (Cmd+Enter to post)'
+                              : 'Add a Team Lead comment or dispute justification note… (Cmd+Enter to post)')
+                          : 'Add a follow-up comment or clarification for your Team Lead… (Cmd+Enter to post)'
                     }
                     value={tlCommentText}
                     onChange={(e) => setTlCommentText(e.target.value)}
@@ -1086,7 +1110,10 @@ export default function PcgChatEvalPanel({
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 10.5, color: 'var(--qa-text-3)' }}>
-                      Visible to RM ({chat.rmName}) and Team Lead ({chat.tlName})
+                      {isTlDispute
+                        ? `Visible to Team Lead (${chat.rmName}) and Admin (${(chat as any).assignedAdmin || 'Aahan'})`
+                        : `Visible to RM (${chat.rmName}) and Team Lead (${chat.tlName})`
+                      }
                     </span>
                     <button
                       type="button"
@@ -1944,8 +1971,8 @@ export default function PcgChatEvalPanel({
                           {g.failedBy === 'rm'
                             ? `Breach by RM: ${rmAgentName}`
                             : g.failedBy === 'am'
-                            ? `Breach by AM: ${amAgentName}`
-                            : 'Breach Attributed to Both: RM & AM'}
+                              ? `Breach by AM: ${amAgentName}`
+                              : 'Breach Attributed to Both: RM & AM'}
                         </span>
                       )}
                     </div>
@@ -2002,10 +2029,10 @@ export default function PcgChatEvalPanel({
                                 {g.failedBy === 'rm'
                                   ? `RM (${rmAgentName})`
                                   : g.failedBy === 'am'
-                                  ? `AM (${amAgentName})`
-                                  : g.failedBy === 'both'
-                                  ? `Both RM (${rmAgentName}) & AM (${amAgentName})`
-                                  : 'Pending Attribution'}
+                                    ? `AM (${amAgentName})`
+                                    : g.failedBy === 'both'
+                                      ? `Both RM (${rmAgentName}) & AM (${amAgentName})`
+                                      : 'Pending Attribution'}
                               </span>
                             </div>
                           )}
@@ -2251,11 +2278,10 @@ export default function PcgChatEvalPanel({
                               activeStatus === 'No'
                                 ? '#fef2f2'
                                 : 'var(--qa-gray-50)',
-                            border: `1px solid ${
-                              activeStatus === 'No'
-                                ? '#fecaca'
-                                : 'var(--qa-border-sub)'
-                            }`,
+                            border: `1px solid ${activeStatus === 'No'
+                              ? '#fecaca'
+                              : 'var(--qa-border-sub)'
+                              }`,
                             borderRadius: 8,
                             display: 'flex',
                             flexDirection: 'column',

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import PcgChatEvalPanel, { type PcgChatEvaluation } from './PcgChatEvalPanel';
 import PcgPeriodFilter, { type PcgPeriod } from './PcgPeriodFilter';
-import { isSamePcgAgent, isPcgAm } from '@/lib/pcg/canonical-names';
+import { isSamePcgAgent, isPcgAm, isPcgTl } from '@/lib/pcg/canonical-names';
 import { PcgProductCategory, detectPcgChatCategories } from '@/lib/pcg/chat-category';
 
 function getDisputeSummary(reason?: string): string {
@@ -65,9 +65,7 @@ export default function PcgChatQualityView({
   ]);
 
   // Filters
-  const [activeSection, setActiveSection] = useState<'pending_evaluation' | 'evaluated' | 'disputes_pending' | 'disputes_reviewed' | 'all'>(
-    activePersona === 'agent' ? 'evaluated' : 'pending_evaluation'
-  );
+  const [activeSection, setActiveSection] = useState<'pending_evaluation' | 'evaluated' | 'disputes_pending' | 'disputes_reviewed' | 'all'>('evaluated');
   const [sectionCounts, setSectionCounts] = useState({
     pendingEvaluation: 0,
     evaluated: 0,
@@ -76,6 +74,7 @@ export default function PcgChatQualityView({
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCohortToggle, setActiveCohortToggle] = useState<'rm' | 'am' | 'tl' | 'team' | 'dual' | null>(null);
+  const [showMyChatsOnly, setShowMyChatsOnly] = useState(false);
   const [selectedRmName, setSelectedRmName] = useState<string>(activePersona === 'agent' && selectedRm ? selectedRm : 'all');
   const [selectedAmName, setSelectedAmName] = useState<string>('all');
   const [selectedTlName, setSelectedTlName] = useState<string>('all');
@@ -84,6 +83,19 @@ export default function PcgChatQualityView({
   const [maxIqsFilter, setMaxIqsFilter] = useState<string>('');
   const [verdictFilter, setVerdictFilter] = useState('all');
   const [disputeFilter, setDisputeFilter] = useState('all');
+  const [disputeSourceFilter, setDisputeSourceFilter] = useState<'all' | 'rm' | 'am' | 'tl'>('all');
+  const [tlAdminMap, setTlAdminMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch('/api/pcg/admin/teams')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.pcgTlAdminAssignments) {
+          setTlAdminMap(d.pcgTlAdminAssignments);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [dualChatsCount, setDualChatsCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -166,15 +178,12 @@ export default function PcgChatQualityView({
 
   // Sync RM and TL filter when activePersona or props change
   useEffect(() => {
+    setShowMyChatsOnly(false);
     if (activePersona === 'agent') {
       const rm = selectedRm || loggedInUserName;
       if (rm) setSelectedRmName(rm);
-      setActiveSection('evaluated');
-    } else if (activePersona === 'tl') {
-      setActiveSection('pending_evaluation');
-    } else {
-      setActiveSection('pending_evaluation');
     }
+    setActiveSection('evaluated');
   }, [activePersona, selectedRm, loggedInUserName]);
 
   // Canonical AMs mapped to Swetha Jayakumar
@@ -238,7 +247,11 @@ export default function PcgChatQualityView({
       params.set('page', String(page));
       params.set('limit', '10');
 
-      if (activeCohortToggle === 'rm') {
+      if (activePersona === 'tl' && showMyChatsOnly) {
+        params.set('caller_role', 'tl');
+        params.set('my_chats', 'true');
+        if (selectedTl) params.set('tl', selectedTl);
+      } else if (activeCohortToggle === 'rm') {
         params.set('caller_role', 'rm');
         if (selectedRmName !== 'all') params.set('rm', selectedRmName);
       } else if (activeCohortToggle === 'am') {
@@ -283,7 +296,7 @@ export default function PcgChatQualityView({
     } finally {
       setLoading(false);
     }
-  }, [page, activeCohortToggle, selectedRmName, selectedAmName, selectedTlName, selectedTeamName, minIqsFilter, maxIqsFilter, verdictFilter, disputeFilter, categoryFilter, activeSection, activePersona, searchQuery, startDate, endDate]);
+  }, [page, activeCohortToggle, selectedRmName, selectedAmName, selectedTlName, selectedTeamName, minIqsFilter, maxIqsFilter, verdictFilter, disputeFilter, categoryFilter, activeSection, activePersona, searchQuery, startDate, endDate, showMyChatsOnly, selectedTl]);
 
   useEffect(() => {
     fetchChats();
@@ -308,10 +321,28 @@ export default function PcgChatQualityView({
     return <span className="px-2 py-0.5 text-xs font-bold rounded bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300">REMEDIATION</span>;
   };
 
-  const getDisputeCommentNotification = (comments: any[] | undefined, rmName?: string) => {
+  const getDisputeCommentNotification = (comments: any[] | undefined, rmName?: string, isTlChat?: boolean) => {
     if (!Array.isArray(comments) || comments.length === 0) return null;
 
+    const isFromAdmin = (c: any) => {
+      const r = (c.authorRole || '').toLowerCase();
+      if (r === 'admin') return true;
+      const name = (c.authorName || '').toLowerCase();
+      if (name.includes('aahan') || name === 'id' || name.includes('admin')) return true;
+      return false;
+    };
+
+    const isFromTl = (c: any) => {
+      if (isFromAdmin(c)) return false;
+      const r = (c.authorRole || '').toLowerCase();
+      if (r === 'tl' || r === 'team lead') return true;
+      if (isPcgTl(c.authorName)) return true;
+      if (isTlChat && rmName && c.authorName && c.authorName.trim().toLowerCase() === rmName.trim().toLowerCase()) return true;
+      return false;
+    };
+
     const isFromAgent = (c: any) => {
+      if (isFromAdmin(c) || isFromTl(c)) return false;
       const r = (c.authorRole || '').toLowerCase();
       if (r === 'agent' || r === 'rm') return true;
       if (rmName && c.authorName && c.authorName.trim().toLowerCase() === rmName.trim().toLowerCase()) return true;
@@ -319,7 +350,7 @@ export default function PcgChatQualityView({
     };
 
     if (activePersona === 'agent') {
-      // For RM/Agent: only show notification if there is a new comment from TL or Admin
+      // For RM/Agent: incoming comments from TL or Admin
       const incoming = comments.filter((c) => !isFromAgent(c));
       if (incoming.length === 0) return null;
       return {
@@ -329,21 +360,74 @@ export default function PcgChatQualityView({
     }
 
     if (activePersona === 'tl') {
-      // For Team Lead: only show notification if there is a new comment from Agent/RM
-      const incoming = comments.filter((c) => isFromAgent(c));
-      if (incoming.length === 0) return null;
-      return {
-        count: incoming.length,
-        label: `${incoming.length} RM comment${incoming.length === 1 ? '' : 's'}`,
-      };
+      if (isTlChat) {
+        // For TL viewing their OWN dispute:
+        // Incoming comments are from the Admin!
+        const incoming = comments.filter((c) => isFromAdmin(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} Admin comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      } else {
+        // For TL reviewing team member's dispute (RM/AM):
+        // Incoming comments are from the RM
+        const incoming = comments.filter((c) => isFromAgent(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} RM comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      }
     }
 
-    // For Admin: show total comments
-    return {
-      count: comments.length,
-      label: `${comments.length} comment${comments.length === 1 ? '' : 's'}`,
-    };
+    if (activePersona === 'admin') {
+      if (isTlChat) {
+        // In Admin DB on a TL dispute:
+        // Incoming comments are from the TL!
+        const incoming = comments.filter((c) => isFromTl(c));
+        if (incoming.length === 0) return null;
+        return {
+          count: incoming.length,
+          label: `${incoming.length} TL comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      } else {
+        // In Admin DB on an RM dispute:
+        // Incoming comments are from the RM
+        const incoming = comments.filter((c) => isFromAgent(c));
+        if (incoming.length === 0) {
+          const tlComments = comments.filter((c) => isFromTl(c));
+          if (tlComments.length > 0) {
+            return {
+              count: tlComments.length,
+              label: `${tlComments.length} TL comment${tlComments.length === 1 ? '' : 's'}`,
+            };
+          }
+          return null;
+        }
+        return {
+          count: incoming.length,
+          label: `${incoming.length} RM comment${incoming.length === 1 ? '' : 's'}`,
+        };
+      }
+    }
+
+    return null;
   };
+
+  const displayedChats = useMemo(() => {
+    let list = chats;
+    if ((activePersona === 'admin' || activePersona === 'tl') && (activeSection === 'disputes_pending' || activeSection === 'disputes_reviewed')) {
+      if (disputeSourceFilter === 'tl') {
+        list = list.filter((c) => (c as any).isTlChat || isPcgTl(c.rmName) || availableTls.some((t) => isSamePcgAgent(t.name, c.rmName)));
+      } else if (disputeSourceFilter === 'am') {
+        list = list.filter((c) => (c as any).isAm || isPcgAm(c.rmName));
+      } else if (disputeSourceFilter === 'rm') {
+        list = list.filter((c) => !((c as any).isTlChat || isPcgTl(c.rmName) || availableTls.some((t) => isSamePcgAgent(t.name, c.rmName))) && !((c as any).isAm || isPcgAm(c.rmName)));
+      }
+    }
+    return list;
+  }, [chats, activePersona, activeSection, disputeSourceFilter, availableTls]);
 
   return (
     <div className="space-y-6">
@@ -351,36 +435,17 @@ export default function PcgChatQualityView({
       {/* Top Sections for TLs and Admins */}
       {(activePersona === 'tl' || activePersona === 'admin') && (
         <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
-          {/* 1. Pending Evaluation (AI-evaluated chats awaiting TL evaluation/override) */}
-          <button
-            onClick={() => { setActiveSection('pending_evaluation'); setPage(1); setExpandedChatId(null); }}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'pending_evaluation'
-              ? 'bg-zinc-900 text-white font-bold shadow-sm'
-              : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-              }`}
-          >
-            <span>Pending Evaluation</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'pending_evaluation'
-                ? 'bg-zinc-700 text-white'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                }`}
-            >
-              {sectionCounts.pendingEvaluation}
-            </span>
-          </button>
-
-          {/* 2. Evaluated Chats (Only chats evaluated by TLs via submit evaluation override) */}
+          {/* 1. Evaluated Chats */}
           <button
             onClick={() => { setActiveSection('evaluated'); setPage(1); setExpandedChatId(null); }}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'evaluated'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeSection === 'evaluated' || activeSection === 'pending_evaluation'
               ? 'bg-zinc-900 text-white font-bold shadow-sm'
               : 'bg-white dark:bg-slate-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
               }`}
           >
             <span>Evaluated Chats</span>
             <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'evaluated'
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeSection === 'evaluated' || activeSection === 'pending_evaluation'
                 ? 'bg-zinc-700 text-white'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
@@ -432,6 +497,27 @@ export default function PcgChatQualityView({
               {sectionCounts.disputesReviewed}
             </span>
           </button>
+
+          {/* Dispute Source Filter for Admins and Team Leads */}
+          {(activePersona === 'admin' || activePersona === 'tl') && (activeSection === 'disputes_pending' || activeSection === 'disputes_reviewed') && (
+            <div className="inline-flex items-center p-1 bg-zinc-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 ml-auto">
+              <span className="text-[11px] font-semibold text-zinc-500 px-2">Disputes:</span>
+              {(['all', 'rm', 'am', 'tl'] as const).map((src) => (
+                <button
+                  key={src}
+                  type="button"
+                  onClick={() => { setDisputeSourceFilter(src); setPage(1); }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    disputeSourceFilter === src
+                      ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-zinc-100 shadow-xs font-bold'
+                      : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
+                  }`}
+                >
+                  {src === 'all' ? 'All' : src === 'rm' ? 'RMs' : src === 'am' ? 'AMs' : activePersona === 'tl' ? 'TLs (My Disputes)' : 'Team Leads'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -611,80 +697,104 @@ export default function PcgChatQualityView({
           </span>
         </div>
 
-        {/* Cohort Toggles (RMs, AMs, Dual Chats) - strictly for TL view, hidden for Admin */}
+        {/* Cohort Toggles (RMs, AMs, Dual Chats) + My chats - strictly for TL view, hidden for Admin */}
         {activePersona === 'tl' && (
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center rounded-lg border border-[#E4E4E7] dark:border-slate-800 bg-zinc-100/90 dark:bg-slate-800/90 p-0.5 shrink-0 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => handleToggleCohort('rm')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'rm'
-                    ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                  }`}
-              >
-                RMs
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleCohort('am')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'am'
-                    ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                  }`}
-              >
-                AMs
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleCohort('dual')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'dual'
-                    ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                  }`}
-              >
-                Dual Chats
-              </button>
-            </div>
+            <button
+              type="button"
+              id="tl-my-chats-toggle"
+              onClick={() => {
+                setShowMyChatsOnly((prev) => {
+                  const next = !prev;
+                  if (next) setActiveCohortToggle(null);
+                  return next;
+                });
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer border ${
+                showMyChatsOnly
+                  ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs font-bold dark:bg-white dark:text-zinc-900'
+                  : 'bg-white text-zinc-700 border-[#E4E4E7] dark:bg-slate-900 dark:text-zinc-300 dark:border-slate-800 hover:bg-zinc-50 dark:hover:bg-slate-800 shadow-2xs'
+              }`}
+            >
+              My chats
+            </button>
 
-            {/* Conditional Dropdown for RMs */}
-            {activeCohortToggle === 'rm' && (
-              <select
-                id="chat-rm-dropdown"
-                value={selectedRmName}
-                onChange={(e) => {
-                  setSelectedRmName(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-medium shrink-0 cursor-pointer shadow-2xs"
-              >
-                <option value="all">All RMs</option>
-                {rmMembers.map((rm) => (
-                  <option key={rm.name} value={rm.name}>
-                    {rm.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            {!showMyChatsOnly && (
+              <>
+                <div className="inline-flex items-center rounded-lg border border-[#E4E4E7] dark:border-slate-800 bg-zinc-100/90 dark:bg-slate-800/90 p-0.5 shrink-0 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleCohort('rm')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'rm'
+                        ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      }`}
+                  >
+                    RMs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleCohort('am')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'am'
+                        ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      }`}
+                  >
+                    AMs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleCohort('dual')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${activeCohortToggle === 'dual'
+                        ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-2xs font-bold'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      }`}
+                  >
+                    Dual Chats
+                  </button>
+                </div>
 
-            {/* Conditional Dropdown for AMs */}
-            {activeCohortToggle === 'am' && (
-              <select
-                id="chat-am-dropdown"
-                value={selectedAmName}
-                onChange={(e) => {
-                  setSelectedAmName(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-medium shrink-0 cursor-pointer shadow-2xs"
-              >
-                <option value="all">All AMs</option>
-                {amMembers.map((am) => (
-                  <option key={am.name} value={am.name}>
-                    {am.name}
-                  </option>
-                ))}
-              </select>
+                {/* Conditional Dropdown for RMs */}
+                {activeCohortToggle === 'rm' && (
+                  <select
+                    id="chat-rm-dropdown"
+                    value={selectedRmName}
+                    onChange={(e) => {
+                      setSelectedRmName(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-9 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-medium shrink-0 cursor-pointer shadow-2xs"
+                  >
+                    <option value="all">All RMs</option>
+                    {rmMembers.map((rm) => (
+                      <option key={rm.name} value={rm.name}>
+                        {rm.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Conditional Dropdown for AMs */}
+                {activeCohortToggle === 'am' && (
+                  <select
+                    id="chat-am-dropdown"
+                    value={selectedAmName}
+                    onChange={(e) => {
+                      setSelectedAmName(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-9 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-medium shrink-0 cursor-pointer shadow-2xs"
+                  >
+                    <option value="all">All AMs</option>
+                    {amMembers.map((am) => (
+                      <option key={am.name} value={am.name}>
+                        {am.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
             )}
           </div>
         )}
@@ -796,7 +906,7 @@ export default function PcgChatQualityView({
         {loading ? (
           <div className="py-20 text-center text-slate-400 text-xs">
             <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            Loading {activeSection === 'pending_evaluation' ? 'pending evaluations' : activeSection === 'evaluated' ? 'evaluated chats' : activeSection === 'disputes_pending' ? 'pending disputes' : 'reviewed disputes'}...
+            Loading {activeSection === 'disputes_pending' ? 'pending disputes' : activeSection === 'disputes_reviewed' ? 'reviewed disputes' : 'evaluated chats'}...
           </div>
         ) : error ? (
           <div className="py-16 text-center text-rose-500 text-xs font-medium">
@@ -813,29 +923,6 @@ export default function PcgChatQualityView({
                 </div>
                 <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm">No TL Chats Found</span>
                 <span className="text-slate-400 text-xs">No chats handled by Team Leads match the selected filters.</span>
-              </div>
-            ) : activeSection === 'pending_evaluation' ? (
-              <div className="flex flex-col items-center justify-center gap-1.5">
-                <span className="text-emerald-600 text-2xl font-bold">✓</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm">No Chats Pending Evaluation</span>
-                <span className="text-slate-400 text-xs">
-                  All AI-evaluated chats for your team have been reviewed.
-                </span>
-              </div>
-            ) : activeSection === 'evaluated' ? (
-              <div className="flex flex-col items-center justify-center gap-1.5">
-                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-1">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                  </svg>
-                </div>
-                <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm">No Evaluated Chats</span>
-                <span className="text-slate-400 text-xs">
-                  {activePersona === 'agent'
-                    ? 'No evaluated chats found for this period.'
-                    : 'Chats evaluated by Team Leads using "Submit Evaluation Override" will automatically appear here.'}
-                </span>
               </div>
             ) : activeSection === 'disputes_pending' ? (
               <div className="flex flex-col items-center justify-center gap-1.5">
@@ -862,7 +949,18 @@ export default function PcgChatQualityView({
                 </span>
               </div>
             ) : (
-              <div>No PCG chat evaluations match the current filter criteria.</div>
+              <div className="flex flex-col items-center justify-center gap-1.5">
+                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-1">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                  </svg>
+                </div>
+                <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm">No Evaluated Chats</span>
+                <span className="text-slate-400 text-xs">
+                  No evaluated chats found for this period.
+                </span>
+              </div>
             )}
           </div>
         ) : (
@@ -902,19 +1000,11 @@ export default function PcgChatQualityView({
                       <th className="py-3 px-4 text-center whitespace-nowrap">Final IQS</th>
                       <th className="py-3 px-4 whitespace-nowrap">Status</th>
                     </>
-                  ) : activeSection === 'evaluated' ? (
-                    <>
-                      <th className="py-3 px-4 text-center">Messages</th>
-                      <th className="py-3 px-4">Closed Date</th>
-                      <th className="py-3 px-4 text-center">{activePersona === 'agent' ? 'Chat IQS' : 'Evaluated IQS'}</th>
-                      <th className="py-3 px-4">Compliance Mistake</th>
-                      {activePersona !== 'agent' && <th className="py-3 px-4">Evaluated By</th>}
-                    </>
                   ) : (
                     <>
                       <th className="py-3 px-4 text-center">Messages</th>
                       <th className="py-3 px-4">Closed Date</th>
-                      <th className="py-3 px-4 text-center">AI Scored IQS</th>
+                      <th className="py-3 px-4 text-center">IQS Score</th>
                       <th className="py-3 px-4">Compliance Mistake</th>
                     </>
                   )}
@@ -925,13 +1015,27 @@ export default function PcgChatQualityView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {chats.map((chat) => {
+                {displayedChats.map((chat) => {
                   const categories = (Array.isArray(chat.categories) && chat.categories.length > 0)
                     ? (chat.categories as PcgProductCategory[])
                     : detectPcgChatCategories(chat);
                   const isExpanded = expandedChatId === chat.id;
                   const totalCols = 10;
                   const isOverridden = chat.disputeStatus === 'overridden' || chat.disputeStatus === 'resolved' || Boolean(chat.tlOverrideNote);
+
+                  const isTlChat = (chat as any).isTlChat || isPcgTl(chat.rmName) || availableTls.some((t) => isSamePcgAgent(t.name, chat.rmName));
+                  const cleanRm = (chat.rmName || '').trim().toLowerCase();
+                  const assignedAdmin = (chat as any).assignedAdmin || tlAdminMap[cleanRm] || 'Aahan';
+                  const isMappedAdmin = Boolean(
+                    loggedInUserName && (
+                      loggedInUserName.trim().toLowerCase() === assignedAdmin.trim().toLowerCase() ||
+                      loggedInUserName.toLowerCase().includes(assignedAdmin.toLowerCase()) ||
+                      assignedAdmin.toLowerCase().includes(loggedInUserName.toLowerCase())
+                    )
+                  );
+                  const canOverride = activePersona === 'tl'
+                    ? !isTlChat
+                    : (isTlChat ? isMappedAdmin : true);
 
                   const breachedGates = (chat.complianceFlags || []).filter((f: any) => f.status === 'FAIL');
                   const breachedBy = chat.precedingRmName && chat.complianceTripwire ? 'Both' : null;
@@ -1007,12 +1111,12 @@ export default function PcgChatQualityView({
                                 className="text-xs text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800/60 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 break-words whitespace-normal leading-relaxed"
                               >
                                 <span className="font-bold text-zinc-900 dark:text-zinc-100 mr-1.5">
-                                  {activePersona === 'agent' ? 'My Note:' : 'RM Note:'}
+                                  {activePersona === 'agent' ? 'My Note:' : (activePersona === 'tl' && isTlChat ? 'My Note:' : isTlChat ? 'TL Note:' : 'RM Note:')}
                                 </span>
                                 {getDisputeSummary(chat.disputeReason) || 'No reasoning provided'}
                               </div>
                               {(() => {
-                                const notif = getDisputeCommentNotification(chat.disputeComments, chat.rmName);
+                                const notif = getDisputeCommentNotification(chat.disputeComments, chat.rmName, isTlChat);
                                 if (!notif) return null;
                                 return (
                                   <div className="mt-1 flex items-center gap-1">
@@ -1043,7 +1147,9 @@ export default function PcgChatQualityView({
                             </td>
                             <td className="py-3 px-4 whitespace-nowrap">
                               <span className="inline-flex items-center px-2.5 py-1 rounded text-[11px] font-bold whitespace-nowrap bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700">
-                                {activePersona === 'agent' ? 'Awaiting TL Review' : 'Pending TL Review'}
+                                {isTlChat
+                                  ? (activePersona === 'tl' ? 'Awaiting Admin Review' : 'Pending Admin Review')
+                                  : (activePersona === 'agent' ? 'Awaiting TL Review' : 'Pending TL Review')}
                               </span>
                             </td>
                           </>
@@ -1057,7 +1163,7 @@ export default function PcgChatQualityView({
                                 {getDisputeSummary(chat.disputeReason) || '—'}
                               </div>
                               {(() => {
-                                const notif = getDisputeCommentNotification(chat.disputeComments, chat.rmName);
+                                const notif = getDisputeCommentNotification(chat.disputeComments, chat.rmName, isTlChat);
                                 if (!notif) return null;
                                 return (
                                   <div className="mt-1 flex items-center gap-1">
@@ -1101,7 +1207,7 @@ export default function PcgChatQualityView({
                         )}
 
                         {/* Evaluated Chats Columns */}
-                        {activeSection === 'evaluated' && (
+                        {activeSection !== 'disputes_pending' && activeSection !== 'disputes_reviewed' && (
                           <>
                             <td className="py-3 px-4 text-center text-slate-700 dark:text-slate-300 font-mono">
                               {chat.totalMessages}
@@ -1120,71 +1226,15 @@ export default function PcgChatQualityView({
                                 ) : (
                                   <span className="text-slate-400 font-bold">NA</span>
                                 )}
-                                {activePersona !== 'agent' && (
+                                {(chat.reviewedBy || isOverridden) && (
                                   <span
                                     className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                                    title="Evaluation submitted by Team Lead"
+                                    title={chat.reviewedBy ? `Overridden by ${chat.reviewedBy}` : 'Score overridden'}
                                   >
-                                    Evaluated
+                                    Overridden
                                   </span>
                                 )}
                               </div>
-                            </td>
-
-                            <td className="py-3 px-4">
-                              {chat.complianceTripwire ? (
-                                <span
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold text-red-700 bg-red-50 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-900"
-                                  title={chat.complianceReason || 'Compliance violation detected'}
-                                >
-                                  <span>Yes</span>
-                                  {breachedBy && (
-                                    <span className="text-[9.5px] px-1 py-0.2 rounded bg-red-100 dark:bg-red-900/60 font-semibold">
-                                      {breachedBy}
-                                    </span>
-                                  )}
-                                </span>
-                              ) : (
-                                <span className="text-zinc-600 dark:text-zinc-400 font-medium" title="No compliance mistake detected">
-                                  No
-                                </span>
-                              )}
-                            </td>
-
-                            {activePersona !== 'agent' && (
-                              <td className="py-3 px-4">
-                                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                                  {chat.reviewedBy || chat.tlName || 'Team Lead'}
-                                </div>
-                                {chat.reviewedAt && (
-                                  <div className="text-[10px] text-slate-400">
-                                    {new Date(chat.reviewedAt).toLocaleDateString()}
-                                  </div>
-                                )}
-                              </td>
-                            )}
-                          </>
-                        )}
-
-                        {/* Pending Evaluation & Default Columns (for AI-evaluated chats) */}
-                        {activeSection !== 'disputes_pending' && activeSection !== 'disputes_reviewed' && activeSection !== 'evaluated' && (
-                          <>
-                            <td className="py-3 px-4 text-center text-slate-700 dark:text-slate-300 font-mono">
-                              {chat.totalMessages}
-                            </td>
-
-                            <td className="py-3 px-4 text-slate-500 dark:text-slate-400 text-[11px]">
-                              {new Date(chat.chatClosedAt).toLocaleDateString()}
-                            </td>
-
-                            <td className="py-3 px-4 text-center">
-                              {chat.iqsScore != null ? (
-                                <span className="inline-flex items-center justify-center font-bold text-xs px-2.5 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 tabular-nums">
-                                  {chat.iqsScore}%
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 font-bold">NA</span>
-                              )}
                             </td>
 
                             <td className="py-3 px-4">
@@ -1222,14 +1272,12 @@ export default function PcgChatQualityView({
                               {isExpanded
                                 ? 'Hide'
                                 : activeSection === 'disputes_pending'
-                                  ? (activePersona === 'agent' ? 'View Dispute' : 'Review Dispute')
+                                  ? (activePersona === 'agent' || showMyChatsOnly ? 'View Dispute' : canOverride ? 'Review Dispute' : 'View Dispute')
                                   : activeSection === 'disputes_reviewed'
                                     ? 'View Review'
-                                    : activeSection === 'evaluated'
-                                      ? (activePersona === 'tl' ? 'View / Re-evaluate' : 'View Evaluation')
-                                      : activePersona === 'agent' || activePersona === 'admin'
-                                        ? 'View Evaluation'
-                                        : 'Review & Evaluate'}
+                                    : activePersona === 'tl' && !showMyChatsOnly
+                                      ? 'Review & Evaluate'
+                                      : 'View Evaluation'}
                             </span>
                             <span className="text-[10px] opacity-70">
                               {isExpanded ? '▲' : '▼'}
@@ -1250,8 +1298,10 @@ export default function PcgChatQualityView({
                               setExpandedChatId(null);
                             }
                           }}
-                          userRole={activePersona}
-                          allowRaiseDispute={activePersona === 'agent'}
+                          userRole={activePersona === 'tl' && (showMyChatsOnly || isTlChat) ? 'tl' : activePersona}
+                          loggedInUserName={loggedInUserName}
+                          allowRaiseDispute={activePersona === 'agent' || (activePersona === 'tl' && (showMyChatsOnly || isTlChat))}
+                          canOverride={activePersona === 'tl' && (showMyChatsOnly || isTlChat) ? false : canOverride}
                         />
                       )}
                     </React.Fragment>

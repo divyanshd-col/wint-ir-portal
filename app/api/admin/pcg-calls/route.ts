@@ -641,6 +641,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const isAgentPersona = userRole === 'agent' || personaParam === 'agent';
   const isTlPersona = userRole === 'tl' || personaParam === 'tl';
+  const myCallsParam = searchParams.get('my_calls') === 'true' || (isTlPersona && callerRoleParam === 'tl');
 
   // Strict TL Scoping:
   // If the authenticated user is a TL, they MUST strictly be restricted to their own identity.
@@ -730,13 +731,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const scopeWhereClauses: string[] = ['r.start_time >= $1 AND r.start_time <= $2'];
   const scopeQueryParams: any[] = [startDateIso, endDateIso];
 
-  if (callerRoleParam === 'tl') {
+  if (callerRoleParam === 'tl' || myCallsParam) {
     // When querying for TL Call Quality: filter by specific selected agent or Team Lead names
     let targetCallers: string[] = [];
     if (rmFilter && rmFilter !== 'all') {
       targetCallers = [rmFilter.trim()];
     } else if (tlFilter && tlFilter !== 'all') {
       targetCallers = [tlFilter.replace(/^Team\s+/i, '').trim()];
+    } else if (isTlPersona && effectiveTl) {
+      targetCallers = [effectiveTl.replace(/^Team\s+/i, '').trim()];
     } else {
       targetCallers = allTlNames;
     }
@@ -1206,12 +1209,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     ];
     const disputeQueryParams: any[] = [];
 
-    if (callerRoleParam === 'tl') {
+    if (callerRoleParam === 'tl' || myCallsParam) {
       let targetTls: string[] = [];
       if (rmFilter && rmFilter !== 'all') {
         targetTls = [rmFilter.trim()];
       } else if (tlFilter && tlFilter !== 'all') {
         targetTls = [tlFilter.replace(/^Team\s+/i, '').trim()];
+      } else if (isTlPersona && effectiveTl) {
+        targetTls = [effectiveTl.replace(/^Team\s+/i, '').trim()];
       } else {
         targetTls = allTlNames;
       }
@@ -1259,8 +1264,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
           disputeWhereClauses.push(`1 = 0`);
         }
       } else {
-        if (allTeamMembers.length > 0) {
-          disputeQueryParams.push(allTeamMembers);
+        const teamWithTl = new Set(allTeamMembers);
+        const cleanTl = effectiveTl.replace(/^Team\s+/i, '').trim().toLowerCase();
+        const canTl = canonicalizePcgRmName(cleanTl).toLowerCase();
+        teamWithTl.add(cleanTl);
+        teamWithTl.add(canTl);
+        for (const [telName, c] of Object.entries(PCG_RM_TELEPHONY_TO_CANONICAL)) {
+          if (c.toLowerCase().trim() === canTl || telName.toLowerCase().trim() === cleanTl) {
+            teamWithTl.add(telName.toLowerCase().trim());
+          }
+        }
+        if (cleanTl.includes('swetha') || canTl.includes('swetha')) {
+          teamWithTl.add('swetha');
+          teamWithTl.add('swetha jayakumar');
+        }
+        const membersList = Array.from(teamWithTl);
+        if (membersList.length > 0) {
+          disputeQueryParams.push(membersList);
           disputeWhereClauses.push(
             `LOWER(COALESCE(NULLIF(e.rm_name, 'Unknown'), NULLIF(r.called_by, ''), NULLIF(r.agent_name, 'Unknown'), 'Unknown RM')) = ANY($${disputeQueryParams.length})`
           );
@@ -1368,7 +1388,40 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const sRow = summaryRows[0] || {};
     const total = countRows[0]?.total || 0;
     const calls = callsRows.map((r) => mapRowToCall(r, customTeamMap));
-    const disputes = (disputesRows || []).map((r) => mapRowToCall(r, customTeamMap));
+
+    const disputeIds = (disputesRows || []).flatMap((r: any) => [String(r.id), r.call_id]).filter(Boolean);
+    const commentsByFlagId = new Map<string, any[]>();
+    if (disputeIds.length > 0) {
+      try {
+        const commentRows = await query<any>(
+          `SELECT id, flag_id, author_name, role, content, created_at
+           FROM iqs_flag_comments
+           WHERE flag_id = ANY($1)
+           ORDER BY created_at ASC`,
+          [disputeIds]
+        );
+        for (const c of commentRows) {
+          const fid = String(c.flag_id);
+          if (!commentsByFlagId.has(fid)) commentsByFlagId.set(fid, []);
+          commentsByFlagId.get(fid)!.push({
+            id: c.id,
+            authorName: c.author_name,
+            authorRole: c.role,
+            content: c.content,
+            createdAt: c.created_at,
+          });
+        }
+      } catch (e) {}
+    }
+
+    const disputes = (disputesRows || []).map((r) => {
+      const call = mapRowToCall(r, customTeamMap);
+      const comments = commentsByFlagId.get(String(r.id)) || commentsByFlagId.get(r.call_id) || [];
+      return {
+        ...call,
+        disputeComments: comments,
+      };
+    });
 
     // Non-RM exclusion set: Admins, TLs, Quality users, placeholders
     const nonRmNames = new Set<string>();
@@ -1741,6 +1794,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         : teamLeads,
       tlTeams: dynamicTlTeams,
       teamAssignments: customTeamMap,
+      tlAdminAssignments: config?.pcgTlAdminAssignments || {},
       departmentStats,
       summary: {
         totalCalls: sRow.total_calls || 0,
@@ -1951,17 +2005,54 @@ export const POST = withLogging(ROUTE, async (req: NextRequest) => {
       const existingRow = existingRows[0];
       const targetCallId = existingRow?.call_id || callId;
 
-      // Strict TL Authorization: TLs can only review disputes for agents mapped to their own team
+      // Strict Authorization
+      const evalRm = existingRow?.rm_name || '';
+      const cleanRm = evalRm.trim().toLowerCase();
+      const isTlCall = Object.keys(TL_TEAMS).some((tl) => isSamePcgAgent(tl, evalRm));
+
       if ((session?.user as any)?.role === 'tl') {
         const callerTl = (session?.user as any)?.name || (session?.user as any)?.email;
+        if (isSamePcgAgent(callerTl, evalRm) || isTlCall) {
+          return NextResponse.json(
+            { error: 'Forbidden: Team Leads cannot override scores for their own calls.' },
+            { status: 403 }
+          );
+        }
         const allowedRms = await getPcgRmsForTl(callerTl);
-        const evalRm = existingRow?.rm_name || '';
-        const isAllowed = allowedRms.some((m) => isSamePcgAgent(m, evalRm)) || isSamePcgAgent(callerTl, evalRm);
+        const isAllowed = allowedRms.some((m) => isSamePcgAgent(m, evalRm));
         if (!isAllowed) {
           return NextResponse.json(
             { error: 'Forbidden: You can only review disputes for agents in your assigned team.' },
             { status: 403 }
           );
+        }
+      } else if ((session?.user as any)?.role === 'admin') {
+        if (isTlCall) {
+          // TL call: only mapped Admin (or super admin) can override
+          const config = await readConfig().catch(() => null);
+          const mappedAdmin = config?.pcgTlAdminAssignments?.[cleanRm] || 'Aahan';
+          const isSuperAdmin = Boolean((session?.user as any)?.is_super_admin || (session?.user as any)?.isSuperAdmin);
+          const sessionName = (session?.user as any)?.name || '';
+          const isMappedAdmin = sessionName && (
+            sessionName.trim().toLowerCase() === mappedAdmin.trim().toLowerCase() ||
+            sessionName.toLowerCase().includes(mappedAdmin.toLowerCase()) ||
+            mappedAdmin.toLowerCase().includes(sessionName.toLowerCase())
+          );
+
+          if (!isSuperAdmin && !isMappedAdmin) {
+            return NextResponse.json(
+              { error: `Evaluation override for TL ${evalRm} is assigned to Admin ${mappedAdmin}.` },
+              { status: 403 }
+            );
+          }
+        } else {
+          // Regular RM call: Admin override restricted unless super admin
+          if (!(session?.user as any)?.is_super_admin) {
+            return NextResponse.json(
+              { error: 'Evaluation override for RM calls is restricted to Team Leads' },
+              { status: 403 }
+            );
+          }
         }
       }
 
