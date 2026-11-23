@@ -168,19 +168,9 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // Roster
-  if (pathname === '/roster' || pathname.startsWith('/roster/')) {
-    if (!checkSkill('roster:view:access')) {
-      return NextResponse.redirect(new URL('/', req.url));
-    }
-  }
-
-  // Leave: needs the skill to use it or to approve
-  if (pathname === '/leave' || pathname.startsWith('/leave/')) {
-    if (!checkSkill(['leave:use:access', 'leave:approve:access'])) {
-      return NextResponse.redirect(new URL('/', req.url));
-    }
-  }
+  // Roster and Leave are gated in their layouts (app/roster/layout.tsx, app/leave/layout.tsx), not here: this token holds the skills
+  // from the moment of login, so a skill switched on in Settings > Skills would show the tab but bounce the click until a new login.
+  // The layouts read the live persona skills, the same ones the tab uses.
 
   // Token Usage
   if (pathname.startsWith('/tokens')) {
