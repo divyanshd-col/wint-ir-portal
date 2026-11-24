@@ -4,6 +4,7 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { DB_SCHEMA } from '@/lib/analytics/schema';
 import { executeReadOnlyQuery, writeAuditLog, isReadQuery } from '@/lib/analytics/executor';
 import { verifyAccessToken, OAUTH_SCOPE } from '@/lib/mcp/oauth';
+import { verifyToken as verifyStaticToken } from '@/lib/mcp/tokens';
 import { readTranscripts } from '@/lib/analytics/transcript-reader';
 
 // pg needs a TCP socket → Node runtime, not Edge. maxDuration mirrors the
@@ -232,29 +233,52 @@ const handler = createMcpHandler(
   },
 );
 
-// ── OAuth bearer-token auth (tokens minted by the OAuth flow, not NextAuth) ─────
-// Access tokens come from the OAuth authorization-code flow (app/api/oauth/*).
-// The static wint_mcp_ token path has been retired — claude.ai's web connector
-// authenticates via OAuth only. On failure, withMcpAuth emits a 401 whose
-// WWW-Authenticate points at the protected-resource metadata below, which is how
-// the connector discovers the authorization server.
+// ── Bearer-token auth (two kinds) ───────────────────────────────────────────────
+// 1. OAuth access tokens (wint_at_…) from the authorization-code flow — how
+//    claude.ai's web connector authenticates (app/api/oauth/*).
+// 2. Static personal tokens (wint_mcp_…) minted in Settings — for IDE / desktop
+//    MCP clients (Antigravity, Cursor, etc.) that pass a bearer token via headers
+//    rather than running the OAuth flow.
+// Both resolve to the same admin/tl + active-status gate and get every tool.
+// On failure, withMcpAuth emits a 401 whose WWW-Authenticate points at the
+// protected-resource metadata so claude.ai can discover the authorization server.
 
 async function verifyBearer(_req: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
+  // OAuth access token first (claude.ai).
   const ctx = await verifyAccessToken(bearerToken);
-  if (!ctx) return undefined;
-  return {
-    token: ctx.token,
-    clientId: ctx.clientId,
-    scopes: ctx.scope.split(/\s+/).filter(Boolean),
-    expiresAt: ctx.expiresAt,
-    resource: ctx.resource ? new URL(ctx.resource) : undefined,
-    extra: {
-      email: ctx.user.email,
-      name: ctx.user.name,
-      role: ctx.user.role,
-      userId: ctx.user.userId,
-    },
-  };
+  if (ctx) {
+    return {
+      token: ctx.token,
+      clientId: ctx.clientId,
+      scopes: ctx.scope.split(/\s+/).filter(Boolean),
+      expiresAt: ctx.expiresAt,
+      resource: ctx.resource ? new URL(ctx.resource) : undefined,
+      extra: {
+        email: ctx.user.email,
+        name: ctx.user.name,
+        role: ctx.user.role,
+        userId: ctx.user.userId,
+      },
+    };
+  }
+
+  // Fall back to a static personal token (IDE clients like Antigravity).
+  const staticUser = await verifyStaticToken(bearerToken);
+  if (staticUser) {
+    return {
+      token: bearerToken as string,
+      clientId: `user:${staticUser.userId}`,
+      scopes: [OAUTH_SCOPE],
+      extra: {
+        email: staticUser.email,
+        name: staticUser.name,
+        role: staticUser.role,
+        userId: staticUser.userId,
+      },
+    };
+  }
+
+  return undefined;
 }
 
 const authHandler = withMcpAuth(handler, verifyBearer, {
