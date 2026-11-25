@@ -1131,6 +1131,7 @@ export async function getCallRecordingsByConversationContact(
       AND cr.chat_id != $1
       AND cr.called_at >= target_conv.started_at
       AND cr.called_at <= COALESCE(target_conv.closed_at, NOW())
+      AND (cr.agent_id IS NULL OR target_conv.agent_id IS NULL OR cr.agent_id = target_conv.agent_id)
     ORDER BY cr.called_at ASC NULLS LAST, cr.created_at ASC
   `, [chatId]);
 }
@@ -1143,14 +1144,22 @@ export async function getCallRecordingsByContactWindow(
   contactId: number,
   windowStart: string,
   windowEnd: string,
+  agentId?: number | null,
 ): Promise<CallRecordingRow[]> {
+  const params: any[] = [contactId, windowStart, windowEnd];
+  let agentClause = '';
+  if (agentId) {
+    params.push(agentId);
+    agentClause = ` AND (agent_id IS NULL OR agent_id = $4)`;
+  }
   return query<CallRecordingRow>(`
     SELECT * FROM call_recordings
     WHERE contact_id = $1
       AND called_at >= $2::timestamptz
       AND called_at <= $3::timestamptz
+      ${agentClause}
     ORDER BY called_at ASC
-  `, [contactId, windowStart, windowEnd]);
+  `, params);
 }
 
 /** Find call recordings for a contact that have not yet been linked to a chat.
@@ -1159,15 +1168,23 @@ export async function getUnlinkedCallsForContact(
   contactId: number,
   startedAt: string,
   closedAt: string,
+  agentId?: number | null,
 ): Promise<CallRecordingRow[]> {
+  const params: any[] = [contactId, startedAt, closedAt];
+  let agentClause = '';
+  if (agentId) {
+    params.push(agentId);
+    agentClause = ` AND (agent_id IS NULL OR agent_id = $4)`;
+  }
   return query<CallRecordingRow>(`
     SELECT * FROM call_recordings
     WHERE contact_id = $1
       AND chat_id IS NULL
       AND called_at >= $2::timestamptz
       AND called_at <= $3::timestamptz
+      ${agentClause}
     ORDER BY called_at ASC
-  `, [contactId, startedAt, closedAt]);
+  `, params);
 }
 
 /** Find the closed conversation that a call belongs to, for self-linking after late transcription.
@@ -1175,21 +1192,44 @@ export async function getUnlinkedCallsForContact(
 export async function findClosedConversationForCall(
   contactId: number,
   calledAt: string,
+  agentId?: number | null,
 ): Promise<{ id: string } | null> {
+  const params: any[] = [contactId, calledAt];
+  let agentClause = '';
+  if (agentId) {
+    params.push(agentId);
+    agentClause = ` AND (agent_id IS NULL OR agent_id = $3)`;
+  }
   const rows = await query<{ id: string }>(`
     SELECT id FROM conversations
     WHERE contact_id = $1
       AND started_at <= $2::timestamptz
       AND closed_at >= $2::timestamptz
       AND closed_at IS NOT NULL
+      ${agentClause}
     ORDER BY started_at DESC
     LIMIT 1
-  `, [contactId, calledAt]);
+  `, params);
   return rows[0] ?? null;
 }
 
 /** Backfill chat_id and advance status to 'linked' on a call recording. */
 export async function linkCallToChat(callId: string, chatId: string): Promise<void> {
+  // Prevent linking across different agents: if call and conversation both have an agent assigned and they differ, abort.
+  const check = await query<{ call_agent: number | null; chat_agent: number | null }>(`
+    SELECT cr.agent_id as call_agent, conv.agent_id as chat_agent
+    FROM call_recordings cr, conversations conv
+    WHERE cr.id = $1 AND conv.id::text = $2
+  `, [callId, chatId]);
+
+  if (check.length > 0) {
+    const { call_agent, chat_agent } = check[0];
+    if (call_agent && chat_agent && call_agent !== chat_agent) {
+      console.warn(`[linkCallToChat] Refusing to link call ${callId} (agent ${call_agent}) to chat ${chatId} (agent ${chat_agent}) due to agent mismatch.`);
+      return;
+    }
+  }
+
   await query(
     `UPDATE call_recordings
      SET chat_id = $1, status = 'linked', updated_at = NOW()

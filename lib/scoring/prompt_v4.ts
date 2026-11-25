@@ -254,11 +254,13 @@ This is a chat-leg judgment about whether the agent made the right decision to m
 - "NA" with unsure = false when no call question arises at all.
 - Never lower this because a call happened. Escalating to voice is a good move when warranted, not a penalty.
 
-### PostCallRecap (conditional, binary 0 / 1, else "NA")
+### PostCallRecap (conditional, graded 0 / 0.5 / 1, else "NA")
 ONLY applies when a voice call happened in this thread (a call transcript is present in context). Otherwise score "NA" with unsure = false.
-When a call happened, the agent must post a short written recap in the chat of what was discussed and decided on the call, so the customer has it in writing. Example of a good recap: "Sir, as discussed over call, your SIP is active and the instalment will go through on the 20th of this month. Please let me know if any other clarity is needed."
-- 1: a clear written recap of the call outcome was posted, and it matches what the call transcript shows.
-- 0: no written recap was posted after the call, or the recap materially misstates what was discussed on the call.
+When a call happened, the agent must post a written recap or acknowledgment in the chat so the customer has a record in writing.
+- 1: a clear written recap of the call outcome, key discussion points, or next steps was posted, and it matches what the call transcript shows.
+  - **Exploratory / Informational / General Call Leniency**: If the call was an introductory, informational, or general discussion (for example, introducing platform bond options, walking through platform features, or answering general questions) where no specific transaction, filing, or complaint was executed, an acknowledgment message referencing the topic discussed on the call (e.g. "I hope I was able to introduce to you the short term bond options available on our platform on call...") along with an offer of further assistance or guidance on where to explore/invest IS FULLY SUFFICIENT for full credit (score 1). Do NOT penalize or demand exhaustive bullet points or technical fine-print (such as listing every tenure, tax rule, or deduction percentage discussed) when the call was exploratory or general in nature.
+- 0.5: the agent acknowledged the call and stated the broad topic, BUT the call involved concrete decisions, pending action items, or specific customer requests that were omitted from the text recap (e.g., the customer asked on the call for a link/form, or a specific timeline/action was committed on the call, but the chat recap only gave a high-level sign-off without that needed follow-up detail).
+- 0: no written recap or reference to the call was posted after the call, the message was a completely generic closing with zero reference to what was discussed on the call, or the recap materially misstates what was discussed.
 - Use the call transcript (provided as context) only to confirm the recap is present and accurate. Do NOT score call quality here.
 
 ### CallHandling
@@ -363,7 +365,7 @@ Return ONLY valid JSON in exactly this shape. Do not compute an overall score, t
     "Readability":             { "score": 0 or 1,                 "unsure": false, "comment": "why this score" },
     "GreetingHandover":        { "score": 0 or 1,                 "unsure": false, "comment": "why this score" },
     "EscalationDecision":      { "score": 0 or 1 or "NA",         "unsure": false, "comment": "why this score, or why NA. Chat-leg decision to move to a call, never the call itself" },
-    "PostCallRecap":           { "score": 0 or 1 or "NA",         "unsure": false, "comment": "why this score, or NA if no call happened" }
+    "PostCallRecap":           { "score": 0 or 0.5 or 1 or "NA",   "unsure": false, "comment": "why this score, or NA if no call happened" }
   },
   "dissatisfaction_triggered": true or false,
   "trigger_signal": "what the customer said that triggered it, or empty",

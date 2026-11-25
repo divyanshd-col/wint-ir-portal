@@ -345,15 +345,35 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
 
   // ── Stage 3: Scoreability Check ────────────────────────────────────────────
   const speechSegments = segments.filter((s: any) => s.type === 'turn' || s.type === 'speech');
-  const isSystemOnly = speechSegments.every((s: any) => s.speaker === 'SYSTEM');
+  const isSystemOnly = speechSegments.length > 0 && speechSegments.every((s: any) => s.speaker === 'SYSTEM');
   const isPureSilence = speechSegments.length === 0;
   const isJunkCall = Boolean(
     (call.call_disposition && call.call_disposition.toLowerCase().includes('junk')) ||
     (call.call_sub_disposition && call.call_sub_disposition.toLowerCase().includes('junk'))
   );
 
-  if (isSystemOnly || isPureSilence || isJunkCall) {
-    log.info('call-pipeline', `Call ${callId} marked as NOT_SCOREABLE (${isJunkCall ? 'junk call' : 'system only or pure silence'})`);
+  const isCustomerTurn = (s: any) => {
+    const spk = (s.speaker || '').toUpperCase();
+    return spk === 'INVESTOR' || spk === 'CUSTOMER' || spk === 'CLIENT' || s.role === 'customer';
+  };
+  const hasCustomerTurn = speechSegments.some(isCustomerTurn);
+
+  // Check if speech segments are purely repetitive greeting hallucination or single-word artifacts (e.g. repeated "Hello.")
+  const isRepetitiveGreetingOnly = speechSegments.length > 0 && speechSegments.every((s: any) => {
+    const txt = (s.text || s.message || '').replace(/[^\w\s]/g, '').trim().toLowerCase();
+    return !txt || ['hello', 'hi', 'hey', 'test', 'unclear', 'inaudible'].includes(txt);
+  });
+
+  const callDuration = Number(call.duration_seconds || duration || 0);
+  const isUnansweredCall = isRepetitiveGreetingOnly || (!hasCustomerTurn && (callDuration < 30 || speechSegments.length <= 3));
+
+  if (isSystemOnly || isPureSilence || isJunkCall || isUnansweredCall) {
+    const reason = isJunkCall
+      ? 'junk call'
+      : isUnansweredCall
+      ? 'unanswered / no customer dialogue recorded'
+      : 'system only or pure silence';
+    log.info('call-pipeline', `Call ${callId} marked as NOT_SCOREABLE (${reason})`);
     
     await query(`
       INSERT INTO call_evaluations (

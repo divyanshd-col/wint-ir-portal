@@ -44,8 +44,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     } catch {}
   }
 
-  if (!segments.length) {
-    return NextResponse.json({ error: 'No transcript segments found for this call' }, { status: 422 });
+  const speechSegments = segments.filter((s: any) => s.type === 'turn' || s.type === 'speech');
+  const isCustomerTurn = (s: any) => {
+    const spk = (s.speaker || '').toUpperCase();
+    return spk === 'INVESTOR' || spk === 'CUSTOMER' || spk === 'CLIENT' || s.role === 'customer';
+  };
+  const hasCustomerTurn = speechSegments.some(isCustomerTurn);
+  const isRepetitiveGreetingOnly = speechSegments.length > 0 && speechSegments.every((s: any) => {
+    const txt = (s.text || s.message || '').replace(/[^\w\s]/g, '').trim().toLowerCase();
+    return !txt || ['hello', 'hi', 'hey', 'test', 'unclear', 'inaudible'].includes(txt);
+  });
+
+  if (!segments.length || isRepetitiveGreetingOnly || (!hasCustomerTurn && speechSegments.length <= 3)) {
+    return NextResponse.json({
+      ok: true,
+      iqs: null,
+      verdict: 'NOT_SCOREABLE',
+      reason: 'Unanswered call / no customer dialogue recorded',
+      scores: {},
+      reasoning: {},
+      summary: 'Call was not answered or no conversation took place.',
+    });
   }
 
   const callTranscriptText = segmentsToText(segments);
