@@ -67,19 +67,20 @@ console.log('Generated Slack Alert:\n');
 console.log(msg);
 console.log('\n');
 
-assert(msg.includes('🚨 PCG CALL MONITORING ALERT — Customer Behaviour & Hostility'));
-assert(msg.includes('• Call ID: 68fb1d8ec9faf992f3132454'));
-assert(msg.includes('• RM: <@U0B5ZNXK6SV>'));
-assert(msg.includes('• TL: <@U0A3PEUCFPW>'));
+assert(!msg.includes('🚨 PCG CALL MONITORING ALERT'));
+assert(!msg.includes('Call ID'));
+assert(!msg.includes('Severity Level'));
+assert(!msg.includes('Direction'));
+assert(!msg.includes('Timestamp'));
 assert(!msg.includes('Customer Phone'));
 assert(!msg.includes('Call Duration'));
 assert(!msg.includes('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
+assert(msg.includes('RM: <@U0B5ZNXK6SV>'));
+assert(msg.includes('TL: <@U0A3PEUCFPW>'));
 assert(msg.includes('Trigger Category: Customer Behaviour & Hostility'));
-assert(msg.includes('Severity Level: CRITICAL'));
-assert(msg.includes('Direction: Customer said this to RM'));
-assert(msg.includes('Timestamp: 02:45 (Turn 14)'));
+assert(msg.includes('<https://ir-portal.wintwealth.com/admin/pcg-calls?callId=68fb1d8ec9faf992f3132454|Quoted Dialogue>:'));
 assert(msg.includes('"If this interest is not credited by 5 PM, I will file a formal complaint with SEBI against Wint Wealth."'));
-assert(msg.includes('admin/pcg-calls?callId=68fb1d8ec9faf992f3132454'));
+assert(!msg.includes('Open Call in Wint IR Portal'));
 console.log('✓ Slack Alert template output strictly verified.\n');
 
 // 5. 7 Monitoring Categories definition test
