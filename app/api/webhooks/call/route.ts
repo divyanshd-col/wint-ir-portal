@@ -167,7 +167,7 @@ async function processCallWebhook(body: any): Promise<void> {
   // was in progress (race condition: TICKET_CLOSED fires before call recording exists).
   let resolvedChatId = chatId;
   if (!resolvedChatId && contactId) {
-    const conv = await findClosedConversationForCall(contactId, calledAt);
+    const conv = await findClosedConversationForCall(contactId, calledAt, agentId);
     if (conv) {
       resolvedChatId = conv.id;
       await linkCallToChat(callId, resolvedChatId);

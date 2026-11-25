@@ -153,7 +153,7 @@ export const PCG_CHAT_PARAM_META: Record<string, {
   Empathy: { num: 6, name: 'Empathy', weight: 5, group: 'Customer Service Skills', scoreType: 'Yes / Half / No' },
   SimplifyingConcepts: { num: 7, name: 'Simplifying Concepts', weight: 5, group: 'Customer Service Skills', scoreType: 'Yes / Half / No' },
   EscalationToCall: { num: 8, name: 'Escalation to Call', weight: 4, group: 'Process Skills', scoreType: 'Yes / No' },
-  PostCallRecap: { num: 9, name: 'Post-Call Recap', weight: 4, group: 'Process Skills', scoreType: 'Yes / No' },
+  PostCallRecap: { num: 9, name: 'Post-Call Recap', weight: 4, group: 'Process Skills', scoreType: 'Yes / Half / No' },
   ReadabilityTone: { num: 10, name: 'Readability & Professional Tone', weight: 2, group: 'Communication Skills', scoreType: 'Yes / No' },
   GreetingClosing: { num: 11, name: 'Greeting & Closing', weight: 2, group: 'Communication Skills', scoreType: 'Yes / No' },
 };

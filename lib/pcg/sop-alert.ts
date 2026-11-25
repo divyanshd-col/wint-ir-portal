@@ -467,26 +467,15 @@ export function getPortalCallUrl(callId: string): string {
 
 // ── Slack Alert Message Construction ──────────────────────────────────────────
 /**
- * Constructs the exact Slack alert text according to Section 2 of the specification:
+ * Constructs the Slack alert text for PCG SOP breach monitoring:
  *
- * 🚨 PCG CALL MONITORING ALERT — [Category Name]
+ * RM: <@U0123456789>
+ * TL: <@U055PU2S4HE>
  *
- * • Call ID: 68fb1d8ec9faf992f3132454
- * • RM: <@U0123456789> (Shrey Jain)
- * • TL: <@U055PU2S4HE> (Dheeraj Bhojwani)
- * • Customer Phone: +91 98•••• ••210
- * • Call Duration: 04:12
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * Trigger Category: Customer Behaviour & Hostility
- * Severity Level: CRITICAL
- * Direction: Customer said this to RM
- * Timestamp: 02:45 (Turn 14)
  *
- * Quoted Dialogue:
- * "If this interest is not credited by 5 PM, I will file a formal complaint with SEBI against Wint Wealth."
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * Open Call in Wint IR Portal:
- * https://ir-portal.wintwealth.com/admin/pcg-calls?callId=68fb1d8ec9faf992f3132454
+ * <https://...|Quoted Dialogue>:
+ * "..."
  */
 export function buildPcgSopSlackMessage(
   trigger: PcgSopTrigger,
@@ -497,27 +486,13 @@ export function buildPcgSopSlackMessage(
   const tlTag = formatTlSlackTag(trigger.tl_name || callMetadata.tlName, customMap);
   const portalUrl = getPortalCallUrl(trigger.call_id || callMetadata.callId);
 
-  const cleanCallId = (trigger.call_id || callMetadata.callId).replace(/^runo-/, '').replace(/^call-/, '');
-
-  const timestampDisplay = trigger.timestamp || '00:00';
-  const turnDisplay = trigger.turn_index ? ` (Turn ${trigger.turn_index})` : '';
-
-  return `🚨 PCG CALL MONITORING ALERT — ${trigger.category}
-
-• Call ID: ${cleanCallId}
-• RM: ${rmTag}
-• TL: ${tlTag}
+  return `RM: ${rmTag}
+TL: ${tlTag}
 
 Trigger Category: ${trigger.category}
-Severity Level: ${trigger.severity}
-Direction: ${trigger.direction}
-Timestamp: ${timestampDisplay}${turnDisplay}
 
-Quoted Dialogue:
-"${trigger.quote.trim()}"
-
-Open Call in Wint IR Portal:
-${portalUrl}`;
+<${portalUrl}|Quoted Dialogue>:
+"${trigger.quote.trim()}"`;
 }
 
 // ── Send Slack Notification ───────────────────────────────────────────────────
