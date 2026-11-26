@@ -4,20 +4,22 @@ import { rosterActor, assertCanEdit, audit, HttpError, withRosterErrors } from '
 import { applyReconciled, planMutation, scheduledRow } from '@/lib/leave-server';
 import { fmtDayLong } from '@/lib/leave';
 import { todayIST, isIsoDate } from '@/lib/ist';
+import { asId, cleanText } from '@/lib/roster';
 
 /** Edit a scheduled change. Body: { toPattern, start, reason, expectedUpdatedAt, expectedFingerprint } */
 const PATCH_ = async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
   const { actor, response } = await rosterActor('roster:manage:access');
   if (response) return response;
-  const id = Number((await ctx.params).id), today = todayIST();
+  const rawId = asId((await ctx.params).id), today = todayIST();
   const b = await req.json().catch(() => ({}));
-  const row = await scheduledRow({ query }, id, today);
+  const row = rawId === null ? null : await scheduledRow({ query }, rawId, today);
   if (!row) return NextResponse.json({ error: 'This change has already started or was cancelled.' }, { status: 404 });
+  const id = row.id;
   const denied = await assertCanEdit(actor, row.user_id, today);
   if (denied) return denied;
-  const toPattern = Number(b.toPattern);
-  const reason = String(b.reason ?? '').trim();
-  if (!isIsoDate(b.start) || !Number.isInteger(toPattern) || !reason) return NextResponse.json({ error: 'Pick a roster type, a start date from tomorrow, and give a reason.' }, { status: 400 });
+  const toPattern = asId(b.toPattern);
+  const reason = cleanText(b.reason);
+  if (!isIsoDate(b.start) || toPattern === null || !reason) return NextResponse.json({ error: 'Pick a roster type, a start date from tomorrow, and give a reason.' }, { status: 400 });
   if (typeof b.expectedFingerprint !== 'string') return NextResponse.json({ error: 'Preview the change first.' }, { status: 400 });
 
   await withTransaction(async tx => {
@@ -41,13 +43,14 @@ export const PATCH = withRosterErrors(PATCH_);
 const DELETE_ = async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
   const { actor, response } = await rosterActor('roster:manage:access');
   if (response) return response;
-  const id = Number((await ctx.params).id), today = todayIST();
+  const rawId = asId((await ctx.params).id), today = todayIST();
   const b = await req.json().catch(() => ({}));
-  const row = await scheduledRow({ query }, id, today);
+  const row = rawId === null ? null : await scheduledRow({ query }, rawId, today);
   if (!row) return NextResponse.json({ error: 'This change has already started or was cancelled.' }, { status: 404 });
+  const id = row.id;
   const denied = await assertCanEdit(actor, row.user_id, today);
   if (denied) return denied;
-  const reason = String(b.reason ?? '').trim();
+  const reason = cleanText(b.reason);
   if (!reason) return NextResponse.json({ error: 'A reason is required.' }, { status: 400 });
   if (typeof b.expectedFingerprint !== 'string') return NextResponse.json({ error: 'Preview the change first.' }, { status: 400 });
 

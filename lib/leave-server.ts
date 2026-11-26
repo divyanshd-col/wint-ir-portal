@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { HttpError } from '@/lib/roster-server';
 import { addDays, weekday } from '@/lib/ist';
-import { cycleOf, patternOn, validateNewChange, type Assignment, type Pattern } from '@/lib/roster';
+import { cycleOf, patternOn, reasonTooLong, validateNewChange, type Assignment, type Pattern } from '@/lib/roster';
 import { LIVE_STATUSES, fmtDayLong, fmtQ, limitWarnings, reconcileLeave, type Change, type LeaveLine, type LeaveRequest, type LimitWarning, type Reconciled } from '@/lib/leave';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -87,6 +87,7 @@ export async function planMutation(db: Db, userId: number, m: Mutation, today: s
   const all = (await db.query<{ id: number; pattern_id: number; effective_from: string; updated_at: string }>(
     `SELECT id, pattern_id, to_char(effective_from,'YYYY-MM-DD') AS effective_from, updated_at FROM roster_assignments WHERE user_id = $1 AND cancelled_at IS NULL`, [userId])).map(r => ({ ...r, id: Number(r.id) }));
   const reason = String(m.reason ?? '').trim();
+  if (reasonTooLong(reason)) throw new HttpError(400, reasonTooLong(reason)!);
   let next: (Assignment & { id?: number })[];
   let from: string;
 
@@ -101,7 +102,8 @@ export async function planMutation(db: Db, userId: number, m: Mutation, today: s
     if (m.kind === 'edit') {
       const old = all.find(r => r.id === m.id);
       if (!old || old.effective_from <= today) throw new HttpError(404, 'This change has already started or was cancelled.');
-      if (forSave && (!m.expectedUpdatedAt || new Date(m.expectedUpdatedAt).getTime() !== new Date(old.updated_at).getTime()))
+      if (forSave && !m.expectedUpdatedAt) throw new HttpError(400, 'Reload the page and try again.');
+      if (forSave && new Date(m.expectedUpdatedAt!).getTime() !== new Date(old.updated_at).getTime())
         throw new HttpError(409, 'This change was edited by someone else. Reload and try again.');
       from = old.effective_from < m.start ? old.effective_from : m.start;
     } else from = m.start;

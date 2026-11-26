@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 
 export type CellKind = 'work' | 'off' | 'extra' | 'none' | 'leave' | 'leave-half' | 'lop' | 'lop-half' | 'hol';
 export interface Pattern { id: number; label: string; off_weekdays: number[]; rotates?: boolean }
@@ -31,6 +31,11 @@ export function Avatar({ name }: { name: string }) {
 }
 
 export function Modal({ title, width = 520, onClose, children }: { title: string; width?: number; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.45)' }}>
       <div style={{ width, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>

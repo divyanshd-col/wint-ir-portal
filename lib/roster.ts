@@ -6,6 +6,18 @@ export interface ExtraMark { day: string; half: 'full' | 'first' | 'second'; rev
 export type CellKind = 'work' | 'off' | 'extra' | 'none' | 'leave' | 'leave-half' | 'lop' | 'lop-half' | 'hol'; // 'none' = no roster type or before the roster starts
 export const CHANNELS = ['Chats', 'Calls', 'Emails', 'ORM'] as const;
 
+/** An id from a request body or URL: a positive whole number, or its digits as text. null, true, [], '', 1.5, 'abc', -3 and huge numbers are not ids. */
+export function asId(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && /^\d{1,15}$/.test(v) ? Number(v) : NaN;
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+/** Free text from a request body: only real strings count (an object must not turn into "[object Object]"). */
+export const cleanText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+export const REASON_MAX = 500;
+export const reasonTooLong = (reason: string): string | null => (reason.length > REASON_MAX ? `Keep the reason under ${REASON_MAX} characters.` : null);
+/** How far ahead a roster type change may be scheduled (the calendar goes the same distance). */
+export const MAX_AHEAD_DAYS = 365;
+
 /** Number of types in the rotation (Type 1 -> 2 -> 3 -> 4 -> back to 1). Types after those are fixed and never rotate. */
 export const ROTATION_TYPES = 4;
 export const cycleOf = (patterns: Pattern[]) => patterns.filter(p => p.rotates !== false).length || ROTATION_TYPES;
@@ -100,6 +112,35 @@ export function canGoPrev(view: RosterView, anchor: string): boolean {
   return days[days.length - 1] >= ROSTER_START;
 }
 
+// ---- Calendar filters (client side: the page already holds everyone) ----
+export interface RosterFilter { q: string; team: string; type: string; role: string; status: string }
+/** 'all' = no filter. team: 'none' (no team lead) or a team lead's user id. type: 'unset' or the type id. */
+export const NO_FILTER: RosterFilter = { q: '', team: 'all', type: 'all', role: 'all', status: 'all' };
+export const isFiltered = (f: RosterFilter) => f.q.trim() !== '' || f.team !== 'all' || f.type !== 'all' || f.role !== 'all' || f.status !== 'all';
+export interface FilterRow { name: string; role: string; tlUserId: number | null; pattern: number | null; cells: CellKind[] }
+export const STATUS_FILTERS: Record<string, CellKind[]> = {
+  working: ['work'], off: ['off'], extra: ['extra'], leave: ['leave', 'leave-half', 'lop', 'lop-half'], hol: ['hol'],
+};
+
+/**
+ * People matching every active filter. Search matches every word anywhere in the name, ignoring case and extra spaces.
+ * Status looks at the days on screen: in the Day view that is that day, in Week and Month anyone who has that status
+ * on at least one of the shown days.
+ */
+export function filterPeople<P extends FilterRow>(people: P[], f: RosterFilter): P[] {
+  const words = f.q.toLowerCase().split(/\s+/).filter(Boolean);
+  const kinds = STATUS_FILTERS[f.status];
+  return people.filter(p => {
+    const name = p.name.toLowerCase();
+    if (!words.every(w => name.includes(w))) return false;
+    if (f.team === 'none' ? p.tlUserId !== null : f.team !== 'all' && String(p.tlUserId) !== f.team) return false;
+    if (f.type === 'unset' ? p.pattern !== null : f.type !== 'all' && String(p.pattern) !== f.type) return false;
+    if (f.role !== 'all' && p.role !== f.role) return false;
+    if (f.status !== 'all' && (!kinds || !p.cells.some(c => kinds.includes(c)))) return false;
+    return true;
+  });
+}
+
 /** The roster covers the Wint CX team only. PCG-only users are excluded; 'both' (cross-workspace admins) are in. */
 export const isCxDomain = (platformDomain: string | null | undefined) => platformDomain !== 'pcg';
 
@@ -120,7 +161,9 @@ export function canEditTarget(actor: Actor, targetUserId: number, tlOfTarget: nu
 /** Validation for a new scheduled change. Returns an error message or null. */
 export function validateNewChange(a: { today: string; start: string; reason: string; toPattern: number; current: number | null; hasFuture: boolean }): string | null {
   if (!a.reason.trim()) return 'A reason is required.';
+  if (reasonTooLong(a.reason)) return reasonTooLong(a.reason);
   if (a.start <= a.today) return 'The change must start tomorrow or later. Past days never change.';
+  if (a.start > addDays(a.today, MAX_AHEAD_DAYS)) return 'A change can be scheduled up to 12 months ahead.';
   if (weekday(a.start) !== 1) return 'The rotation moves on Mondays, so a change must start on a Monday.';
   if (a.toPattern === a.current) return 'That’s already the type they’ll be on that week. Pick a different one.';
   if (a.hasFuture) return 'This person already has a scheduled change. Edit or cancel it first.';
@@ -136,6 +179,7 @@ export function extraDayNote(day: string, today: string): string | null {
 
 export function validateExtraDay(a: { today: string; day: string; isWeekOff: boolean; hasActive: boolean; reason: string }): string | null {
   if (!a.reason.trim()) return 'A reason is required.';
+  if (reasonTooLong(a.reason)) return reasonTooLong(a.reason);
   if (a.day > a.today) return 'Only today or past week-offs can be marked.';
   if (a.day < ROSTER_START) return 'The roster starts on 1 Nov 2026, so earlier days can’t be marked.';
   if (!a.isWeekOff) return 'That day is not a week-off for this person.';
@@ -146,6 +190,7 @@ export function validateExtraDay(a: { today: string; day: string; isWeekOff: boo
 /** Changing who someone reports to: admins only, agents only, to an active team lead, never your own record. */
 export function validateReportingLine(a: { actorUserId: number; userId: number; tlUserId: number; reason: string; personRole: string; tlRole: string }): string | null {
   if (!a.reason.trim()) return 'A reason is required.';
+  if (reasonTooLong(a.reason)) return reasonTooLong(a.reason);
   if (a.actorUserId === a.userId) return 'Nobody changes their own team lead.';
   if (a.personRole !== 'agent') return 'Only agents report to a team lead.';
   if (a.tlRole !== 'tl') return 'Pick a team lead.';
