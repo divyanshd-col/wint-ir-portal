@@ -4,8 +4,9 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { activeTab, isAuthPath, topTabs } from '@/lib/nav';
+import { activeTab, hasNavSkill, isAuthPath, topTabs } from '@/lib/nav';
 import SecuritySection from '@/components/settings/SecuritySection';
+import NotificationBell from '@/components/shell/NotificationBell';
 
 const ROLE_LABELS: Record<string, string> = { admin: 'Admin', quality: 'QA Analyst', tl: 'Team Lead', agent: 'IR Agent' };
 const THEME_KEY = 'wint_theme';
@@ -200,6 +201,7 @@ export default function TopBar() {
               </svg>
             </Link>
           )}
+          {status === 'authenticated' && (hasNavSkill(role, user?.skills, 'leave:use:access') || hasNavSkill(role, user?.skills, 'leave:approve:access')) && <NotificationBell />}
           <ThemeToggle />
           {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} isDhanush={isDhanush} isHarsh={isHarsh} isSindhu={isSindhu} />}
         </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
-import { leaveActor, withLeaveErrors } from '@/lib/leave-api';
-import { computeRequest, type ApplyInput } from '@/lib/leave-requests';
+import { applyInputFrom, leaveActor, withLeaveErrors } from '@/lib/leave-api';
+import { computeRequest } from '@/lib/leave-requests';
 import { sweepDue } from '@/lib/leave-requests';
 import { withTransaction } from '@/lib/cx/db';
 
@@ -10,7 +10,7 @@ const POST_ = async (req: NextRequest) => {
   const { actor, response } = await leaveActor('leave:use:access');
   if (response) return response;
   const b = await req.json().catch(() => ({}));
-  const input: ApplyInput = { start: String(b.start ?? ''), startHalf: b.startHalf ?? 'full', end: String(b.end ?? b.start ?? ''), endHalf: b.endHalf ?? 'full' };
+  const input = applyInputFrom(b);
   await sweepDue(withTransaction, { query });
   let excludeLeaveId: string | undefined;
   if (typeof b.excludeLeaveId === 'string') { // when editing: the request being edited must not clash with itself
