@@ -497,7 +497,13 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   );
 }
 
-export default function TLEmailQualityPage() {
+interface TLEmailQualityProps {
+  initialTab?: 'evaluated' | 'raised' | 'reviewed';
+  mode?: 'all' | 'evaluated-only' | 'disputes-only';
+  hideHeader?: boolean;
+}
+
+export default function TLEmailQualityPage({ initialTab: propInitialTab, mode = 'all', hideHeader = false }: TLEmailQualityProps = {}) {
   const emailParams = useEmailParameters();
   const { data: session } = useSession();
   const [agents, setAgents] = useState<AgentBreakdown[]>([]);
@@ -506,7 +512,14 @@ export default function TLEmailQualityPage() {
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
   const [loading, setLoading] = useState<boolean>(true);
-  const [tab, setTab] = useState<'evaluated' | 'raised' | 'reviewed'>('evaluated');
+  const defaultTab = mode === 'disputes-only' ? 'raised' : 'evaluated';
+  const [tab, setTab] = useState<'evaluated' | 'raised' | 'reviewed'>(
+    mode === 'evaluated-only'
+      ? 'evaluated'
+      : propInitialTab && ['evaluated', 'raised', 'reviewed'].includes(propInitialTab)
+        ? (mode === 'disputes-only' && propInitialTab === 'evaluated' ? 'raised' : propInitialTab)
+        : defaultTab
+  );
   const [counts, setCounts] = useState<{ evaluated: number; raised: number; reviewed: number } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
@@ -663,48 +676,52 @@ export default function TLEmailQualityPage() {
   return (
     <div>
       {/* ── Page Header ── */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
-          Quality Emails
-        </h1>
-      </div>
+      {!hideHeader && (
+        <div style={{ marginBottom: 20 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
+            Quality Emails
+          </h1>
+        </div>
+      )}
 
       {/* ── Tabs (left) + period filter (right), same slot as the chat/call pages ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 16 }}>
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0 }}>
-        {([
-          ['evaluated', 'Evaluated Emails', counts?.evaluated],
-          ['raised', 'Disputes Raised', counts?.raised],
-          ['reviewed', 'Reviewed Disputes', counts?.reviewed],
-        ] as const).map(([key, label, n]) => {
-          const active = tab === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              style={{
-                height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
-                background: 'transparent',
-                color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
-                borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
-                fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 600 : 500,
-                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-              }}
-            >
-              {label}
-              {n != null && (key === 'evaluated' || n > 0 || key === 'reviewed') && (
-                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px', background: active ? 'var(--ink)' : 'var(--qa-fill-light)', color: active ? 'var(--ink-fg)' : 'var(--qa-text-2)' }}>{n}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-      </div>
+      {mode !== 'evaluated-only' && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0 }}>
+          {([
+            ...(mode === 'all' ? [['evaluated', 'Evaluated Emails', counts?.evaluated] as const] : []),
+            ['raised', 'Disputes Raised', counts?.raised] as const,
+            ['reviewed', 'Reviewed Disputes', counts?.reviewed] as const,
+          ] as const).map(([key, label, n]) => {
+            const active = tab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                style={{
+                  height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
+                  background: 'transparent',
+                  color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+                  borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
+                  fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 600 : 500,
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {label}
+                {n != null && (key === 'evaluated' || n > 0 || key === 'reviewed') && (
+                  <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px', background: active ? 'var(--ink)' : 'var(--qa-fill-light)', color: active ? 'var(--ink-fg)' : 'var(--qa-text-2)' }}>{n}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        </div>
+      )}
 
-      {tab === 'raised' && <EmailDisputesSection queue="tl_pending" period={period} onPeriod={setPeriod} onChanged={fetchData} />}
-      {tab === 'reviewed' && <EmailDisputesSection queue="tl_history" period={period} onPeriod={setPeriod} onChanged={fetchData} />}
+      {(mode === 'all' || mode === 'disputes-only') && tab === 'raised' && <EmailDisputesSection queue="tl_pending" period={period} onPeriod={setPeriod} onChanged={fetchData} />}
+      {(mode === 'all' || mode === 'disputes-only') && tab === 'reviewed' && <EmailDisputesSection queue="tl_history" period={period} onPeriod={setPeriod} onChanged={fetchData} />}
 
-      {tab === 'evaluated' && (
+      {(mode === 'all' || mode === 'evaluated-only') && tab === 'evaluated' && (
       <>
       {/* ── KPI Cards (Consistent with QAAnalyticsDashboard / IQSRingCard) ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>

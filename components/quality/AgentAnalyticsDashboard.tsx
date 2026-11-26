@@ -11,17 +11,31 @@ interface StatChannel {
   volume: number;
   iqs: number | null;
   csat: number | null;
+  solvable_csat_pct?: number | null;
+  unsolvable_csat_pct?: number | null;
+  solvable_csat?: number | null;
+  unsolvable_csat?: number | null;
 }
 
 interface CategoryChild {
   name: string;
   iqsChats: number | null;
+  iqsCalls?: number | null;
+  iqsEmails?: number | null;
+  csatChats?: number | null;
+  csatCalls?: number | null;
+  csatEmails?: number | null;
   resolutionSecs: number | null;
 }
 
 interface CategoryRow {
   disposition: string;
   iqsChats: number | null;
+  iqsCalls?: number | null;
+  iqsEmails?: number | null;
+  csatChats?: number | null;
+  csatCalls?: number | null;
+  csatEmails?: number | null;
   resolutionSecs: number | null;
   children: CategoryChild[];
 }
@@ -42,11 +56,8 @@ interface AnalyticsData {
   categories: CategoryRow[];
   wowWeeks: string[];
   wowMetrics: { chats: WoWMetrics; calls: WoWMetrics; emails: WoWMetrics };
-  wowParams: { chats: WoWParam[]; calls: WoWParam[] };
+  wowParams: { chats: WoWParam[]; calls: WoWParam[]; emails?: WoWParam[] };
 }
-
-interface AIInsightItem { tag: string; text: string; }
-interface AIResult { summary: string; items: AIInsightItem[]; }
 
 // ─────────────────────────── Helpers ──────────────────────────────────────────
 
@@ -57,8 +68,13 @@ function fmtSecs(s: number | null): string {
   return `${h.toFixed(1)}h`;
 }
 
-function numOrDash(v: number | null, suffix = ''): string {
+function numOrDash(v: number | null | undefined, suffix = ''): string {
   return v == null ? '—' : `${v}${suffix}`;
+}
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null) return '—';
+  return `${Number(v.toFixed(1))}%`;
 }
 
 // ─────────────────────── Icons (inline SVG) ───────────────────────────────────
@@ -67,14 +83,6 @@ function DownloadIcon() {
   return (
     <svg style={{ width: 14, height: 14, stroke: 'currentColor', fill: 'none', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }} viewBox="0 0 24 24">
       <path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M5 21h14" />
-    </svg>
-  );
-}
-
-function StarIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg style={{ width: size, height: size, stroke: 'currentColor', fill: 'none', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }} viewBox="0 0 24 24">
-      <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
     </svg>
   );
 }
@@ -92,49 +100,51 @@ function SpinnerIcon() {
 
 // ─────────────────────── Main component ───────────────────────────────────────
 
-interface Props { userEmail: string; selfAgentName?: string; }
+interface Props { userEmail?: string; selfAgentName?: string; }
 
-export default function AgentAnalyticsDashboard({}: Props) {
+export default function AgentAnalyticsDashboard({ userEmail = '', selfAgentName = '' }: Props) {
   // ── Time range ──────────────────────────────────────────────────────────────
   const [period, setPeriod] = useState<'7' | '30' | 'custom'>('30');
   const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo]   = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const timerangeRef = useRef<HTMLDivElement>(null);
 
   // ── Data ────────────────────────────────────────────────────────────────────
-  const [data, setData]       = useState<AnalyticsData | null>(null);
+  const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
+  const [error, setError] = useState('');
 
   // ── Category expand state ──────────────────────────────────────────────────
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
 
   // ── WoW ─────────────────────────────────────────────────────────────────────
   const [wowChannel, setWowChannel] = useState<'chats' | 'calls' | 'emails'>('chats');
-  const [wowTab, setWowTab]         = useState<'metrics' | 'params'>('metrics');
-
-  // ── AI Analysis ─────────────────────────────────────────────────────────────
-  const [aiChannel, setAiChannel]     = useState<'chats' | 'calls'>('chats');
-  const [aiState, setAiState]         = useState<'empty' | 'loading' | 'insights'>('empty');
-  const [aiResults, setAiResults]     = useState<Partial<Record<'chats' | 'calls', AIResult>>>({});
-  const [aiGenerating, setAiGenerating] = useState(false);
+  const [wowTab, setWowTab] = useState<'metrics' | 'params'>('metrics');
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchData = useCallback(async (p: string, from = '', to = '') => {
     setLoading(true); setError('');
     try {
       const params = new URLSearchParams({ period: p });
+      if (selfAgentName) params.set('agent', selfAgentName);
+      if (userEmail) params.set('email', userEmail);
       if (p === 'custom' && from && to) { params.set('from', from); params.set('to', to); }
       const res = await fetch(`/api/quality/my-analytics?${params}`);
-      const d = await res.json();
+      const text = await res.text();
+      let d: any;
+      try {
+        d = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(text || `Server returned ${res.status}`);
+      }
       if (!res.ok) throw new Error(d.error || 'Failed to load');
       setData(d);
     } catch (e: any) {
       setError(e.message || 'Failed to load');
     }
     setLoading(false);
-  }, []);
+  }, [selfAgentName, userEmail]);
 
   useEffect(() => { fetchData('30'); }, [fetchData]);
 
@@ -174,11 +184,11 @@ export default function AgentAnalyticsDashboard({}: Props) {
 
   function exportCategories() {
     if (!data) return;
-    const header = ['Category', 'IQS Chats %', 'Chat Resolution'];
+    const header = ['Category', 'IQS Chats %', 'IQS Calls %', 'IQS Emails %', 'CSAT Chats %', 'CSAT Calls %', 'CSAT Emails %'];
     const rows: string[][] = [header];
     for (const c of data.categories) {
-      rows.push([c.disposition, numOrDash(c.iqsChats, '%'), fmtSecs(c.resolutionSecs)]);
-      for (const s of c.children) rows.push([`  ${s.name}`, numOrDash(s.iqsChats, '%'), fmtSecs(s.resolutionSecs)]);
+      rows.push([c.disposition, numOrDash(c.iqsChats, '%'), numOrDash(c.iqsCalls, '%'), numOrDash(c.iqsEmails, '%'), numOrDash(c.csatChats, '%'), numOrDash(c.csatCalls, '%'), numOrDash(c.csatEmails, '%')]);
+      for (const s of c.children) rows.push([`  ${s.name}`, numOrDash(s.iqsChats, '%'), numOrDash(s.iqsCalls, '%'), numOrDash(s.iqsEmails, '%'), numOrDash(s.csatChats, '%'), numOrDash(s.csatCalls, '%'), numOrDash(s.csatEmails, '%')]);
     }
     exportCsv(rows, 'categories.csv');
   }
@@ -189,38 +199,15 @@ export default function AgentAnalyticsDashboard({}: Props) {
     const metrics = data.wowMetrics[wowChannel];
     const rows: string[][] = [['Metric', ...weeks]];
     rows.push(['CSAT %', ...metrics.csat.map(v => numOrDash(v, '%'))]);
-    rows.push(['IQS %',  ...metrics.iqs.map(v => numOrDash(v, '%'))]);
+    rows.push(['IQS %', ...metrics.iqs.map(v => numOrDash(v, '%'))]);
     rows.push(['Volume', ...metrics.volume.map(String)]);
     exportCsv(rows, `wow-${wowChannel}.csv`);
-  }
-
-  // ── AI Generate ─────────────────────────────────────────────────────────────
-  async function generateAI() {
-    if (aiGenerating) return;
-    setAiGenerating(true);
-    setAiState('loading');
-    try {
-      const body: any = { channel: aiChannel, period };
-      if (period === 'custom') { body.from = customFrom; body.to = customTo; }
-      const res = await fetch('/api/quality/my-analytics/ai', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const d = await res.json();
-      if (res.ok) {
-        setAiResults(prev => ({ ...prev, [aiChannel]: d }));
-        setAiState('insights');
-      } else {
-        setAiState('empty');
-      }
-    } catch { setAiState('empty'); }
-    setAiGenerating(false);
   }
 
   // ── Period label ────────────────────────────────────────────────────────────
   const periodLabel = period === '7' ? 'Last 7 days'
     : period === 'custom' && customFrom && customTo ? `${customFrom} – ${customTo}`
-    : 'Last 30 days';
+      : 'Last 30 days';
 
   // ─── Style helper (avoids spreading objects into JSX style) ─────────────────
   const S = (x: any): React.CSSProperties => x;
@@ -228,39 +215,6 @@ export default function AgentAnalyticsDashboard({}: Props) {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={S({ display: 'flex', minHeight: 'var(--vh100)', fontFamily: 'var(--qa-sans, -apple-system, BlinkMacSystemFont, "Inter", sans-serif)', fontSize: 14, background: 'var(--qa-bg)', color: 'var(--qa-text)' })}>
-
-      {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
-      <aside style={S({
-        width: 220, flexShrink: 0,
-        background: 'var(--qa-card)', borderRight: '1px solid var(--qa-border)',
-        padding: '16px 0', minHeight: 'var(--vh100)', position: 'sticky', top: 0,
-      })}>
-        <div style={S({ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', padding: '12px 16px 6px' })}>
-          Agent
-        </div>
-
-        {([
-          { href: '/tl/member-analytics', label: 'My Analytics', active: false },
-          { href: '/agent/quality-chats', label: 'My Quality Chats', active: false },
-        ] as const).map(({ href, label, active }) => (
-          <Link key={href} href={href} style={S({
-            width: '100%', height: 44, padding: '0 16px',
-            display: 'flex', alignItems: 'center', gap: 10,
-            fontSize: 14, color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
-            cursor: 'pointer', position: 'relative', textDecoration: 'none',
-            background: active ? 'var(--qa-gray-100)' : 'transparent',
-            borderLeft: active ? '3px solid var(--qa-text)' : '3px solid transparent',
-            fontWeight: active ? 500 : 400, fontFamily: 'inherit',
-          })}>
-            <span style={S({
-              width: 16, height: 16, border: `1px solid ${active ? 'var(--qa-text)' : 'var(--qa-text-3)'}`,
-              borderRadius: 3, flexShrink: 0,
-              background: active ? 'var(--qa-fill-med)' : 'transparent',
-            })} />
-            {label}
-          </Link>
-        ))}
-      </aside>
 
       {/* ── Main ────────────────────────────────────────────────────────────── */}
       <main style={S({ flex: 1, minWidth: 0, padding: 32, overflowY: 'auto' })}>
@@ -319,32 +273,48 @@ export default function AgentAnalyticsDashboard({}: Props) {
                 <div style={S({ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 })}>
                   {(['chats', 'calls', 'emails'] as const).map(ch => {
                     const c = data.statCards[ch];
-                    const isEmpty = ch === 'emails';
+                    const isEmpty = ch === 'emails' ? (c.volume === 0 && c.iqs === null) : (c.volume === 0 && c.iqs === null && c.csat === null);
                     return (
                       <div key={ch} style={S({ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 20, minHeight: 132 })}>
                         <div style={S({ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 12 })}>
                           {ch.charAt(0).toUpperCase() + ch.slice(1)}
                         </div>
-                        <div style={S({ display: 'flex', alignItems: 'flex-end', gap: 0 })}>
+                        <div style={S({ display: 'flex', alignItems: 'stretch', gap: 0 })}>
                           {[
-                            { label: 'CSAT', value: isEmpty ? '—' : numOrDash(c.csat, '%') },
-                            { label: 'IQS',  value: isEmpty ? '—' : numOrDash(c.iqs, '%') },
+                            { label: 'CSAT', value: (isEmpty || c.csat == null) ? '—' : numOrDash(c.csat, '%') },
+                            { label: 'IQS', value: (isEmpty || c.iqs == null) ? '—' : numOrDash(c.iqs, '%') },
                             { label: 'Volume', value: isEmpty ? '—' : String(c.volume) },
                           ].map((item, idx) => (
                             <div key={item.label} style={S({ display: 'flex', alignItems: 'stretch' })}>
-                              {idx > 0 && <span style={S({ width: 1, alignSelf: 'stretch', background: 'var(--qa-border)' })} />}
-                              <div style={S({ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1, padding: idx === 0 ? '0 18px 0 0' : '0 18px' })}>
+                              {idx > 0 && <span style={S({ width: 1, alignSelf: 'stretch', background: 'var(--qa-border)', marginTop: 2, marginBottom: 2 })} />}
+                              <div style={S({ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', lineHeight: 1.1, padding: idx === 0 ? '0 18px 0 0' : '0 18px' })}>
                                 <span style={S({ fontSize: 24, fontWeight: 700, color: isEmpty ? 'var(--qa-text-4)' : 'var(--qa-text)', fontFamily: 'ui-monospace, monospace', lineHeight: 1 })}>
                                   {item.value}
                                 </span>
                                 <span style={S({ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)', marginTop: 8 })}>
                                   {item.label}
                                 </span>
+                                {item.label === 'CSAT' && ch === 'chats' && (
+                                  <div style={S({ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, lineHeight: 1.3 })}>
+                                    <div style={S({ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' })}>
+                                      <span style={S({ color: 'var(--qa-text-3)', fontSize: 10 })}>Solvable:</span>
+                                      <span style={S({ fontWeight: 600, color: (c.solvable_csat_pct ?? c.solvable_csat) != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>
+                                        {fmtPct(c.solvable_csat_pct ?? c.solvable_csat)}
+                                      </span>
+                                    </div>
+                                    <div style={S({ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' })}>
+                                      <span style={S({ color: 'var(--qa-text-3)', fontSize: 10 })}>Unsolvable:</span>
+                                      <span style={S({ fontWeight: 600, color: (c.unsolvable_csat_pct ?? c.unsolvable_csat) != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>
+                                        {fmtPct(c.unsolvable_csat_pct ?? c.unsolvable_csat)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
                         </div>
-                        {isEmpty && <div style={S({ fontSize: 13, color: 'var(--qa-text-2)', marginTop: 8 })}>Not yet evaluated</div>}
+                        {ch === 'emails' && isEmpty && <div style={S({ fontSize: 13, color: 'var(--qa-text-2)', marginTop: 8 })}>Not yet evaluated</div>}
                       </div>
                     );
                   })}
@@ -373,19 +343,19 @@ export default function AgentAnalyticsDashboard({}: Props) {
                       <table style={S({ width: '100%', borderCollapse: 'collapse' })}>
                         <thead>
                           <tr style={S({ background: 'var(--qa-gray-50)' })}>
-                            <th rowSpan={2} style={S({ width: '38%', height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap', verticalAlign: 'middle', position: 'sticky', top: 0, zIndex: 3 })}>
+                            <th rowSpan={2} style={S({ width: '28%', height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap', verticalAlign: 'middle', position: 'sticky', top: 0, zIndex: 3 })}>
                               Category
                             </th>
-                            <th colSpan={2} style={S({ height: 28, paddingTop: 8, paddingBottom: 0, paddingLeft: 16, paddingRight: 16, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 3 })}>
+                            <th colSpan={3} style={S({ height: 28, paddingTop: 8, paddingBottom: 0, paddingLeft: 16, paddingRight: 16, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 3 })}>
                               IQS
                             </th>
-                            <th rowSpan={2} style={S({ height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'right', padding: '0 16px', whiteSpace: 'nowrap', verticalAlign: 'middle', position: 'sticky', top: 0, zIndex: 3 })}>
-                              Chat Resolution
+                            <th colSpan={3} style={S({ height: 28, paddingTop: 8, paddingBottom: 0, paddingLeft: 16, paddingRight: 16, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 3 })}>
+                              CSAT
                             </th>
                           </tr>
                           <tr style={S({ background: 'var(--qa-gray-50)' })}>
-                            {['Chats', 'Calls'].map(h => (
-                              <th key={h} style={S({ height: 34, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'right', padding: '0 16px', whiteSpace: 'nowrap', position: 'sticky', top: 28, zIndex: 2 })}>
+                            {['Chats', 'Calls', 'Emails', 'Chats', 'Calls', 'Emails'].map((h, i) => (
+                              <th key={`${h}-${i}`} style={S({ height: 34, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'right', padding: '0 16px', whiteSpace: 'nowrap', position: 'sticky', top: 28, zIndex: 2 })}>
                                 {h}
                               </th>
                             ))}
@@ -393,7 +363,7 @@ export default function AgentAnalyticsDashboard({}: Props) {
                         </thead>
                         <tbody>
                           {data.categories.length === 0 && (
-                            <tr><td colSpan={4} style={S({ textAlign: 'center', padding: '32px 16px', color: 'var(--qa-text-3)', fontSize: 13 })}>No category data for this period.</td></tr>
+                            <tr><td colSpan={7} style={S({ textAlign: 'center', padding: '32px 16px', color: 'var(--qa-text-3)', fontSize: 13 })}>No category data for this period.</td></tr>
                           )}
                           {data.categories.map(cat => {
                             const isOpen = openKeys.has(cat.disposition);
@@ -404,16 +374,22 @@ export default function AgentAnalyticsDashboard({}: Props) {
                                     <span style={S({ display: 'inline-block', width: 10, height: 10, marginRight: 10, color: 'var(--qa-text-2)', fontSize: 10, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', transformOrigin: 'center' })}>▶</span>
                                     {cat.disposition}
                                   </td>
-                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text)' })}>{numOrDash(cat.iqsChats, '%')}</td>
-                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text-4)' })}>—</td>
-                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text)' })}>{fmtSecs(cat.resolutionSecs)}</td>
+                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: cat.iqsChats != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(cat.iqsChats, '%')}</td>
+                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: cat.iqsCalls != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(cat.iqsCalls, '%')}</td>
+                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: cat.iqsEmails != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(cat.iqsEmails, '%')}</td>
+                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: cat.csatChats != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(cat.csatChats, '%')}</td>
+                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: cat.csatCalls != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(cat.csatCalls, '%')}</td>
+                                  <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: cat.csatEmails != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(cat.csatEmails, '%')}</td>
                                 </tr>
                                 {isOpen && cat.children.map(child => (
                                   <tr key={child.name} style={S({ height: 44, borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' })}>
                                     <td style={S({ padding: '0 16px 0 48px', fontSize: 13, color: 'var(--qa-text-2)' })}>{child.name}</td>
-                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text)' })}>{numOrDash(child.iqsChats, '%')}</td>
-                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text-4)' })}>—</td>
-                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text)' })}>{fmtSecs(child.resolutionSecs)}</td>
+                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: child.iqsChats != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(child.iqsChats, '%')}</td>
+                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: child.iqsCalls != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(child.iqsCalls, '%')}</td>
+                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: child.iqsEmails != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(child.iqsEmails, '%')}</td>
+                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: child.csatChats != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(child.csatChats, '%')}</td>
+                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: child.csatCalls != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(child.csatCalls, '%')}</td>
+                                    <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: child.csatEmails != null ? 'var(--qa-text)' : 'var(--qa-text-4)' })}>{numOrDash(child.csatEmails, '%')}</td>
                                   </tr>
                                 ))}
                               </Fragment>
@@ -483,8 +459,8 @@ export default function AgentAnalyticsDashboard({}: Props) {
                           <tbody>
                             {[
                               { label: 'CSAT %', vals: data.wowMetrics[wowChannel].csat, pct: true },
-                              { label: 'IQS',    vals: data.wowMetrics[wowChannel].iqs,  pct: true },
-                              { label: 'Volume', vals: data.wowMetrics[wowChannel].volume as (number|null)[], pct: false },
+                              { label: 'IQS', vals: data.wowMetrics[wowChannel].iqs, pct: true },
+                              { label: 'Volume', vals: data.wowMetrics[wowChannel].volume as (number | null)[], pct: false },
                             ].map(row => (
                               <tr key={row.label} style={S({ borderBottom: '1px solid var(--qa-border-sub)' })}>
                                 <td style={S({ padding: '0 16px', height: 46, fontSize: 14, fontWeight: 500, color: 'var(--qa-text)' })}>{row.label}</td>
@@ -513,7 +489,7 @@ export default function AgentAnalyticsDashboard({}: Props) {
                             </tr>
                           </thead>
                           <tbody>
-                            {(wowChannel === 'emails' ? [] : wowChannel === 'calls' ? data.wowParams.calls : data.wowParams.chats).map(param => (
+                            {(wowChannel === 'emails' ? (data.wowParams.emails || []) : wowChannel === 'calls' ? data.wowParams.calls : data.wowParams.chats).map(param => (
                               <tr key={param.name} style={S({ borderBottom: '1px solid var(--qa-border-sub)' })}>
                                 <td style={S({ padding: '0 16px', height: 46, fontSize: 14, fontWeight: 500, color: 'var(--qa-text)' })}>{param.name}</td>
                                 {param.vals.map((v, i) => (
@@ -523,8 +499,8 @@ export default function AgentAnalyticsDashboard({}: Props) {
                                 ))}
                               </tr>
                             ))}
-                            {wowChannel === 'emails' && (
-                              <tr><td colSpan={data.wowWeeks.length + 1} style={S({ textAlign: 'center', padding: '32px 16px', color: 'var(--qa-text-3)', fontSize: 13 })}>Email quality scoring coming soon.</td></tr>
+                            {wowChannel === 'emails' && (!data.wowParams.emails || data.wowParams.emails.length === 0) && (
+                              <tr><td colSpan={data.wowWeeks.length + 1} style={S({ textAlign: 'center', padding: '32px 16px', color: 'var(--qa-text-3)', fontSize: 13 })}>No parameter data for emails in this period.</td></tr>
                             )}
                           </tbody>
                         </table>
@@ -533,97 +509,6 @@ export default function AgentAnalyticsDashboard({}: Props) {
                   </div>
                 </section>
 
-                {/* ── Section: AI Analysis ─────────────────────────────────── */}
-                <section style={S({ marginBottom: 32 })}>
-                  <div style={S({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 })}>
-                    <h2 style={S({ fontSize: 18, fontWeight: 600, margin: 0 })}>AI Analysis</h2>
-                  </div>
-
-                  <div style={S({ background: 'var(--qa-gray-50)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 24 })}>
-                    {/* AI card header */}
-                    <div style={S({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 })}>
-                      <h3 style={S({ fontSize: 18, fontWeight: 600, margin: 0 })}>AI Analysis</h3>
-                      <button onClick={generateAI} disabled={aiGenerating} style={S({
-                        height: 36, padding: '0 16px', borderRadius: 8, fontFamily: 'inherit', fontSize: 13,
-                        fontWeight: 500, cursor: aiGenerating ? 'not-allowed' : 'pointer',
-                        display: 'inline-flex', alignItems: 'center', gap: 8,
-                        border: '1px solid var(--qa-text)', background: aiGenerating ? 'var(--qa-fill-med)' : 'var(--qa-text)',
-                        color: aiGenerating ? 'var(--qa-text-3)' : '#fff',
-                      })}>
-                        <StarIcon size={15} />
-                        {aiResults[aiChannel] ? 'Regenerate' : 'Generate Analysis'}
-                      </button>
-                    </div>
-
-                    {/* AI channel tabs */}
-                    <div style={S({ display: 'flex', gap: 4, borderBottom: '1px solid var(--qa-border)', marginBottom: 20 })}>
-                      {(['chats', 'calls'] as const).map(ch => (
-                        <button key={ch} onClick={() => {
-                          setAiChannel(ch);
-                          setAiState(aiResults[ch] ? 'insights' : 'empty');
-                        }} style={S({
-                          height: 36, padding: '0 14px', background: 'transparent', border: 0,
-                          fontSize: 13, color: aiChannel === ch ? 'var(--qa-text)' : 'var(--qa-text-2)',
-                          cursor: 'pointer', fontFamily: 'inherit', fontWeight: aiChannel === ch ? 600 : 400,
-                          borderBottom: aiChannel === ch ? '2px solid var(--qa-text)' : '2px solid transparent',
-                          marginBottom: -1,
-                        })}>{ch.charAt(0).toUpperCase() + ch.slice(1)}</button>
-                      ))}
-                      <button disabled title="Coming soon" style={S({
-                        height: 36, padding: '0 14px', background: 'transparent', border: 0,
-                        fontSize: 13, color: 'var(--qa-text-4)', cursor: 'not-allowed', fontFamily: 'inherit',
-                        borderBottom: '2px solid transparent', marginBottom: -1,
-                      })}>Emails</button>
-                    </div>
-
-                    {/* Loading state */}
-                    {aiState === 'loading' && (
-                      <div style={S({ display: 'flex', alignItems: 'center', gap: 10, minHeight: 160, justifyContent: 'center', color: 'var(--qa-text-2)', fontSize: 13 })}>
-                        <SpinnerIcon />
-                        Analyzing your {aiChannel}…
-                      </div>
-                    )}
-
-                    {/* Empty state */}
-                    {aiState === 'empty' && (
-                      <div style={S({ minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center' })}>
-                        <StarIcon size={28} />
-                        <p style={S({ fontSize: 13, color: 'var(--qa-text-3)', margin: 0, maxWidth: 340 })}>
-                          Click <strong>Generate Analysis</strong> to get AI-powered performance insights.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Insights */}
-                    {aiState === 'insights' && aiResults[aiChannel] && (() => {
-                      const result = aiResults[aiChannel]!;
-                      return (
-                        <div>
-                          <p style={S({ fontSize: 14, color: 'var(--qa-text)', lineHeight: 1.55, margin: '0 0 18px', maxWidth: 760 })}>
-                            {result.summary}
-                          </p>
-                          <div style={S({ display: 'flex', flexDirection: 'column', gap: 12 })}>
-                            {result.items.map((item, i) => {
-                              const tagStyle = item.tag === 'Strength'
-                                ? { background: 'var(--qa-text)', color: 'var(--qa-on-text)' }
-                                : item.tag === 'Watch'
-                                ? { background: 'var(--qa-fill-med)', color: 'var(--qa-text)' }
-                                : { background: 'var(--qa-card)', color: 'var(--qa-text-2)', border: '1px solid var(--qa-border)' };
-                              return (
-                                <div key={i} style={S({ display: 'flex', gap: 12, padding: '14px 16px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 })}>
-                                  <span style={S({ flexShrink: 0, height: 20, padding: '0 8px', borderRadius: 999, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'inline-flex', alignItems: 'center', ...tagStyle })}>
-                                    {item.tag}
-                                  </span>
-                                  <span style={S({ fontSize: 13, color: 'var(--qa-text)', lineHeight: 1.5 })}>{item.text}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </section>
               </>
             )}
           </>

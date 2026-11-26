@@ -93,6 +93,24 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
     return <div className="quality-shell-container" />;
   }
 
+  const user = session?.user as any;
+  const userEmail = (user?.email || '').toLowerCase();
+  const userName = (user?.name || '').toLowerCase();
+  const isCustomUser = Boolean(
+    userEmail === 'dhanush@wintwealth.com' || userName === 'dhanush' ||
+    userEmail.includes('harsh') || userName.includes('harsh') ||
+    userEmail.includes('sindhu') || userName.includes('sindhu') ||
+    userEmail.includes('yashvi') || userName.includes('yashvi')
+  );
+
+  if (isCustomUser) {
+    return (
+      <main style={{ flex: 1, minWidth: 0, width: '100%', ...(mainStyle || {}) }}>
+        {children}
+      </main>
+    );
+  }
+
   const sessionSkills = (session?.user as any)?.skills as string[] | undefined;
   const effectiveSkills = Array.isArray(propSkills) && propSkills.length
     ? propSkills

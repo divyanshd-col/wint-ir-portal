@@ -121,17 +121,25 @@ interface DisputeRow {
 
 interface Props {
   agentName: string;
+  initialTab?: 'evaluated' | 'disputes' | 'reviewed';
+  mode?: 'all' | 'evaluated-only' | 'disputes-only';
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function MyQualityChatsPage({ agentName }: Props) {
+export default function MyQualityChatsPage({ agentName, initialTab: propInitialTab, mode = 'all' }: Props) {
   const searchParams = useSearchParams();
   const targetChatId = searchParams.get('chatId') || searchParams.get('chat_id') || '';
-  const initialTab = searchParams.get('tab') as ('evaluated' | 'disputes' | 'reviewed') | null;
+  const queryInitialTab = searchParams.get('tab') as ('evaluated' | 'disputes' | 'reviewed') | null;
+  const effectiveInitialTab = propInitialTab || queryInitialTab;
 
+  const defaultTab = mode === 'disputes-only' ? 'disputes' : 'evaluated';
   const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>(
-    initialTab && ['evaluated', 'disputes', 'reviewed'].includes(initialTab) ? initialTab : 'evaluated'
+    mode === 'evaluated-only'
+      ? 'evaluated'
+      : effectiveInitialTab && ['evaluated', 'disputes', 'reviewed'].includes(effectiveInitialTab)
+        ? (mode === 'disputes-only' && effectiveInitialTab === 'evaluated' ? 'disputes' : effectiveInitialTab)
+        : defaultTab
   );
   const [agentFilter, setAgentFilter] = useState<'all' | 'has_calls'>('all');
 
@@ -390,43 +398,47 @@ export default function MyQualityChatsPage({ agentName }: Props) {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
-          My Quality Chats
+          {mode === 'disputes-only' ? 'Chat Disputes' : 'My Quality Chats'}
         </h1>
       </div>
 
       {/* Tabs & Interaction Filter Row */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 20,
-          flexWrap: 'wrap',
-          gap: 16,
-        }}
-      >
-        {/* Tab Buttons */}
+      {mode !== 'evaluated-only' && (
         <div
           style={{
             display: 'flex',
-            gap: 4,
-            borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 20,
+            flexWrap: 'wrap',
+            gap: 16,
           }}
         >
-          <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
-            Evaluated Chats
-            <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
-          </button>
-          <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
-            Disputes Raised
-            <CountBadge count={filteredPendingDisputes.length} active={activeTab === 'disputes'} />
-          </button>
-          <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
-            Reviewed Disputes
-            <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
-          </button>
+          {/* Tab Buttons */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 4,
+              borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
+            }}
+          >
+            {mode === 'all' && (
+              <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
+                Evaluated Chats
+                <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
+              </button>
+            )}
+            <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
+              Disputes Raised
+              <CountBadge count={filteredPendingDisputes.length} active={activeTab === 'disputes'} />
+            </button>
+            <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
+              Reviewed Disputes
+              <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── TAB 1: EVALUATED CHATS ──────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (

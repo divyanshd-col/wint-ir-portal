@@ -135,10 +135,19 @@ interface DisputeRow {
 
 interface Props {
   agentName: string;
+  initialTab?: 'evaluated' | 'disputes' | 'reviewed';
+  mode?: 'all' | 'evaluated-only' | 'disputes-only';
 }
 
-export default function MyQualityCallsPage({ agentName }: Props) {
-  const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>('evaluated');
+export default function MyQualityCallsPage({ agentName, initialTab = 'evaluated', mode = 'all' }: Props) {
+  const defaultTab = mode === 'disputes-only' ? 'disputes' : 'evaluated';
+  const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>(
+    mode === 'evaluated-only'
+      ? 'evaluated'
+      : (mode === 'disputes-only' && initialTab === 'evaluated')
+        ? 'disputes'
+        : initialTab
+  );
 
   // Evaluated Calls State
   const [entries, setEntries] = useState<CallScoreEntry[]>([]);
@@ -403,25 +412,29 @@ export default function MyQualityCallsPage({ agentName }: Props) {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
-          My Quality Calls
+          {mode === 'disputes-only' ? 'Call Disputes' : 'My Quality Calls'}
         </h1>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto', }}>
-        <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
-          Evaluated Calls
-          <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
-        </button>
-        <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
-          Disputes Raised
-          <CountBadge count={filteredPendingDisputes.length} active={activeTab === 'disputes'} />
-        </button>
-        <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
-          Reviewed Disputes
-          <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
-        </button>
-      </div>
+      {mode !== 'evaluated-only' && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto', }}>
+          {mode === 'all' && (
+            <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
+              Evaluated Calls
+              <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
+            </button>
+          )}
+          <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
+            Disputes Raised
+            <CountBadge count={filteredPendingDisputes.length} active={activeTab === 'disputes'} />
+          </button>
+          <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
+            Reviewed Disputes
+            <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
+          </button>
+        </div>
+      )}
 
       {/* ── TAB 1: EVALUATED CALLS ────────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (
@@ -455,36 +468,36 @@ export default function MyQualityCallsPage({ agentName }: Props) {
             </UISelect>
 
             <span className="qf-group">
-<span className="qf-label">IQS</span>
-<input
-              type="number"
-              placeholder="min"
-              value={iqsMin}
-              onChange={e => { setIqsMin(e.target.value); setPage(0); }}
-              style={{ ...chipInputStyle, width: 80 }}
-            />
-<input
-              type="number"
-              placeholder="max"
-              value={iqsMax}
-              onChange={e => { setIqsMax(e.target.value); setPage(0); }}
-              style={{ ...chipInputStyle, width: 80 }}
-            />
-</span>
+              <span className="qf-label">IQS</span>
+              <input
+                type="number"
+                placeholder="min"
+                value={iqsMin}
+                onChange={e => { setIqsMin(e.target.value); setPage(0); }}
+                style={{ ...chipInputStyle, width: 80 }}
+              />
+              <input
+                type="number"
+                placeholder="max"
+                value={iqsMax}
+                onChange={e => { setIqsMax(e.target.value); setPage(0); }}
+                style={{ ...chipInputStyle, width: 80 }}
+              />
+            </span>
 
             <DateRangeChip from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); setPage(0); }} />
             <button type="button" className="qf-chip" disabled={!(callIdSearch || disposition || dateFrom || dateTo || qualityParam || iqsMin || iqsMax)}
-                onClick={() => {
-                  setCallIdSearch('');
-                  setDisposition('');
-                  setDateFrom('');
-                  setDateTo('');
-                  setQualityParam('');
-                  setIqsMin('');
-                  setIqsMax('');
-                  setPage(0);
-                }}
-              >
+              onClick={() => {
+                setCallIdSearch('');
+                setDisposition('');
+                setDateFrom('');
+                setDateTo('');
+                setQualityParam('');
+                setIqsMin('');
+                setIqsMax('');
+                setPage(0);
+              }}
+            >
               Reset Filters
             </button>
 
@@ -497,7 +510,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab1' ? null : 'tab1')}
                   title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
                 </button>
                 {openPageDrop === 'tab1' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
@@ -810,13 +823,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
 
             <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
             <button type="button" className="qf-chip" disabled={!(pendingOutcomeFilter || pendingFromFilter || pendingToFilter)}
-                onClick={() => {
-                  setPendingOutcomeFilter('');
-                  setPendingFromFilter('');
-                  setPendingToFilter('');
-                  setPendingPage(1);
-                }}
-              >
+              onClick={() => {
+                setPendingOutcomeFilter('');
+                setPendingFromFilter('');
+                setPendingToFilter('');
+                setPendingPage(1);
+              }}
+            >
               Reset Filters
             </button>
 
@@ -829,7 +842,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab2' ? null : 'tab2')}
                   title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
                 </button>
                 {openPageDrop === 'tab2' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
@@ -1011,13 +1024,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
 
             <DateRangeChip from={reviewedFromFilter} to={reviewedToFilter} onChange={(f, t) => { setReviewedFromFilter(f); setReviewedToFilter(t); }} />
             <button type="button" className="qf-chip" disabled={!(reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter)}
-                onClick={() => {
-                  setReviewedOutcomeFilter('');
-                  setReviewedFromFilter('');
-                  setReviewedToFilter('');
-                  setReviewedPage(1);
-                }}
-              >
+              onClick={() => {
+                setReviewedOutcomeFilter('');
+                setReviewedFromFilter('');
+                setReviewedToFilter('');
+                setReviewedPage(1);
+              }}
+            >
               Reset Filters
             </button>
 
@@ -1030,7 +1043,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab3' ? null : 'tab3')}
                   title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
                 </button>
                 {openPageDrop === 'tab3' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>

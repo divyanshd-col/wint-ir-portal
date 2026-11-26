@@ -52,6 +52,16 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   // Copy Feedback State
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Collapsible Evidence Sections & Pagination (10 per page)
+  const [expandedEvidenceSections, setExpandedEvidenceSections] = useState<Record<string, boolean>>({});
+  const [evidencePages, setEvidencePages] = useState<Record<string, number>>({});
+  const toggleEvidenceSection = (key: string) => {
+    setExpandedEvidenceSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+  const setEvidencePage = (key: string, page: number) => {
+    setEvidencePages((prev) => ({ ...prev, [key]: page }));
+  };
+
   const searchParams = useSearchParams();
   const urlAgentParam = searchParams?.get('agent')?.trim() || '';
 
@@ -280,6 +290,22 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
     return (weekRange.includes(searchTerm.toLowerCase()) || agentMatch) && agentFilterMatch && weekFilterMatch;
   });
 
+  const isBrowsingHistory = selectedWeekFilter !== 'all' || searchTerm.trim() !== '';
+  const visibleSidebarReports = !isBrowsingHistory
+    ? (() => {
+        if (role === 'agent' || selectedAgentFilter !== 'all') {
+          return filteredReports.slice(0, 1);
+        }
+        const seen = new Set<string>();
+        return filteredReports.filter(r => {
+          const key = String(r.agent_id || r.agent_name || r.id);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      })()
+    : filteredReports;
+
   // Check if there is a missing report alert to display
   let missingWeekAlert = null;
   if (latestSystemWeek) {
@@ -338,10 +364,19 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
           <div className="p-2 border-b border-[#E4E4E7] bg-white">
             <select
               value={selectedWeekFilter}
-              onChange={(e) => setSelectedWeekFilter(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedWeekFilter(val);
+                if (val !== 'all') {
+                  const match = reports.find(r => r.week_start === val && (selectedAgentFilter === 'all' || r.agent_name === selectedAgentFilter));
+                  if (match) setActiveReportId(match.id);
+                } else if (reports[0]) {
+                  setActiveReportId(reports[0].id);
+                }
+              }}
               className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
             >
-              <option value="all">All Weeks</option>
+              <option value="all">Latest Week</option>
               {uniqueWeeks.map(([weekStart, label]) => (
                 <option key={weekStart} value={weekStart}>{label}</option>
               ))}
@@ -361,16 +396,16 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         </div>
 
         <nav className="flex-1 p-2 space-y-1">
-          {filteredReports.length === 0 ? (
+          {visibleSidebarReports.length === 0 ? (
             <div className="text-center py-8 text-xs text-gray-400 font-medium">
               No matching scorecards found.
             </div>
           ) : (
-            filteredReports.map((r) => {
+            visibleSidebarReports.map((r) => {
               const isSelected = r.id === activeReportId;
               const isUnread = !r.viewed_at;
               const weekRange = `${formatDate(r.week_start)} - ${formatDate(r.week_end)}`;
-              const score = r.generated?.numbers?.averageScore;
+              const score = r.generated?.unified?.blendedAvgScore ?? r.generated?.numbers?.averageScore;
 
               return (
                 <button
@@ -429,7 +464,625 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
           </div>
         )}
 
-        {activeReport && scorecard && (
+        {activeReport && scorecard && ((scorecard as any).unified ? (
+          (() => {
+            const u = (scorecard as any).unified;
+            return (
+              <div className="max-w-4xl mx-auto space-y-8">
+                {/* Header info */}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-6 border-b border-[#E4E4E7] gap-4">
+                  <div>
+                    <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+                      {role === 'agent' ? 'My Weekly Scorecard' : `${activeReport.agent_name || agentName} — Weekly Scorecard`}
+                    </h1>
+                    <p className="text-sm text-gray-500 font-medium mt-1">
+                      Week of {formatDate(activeReport.week_start)} to {formatDate(activeReport.week_end)} ({u.totalInteractions} interactions total)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <span className="text-xs text-gray-400 font-medium font-mono block">
+                        Generated every Monday
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-mono">
+                        {new Date(activeReport.generated_at).toLocaleString('en-GB')}
+                      </span>
+                    </div>
+                    {role === 'agent' && (
+                      <button
+                        onClick={() => handleOpenComment('general', 'General Feedback')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-indigo-500 hover:text-indigo-600 bg-white text-gray-600 text-xs font-semibold shadow-sm transition-all"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        General Notes
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* General Report Comments */}
+                {renderCommentsForTarget('general', 'General Notes & Feedback')}
+
+                {/* ── 1. THE NUMBERS SECTION (UNIFIED CHATS, CALLS & EMAILS) ─────── */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                      <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                        1
+                      </span>
+                      The Numbers
+                    </h2>
+                    <span className="text-xs font-semibold text-gray-500">
+                      Comprehensive cross-channel evaluation
+                    </span>
+                  </div>
+
+                  {/* Top Overview Cards Strip */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {/* Blended IQS Score */}
+                    <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                        Blended Avg IQS
+                      </span>
+                      <span
+                        className={`text-3xl font-extrabold font-mono mt-2 ${(u.blendedAvgScore ?? 0) >= 85
+                          ? 'text-green-600'
+                          : (u.blendedAvgScore ?? 0) >= 70
+                            ? 'text-amber-600'
+                            : 'text-red-600'
+                          }`}
+                      >
+                        {u.blendedAvgScore != null ? `${u.blendedAvgScore}%` : '—'}
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-medium mt-1">
+                        Blended across evaluated interactions
+                      </span>
+                    </div>
+
+                    {/* Total Interactions */}
+                    <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                        Total Interactions
+                      </span>
+                      <span className="text-3xl font-extrabold text-gray-900 font-mono mt-2">
+                        {u.totalInteractions}
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-medium mt-1">
+                        {u.chats.handled} {u.chats.handled === 1 ? 'Chat' : 'Chats'} · {u.calls.handled} {u.calls.handled === 1 ? 'Call' : 'Calls'} · {u.emails.handled} {u.emails.handled === 1 ? 'Email' : 'Emails'}
+                      </span>
+                    </div>
+
+                    {/* Below 85 Score */}
+                    <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                        Interactions Below 85
+                      </span>
+                      <span
+                        className={`text-3xl font-extrabold font-mono mt-2 ${u.totalBelow85Count > 0 ? 'text-amber-600' : 'text-gray-900'}`}
+                      >
+                        {u.totalBelow85Count}
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-medium mt-1">
+                        {u.chats.below85Count} {u.chats.below85Count === 1 ? 'Chat' : 'Chats'} · {u.calls.below85Count} {u.calls.below85Count === 1 ? 'Call' : 'Calls'} · {u.emails.below85Count} {u.emails.below85Count === 1 ? 'Email' : 'Emails'}
+                      </span>
+                    </div>
+
+                    {/* Compliance Breaches */}
+                    <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                        Compliance Breaches
+                      </span>
+                      <span
+                        className={`text-3xl font-extrabold font-mono mt-2 ${u.totalComplianceBreaches > 0 ? 'text-red-600 font-bold' : 'text-gray-900'}`}
+                      >
+                        {u.totalComplianceBreaches}
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-medium mt-1">
+                        {u.totalComplianceBreaches > 0
+                          ? `${u.chats.breachesCount} Chats · ${u.calls.breachesCount} Calls · ${u.emails.breachesCount} Emails`
+                          : 'Zero compliance breaches'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Channel Breakdown Grid (Chats, Calls, Emails) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                    {/* Chats Quality Card */}
+                    <div className="bg-white p-5 rounded-2xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                          </div>
+                          <span className="font-bold text-gray-900 text-sm">Chats Quality</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Chats Handled</span>
+                          <span className="font-mono font-extrabold text-lg text-gray-900 mt-0.5 block">
+                            {u.chats.handled}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Avg IQS</span>
+                          <span
+                            className={`font-mono font-extrabold text-lg mt-0.5 block ${(u.chats.avgScore ?? 0) >= 85
+                              ? 'text-green-600'
+                              : (u.chats.avgScore ?? 0) >= 70
+                                ? 'text-amber-600'
+                                : u.chats.avgScore != null
+                                  ? 'text-red-600'
+                                  : 'text-gray-400'
+                              }`}
+                          >
+                            {u.chats.avgScore != null ? `${u.chats.avgScore}%` : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Below 85 Score</span>
+                          <span className="font-mono font-extrabold text-lg text-gray-900 mt-0.5 block">
+                            {u.chats.below85Count}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Breaches</span>
+                          <span
+                            className={`font-mono font-extrabold text-lg mt-0.5 block ${u.chats.breachesCount > 0 ? 'text-red-600' : 'text-gray-900'}`}
+                          >
+                            {u.chats.breachesCount}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Calls Quality Card */}
+                    <div className="bg-white p-5 rounded-2xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                          </div>
+                          <span className="font-bold text-gray-900 text-sm">Calls Quality</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Calls Handled</span>
+                          <span className="font-mono font-extrabold text-lg text-gray-900 mt-0.5 block">
+                            {u.calls.handled}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Avg IQS</span>
+                          <span
+                            className={`font-mono font-extrabold text-lg mt-0.5 block ${(u.calls.avgScore ?? 0) >= 85
+                              ? 'text-green-600'
+                              : (u.calls.avgScore ?? 0) >= 70
+                                ? 'text-amber-600'
+                                : u.calls.avgScore != null
+                                  ? 'text-red-600'
+                                  : 'text-gray-400'
+                              }`}
+                          >
+                            {u.calls.avgScore != null ? `${u.calls.avgScore}%` : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Below 85 Score</span>
+                          <span className="font-mono font-extrabold text-lg text-gray-900 mt-0.5 block">
+                            {u.calls.below85Count}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Breaches</span>
+                          <span
+                            className={`font-mono font-extrabold text-lg mt-0.5 block ${u.calls.breachesCount > 0 ? 'text-red-600' : 'text-gray-900'}`}
+                          >
+                            {u.calls.breachesCount}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Emails Quality Card */}
+                    <div className="bg-white p-5 rounded-2xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <span className="font-bold text-gray-900 text-sm">Emails Quality</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Emails Handled</span>
+                          <span className={`font-mono font-extrabold text-lg mt-0.5 block ${u.emails.handled > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                            {u.emails.handled > 0 ? u.emails.handled : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Avg IQS</span>
+                          <span
+                            className={`font-mono font-extrabold text-lg mt-0.5 block ${(u.emails.avgScore ?? 0) >= 85
+                              ? 'text-green-600'
+                              : (u.emails.avgScore ?? 0) >= 70
+                                ? 'text-amber-600'
+                                : u.emails.avgScore != null
+                                  ? 'text-red-600'
+                                  : 'text-gray-400'
+                              }`}
+                          >
+                            {u.emails.avgScore != null ? `${u.emails.avgScore}%` : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Below 85 Score</span>
+                          <span className={`font-mono font-extrabold text-lg mt-0.5 block ${u.emails.handled > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                            {u.emails.handled > 0 ? u.emails.below85Count : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-bold block uppercase text-[10px]">Breaches</span>
+                          <span
+                            className={`font-mono font-extrabold text-lg mt-0.5 block ${u.emails.breachesCount > 0 ? 'text-red-600' : u.emails.handled > 0 ? 'text-gray-900' : 'text-gray-400'}`}
+                          >
+                            {u.emails.breachesCount}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── 2. 1-ON-1 DISCUSSION POINTS ─────────────────────────────────── */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                      <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                        2
+                      </span>
+                      1-on-1 Discussion Points (Areas for Improvement)
+                    </h2>
+                  </div>
+
+                  {scorecard?.themes && scorecard.themes.length > 0 ? (
+                    <div className="space-y-4">
+                      {scorecard.themes.map((theme: any, index: number) => {
+                        const commentKey = `theme:${index}`;
+                        const hasActiveComment = activeReport.comments?.some(c => c.targetKey === commentKey);
+                        return (
+                          <div
+                            key={index}
+                            className={`bg-white rounded-2xl border shadow-sm p-6 space-y-4 transition-all hover:shadow-md ${theme.isBreach ? 'border-red-200 bg-red-50/10' : 'border-[#E4E4E7]'}`}
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border tracking-wider bg-emerald-50 text-emerald-700 border-emerald-200">
+                                  Chat
+                                </span>
+                                {theme.isBreach && (
+                                  <span className="bg-red-100 text-red-800 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-red-200 tracking-wider">
+                                    Compliance Breach Root
+                                  </span>
+                                )}
+                                <h4 className="font-bold text-gray-900 text-base">
+                                  {theme.pattern}
+                                </h4>
+                              </div>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-700">
+                              <div>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Why it Matters</span>
+                                <p className="mt-1 text-gray-600 font-medium leading-relaxed">{theme.whyItMatters}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Actionable Behavior Change</span>
+                                <p className="mt-1 text-gray-900 font-bold leading-relaxed">{theme.actionable}</p>
+                              </div>
+                            </div>
+
+                            <div className="pt-2 flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Evidence:</span>
+                              {theme.backingChatIds?.map((cid: string) => (
+                                <div key={cid} className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded-md border border-gray-200 font-mono transition-all">
+                                  <a href={`https://app.robylon.ai/unified-inbox/share/${cid}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                    Chat #{cid}
+                                  </a>
+                                  <button
+                                    onClick={() => handleCopy(cid)}
+                                    className="ml-1.5 text-gray-400 hover:text-indigo-600"
+                                    title="Copy Chat ID"
+                                  >
+                                    {copiedId === cid ? '✓' : 'Copy'}
+                                  </button>
+                                </div>
+                              ))}
+                              {role === 'agent' && (
+                                <button
+                                  onClick={() => handleOpenComment(commentKey, theme.pattern)}
+                                  className={`ml-auto text-xs font-semibold px-2.5 py-1 rounded-lg border transition ${hasActiveComment ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                >
+                                  + Note
+                                </button>
+                              )}
+                            </div>
+                            {renderCommentsForTarget(commentKey, theme.pattern)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-500 font-medium">
+                      Fantastic week! No low-scoring themes were identified across your interactions. Keep up the excellent work!
+                    </div>
+                  )}
+                </div>
+
+                {/* ── 3. INTERACTIONS EVIDENCE BREAKDOWN (PCG TEMPLATE) ─────────────── */}
+                {(() => {
+                  const callsAll: any[] = Array.isArray(u.callsEvidence) ? u.callsEvidence : [];
+                  const chatsAll: any[] = Array.isArray(u.chatsEvidence) ? u.chatsEvidence : [];
+                  const emailsAll: any[] = Array.isArray(u.emailsEvidence) ? u.emailsEvidence : [];
+
+                  const lowCalls = callsAll.filter((e) => Number(e.score) <= 75);
+                  const lowChats = chatsAll.filter((e) => Number(e.score) <= 75);
+                  const lowEmails = emailsAll.filter((e) => Number(e.score) <= 75);
+
+                  const highCalls = callsAll.filter((e) => Number(e.score) > 75);
+                  const highChats = chatsAll.filter((e) => Number(e.score) > 75);
+                  const highEmails = emailsAll.filter((e) => Number(e.score) > 75);
+
+                  const renderChannelTable = (
+                    label: string,
+                    items: any[],
+                    ch: 'call' | 'chat' | 'email',
+                    isLow: boolean
+                  ) => {
+                    const sectionKey = `${isLow ? 'low' : 'high'}-${ch}`;
+                    const isExpanded = !!expandedEvidenceSections[sectionKey];
+                    const PAGE_SIZE = 10;
+                    const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+                    const currentPage = Math.min(evidencePages[sectionKey] ?? 0, totalPages - 1);
+                    const startIdx = currentPage * PAGE_SIZE;
+                    const pageItems = items.slice(startIdx, startIdx + PAGE_SIZE);
+
+                    const badgeLabel = ch === 'call' ? 'Call' : ch === 'email' ? 'Email' : 'Chat';
+                    const badgeClass =
+                      ch === 'call'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : ch === 'email'
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                    const emptySubject =
+                      ch === 'call' ? 'voice calls' : ch === 'email' ? 'emails' : 'chats';
+
+                    return (
+                      <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-sm overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleEvidenceSection(sectionKey)}
+                          className={`w-full px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition ${isExpanded ? 'border-b border-[#E4E4E7]' : ''}`}
+                          aria-expanded={isExpanded}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wider">
+                              {label}
+                            </span>
+                            <span className="bg-gray-100 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-200">
+                              {items.length}
+                            </span>
+                          </div>
+                          <span className={`text-xs text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                            ▾
+                          </span>
+                        </button>
+
+                        {isExpanded && (
+                          items.length > 0 ? (
+                            <div>
+                              <table className="w-full border-collapse">
+                                <thead>
+                                  <tr className="bg-gray-50 border-b border-[#E4E4E7] text-xs text-gray-400 font-bold uppercase tracking-wider text-left">
+                                    <th className="p-4 w-24">Channel</th>
+                                    <th className="p-4">Interaction ID</th>
+                                    <th className="p-4 text-center">Score</th>
+                                    <th className="p-4">Topic / Category</th>
+                                    <th className="p-4">
+                                      {isLow ? 'Primary Coaching Point / Issue' : 'Demonstrated Strengths / Best Practice'}
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#E4E4E7] text-xs text-gray-700">
+                                  {pageItems.map((ev, idx) => {
+                                    const evId = String(ev.chatId || ev.id || (startIdx + idx));
+                                    const displayPrefix = ch === 'call' ? 'Call #' : ch === 'email' ? 'Ticket #' : 'Chat #';
+                                    return (
+                                      <tr
+                                        key={`${sectionKey}-${evId}-${startIdx + idx}`}
+                                        className={`transition-all ${isLow ? 'hover:bg-amber-50/30' : 'hover:bg-green-50/30'}`}
+                                      >
+                                        <td className="p-4 whitespace-nowrap">
+                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass}`}>
+                                            {badgeLabel}
+                                          </span>
+                                        </td>
+                                        <td className="p-4 font-mono font-bold text-indigo-700 whitespace-nowrap">
+                                          <div className="flex items-center gap-1.5">
+                                            {ch === 'chat' ? (
+                                              <a
+                                                href={`https://app.robylon.ai/unified-inbox/share/${evId}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="hover:underline flex items-center gap-1 text-indigo-700 font-bold"
+                                              >
+                                                <span>{displayPrefix}{evId}</span>
+                                                <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                </svg>
+                                              </a>
+                                            ) : (
+                                              <span>{displayPrefix}{evId}</span>
+                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() => handleCopy(evId)}
+                                              className="ml-1 text-gray-400 hover:text-indigo-600 p-0.5 cursor-pointer"
+                                              title="Copy ID"
+                                            >
+                                              {copiedId === evId ? (
+                                                <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                              ) : (
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1M8 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M8 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m0 0h2a2 2 0 0 1 2 2v3" />
+                                                </svg>
+                                              )}
+                                            </button>
+                                          </div>
+                                        </td>
+                                        <td className="p-4 text-center whitespace-nowrap">
+                                          <span
+                                            className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${
+                                              isLow
+                                                ? ev.score <= 70
+                                                  ? 'bg-red-50 text-red-700 border border-red-200'
+                                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                                : 'bg-green-50 text-green-700 border border-green-200'
+                                            }`}
+                                          >
+                                            {ev.score}%
+                                          </span>
+                                        </td>
+                                        <td className="p-4 font-semibold text-gray-800 whitespace-nowrap">
+                                          {ev.topic}
+                                        </td>
+                                        <td className="p-4 text-gray-700 font-medium leading-relaxed">
+                                          {ev.summary}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+
+                              {items.length > PAGE_SIZE && (
+                                <div className="px-4 py-3 bg-gray-50 border-t border-[#E4E4E7] flex items-center justify-between text-xs text-gray-500">
+                                  <span className="font-medium">
+                                    Showing {startIdx + 1}–{Math.min(startIdx + PAGE_SIZE, items.length)} of {items.length}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={currentPage === 0}
+                                      onClick={() => setEvidencePage(sectionKey, currentPage - 1)}
+                                      className="px-3 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                                    >
+                                      Previous
+                                    </button>
+                                    <span className="font-mono text-[11px] font-semibold text-gray-600">
+                                      Page {currentPage + 1} of {totalPages}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      disabled={currentPage >= totalPages - 1}
+                                      onClick={() => setEvidencePage(sectionKey, currentPage + 1)}
+                                      className="px-3 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                                    >
+                                      Next
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-4 text-center text-xs text-gray-500 font-medium">
+                              {isLow
+                                ? `No low-scoring ${emptySubject} recorded this period (all evaluated ${emptySubject} scored above 75%).`
+                                : `No high-scoring ${emptySubject} above 75% recorded this period.`}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <div className="space-y-8">
+                      {/* Header */}
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                          <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                            3
+                          </span>
+                          Interactions Evidence Breakdown
+                        </h2>
+                      </div>
+
+                      {/* ── SUBSECTION 3A: LOW-SCORING INTERACTIONS (<= 75%) ── */}
+                      <div className="space-y-5">
+                        <div className="flex items-center justify-between pb-2 border-b border-gray-200 gap-3 flex-wrap">
+                          <div>
+                            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                              Low-Scoring Interactions (75% and Below)
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Interactions scoring 75% or below requiring 1-on-1 coaching, process alignment, or quality review.
+                            </p>
+                          </div>
+                          <span className="bg-amber-50 text-amber-800 text-[11px] font-extrabold px-2.5 py-1 rounded-full border border-amber-200 uppercase tracking-wide">
+                            Low-Scoring Threshold: &le; 75%
+                          </span>
+                        </div>
+
+                        {renderChannelTable('Voice Calls (≤ 75%)', lowCalls, 'call', true)}
+                        {renderChannelTable('Chats (≤ 75%)', lowChats, 'chat', true)}
+                        {renderChannelTable('Emails (≤ 75%)', lowEmails, 'email', true)}
+                      </div>
+
+                      {/* ── SUBSECTION 3B: WHAT WENT WELL — HIGH-SCORING INTERACTIONS (> 75%) ── */}
+                      <div className="space-y-5 pt-2">
+                        <div className="flex items-center justify-between pb-2 border-b border-gray-200 gap-3 flex-wrap">
+                          <div>
+                            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span>
+                              What Went Well — High-Scoring Interactions (Above 75%)
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Exemplary interactions scoring above 75% demonstrating strong client communication and quality standards.
+                            </p>
+                          </div>
+                          <span className="bg-green-50 text-green-800 text-[11px] font-extrabold px-2.5 py-1 rounded-full border border-green-200 uppercase tracking-wide">
+                            Quality Benchmark: &gt; 75%
+                          </span>
+                        </div>
+
+                        {renderChannelTable('Voice Calls (> 75%)', highCalls, 'call', false)}
+                        {renderChannelTable('Chats (> 75%)', highChats, 'chat', false)}
+                        {renderChannelTable('Emails (> 75%)', highEmails, 'email', false)}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })()
+        ) : (
           <div className="max-w-4xl mx-auto space-y-8">
 
             {/* Header info */}
@@ -767,7 +1420,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
             })()}
 
           </div>
-        )}
+        ))}
       </main>
 
       {/* Floating Comment Modal Dialog */}

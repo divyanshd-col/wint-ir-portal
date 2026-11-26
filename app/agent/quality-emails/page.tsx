@@ -8,7 +8,11 @@ export default async function AgentQualityEmailsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
+  const role = ((session.user as any)?.role || '').toLowerCase();
   const email = (session.user as any)?.email || '';
+  if (role === 'agent') {
+    redirect('/quality');
+  }
   const config = await readConfig().catch(() => ({} as any));
   const configUser = config.users?.find((u: any) => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
   let agentName: string = configUser?.agentName || '';

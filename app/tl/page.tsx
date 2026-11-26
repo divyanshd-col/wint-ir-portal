@@ -8,7 +8,10 @@ export default async function TLPage() {
   if (!session) redirect('/login');
 
   const userAny = session.user as Record<string, string | undefined>;
-  const role    = userAny?.role || (userAny?.isAdmin ? 'admin' : 'agent');
+  const role = (userAny?.role || (userAny?.isAdmin ? 'admin' : 'agent')).toLowerCase();
+  if (role === 'tl') {
+    redirect('/quality?section=performance&sub=team_analytics');
+  }
   const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
   const skills = (session.user as any)?.skills || (await getSkillsForPersona(role));
 

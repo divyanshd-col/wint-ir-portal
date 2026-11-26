@@ -27,18 +27,6 @@ export interface PersonaWithSkills extends Persona {
 let cachedSkills: Skill[] | null = null;
 let cachedSkillsTime = 0;
 
-let cachedPersonaSkills: Record<string, string[]> | null = null;
-let cachedPersonaSkillsTime = 0;
-
-const CACHE_TTL_MS = 30_000; // 30 seconds
-
-export function invalidateSkillsCache(): void {
-  cachedSkills = null;
-  cachedSkillsTime = 0;
-  cachedPersonaSkills = null;
-  cachedPersonaSkillsTime = 0;
-}
-
 // Hardcoded fallback mappings in case DB is momentarily unreachable
 const DEFAULT_PERSONA_SKILLS: Record<string, string[]> = {
   admin: [
@@ -50,6 +38,7 @@ const DEFAULT_PERSONA_SKILLS: Record<string, string[]> = {
     'tl:quality_calls:access', 'tl:reports:access', 'agent:my_analytics:access',
     'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access',
     'tokens:view:access', 'settings:manage:access', 'users:manage:access', 'skills:manage:access',
+    'roster:view:access', 'roster:manage:access', 'leave:use:access', 'leave:approve:access',
   ],
   tl: [
     'roster:view:access', 'roster:manage:access',
@@ -57,17 +46,36 @@ const DEFAULT_PERSONA_SKILLS: Record<string, string[]> = {
     'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
     'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
     'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
+    'roster:view:access', 'roster:manage:access', 'leave:use:access', 'leave:approve:access',
   ],
   quality: [
     'roster:view:access',
     'chat:access', 'cx_dashboard:access', 'quality:analytics:access',
     'quality:chat_eval:access', 'quality:call_eval:access',
+    'roster:view:access',
   ],
   agent: [
     'chat:access', 'quality:analytics:access', 'agent:my_analytics:access',
     'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access',
+    'roster:view:access', 'leave:use:access',
   ],
 };
+
+let cachedPersonaSkills: Record<string, string[]> = { ...DEFAULT_PERSONA_SKILLS };
+let cachedPersonaSkillsTime = 0;
+let isFetchingPersonaSkills = false;
+
+const userSkillsCache = new Map<number, { skills: { skill_id: string; granted: boolean }[]; time: number }>();
+
+const CACHE_TTL_MS = 600_000; // 10 minutes
+
+export function invalidateSkillsCache(): void {
+  cachedSkills = null;
+  cachedSkillsTime = 0;
+  cachedPersonaSkills = { ...DEFAULT_PERSONA_SKILLS };
+  cachedPersonaSkillsTime = 0;
+  userSkillsCache.clear();
+}
 
 // ── Reads ────────────────────────────────────────────────────────────────────
 
@@ -103,32 +111,38 @@ export async function listAllSkills(): Promise<Skill[]> {
 
 export async function getPersonaSkillsMap(): Promise<Record<string, string[]>> {
   const now = Date.now();
-  if (cachedPersonaSkills && now - cachedPersonaSkillsTime < CACHE_TTL_MS) {
+  if (now - cachedPersonaSkillsTime < CACHE_TTL_MS) {
     return cachedPersonaSkills;
   }
-  try {
-    const rows = await query<{ persona_id: string; skill_id: string }>(
-      'SELECT persona_id, skill_id FROM persona_skills'
-    );
-    const map: Record<string, string[]> = {
-      admin: [],
-      tl: [],
-      quality: [],
-      agent: [],
-    };
-    for (const row of rows) {
-      if (!map[row.persona_id]) {
-        map[row.persona_id] = [];
+  if (!isFetchingPersonaSkills) {
+    isFetchingPersonaSkills = true;
+    (async () => {
+      try {
+        const rows = await query<{ persona_id: string; skill_id: string }>(
+          'SELECT persona_id, skill_id FROM persona_skills'
+        );
+        const map: Record<string, string[]> = {
+          admin: [],
+          tl: [],
+          quality: [],
+          agent: [],
+        };
+        for (const row of rows) {
+          if (!map[row.persona_id]) {
+            map[row.persona_id] = [];
+          }
+          map[row.persona_id].push(row.skill_id);
+        }
+        cachedPersonaSkills = map;
+        cachedPersonaSkillsTime = Date.now();
+      } catch (err) {
+        console.warn('[skills] Background fetch failed:', (err as Error)?.message);
+      } finally {
+        isFetchingPersonaSkills = false;
       }
-      map[row.persona_id].push(row.skill_id);
-    }
-    cachedPersonaSkills = map;
-    cachedPersonaSkillsTime = now;
-    return map;
-  } catch (err) {
-    console.error('[skills] Failed to fetch persona_skills map:', (err as Error)?.message);
-    return cachedPersonaSkills || DEFAULT_PERSONA_SKILLS;
+    })();
   }
+  return cachedPersonaSkills;
 }
 
 export async function listPersonasWithSkills(): Promise<PersonaWithSkills[]> {
@@ -175,10 +189,18 @@ export async function getEffectiveSkillsForUser(user: { id?: number; role?: stri
   if (!user.id) return personaSkills;
 
   try {
-    const overrides = await query<{ skill_id: string; granted: boolean }>(
-      'SELECT skill_id, granted FROM user_skills WHERE user_id = $1',
-      [user.id]
-    );
+    const cached = userSkillsCache.get(user.id);
+    const now = Date.now();
+    let overrides: { skill_id: string; granted: boolean }[];
+    if (cached && now - cached.time < CACHE_TTL_MS) {
+      overrides = cached.skills;
+    } else {
+      overrides = await query<{ skill_id: string; granted: boolean }>(
+        'SELECT skill_id, granted FROM user_skills WHERE user_id = $1',
+        [user.id]
+      );
+      userSkillsCache.set(user.id, { skills: overrides, time: now });
+    }
     if (!overrides.length) return personaSkills;
 
     const skillSet = new Set(personaSkills);

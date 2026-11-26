@@ -14,6 +14,7 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { renderWithAttachments } from './attachments';
 import { CsatPill } from './csat';
 import AutoTextarea from './AutoTextarea';
+import AiEvaluationAuditBox, { type AiAuditSelection } from './AiEvaluationAuditBox';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -268,6 +269,12 @@ export default function EvalPanel({
         .catch(() => {});
     }
   }, [userRole]);
+
+  const isQA = (userRole || reviewerRole || '').toLowerCase() === 'quality';
+  const [auditSelection, setAuditSelection] = useState<AiAuditSelection>(null);
+  const [isAiAuditOpen, setIsAiAuditOpen] = useState(false);
+  const [isComplianceOpen, setIsComplianceOpen] = useState(false);
+  const [isParametersOpen, setIsParametersOpen] = useState(false);
 
   const canMarkKb = ['admin', 'quality'].includes((userRole || reviewerRole || '').toLowerCase());
 
@@ -573,7 +580,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
 
   const primaryLabel = mode === 'resolve'
     ? (isModified ? 'Override & Resolve' : 'Resolve')
-    : (isModified ? 'Save / Override' : 'Submit');
+    : 'Submit Evaluation Override';
 
 
   // Fetch transcript on mount
@@ -631,6 +638,11 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
 
   // Submit evaluation
   async function submit() {
+    if (isQA && !isReadOnly && !auditSelection) {
+      setIsAiAuditOpen(true);
+      setSubmitErr('Please select AI Accurate or AI Hallucinated in AI Evaluation Audit before submitting.');
+      return;
+    }
     let noteToUse = noteText.trim();
     if (mode === 'resolve' && !noteToUse) {
       const promptNote = prompt('Enter a resolution note explaining the decision for Agent & TL:');
@@ -1142,63 +1154,178 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
               </div>
             )}
             <div className="eval-scroll-r" style={{ flex: 1, overflowY: 'auto' }}>
-              {/* Compliance Gates — scrolls away with the params to free space for them */}
-              <div className={`eval-gates${gateFail ? ' failed' : ''}`}>
-                <div className="eval-ghead">
-                  <span className="eval-gtitle">Compliance Gates</span>
-                  <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
-                </div>
-                {COMPLIANCE_GATES_LIST.map(g => {
-                  const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
-                  return (
-                    <div key={g.key} className="eval-gate">
-                      <div style={{ minWidth: 0 }}>
-                        <b>{g.shortLabel}</b>
-                        <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
-                      </div>
-                      <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
-                        {([
-                          { label: 'Pass', val: 'pass' as const },
-                          { label: 'Breach', val: 'fail' as const },
-                          { label: 'NA', val: 'not_applicable' as const },
-                        ]).map(opt => (
-                          <button
-                            key={opt.val} type="button" data-v={opt.val}
-                            aria-pressed={gItem.status === opt.val}
-                            disabled={isReadOnly}
-                            onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
+              {isQA && !isReadOnly && (
+                <AiEvaluationAuditBox
+                  type="chat"
+                  id={chatId}
+                  open={isAiAuditOpen}
+                  onOpenChange={setIsAiAuditOpen}
+                  onSelectionChange={setAuditSelection}
+                  style={{ margin: '12px 16px 0' }}
+                />
+              )}
+              {/* Compliance Gates (collapsible, hidden by default) */}
+              <div
+                style={{
+                  margin: '12px 16px',
+                  borderRadius: 8,
+                  border: '1px solid var(--qa-border, #e5e7eb)',
+                  background: 'var(--qa-card, #ffffff)',
+                  overflow: 'hidden',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsComplianceOpen((prev) => !prev)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: isComplianceOpen ? 'var(--qa-fill-light, #f9fafb)' : 'var(--qa-card, #ffffff)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#4b5563"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{
+                        transform: isComplianceOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s ease',
+                      }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                    <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111827)' }}>
+                      Compliance Gates
+                    </h4>
+                  </div>
+                  <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>
+                    {gateFail ? 'BREACHED' : 'PASS'}
+                  </span>
+                </button>
 
-                      {/* Reason for compliance gate (shown only in case of breach) */}
-                      {gItem.status === 'fail' && (
-                        isReadOnly ? (
-                          gItem.reasoning ? (
-                            <div className="eval-gate-extra eval-reason">
-                              <strong>Reason: </strong>{gItem.reasoning}
-                            </div>
-                          ) : null
-                        ) : (
-                          <div className="eval-gate-extra">
-                            <div className="eval-reason-label">Reason for Breach:</div>
-                            <AutoTextarea
-                              className="eval-reason-input"
-                              value={gItem.reasoning}
-                              onChange={e => handleGateReasoningChange(g.key, e.target.value)}
-                              placeholder="Specify reason / citation for this compliance breach…"
-                              rows={2}
-                            />
+                {isComplianceOpen && (
+                  <div className={`eval-gates${gateFail ? ' failed' : ''}`} style={{ borderTop: '1px solid var(--qa-border, #e5e7eb)', margin: 0, borderRadius: 0 }}>
+                    {COMPLIANCE_GATES_LIST.map(g => {
+                      const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
+                      return (
+                        <div key={g.key} className="eval-gate">
+                          <div style={{ minWidth: 0 }}>
+                            <b>{g.shortLabel}</b>
+                            <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
                           </div>
-                        )
-                      )}
-                    </div>
-                  );
-                })}
+                          <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
+                            {([
+                              { label: 'Pass', val: 'pass' as const },
+                              { label: 'Breach', val: 'fail' as const },
+                              { label: 'NA', val: 'not_applicable' as const },
+                            ]).map(opt => (
+                              <button
+                                key={opt.val} type="button" data-v={opt.val}
+                                aria-pressed={gItem.status === opt.val}
+                                disabled={isReadOnly}
+                                onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Reason for compliance gate (shown only in case of breach) */}
+                          {gItem.status === 'fail' && (
+                            isReadOnly ? (
+                              gItem.reasoning ? (
+                                <div className="eval-gate-extra eval-reason">
+                                  <strong>Reason: </strong>{gItem.reasoning}
+                                </div>
+                              ) : null
+                            ) : (
+                              <div className="eval-gate-extra">
+                                <div className="eval-reason-label">Reason for Breach:</div>
+                                <AutoTextarea
+                                  className="eval-reason-input"
+                                  value={gItem.reasoning}
+                                  onChange={e => handleGateReasoningChange(g.key, e.target.value)}
+                                  placeholder="Specify reason / citation for this compliance breach…"
+                                  rows={2}
+                                />
+                              </div>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              {activeParamOrder.map(pascal => {
+
+              {/* Parameters (collapsible, hidden by default) */}
+              <div
+                style={{
+                  margin: '0 16px 12px',
+                  borderRadius: 8,
+                  border: '1px solid var(--qa-border, #e5e7eb)',
+                  background: 'var(--qa-card, #ffffff)',
+                  overflow: 'hidden',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsParametersOpen((prev) => !prev)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: isParametersOpen ? 'var(--qa-fill-light, #f9fafb)' : 'var(--qa-card, #ffffff)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#4b5563"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{
+                        transform: isParametersOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s ease',
+                      }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                    <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111827)' }}>
+                      Parameters
+                    </h4>
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 border border-gray-200">
+                    {shownIqs != null ? `IQS ${shownIqs}%` : `${activeParamOrder.length} Parameters`}
+                  </span>
+                </button>
+
+                {isParametersOpen && (
+                  <div style={{ borderTop: '1px solid var(--qa-border, #e5e7eb)' }}>
+                    {activeParamOrder.map(pascal => {
                 const st       = currentParamState[pascal];
                 const pickKey  = `${activeTab}:${pascal}`;
                 const disputed = (dispute?.challengedParams ?? []).find(c =>
@@ -1302,6 +1429,43 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                   </div>
                 );
               })}
+                  </div>
+                )}
+              </div>
+
+              {/* Submit evaluation override button placed directly below Parameters */}
+              <div style={{ margin: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {submitErr && <div className="eval-foot-err" role="alert">{submitErr}</div>}
+                {canMarkKb && (
+                  <>
+                    <label className="eval-kb">
+                      <input type="checkbox" checked={needsKbUpdate} onChange={e => setNeedsKbUpdate(e.target.checked)} />
+                      Mark for KB change
+                    </label>
+                    {needsKbUpdate && (
+                      <input
+                        type="text" className="eval-kb-comment" placeholder="Comment on KB update needed..."
+                        value={kbComment} onChange={e => setKbComment(e.target.value)}
+                      />
+                    )}
+                  </>
+                )}
+                {(mode === 'submit' || mode === 'resolve' || isModified || needsKbUpdate !== initialNeedsKbUpdate) && (
+                  <button
+                    type="button"
+                    className="eval-submit"
+                    onClick={submit}
+                    disabled={submitting || (isQA && !isReadOnly && !auditSelection)}
+                    style={{
+                      width: '100%',
+                      opacity: submitting || (isQA && !isReadOnly && !auditSelection) ? 0.45 : 1,
+                      cursor: submitting || (isQA && !isReadOnly && !auditSelection) ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {submitting ? 'Saving…' : gateFail && mode === 'submit' ? 'Submit Evaluation Override' : primaryLabel}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Dispute composer for TL */}
@@ -1364,39 +1528,6 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                 <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>{reviewNote}</div>
               </div>
             )}
-
-            {/* Sticky commit footer: score, gate status, optional KB flag, submit. */}
-            <div className="eval-foot">
-              {submitErr && <div className="eval-foot-err" role="alert">{submitErr}</div>}
-              <div className="eval-status">
-                <div className="eval-big">
-                  <span style={{ fontFamily: 'ui-monospace, monospace' }}>{activeTab === 'bot' ? 'Bot' : 'Agent'} IQS {shownIqs ?? '—'}</span>
-                  <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
-                </div>
-                <div className="eval-small">
-                  {zeroed ? `Computed ${liveIqs ?? '—'} · scored 0 on gate breach` : gateFail ? 'One or more gates breached' : isReadOnly ? 'Saved evaluation' : 'Check the score before you submit'}
-                </div>
-              </div>
-              {canMarkKb && (
-                <>
-                  <label className="eval-kb">
-                    <input type="checkbox" checked={needsKbUpdate} onChange={e => setNeedsKbUpdate(e.target.checked)} />
-                    Mark for KB change
-                  </label>
-                  {needsKbUpdate && (
-                    <input
-                      type="text" className="eval-kb-comment" placeholder="Comment on KB update needed..."
-                      value={kbComment} onChange={e => setKbComment(e.target.value)}
-                    />
-                  )}
-                </>
-              )}
-              {(mode === 'submit' || mode === 'resolve' || isModified || needsKbUpdate !== initialNeedsKbUpdate) && (
-                <button type="button" className="eval-submit" onClick={submit} disabled={submitting}>
-                  {submitting ? 'Saving…' : gateFail && mode === 'submit' ? 'Submit Evaluation Override' : primaryLabel}
-                </button>
-              )}
-            </div>
           </div>
         </div>
       </td>

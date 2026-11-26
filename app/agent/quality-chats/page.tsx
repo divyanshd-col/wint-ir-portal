@@ -14,6 +14,9 @@ export default async function AgentQualityChatsPage() {
   if (!hasSkill({ ...(session.user as any), skills }, 'agent:my_chats:access')) redirect('/quality');
 
   const email = (session.user as any)?.email || '';
+  if (role.toLowerCase() === 'agent') {
+    redirect('/quality');
+  }
   const config = await readConfig();
   const configUser = config.users.find((u: any) => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
   let agentName: string = configUser?.agentName || '';

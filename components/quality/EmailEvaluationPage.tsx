@@ -18,6 +18,7 @@ import {
   normalizeParamScoreValue,
 } from '@/lib/email/context-builder';
 import { useEmailParameters } from '@/components/quality/useEmailParameters';
+import AiEvaluationAuditBox, { type AiAuditSelection } from '@/components/quality/AiEvaluationAuditBox';
 import EmailMessageView, {
   CustomerSummaryBlock,
   CustomerCoreQueryCard,
@@ -434,12 +435,25 @@ const SORTABLE: Col[] = ['dateTime', 'agent', 'intent', 'iqs', 'raised', 'disput
 
 /** `embedded`: rendered inside another page (the TL's Quality Emails → Disputes Raised). It shows only the disputes list, with no page title or
  *  tab bar, and tells the host when a dispute was resolved so its counts refresh. */
-export default function EmailEvaluationPage({ embedded = false, onResolved }: { embedded?: boolean; onResolved?: () => void } = {}) {
+export default function EmailEvaluationPage({
+  embedded = false,
+  hideDisputes = false,
+  onResolved,
+}: {
+  embedded?: boolean;
+  hideDisputes?: boolean;
+  onResolved?: () => void;
+} = {}) {
   const emailParams = useEmailParameters();
   const { data: session } = useSession();
   const isAdmin = (session?.user as any)?.role === 'admin' || Boolean((session?.user as any)?.isAdmin);
   // A TL reviews disputes here (the same scoring panel QA uses) but cannot score undisputed emails: the server enforces it too.
   const isTL = (session?.user as any)?.role === 'tl' && !isAdmin;
+  const isQA = ((session?.user as any)?.role || '').toLowerCase() === 'quality';
+  const [emailAuditSelection, setEmailAuditSelection] = useState<Record<string, AiAuditSelection>>({});
+  const [emailAuditOpen, setEmailAuditOpen] = useState<Record<string, boolean>>({});
+  const [emailComplianceOpen, setEmailComplianceOpen] = useState<Record<string, boolean>>({});
+  const [emailParametersOpen, setEmailParametersOpen] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<Tab>(embedded ? 'disputes' : 'pending');
   // Deep link from the TL dispute list: ?tab=disputes&search=<ticket>. A TL with no link lands on Disputes.
   const urlParams = useSearchParams();
@@ -448,11 +462,16 @@ export default function EmailEvaluationPage({ embedded = false, onResolved }: { 
     if (embedded || urlApplied.current || !session) return;
     urlApplied.current = true;
     const t = urlParams.get('tab');
-    if (t === 'pending' || t === 'reviewed' || t === 'disputes') setTab(isTL && t === 'pending' ? 'disputes' : t);
-    else if (isTL) setTab('disputes');
+    if (hideDisputes && t === 'disputes') {
+      setTab('pending');
+    } else if (t === 'pending' || t === 'reviewed' || t === 'disputes') {
+      setTab(isTL && t === 'pending' && !hideDisputes ? 'disputes' : t);
+    } else if (isTL && !hideDisputes) {
+      setTab('disputes');
+    }
     const q = urlParams.get('search');
     if (q) setSearch(q);
-  }, [embedded, session, isTL, urlParams]);
+  }, [embedded, session, isTL, urlParams, hideDisputes]);
   const [items, setItems] = useState<EvaluationItem[]>([]);
   const [summary, setSummary] = useState<{
     pendingReviewCount?: number;
@@ -693,6 +712,7 @@ export default function EmailEvaluationPage({ embedded = false, onResolved }: { 
   // Tab switch handler
   const handleTabChange = (nextTab: Tab) => {
     if (nextTab === 'unscored' && !isAdmin) return;
+    if (nextTab === 'disputes' && hideDisputes) return;
     setTab(nextTab);
     setDisputeFilter('');
     setExpandedId(null);
@@ -983,10 +1003,12 @@ export default function EmailEvaluationPage({ embedded = false, onResolved }: { 
             />
           </button>
           )}
+          {!isTL && !hideDisputes && (
           <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
             Disputes
             <CountBadge count={summary?.qaDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
           </button>
+          )}
           <button style={tabStyle(tab === 'reviewed')} onClick={() => handleTabChange('reviewed')}>
             Reviewed Emails
             <CountBadge count={summary?.reviewedCount ?? (tab === 'reviewed' ? items.length : 0)} active={tab === 'reviewed'} />
@@ -1048,30 +1070,34 @@ export default function EmailEvaluationPage({ embedded = false, onResolved }: { 
             </svg>
           </div>
 
-          {/* Agent Filter Dropdown */}
-          <UISelect
-            value={agentFilter}
-            onChange={(e) => setAgentFilter(e.target.value)}
-            style={{
-              height: 32,
-              padding: '0 10px',
-              border: '1px solid var(--qa-border)',
-              borderRadius: 8,
-              background: 'var(--qa-card)',
-              color: agentFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
-              fontSize: 13,
-              fontFamily: 'inherit',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="">All Agents</option>
-            {agentOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </UISelect>
+          {/* Agent Filter Search Input */}
+          <div style={{ position: 'relative', width: 170 }}>
+            <input
+              type="text"
+              placeholder="Search by Agent…"
+              value={agentFilter}
+              onChange={(e) => setAgentFilter(e.target.value)}
+              style={{
+                width: '100%',
+                height: 32,
+                padding: '0 10px 0 28px',
+                border: `1px solid ${agentFilter ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`,
+                borderRadius: 8,
+                background: 'var(--qa-fill-light)',
+                color: 'var(--qa-text)',
+                fontSize: 13,
+                fontFamily: 'inherit',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+            <svg
+              width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--qa-text-3)' }}
+            >
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </div>
 
           {/* Disposition Filter Dropdown */}
           <UISelect
@@ -1153,28 +1179,30 @@ export default function EmailEvaluationPage({ embedded = false, onResolved }: { 
           </div>
 
           {/* Dispute Status Filter Dropdown */}
-          <UISelect
-            value={disputeFilter}
-            onChange={(e) => setDisputeFilter(e.target.value)}
-            style={{
-              height: 32,
-              padding: '0 10px',
-              border: '1px solid var(--qa-border)',
-              borderRadius: 8,
-              background: 'var(--qa-card)',
-              color: disputeFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
-              fontSize: 13,
-              fontFamily: 'inherit',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="">{tab === 'disputes' ? 'All Disputes' : 'All Dispute Statuses'}</option>
-            <option value="forwarded_to_tl">Pending TL review</option>
-            <option value="forwarded_to_qa">Forwarded to QA</option>
-            <option value="reviewed">Reviewed Disputes</option>
-            {tab !== 'disputes' && <option value="none">No Dispute</option>}
-          </UISelect>
+          {!hideDisputes && (
+            <UISelect
+              value={disputeFilter}
+              onChange={(e) => setDisputeFilter(e.target.value)}
+              style={{
+                height: 32,
+                padding: '0 10px',
+                border: '1px solid var(--qa-border)',
+                borderRadius: 8,
+                background: 'var(--qa-card)',
+                color: disputeFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
+                fontSize: 13,
+                fontFamily: 'inherit',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="">{tab === 'disputes' ? 'All Disputes' : 'All Dispute Statuses'}</option>
+              <option value="forwarded_to_tl">Pending TL review</option>
+              <option value="forwarded_to_qa">Forwarded to QA</option>
+              <option value="reviewed">Reviewed Disputes</option>
+              {tab !== 'disputes' && <option value="none">No Dispute</option>}
+            </UISelect>
+          )}
 
           {/* Reset Filters */}
           <button
@@ -1486,126 +1514,240 @@ export default function EmailEvaluationPage({ embedded = false, onResolved }: { 
                                 </div>
 
                                 <div className="eval-scroll-r" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                                {/* Compliance Gates — identical to EvalPanel in chats */}
+                                {isQA && (
+                                  <AiEvaluationAuditBox
+                                    type="email"
+                                    id={item.message_id || String(item.id)}
+                                    open={Boolean(emailAuditOpen[item.message_id])}
+                                    onOpenChange={(next) => setEmailAuditOpen((prev) => ({ ...prev, [item.message_id]: next }))}
+                                    onSelectionChange={(sel) => setEmailAuditSelection((prev) => ({ ...prev, [item.message_id]: sel }))}
+                                    style={{ margin: '12px 16px 0' }}
+                                  />
+                                )}
+                                {/* Compliance Gates — collapsible, hidden by default */}
                                 {(() => {
                                   const gates = getGatesForItem(item);
                                   const gateFail = getGateFailForItem(item);
+                                  const isCompOpen = Boolean(emailComplianceOpen[item.message_id]);
                                   return (
-                                    <div className={`eval-gates${gateFail ? ' failed' : ''}`}>
-                                      <div className="eval-ghead">
-                                        <span className="eval-gtitle">Compliance Gates</span>
-                                        <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
-                                      </div>
-                                      {COMPLIANCE_GATES_LIST.map(g => {
-                                        const gItem = gates[g.key] || { status: 'pass', reasoning: '' };
-                                        return (
-                                          <div key={g.key} className="eval-gate">
-                                            <div style={{ minWidth: 0 }}>
-                                              <b>{g.shortLabel}</b>
-                                              <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
-                                            </div>
-                                            <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
-                                              {([
-                                                { label: 'Pass', val: 'pass' as const },
-                                                { label: 'Breach', val: 'fail' as const },
-                                                { label: 'NA', val: 'not_applicable' as const },
-                                              ]).map(opt => (
-                                                <button
-                                                  key={opt.val} type="button" data-v={opt.val}
-                                                  aria-pressed={gItem.status === opt.val}
-                                                  onClick={() => handleGateStatusChange(item.message_id, g.key, opt.val)}
-                                                >
-                                                  {opt.label}
-                                                </button>
-                                              ))}
-                                            </div>
+                                    <div
+                                      style={{
+                                        margin: '12px 16px',
+                                        borderRadius: 8,
+                                        border: '1px solid var(--qa-border, #e5e7eb)',
+                                        background: 'var(--qa-card, #ffffff)',
+                                        overflow: 'hidden',
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => setEmailComplianceOpen((prev) => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
+                                        style={{
+                                          width: '100%',
+                                          padding: '10px 14px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          background: isCompOpen ? 'var(--qa-fill-light, #f9fafb)' : 'var(--qa-card, #ffffff)',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left',
+                                          transition: 'background 0.15s ease',
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                          <svg
+                                            width="13"
+                                            height="13"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="#4b5563"
+                                            strokeWidth="2.2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            style={{
+                                              transform: isCompOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                              transition: 'transform 0.2s ease',
+                                            }}
+                                          >
+                                            <polyline points="6 9 12 15 18 9" />
+                                          </svg>
+                                          <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111827)' }}>
+                                            Compliance Gates
+                                          </h4>
+                                        </div>
+                                        <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>
+                                          {gateFail ? 'BREACHED' : 'PASS'}
+                                        </span>
+                                      </button>
 
-                                            {/* Reason for compliance gate (shown only in case of breach) */}
-                                            {gItem.status === 'fail' && (
-                                              <div className="eval-gate-extra">
-                                                <div className="eval-reason-label">Reason for Breach:</div>
-                                                <AutoTextarea
-                                                  className="eval-reason-input"
-                                                  value={gItem.reasoning || ''}
-                                                  onChange={e => handleGateReasoningChange(item.message_id, g.key, e.target.value)}
-                                                  placeholder="Specify reason / citation for this compliance breach…"
-                                                  rows={2}
-                                                />
+                                      {isCompOpen && (
+                                        <div className={`eval-gates${gateFail ? ' failed' : ''}`} style={{ borderTop: '1px solid var(--qa-border, #e5e7eb)', margin: 0, borderRadius: 0 }}>
+                                          {COMPLIANCE_GATES_LIST.map(g => {
+                                            const gItem = gates[g.key] || { status: 'pass', reasoning: '' };
+                                            return (
+                                              <div key={g.key} className="eval-gate">
+                                                <div style={{ minWidth: 0 }}>
+                                                  <b>{g.shortLabel}</b>
+                                                  <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
+                                                </div>
+                                                <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
+                                                  {([
+                                                    { label: 'Pass', val: 'pass' as const },
+                                                    { label: 'Breach', val: 'fail' as const },
+                                                    { label: 'NA', val: 'not_applicable' as const },
+                                                  ]).map(opt => (
+                                                    <button
+                                                      key={opt.val} type="button" data-v={opt.val}
+                                                      aria-pressed={gItem.status === opt.val}
+                                                      onClick={() => handleGateStatusChange(item.message_id, g.key, opt.val)}
+                                                    >
+                                                      {opt.label}
+                                                    </button>
+                                                  ))}
+                                                </div>
+
+                                                {/* Reason for compliance gate (shown only in case of breach) */}
+                                                {gItem.status === 'fail' && (
+                                                  <div className="eval-gate-extra">
+                                                    <div className="eval-reason-label">Reason for Breach:</div>
+                                                    <AutoTextarea
+                                                      className="eval-reason-input"
+                                                      value={gItem.reasoning || ''}
+                                                      onChange={e => handleGateReasoningChange(item.message_id, g.key, e.target.value)}
+                                                      placeholder="Specify reason / citation for this compliance breach…"
+                                                      rows={2}
+                                                    />
+                                                  </div>
+                                                )}
                                               </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })()}
-                                  <div style={{ padding: 16 }}>
-                                <div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Parameter Scores ({emailParams.length})
+
+                                {/* Parameters — collapsible, hidden by default */}
+                                {(() => {
+                                  const isParamsOpen = Boolean(emailParametersOpen[item.message_id]);
+                                  return (
+                                    <div
+                                      style={{
+                                        margin: '0 16px 12px',
+                                        borderRadius: 8,
+                                        border: '1px solid var(--qa-border, #e5e7eb)',
+                                        background: 'var(--qa-card, #ffffff)',
+                                        overflow: 'hidden',
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => setEmailParametersOpen((prev) => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
+                                        style={{
+                                          width: '100%',
+                                          padding: '10px 14px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          background: isParamsOpen ? 'var(--qa-fill-light, #f9fafb)' : 'var(--qa-card, #ffffff)',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left',
+                                          transition: 'background 0.15s ease',
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                          <svg
+                                            width="13"
+                                            height="13"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="#4b5563"
+                                            strokeWidth="2.2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            style={{
+                                              transform: isParamsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                              transition: 'transform 0.2s ease',
+                                            }}
+                                          >
+                                            <polyline points="6 9 12 15 18 9" />
+                                          </svg>
+                                          <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111827)' }}>
+                                            Parameters
+                                          </h4>
+                                        </div>
+                                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 border border-gray-200">
+                                          {currentIQS != null ? `IQS ${Math.round(Number(currentIQS))}%` : `${emailParams.length} Parameters`}
+                                        </span>
+                                      </button>
+
+                                      {isParamsOpen && (
+                                        <div style={{ borderTop: '1px solid var(--qa-border, #e5e7eb)', padding: 12, background: 'var(--qa-gray-50, #fafafa)' }}>
+                                          <div style={{
+                                            border: '1px solid var(--qa-border)',
+                                            borderRadius: 8,
+                                            background: 'var(--qa-card)',
+                                            overflow: 'hidden',
+                                          }}>
+                                            {emailParams.map((def, idx) => {
+                                              const currentParams = getParamsForItem(item);
+                                              const currentReasoning = getReasoningForItem(item);
+                                              const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
+                                              return (
+                                                <ParamScoreRow
+                                                  key={def.key}
+                                                  name={def.name}
+                                                  description={def.description}
+                                                  value={currentParams[def.key] ?? 'yes'}
+                                                  allowNA={def.allowNA}
+                                                  weight={def.defaultWeight}
+                                                  disputed={isDisputed}
+                                                  reason={currentReasoning[def.key] ?? ''}
+                                                  onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
+                                                  onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
+                                                  last={idx === emailParams.length - 1}
+                                                />
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                  </div>
+                                  );
+                                })()}
 
-                                  <div style={{
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    background: 'var(--qa-card)',
-                                    overflow: 'hidden',
-                                  }}>
-                                    {emailParams.map((def, idx) => {
-                                      const currentParams = getParamsForItem(item);
-                                      const currentReasoning = getReasoningForItem(item);
-                                      const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
-                                      return (
-                                        <ParamScoreRow
-                                          key={def.key}
-                                          name={def.name}
-                                          description={def.description}
-                                          value={currentParams[def.key] ?? 'yes'}
-                                          allowNA={def.allowNA}
-                                          weight={def.defaultWeight}
-                                          disputed={isDisputed}
-                                          reason={currentReasoning[def.key] ?? ''}
-                                          onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
-                                          onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
-                                          last={idx === emailParams.length - 1}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                                  </div>
-                                </div>
-
-                                {/* Sticky commit footer: score, compliance, submit */}
+                                {/* Submit button placed directly below Parameters */}
                                 {(() => {
                                   const isCompliant = getCompliancePassedForItem(item);
                                   return (
-                                    <div className={`eval-foot${!isCompliant ? ' failed' : ''}`}>
-                                      <div className="eval-status">
-                                        <div className="eval-big">
-                                          <span style={{ fontFamily: 'ui-monospace, monospace' }}>IQS {currentIQS != null ? `${Math.round(Number(currentIQS))}%` : '—'}</span>
-                                          <span className={`eval-chip ${!isCompliant ? 'fail' : 'pass'}`}>{!isCompliant ? 'NON-COMPLIANT' : 'COMPLIANT'}</span>
-                                        </div>
-                                        <div className="eval-small">
-                                          {item.review_status === 'reviewed' && item.reviewed_by
-                                            ? <>Reviewed by {formatReviewerName(item.reviewed_by)}{item.reviewed_at ? ` on ${new Date(item.reviewed_at).toLocaleDateString('en-GB')}` : ''}</>
-                                            : 'Check the score before you submit'}
-                                        </div>
-                                      </div>
+                                    <div style={{ margin: '0 16px 16px' }}>
                                       <button
                                         type="button"
                                         className={`eval-submit${!isCompliant ? ' danger' : ''}`}
-                                        onClick={() => handleSubmitReview(item)}
-                                        disabled={submittingAction || (isTL && tab !== 'disputes')}
+                                        onClick={() => {
+                                          if (isQA && !emailAuditSelection[item.message_id]) {
+                                            setEmailAuditOpen((prev) => ({ ...prev, [item.message_id]: true }));
+                                            return;
+                                          }
+                                          handleSubmitReview(item);
+                                        }}
+                                        disabled={submittingAction || (isTL && tab !== 'disputes') || (isQA && !emailAuditSelection[item.message_id])}
+                                        style={{
+                                          width: '100%',
+                                          opacity: submittingAction || (isTL && tab !== 'disputes') || (isQA && !emailAuditSelection[item.message_id]) ? 0.45 : 1,
+                                          cursor: submittingAction || (isTL && tab !== 'disputes') || (isQA && !emailAuditSelection[item.message_id]) ? 'not-allowed' : 'pointer',
+                                        }}
                                         title={isTL && tab !== 'disputes' ? 'TLs change scores only to resolve an open dispute' : undefined}
                                       >
-                                        {submittingAction ? (item.review_status === 'reviewed' ? 'Updating…' : 'Submitting…') : item.review_status === 'reviewed' ? 'Update Review' : 'Submit Evaluation Score'}
+                                        {submittingAction ? (item.review_status === 'reviewed' ? 'Updating…' : 'Submitting…') : item.review_status === 'reviewed' ? 'Update Review' : 'Submit Evaluation Override'}
                                       </button>
                                     </div>
                                   );
                                 })()}
+                                </div>
                               </div>
                             </div>
                           </td>

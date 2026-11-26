@@ -8,7 +8,11 @@ import DisputesTable from './DisputesTable';
 
 type Tab = 'pending' | 'disputes' | 'reviewed';
 
-function CallEvaluationContent() {
+interface Props {
+  hideDisputes?: boolean;
+}
+
+function CallEvaluationContent({ hideDisputes = false }: Props) {
   const searchParams = useSearchParams();
   const targetCallId = searchParams.get('callId') || searchParams.get('call_id') || '';
   const targetMobile = searchParams.get('mobile') || searchParams.get('phone') || searchParams.get('mobile_number') || '';
@@ -17,7 +21,9 @@ function CallEvaluationContent() {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [disputeCount, setDisputeCount] = useState<number | null>(null);
   const [loadingDisp, setLoadingDisp] = useState(true);
-  const [tab, setTab] = useState<Tab>('pending');
+  const [tab, setTab] = useState<Tab>(
+    hideDisputes ? 'pending' : 'pending'
+  );
   const [agentFilter, setAgentFilter] = useState<'all' | 'human_only'>('all');
 
   useEffect(() => {
@@ -81,10 +87,12 @@ function CallEvaluationContent() {
             Pending Review
             {pendingCount !== null && <CountBadge count={pendingCount} active={tab === 'pending'} />}
           </button>
-          <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
-            Disputes
-            {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
-          </button>
+          {!hideDisputes && (
+            <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
+              Disputes
+              {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
+            </button>
+          )}
           <button style={tabStyle(tab === 'reviewed')} onClick={() => setTab('reviewed')}>
             Reviewed Calls
           </button>
@@ -104,15 +112,17 @@ function CallEvaluationContent() {
         />
       </div>
 
-      <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
-        <DisputesTable
-          type="calls"
-          onCountChange={setDisputeCount}
-          agentFilter={agentFilter}
-          leadingFilter={<AgentFilterSelect value={agentFilter} onChange={v => setAgentFilter(v as typeof agentFilter)} options={[{ value: 'all', label: 'All' }, { value: 'human_only', label: 'Human Only' }]} />}
-          initialMobile={targetMobile}
-        />
-      </div>
+      {!hideDisputes && (
+        <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
+          <DisputesTable
+            type="calls"
+            onCountChange={setDisputeCount}
+            agentFilter={agentFilter}
+            leadingFilter={<AgentFilterSelect value={agentFilter} onChange={v => setAgentFilter(v as typeof agentFilter)} options={[{ value: 'all', label: 'All' }, { value: 'human_only', label: 'Human Only' }]} />}
+            initialMobile={targetMobile}
+          />
+        </div>
+      )}
 
       <div style={{ display: tab === 'reviewed' ? 'block' : 'none' }}>
         <ReviewedCallsTable
@@ -127,10 +137,10 @@ function CallEvaluationContent() {
   );
 }
 
-export default function CallEvaluationPage() {
+export default function CallEvaluationPage({ hideDisputes = false }: Props = {}) {
   return (
     <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading call evaluation…</div>}>
-      <CallEvaluationContent />
+      <CallEvaluationContent hideDisputes={hideDisputes} />
     </Suspense>
   );
 }

@@ -27,6 +27,10 @@ export default async function TLReportsPage() {
   const configUser = config.users.find((u: any) => (u.email || u.username).toLowerCase() === email.toLowerCase());
   const name = dbUser?.name || configUser?.agentName || email.split('@')[0];
 
+  if (resolvedRole === 'tl') {
+    redirect('/quality?section=performance&sub=scorecard');
+  }
+
   // Render the same report client component but with TL/Admin role so it runs in read-only mode for comments
   return (
     <Suspense fallback={<div className="p-8 text-zinc-500 font-sans text-sm">Loading Reports...</div>}>
