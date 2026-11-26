@@ -290,10 +290,20 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
     return (weekRange.includes(searchTerm.toLowerCase()) || agentMatch) && agentFilterMatch && weekFilterMatch;
   });
 
-  const isDhanushView = agentName.toLowerCase().includes('dhanush');
   const isBrowsingHistory = selectedWeekFilter !== 'all' || searchTerm.trim() !== '';
-  const visibleSidebarReports = (isDhanushView && !isBrowsingHistory)
-    ? filteredReports.slice(0, 1)
+  const visibleSidebarReports = !isBrowsingHistory
+    ? (() => {
+        if (role === 'agent' || selectedAgentFilter !== 'all') {
+          return filteredReports.slice(0, 1);
+        }
+        const seen = new Set<string>();
+        return filteredReports.filter(r => {
+          const key = String(r.agent_id || r.agent_name || r.id);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      })()
     : filteredReports;
 
   // Check if there is a missing report alert to display
@@ -454,7 +464,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
           </div>
         )}
 
-        {activeReport && scorecard && (agentName.toLowerCase().includes('dhanush') && activeReport.id === reports[0]?.id && (scorecard as any).unified ? (
+        {activeReport && scorecard && ((scorecard as any).unified ? (
           (() => {
             const u = (scorecard as any).unified;
             return (
@@ -463,7 +473,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-6 border-b border-[#E4E4E7] gap-4">
                   <div>
                     <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-                      My Weekly Scorecard
+                      {role === 'agent' ? 'My Weekly Scorecard' : `${activeReport.agent_name || agentName} — Weekly Scorecard`}
                     </h1>
                     <p className="text-sm text-gray-500 font-medium mt-1">
                       Week of {formatDate(activeReport.week_start)} to {formatDate(activeReport.week_end)} ({u.totalInteractions} interactions total)

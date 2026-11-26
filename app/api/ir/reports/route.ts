@@ -555,6 +555,16 @@ export async function GET(req: NextRequest) {
         [allMappedNames]
       );
       const enrichedReports = await enrichReportsWithLiveScores(reports);
+      // Enrich the latest scorecard per team member with the unified 3-channel template
+      const seenAgents = new Set<number>();
+      await Promise.all(
+        enrichedReports.map(async (rep, idx) => {
+          if (rep.agent_id && !seenAgents.has(rep.agent_id)) {
+            seenAgents.add(rep.agent_id);
+            enrichedReports[idx] = await enrichDhanushLatestScorecard(rep, rep.agent_id, rep.agent_name || 'Agent');
+          }
+        })
+      );
       return NextResponse.json({ reports: enrichedReports, latestSystemWeek });
     }
 
@@ -568,6 +578,16 @@ export async function GET(req: NextRequest) {
          ORDER BY r.week_start DESC, a.name ASC`
       );
       const enrichedReports = await enrichReportsWithLiveScores(reports);
+      // Enrich the latest scorecard per team member with the unified 3-channel template
+      const seenAgents = new Set<number>();
+      await Promise.all(
+        enrichedReports.map(async (rep, idx) => {
+          if (rep.agent_id && !seenAgents.has(rep.agent_id)) {
+            seenAgents.add(rep.agent_id);
+            enrichedReports[idx] = await enrichDhanushLatestScorecard(rep, rep.agent_id, rep.agent_name || 'Agent');
+          }
+        })
+      );
       return NextResponse.json({ reports: enrichedReports, latestSystemWeek });
     }
 
