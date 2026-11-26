@@ -13,9 +13,8 @@ interface Props {
 }
 
 export default function TLShell({ role, name, email, skills, children }: Props) {
-  const emailLower = (email || '').toLowerCase();
-  const nameLower = (name || '').toLowerCase();
-  if (emailLower.includes('harsh') || nameLower.includes('harsh')) {
+  const roleLower = (role || '').toLowerCase();
+  if (roleLower === 'tl' || roleLower === 'agent' || roleLower === 'quality') {
     return <>{children}</>;
   }
 
