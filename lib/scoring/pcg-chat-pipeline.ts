@@ -78,7 +78,7 @@ export const PCG_CHAT_PARAMETERS: PcgChatParameterDef[] = [
     weight: 4,
     group: 'Process Skills',
     conditional: true,
-    scoreType: 'Yes / No',
+    scoreType: 'Yes / Half / No',
     description: 'Evaluated whenever chat references a completed call: did RM post a written summary of what was discussed and agreed. NA if no call took place.',
   },
 
@@ -620,7 +620,7 @@ Use this background context to understand ongoing requests, references to prior 
 6. Empathy (Weight: 5, max: 5, Group: 'Customer Service Skills', Yes/Half/No/NA): ONLY in gentler moments of confusion, market worry, anxiety, or apology. Specific acknowledgement fitting the moment. NA if Dissatisfaction applies or on calm chats.
 7. SimplifyingConcepts (Weight: 5, max: 5, Group: 'Customer Service Skills', Yes/Half/No/NA): ONLY when complex terms arise (hurdle rate, high-water mark, drawdown, exit load, pass-through taxation, TWRR, XIRR, YTM, TDS, Record Date). NA if no complex terms used.
 8. EscalationToCall (Weight: 4, max: 4, Group: 'Process Skills', Yes/No/NA): Was moving to a call, or staying in chat, the right decision? NA if question of call never arose.
-9. PostCallRecap (Weight: 4, max: 4, Group: 'Process Skills', Yes/No/NA): Whenever chat references a completed call, did RM post a written summary/recap of what was discussed and agreed? NA if no call took place.
+9. PostCallRecap (Weight: 4, max: 4, Group: 'Process Skills', Yes/Half/No/NA): Whenever chat references a completed call, did RM post a written summary/recap of what was discussed and agreed? Score Yes (1) for a clear recap of decisions/next steps, or for informational/introductory calls where RM acknowledged the topic discussed; Score Half (0.5) for generic call acknowledgment when concrete action items from the call were omitted; Score No (0) if no recap/call reference was posted. NA if no call took place.
 10. ReadabilityTone (Weight: 2, max: 2, Group: 'Communication Skills', Yes/No): Easy to read on phone (no solid unformatted text blocks), polite & professional tone, no raw internal jargon. Small typos/Hinglish never penalised.
 11. GreetingClosing (Weight: 2, max: 2, Group: 'Communication Skills', Yes/No): Addresses client respectfully (Sir/Ma'am), introduces self/Wint on new thread/first contact, and closes properly upon resolution. (In ongoing threads, respectful "Hi Sir" is Yes).
 
@@ -647,7 +647,7 @@ Return ONLY a valid JSON object matching this schema:
     "Empathy": { "status": "Yes" | "Half" | "No" | "NA", "quote": "...", "reasoning": "..." },
     "SimplifyingConcepts": { "status": "Yes" | "Half" | "No" | "NA", "quote": "...", "reasoning": "..." },
     "EscalationToCall": { "status": "Yes" | "No" | "NA", "quote": "...", "reasoning": "..." },
-    "PostCallRecap": { "status": "Yes" | "No" | "NA" | "Cannot tell", "quote": "...", "reasoning": "..." },
+    "PostCallRecap": { "status": "Yes" | "Half" | "No" | "NA" | "Cannot tell", "quote": "...", "reasoning": "..." },
     "ReadabilityTone": { "status": "Yes" | "No", "quote": "...", "reasoning": "..." },
     "GreetingClosing": { "status": "Yes" | "No", "quote": "...", "reasoning": "..." }
   },

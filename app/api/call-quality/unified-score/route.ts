@@ -247,8 +247,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (chatConv?.contact_id) {
       const windowStart = chatConv.started_at ?? new Date(Date.now() - 24 * 3600 * 1000).toISOString();
       const windowEnd   = chatConv.closed_at  ?? new Date().toISOString();
-      try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd)); } catch {}
+      try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd, chatConv.agent_id)); } catch {}
     }
+
+    // Filter out calls where call's human agent differs from chat's human agent
+    const filteredRecs = allRecs.filter(r => {
+      if (r.agent_id && chatConv?.agent_id && r.agent_id !== chatConv.agent_id) {
+        return false;
+      }
+      return true;
+    });
+    allRecs.length = 0;
+    allRecs.push(...filteredRecs);
 
     // Sort by called_at so segments are in chronological order across multiple calls
     allRecs.sort((a, b) => {
@@ -293,8 +303,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (chatConv?.contact_id) {
         const windowStart = chatConv.started_at ?? new Date(Date.now() - 24 * 3600 * 1000).toISOString();
         const windowEnd   = chatConv.closed_at  ?? new Date().toISOString();
-        try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd)); } catch {}
+        try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd, chatConv.agent_id)); } catch {}
       }
+      
+      const refilteredRecs = allRecs.filter(r => {
+        if (r.agent_id && chatConv?.agent_id && r.agent_id !== chatConv.agent_id) {
+          return false;
+        }
+        return true;
+      });
+      allRecs.length = 0;
+      allRecs.push(...refilteredRecs);
       
       allRecs.sort((a, b) => {
         if (!a.called_at) return 1;

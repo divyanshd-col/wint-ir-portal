@@ -388,6 +388,9 @@ TASK 2 — TRANSCRIPTION
 For each "turn" event in the structure above, transcribe the exact words spoken during that time window.
 CRITICAL COMPLETENESS: Transcribe every single turn through to the very last event in the structure. DO NOT STOP EARLY. Ensure the final instances of the call (closing pleasantries, wrap-up statements, 'thank you', 'take care', 'bye', and disconnection sign-offs) are fully transcribed.
 
+Unanswered calls, dial tones, and silence:
+- If a turn contains only telephone ringing tones, dial tones, beeps, or silence, do NOT transcribe it as "Hello" or invent words. Leave it empty or write [inaudible].
+
 Language rules:
 - Auto-detect: English, Hindi, Hinglish, Tamil, Telugu, Kannada, Malayalam, Marathi and any other Indian language.
 - Translate ALL non-English content to natural fluent English.
