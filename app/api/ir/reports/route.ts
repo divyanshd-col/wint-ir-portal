@@ -75,6 +75,394 @@ async function enrichReportsWithLiveScores(reports: any[]): Promise<any[]> {
   return reports;
 }
 
+function formatSimpleCoachingPoint(
+  channel: 'chat' | 'call' | 'email',
+  score: number,
+  agentName: string,
+  paramsObj: any,
+  complianceIssues?: any,
+  fallbackReason?: string | null,
+  idx = 0
+): string {
+  const firstName = (agentName || 'Agent').split(' ')[0];
+
+  const PARAM_PLAIN_ENGLISH: Record<string, string> = {
+    issue_resolution: `${firstName} did not completely resolve the customer's issue before ending the interaction.`,
+    accuracy: `${firstName} shared inaccurate or incomplete details while answering the query.`,
+    expectation_follow_through: `${firstName} did not set clear expectations or a specific follow-up timeline.`,
+    dissatisfactionhandling: `${firstName} could have handled the customer's dissatisfaction more empathetically and proactively.`,
+    personalization: `${firstName} gave a generic response instead of personalizing it to the customer's specific context.`,
+    empathy: `${firstName} could have acknowledged the customer's concern more warmly.`,
+    escalation_decision: `${firstName} missed escalating or routing the issue appropriately.`,
+    readability: `${firstName}'s message was hard to follow; clearer structure and formatting would help.`,
+    greeting_handover: `${firstName} missed a polite greeting or proper closing handover.`,
+    post_call_recap: `${firstName} did not provide a clear post-call summary of next steps.`,
+    call_opening: `${firstName} missed a warm greeting and clear introduction at the start of the call.`,
+    opening: `${firstName} missed a warm greeting and clear introduction at the start of the call.`,
+    call_closing: `${firstName} ended the call without summarizing the outcome and next steps.`,
+    follow_up: `${firstName} ended the call without summarizing the outcome and next steps.`,
+    technical: `${firstName} quoted inaccurate or incomplete product or policy information.`,
+    all_questions: `${firstName} missed answering one or more of the customer's questions during the interaction.`,
+    expectation: `${firstName} did not set a clear timeline or next step for the customer.`,
+    process: `${firstName} missed checking the customer's existing details beforehand or skipped a process step.`,
+    grammar: `${firstName} had phrasing or grammar issues that made the explanation less clear.`,
+    fillers: `${firstName} had noticeable pauses, dead air, or filler words during the call.`,
+    energy_tone: `${firstName}'s tone sounded flat or rushed; a warmer, calmer tone helps build trust.`,
+    active_listening: `${firstName} interrupted or missed acknowledging what the customer shared.`,
+    simplifying: `${firstName} used technical terms without explaining them in simple words.`,
+  };
+
+  // High-scoring (> 75%) -> Demonstrated Strengths / Best Practice
+  if (score > 75) {
+    if (score === 100) {
+      if (channel === 'call') {
+        const lines = [
+          `${firstName} delivered a stellar call with accurate answers, clear expectations, and warm customer rapport.`,
+          `${firstName} answered all customer questions thoroughly and closed the call with clear next steps.`,
+        ];
+        return lines[idx % lines.length];
+      }
+      if (channel === 'email') {
+        return `${firstName} wrote a clear, accurate, and complete email reply that resolved the customer's query.`;
+      }
+      return `${firstName} resolved the customer's chat query completely with accurate details and a helpful tone.`;
+    }
+    if (score >= 90) {
+      if (channel === 'call') return `${firstName} handled the customer's questions clearly, maintained strong rapport, and followed all quality guidelines.`;
+      if (channel === 'email') return `${firstName} sent a well-structured, accurate email reply with clear next steps.`;
+      return `${firstName} responded promptly, explained the solution clearly, and followed all quality guidelines.`;
+    }
+    if (channel === 'call') return `${firstName} maintained good call flow and addressed the customer's query accurately.`;
+    if (channel === 'email') return `${firstName} provided a helpful and compliant email reply to the customer.`;
+    return `${firstName} handled the chat well with accurate answers and polite communication.`;
+  }
+
+  // Low-scoring (<= 75%) -> Primary Coaching Point / Issue in plain simple English
+  if (complianceIssues) {
+    const issueText = Array.isArray(complianceIssues)
+      ? complianceIssues.map((x) => (typeof x === 'string' ? x : x?.reason || x?.mention || '')).filter(Boolean).join('; ')
+      : String(complianceIssues);
+    if (issueText && !issueText.includes('[object Object]')) {
+      return issueText.length > 180 ? `${issueText.slice(0, 177)}...` : issueText;
+    }
+  }
+
+  if (paramsObj && typeof paramsObj === 'object') {
+    const entries = Object.entries(paramsObj);
+    for (const [k, v] of entries) {
+      if (k.startsWith('__')) continue;
+      if (v && typeof v === 'object') {
+        const val = v as any;
+        const ans = String(val.answer || val.verdict || val.rating || '').toLowerCase();
+        if (ans === 'no' || ans === 'partial' || ans === 'fail' || (typeof val.score === 'number' && val.score === 0)) {
+          if (typeof val.reason === 'string' && val.reason.trim().length > 8) {
+            const clean = val.reason.trim();
+            return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
+          }
+          if (PARAM_PLAIN_ENGLISH[k]) return PARAM_PLAIN_ENGLISH[k];
+        }
+      } else if (typeof v === 'string') {
+        const ans = v.toLowerCase();
+        if ((ans === 'no' || ans === 'partial' || ans === 'fail') && PARAM_PLAIN_ENGLISH[k]) {
+          return PARAM_PLAIN_ENGLISH[k];
+        }
+      }
+    }
+  }
+
+  if (fallbackReason && typeof fallbackReason === 'string') {
+    const trimmed = fallbackReason.trim();
+    const lower = trimmed.toLowerCase();
+    const isEnum = /^[a-z0-9_]+$/i.test(trimmed) || ['remediation', 'pass', 'fail', 'failed critical', 'failed_critical', 'needs_review', 'pending', 'reviewed'].includes(lower);
+    if (!isEnum && trimmed.length > 8) {
+      return trimmed.length > 180 ? `${trimmed.slice(0, 177)}...` : trimmed;
+    }
+  }
+
+  if (channel === 'call') return `${firstName} missed key quality steps on this call; review opening, accuracy, and expectation setting.`;
+  if (channel === 'email') return `${firstName}'s email reply missed key details or clarity; ensure all customer questions are answered simply.`;
+  return `${firstName} missed key resolution or clarity steps in this chat; review the conversation for coaching.`;
+}
+
+async function enrichDhanushLatestScorecard(report: any, agentId: number, agentName: string): Promise<any> {
+  if (!report || !report.generated) return report;
+  const weekStart = report.week_start;
+  const weekEnd = report.week_end;
+  const gen = report.generated;
+  const nums = gen.numbers || {};
+
+  // 1. Live Chats for [weekStart, weekEnd] matching My Analytics / Member Analytics
+  let chatRows: any[] = [];
+  try {
+    chatRows = await query<any>(
+      `SELECT
+         c.id AS chat_id,
+         c.csat_score,
+         c.csat_label,
+         c.tags->>'disposition' AS disposition,
+         c.tags->>'sub_disposition' AS sub_disposition,
+         s.iqs_score,
+         s.parameters,
+         s.reviewed_by,
+         s.review_note
+       FROM conversations c
+       LEFT JOIN iqs_scores s ON s.chat_id = c.id
+       WHERE c.agent_id = $1
+         AND c.closed_at::date >= $2::date
+         AND c.closed_at::date <= $3::date
+         AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+         AND s.iqs_score IS NOT NULL
+       ORDER BY s.iqs_score ASC NULLS LAST, c.closed_at DESC`,
+      [agentId, weekStart, weekEnd]
+    );
+  } catch (err: any) {
+    console.warn('[ir-reports-api] chats live enrichment warning:', err?.message);
+  }
+
+  const chatEvidenceFromGen = new Map<string, any>(
+    (Array.isArray(gen.evidence) ? gen.evidence : []).map((e: any) => [String(e.chatId), e])
+  );
+  const chatBreaches: any[] = Array.isArray(gen.breaches) ? gen.breaches : [];
+
+  const chatsHandled = chatRows.length > 0 ? chatRows.length : Number(nums.chatsHandled ?? 0);
+  const chatScores = chatRows.map((r) => Math.round(Number(r.iqs_score))).filter((n) => !Number.isNaN(n));
+  const chatsAvgScore = chatScores.length > 0
+    ? Math.round(chatScores.reduce((a, b) => a + b, 0) / chatScores.length)
+    : (nums.averageScore != null ? Number(nums.averageScore) : null);
+  const chatsBelow85 = chatScores.length > 0
+    ? chatScores.filter((s) => s < 85).length
+    : Number(nums.below85Count ?? 0);
+  const chatsBreachesCount = Number(nums.complianceBreachesCount ?? chatBreaches.length ?? 0);
+
+  // Live CSAT for chats
+  let csatText = nums.csatText || 'No ratings recorded';
+  if (chatRows.length > 0) {
+    const rated = chatRows.filter((r) => r.csat_score != null || r.csat_label != null);
+    if (rated.length > 0) {
+      const good = rated.filter((r) => Number(r.csat_score) === 5 || String(r.csat_label || '').toLowerCase() === 'good').length;
+      const pct = Math.round((good / rated.length) * 1000) / 10;
+      csatText = `${pct}% (${good}/${rated.length} rated)`;
+    }
+  }
+
+  const chatsEvidence: any[] = (chatRows.length > 0
+    ? chatRows.map((r, idx) => {
+        const sc = Math.round(Number(r.iqs_score));
+        const prev = chatEvidenceFromGen.get(String(r.chat_id));
+        const rawSummary = prev?.summary || '';
+        const coaching = formatSimpleCoachingPoint('chat', sc, agentName, r.parameters, null, rawSummary, idx);
+        return {
+          channel: 'chat',
+          id: String(r.chat_id),
+          chatId: String(r.chat_id),
+          score: sc,
+          topic: [r.disposition, r.sub_disposition].filter(Boolean).join(' › ') || prev?.topic || 'Chat Interaction',
+          summary: coaching,
+          isReviewed: Boolean(r.reviewed_by),
+          reviewNote: r.review_note || undefined,
+        };
+      })
+    : (Array.isArray(gen.evidence) ? gen.evidence : []).map((ev: any, idx: number) => ({
+        ...ev,
+        channel: 'chat',
+        id: String(ev.chatId),
+        summary: formatSimpleCoachingPoint('chat', Number(ev.score ?? 100), agentName, null, null, ev.summary, idx),
+      }))
+  );
+
+  // 2. Live Calls for [weekStart, weekEnd]
+  let callRows: any[] = [];
+  try {
+    callRows = await query<any>(
+      `SELECT
+         cr.id AS call_id,
+         COALESCE(ce.chat_id, cr.chat_id) AS chat_id,
+         cr.duration_seconds,
+         cr.call_disposition,
+         cr.call_sub_disposition,
+         COALESCE(ce.iqs_percent, s.call_iqs_score) AS score,
+         COALESCE(ce.iqs_scores, s.call_parameters) AS call_params,
+         ce.call_gate_result,
+         ce.breach_mentions,
+         ce.verdict,
+         COALESCE(ce.reviewed_by, s.reviewed_by) AS reviewed_by,
+         COALESCE(ce.review_note, s.review_note) AS review_note
+       FROM call_recordings cr
+       LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+       LEFT JOIN conversations c ON c.id = cr.chat_id
+       LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+       WHERE COALESCE(ce.agent_id, cr.agent_id, c.agent_id) = $1
+         AND cr.called_at::date >= $2::date
+         AND cr.called_at::date <= $3::date
+         AND (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+         AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+         AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+         AND COALESCE(ce.iqs_percent, s.call_iqs_score) IS NOT NULL
+       ORDER BY COALESCE(ce.iqs_percent, s.call_iqs_score) ASC NULLS LAST, cr.called_at DESC`,
+      [agentId, weekStart, weekEnd]
+    );
+  } catch (err: any) {
+    console.warn('[ir-reports-api] calls enrichment warning:', err?.message);
+  }
+
+  const callsHandled = callRows.length;
+  const callScores = callRows.map((r) => Math.round(Number(r.score))).filter((n) => !Number.isNaN(n));
+  const callsAvgScore = callScores.length > 0 ? Math.round(callScores.reduce((a, b) => a + b, 0) / callScores.length) : null;
+  const callsBelow85 = callScores.filter((s) => s < 85).length;
+
+  const durations = callRows.map((r) => Number(r.duration_seconds)).filter((d) => !Number.isNaN(d) && d > 0);
+  let avgDurationText = '—';
+  if (durations.length > 0) {
+    const avgSec = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    const m = Math.floor(avgSec / 60);
+    const s = avgSec % 60;
+    avgDurationText = `${m}m ${s}s avg duration`;
+  }
+
+  let callsBreachesCount = 0;
+  const callsEvidence: any[] = callRows.map((r, idx) => {
+    const sc = Math.round(Number(r.score));
+    const hasGateFail = String(r.call_gate_result || '').toUpperCase() === 'FAIL';
+    const mentions = Array.isArray(r.breach_mentions) ? r.breach_mentions : [];
+    if (hasGateFail) callsBreachesCount++;
+    const coaching = formatSimpleCoachingPoint('call', sc, agentName, r.call_params, hasGateFail ? mentions : null, r.verdict, idx);
+    return {
+      channel: 'call',
+      id: String(r.call_id),
+      chatId: r.chat_id ? String(r.chat_id) : String(r.call_id),
+      score: sc,
+      topic: [r.call_disposition, r.call_sub_disposition].filter(Boolean).join(' › ') || 'Call Interaction',
+      summary: coaching,
+      isReviewed: Boolean(r.reviewed_by),
+      reviewNote: r.review_note || undefined,
+    };
+  });
+
+  // 3. Live Emails for [weekStart, weekEnd] (using c.subject_line!)
+  let emailRows: any[] = [];
+  try {
+    emailRows = await query<any>(
+      `SELECT
+         e.id,
+         e.ticket_id,
+         e.message_id,
+         COALESCE(e.qa_override_score, e.quality_score) AS score,
+         e.compliance_passed,
+         e.compliance_issues,
+         e.parameter_scores,
+         e.qa_notes,
+         e.reviewed_by,
+         c.subject_line,
+         c.intent_l1
+       FROM email_reply_evaluations e
+       LEFT JOIN email_conversations c ON c.id = e.ticket_id
+       WHERE (e.agent_id = $1 OR TRIM(e.agent_name) ILIKE $2)
+         AND e.sent_at::date >= $3::date
+         AND e.sent_at::date <= $4::date
+         AND (e.evaluation_status = 'Completed' OR e.quality_score IS NOT NULL)
+         AND (c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')
+       ORDER BY COALESCE(e.qa_override_score, e.quality_score) ASC NULLS LAST, e.sent_at DESC`,
+      [agentId, agentName, weekStart, weekEnd]
+    );
+  } catch (err: any) {
+    console.warn('[ir-reports-api] emails enrichment warning:', err?.message);
+  }
+
+  const emailsHandled = emailRows.length;
+  const emailScores = emailRows.map((r) => Math.round(Number(r.score))).filter((n) => !Number.isNaN(n));
+  const emailsAvgScore = emailScores.length > 0 ? Math.round(emailScores.reduce((a, b) => a + b, 0) / emailScores.length) : null;
+  const emailsBelow85 = emailScores.filter((s) => s < 85).length;
+  let emailsBreachesCount = 0;
+  const emailsEvidence: any[] = emailRows.map((r, idx) => {
+    const sc = Math.round(Number(r.score));
+    if (r.compliance_passed === false) emailsBreachesCount++;
+    const coaching = formatSimpleCoachingPoint('email', sc, agentName, r.parameter_scores, r.compliance_issues, r.qa_notes, idx);
+    return {
+      channel: 'email',
+      id: String(r.ticket_id || r.message_id || r.id),
+      messageId: String(r.message_id || r.id),
+      score: sc,
+      topic: r.intent_l1 || r.subject_line || 'Email Support',
+      summary: coaching,
+      isReviewed: Boolean(r.reviewed_by),
+    };
+  });
+
+  // 4. Consolidated metrics across all 3 channels
+  const totalInteractions = chatsHandled + callsHandled + emailsHandled;
+  const totalBelow85Count = chatsBelow85 + callsBelow85 + emailsBelow85;
+  const totalComplianceBreaches = chatsBreachesCount + callsBreachesCount + emailsBreachesCount;
+
+  let weightedScoreSum = 0;
+  let weightedCount = 0;
+  if (chatsHandled > 0 && chatsAvgScore != null) {
+    weightedScoreSum += chatsAvgScore * chatsHandled;
+    weightedCount += chatsHandled;
+  }
+  if (callsHandled > 0 && callsAvgScore != null) {
+    weightedScoreSum += callsAvgScore * callsHandled;
+    weightedCount += callsHandled;
+  }
+  if (emailsHandled > 0 && emailsAvgScore != null) {
+    weightedScoreSum += emailsAvgScore * emailsHandled;
+    weightedCount += emailsHandled;
+  }
+  const blendedAvgScore = weightedCount > 0 ? Math.round(weightedScoreSum / weightedCount) : chatsAvgScore;
+
+  // 5. Channel highlights
+  const whatWentWellChats = gen.whatWentWell || (
+    chatsHandled > 0
+      ? `Maintained ${chatsAvgScore ?? 0}% average IQS across ${chatsHandled} evaluated chat${chatsHandled === 1 ? '' : 's'} (${csatText}).`
+      : 'No evaluated chats recorded during this period.'
+  );
+  const whatWentWellCalls = callsHandled > 0
+    ? `Handled ${callsHandled} evaluated call${callsHandled === 1 ? '' : 's'} with an average IQS of ${callsAvgScore ?? 0}% (${avgDurationText}). Maintained clear communication and structured issue resolution.`
+    : 'No evaluated calls recorded during this period.';
+  const whatWentWellEmails = emailsHandled > 0
+    ? `Resolved ${emailsHandled} evaluated email repl${emailsHandled === 1 ? 'y' : 'ies'} with an average IQS of ${emailsAvgScore ?? 0}% and thorough written clarity.`
+    : 'No evaluated email replies recorded during this period.';
+
+  return {
+    ...report,
+    generated: {
+      ...gen,
+      unified: {
+        blendedAvgScore,
+        totalInteractions,
+        totalBelow85Count,
+        totalComplianceBreaches,
+        chats: {
+          handled: chatsHandled,
+          avgScore: chatsAvgScore,
+          below85Count: chatsBelow85,
+          breachesCount: chatsBreachesCount,
+          csatText,
+        },
+        calls: {
+          handled: callsHandled,
+          avgScore: callsAvgScore,
+          below85Count: callsBelow85,
+          breachesCount: callsBreachesCount,
+          avgDurationText,
+        },
+        emails: {
+          handled: emailsHandled,
+          avgScore: emailsAvgScore,
+          below85Count: emailsBelow85,
+          breachesCount: emailsBreachesCount,
+          resolutionText: emailsHandled > 0 ? `${emailsHandled} evaluated ${emailsHandled === 1 ? 'reply' : 'replies'}` : 'No evaluated emails this period',
+        },
+        whatWentWellChats,
+        whatWentWellCalls,
+        whatWentWellEmails,
+        callsEvidence,
+        chatsEvidence,
+        emailsEvidence,
+      },
+    },
+  };
+}
+
 // GET: Fetch reports depending on user role
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -114,6 +502,9 @@ export async function GET(req: NextRequest) {
         [agentId]
       );
       const reports = await enrichReportsWithLiveScores(rawReports);
+      if (reports.length > 0) {
+        reports[0] = await enrichDhanushLatestScorecard(reports[0], agentId, agentName);
+      }
       return NextResponse.json({ reports, latestSystemWeek });
     }
 
@@ -164,6 +555,16 @@ export async function GET(req: NextRequest) {
         [allMappedNames]
       );
       const enrichedReports = await enrichReportsWithLiveScores(reports);
+      // Enrich the latest scorecard per team member with the unified 3-channel template
+      const seenAgents = new Set<number>();
+      await Promise.all(
+        enrichedReports.map(async (rep, idx) => {
+          if (rep.agent_id && !seenAgents.has(rep.agent_id)) {
+            seenAgents.add(rep.agent_id);
+            enrichedReports[idx] = await enrichDhanushLatestScorecard(rep, rep.agent_id, rep.agent_name || 'Agent');
+          }
+        })
+      );
       return NextResponse.json({ reports: enrichedReports, latestSystemWeek });
     }
 
@@ -177,6 +578,16 @@ export async function GET(req: NextRequest) {
          ORDER BY r.week_start DESC, a.name ASC`
       );
       const enrichedReports = await enrichReportsWithLiveScores(reports);
+      // Enrich the latest scorecard per team member with the unified 3-channel template
+      const seenAgents = new Set<number>();
+      await Promise.all(
+        enrichedReports.map(async (rep, idx) => {
+          if (rep.agent_id && !seenAgents.has(rep.agent_id)) {
+            seenAgents.add(rep.agent_id);
+            enrichedReports[idx] = await enrichDhanushLatestScorecard(rep, rep.agent_id, rep.agent_name || 'Agent');
+          }
+        })
+      );
       return NextResponse.json({ reports: enrichedReports, latestSystemWeek });
     }
 

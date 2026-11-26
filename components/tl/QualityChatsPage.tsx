@@ -982,13 +982,25 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   );
 }
 
-// ─── Root page ────────────────────────────────────────────────────────────────
-export default function QualityChatsPage() {
-  const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab') as Tab | null;
+interface QualityChatsProps {
+  initialTab?: 'evaluated' | 'disputes' | 'reviewed';
+  mode?: 'all' | 'evaluated-only' | 'disputes-only';
+  hideHeader?: boolean;
+}
 
+// ─── Root page ────────────────────────────────────────────────────────────────
+export default function QualityChatsPage({ initialTab: propInitialTab, mode = 'all', hideHeader = false }: QualityChatsProps = {}) {
+  const searchParams = useSearchParams();
+  const queryTab = searchParams.get('tab') as Tab | null;
+  const initialTab = propInitialTab || queryTab;
+
+  const defaultTab = mode === 'disputes-only' ? 'disputes' : 'evaluated';
   const [tab, setTab] = useState<Tab>(
-    initialTab && ['evaluated', 'disputes', 'reviewed'].includes(initialTab) ? initialTab : 'evaluated'
+    mode === 'evaluated-only'
+      ? 'evaluated'
+      : initialTab && ['evaluated', 'disputes', 'reviewed'].includes(initialTab)
+        ? (mode === 'disputes-only' && initialTab === 'evaluated' ? 'disputes' : initialTab)
+        : defaultTab
   );
   const [evaluatedCount, setEvaluatedCount] = useState<number | null>(null);
   const [disputeCount,   setDisputeCount]   = useState<number | null>(null);
@@ -1006,58 +1018,70 @@ export default function QualityChatsPage() {
   return (
     <div>
       {/* Page Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
-          Quality Chats
-        </h1>
-      </div>
+      {!hideHeader && (
+        <div style={{ marginBottom: 20 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
+            Quality Chats
+          </h1>
+        </div>
+      )}
 
       {/* Tab Bar */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-        flexWrap: 'wrap',
-        gap: 16
-      }}>
+      {mode !== 'evaluated-only' && (
         <div style={{
-          display: 'flex', gap: 4,
-          borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 20,
+          flexWrap: 'wrap',
+          gap: 16
         }}>
-          <button style={tabStyle(tab === 'evaluated')} onClick={() => setTab('evaluated')}>
-            Evaluated Chats
-            {evaluatedCount !== null && <CountBadge count={evaluatedCount} active={tab === 'evaluated'} />}
-          </button>
-          <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
-            Disputes Raised
-            {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
-          </button>
-          <button style={tabStyle(tab === 'reviewed')} onClick={() => setTab('reviewed')}>
-            Reviewed Disputes
-            {reviewedCount !== null && <CountBadge count={reviewedCount} active={tab === 'reviewed'} />}
-          </button>
+          <div style={{
+            display: 'flex', gap: 4,
+            borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
+          }}>
+            {mode === 'all' && (
+              <button style={tabStyle(tab === 'evaluated')} onClick={() => setTab('evaluated')}>
+                Evaluated Chats
+                {evaluatedCount !== null && <CountBadge count={evaluatedCount} active={tab === 'evaluated'} />}
+              </button>
+            )}
+            <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
+              Disputes Raised
+              {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
+            </button>
+            <button style={tabStyle(tab === 'reviewed')} onClick={() => setTab('reviewed')}>
+              Reviewed Disputes
+              {reviewedCount !== null && <CountBadge count={reviewedCount} active={tab === 'reviewed'} />}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Tab Contents */}
-      <div style={{ display: tab === 'evaluated' ? 'block' : 'none' }}>
-        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
-          <EvaluatedChatsSection onTotalChange={setEvaluatedCount} />
+      {(mode === 'all' || mode === 'evaluated-only') && (
+        <div style={{ display: tab === 'evaluated' ? 'block' : 'none' }}>
+          <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+            <EvaluatedChatsSection onTotalChange={setEvaluatedCount} />
+          </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
-        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
-          <DisputesSection status="pending" onTotalChange={setDisputeCount} />
-        </div>
-      </div>
+      {(mode === 'all' || mode === 'disputes-only') && (
+        <>
+          <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
+            <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+              <DisputesSection status="pending" onTotalChange={setDisputeCount} />
+            </div>
+          </div>
 
-      <div style={{ display: tab === 'reviewed' ? 'block' : 'none' }}>
-        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
-          <DisputesSection status="resolved" onTotalChange={setReviewedCount} />
-        </div>
-      </div>
+          <div style={{ display: tab === 'reviewed' ? 'block' : 'none' }}>
+            <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+              <DisputesSection status="resolved" onTotalChange={setReviewedCount} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

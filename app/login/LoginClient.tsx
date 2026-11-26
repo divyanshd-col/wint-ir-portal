@@ -30,17 +30,19 @@ function LoginForm() {
           setLoginError('Invalid email or password.');
         }
       } else if (result?.url) {
+        const defaultLanding = '/';
+
         try {
           const parsed = new URL(result.url, window.location.origin);
           if (parsed.origin !== window.location.origin) {
-            const targetPath = parsed.pathname === '/' ? '/quality' : parsed.pathname;
+            const targetPath = parsed.pathname === '/' ? defaultLanding : parsed.pathname;
             window.location.href = targetPath + parsed.search + parsed.hash;
           } else {
-            const targetPath = parsed.pathname === '/' ? '/quality' : result.url;
+            const targetPath = parsed.pathname === '/' ? defaultLanding : result.url;
             window.location.href = targetPath;
           }
         } catch {
-          window.location.href = '/quality';
+          window.location.href = defaultLanding;
         }
       }
     } catch {

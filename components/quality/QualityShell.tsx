@@ -121,6 +121,26 @@ export default function QualityShell({ role, name, skills, children }: Props) {
   const platformDomain = user?.platformDomain || 'cx';
   const activeDomain: 'cx' | 'pcg' = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
 
+  const userEmail = (user?.email || '').toLowerCase();
+  const userName = user?.name || '';
+  const isDhanush = userEmail === 'dhanush@wintwealth.com' || userName === 'Dhanush';
+  const isHarsh = Boolean(
+    userEmail === 'harsh.baid@wintwealth.com' ||
+    userEmail === 'harsh@wintwealth.com' ||
+    userName.toLowerCase().trim() === 'harsh' ||
+    userName.toLowerCase().includes('harsh baid')
+  );
+  const isSindhu = Boolean(
+    userEmail.includes('sindhu') ||
+    userName.toLowerCase().includes('sindhu') ||
+    userEmail.includes('yashvi') ||
+    userName.toLowerCase().includes('yashvi')
+  );
+
+  if (isDhanush || isHarsh || isSindhu) {
+    return <>{children}</>;
+  }
+
   const nav = activeDomain === 'pcg' ? PCG_NAV : NAV_ALL;
 
   return (

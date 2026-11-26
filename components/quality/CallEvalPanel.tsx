@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { normalizeScore } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
 import ScoreRing from './ScoreRing';
@@ -455,6 +456,117 @@ export default function CallEvalPanel({
   const [paramState, setParamState] = useState<Record<string, { score: string; reasoning: string }>>({});
   const [hasUserEditedParams, setHasUserEditedParams] = useState(false);
 
+  // QA-only AI evaluation audit state (AI accurate vs. AI hallucinated)
+  const { data: session } = useSession();
+  const sessionUser = session?.user as any;
+  const userRole = (sessionUser?.role || '').toLowerCase();
+  const userEmail = (sessionUser?.email || '').toLowerCase();
+  const userName = (sessionUser?.name || '').toLowerCase();
+  const isQA =
+    userRole === 'quality' ||
+    userRole === 'admin' ||
+    sessionUser?.isAdmin ||
+    userEmail.includes('sindhu') ||
+    userName.includes('sindhu') ||
+    userEmail.includes('yashvi') ||
+    userName.includes('yashvi');
+
+  const [isAiAuditOpen, setIsAiAuditOpen] = useState(false);
+  const [isComplianceOpen, setIsComplianceOpen] = useState(false);
+  const [isParametersOpen, setIsParametersOpen] = useState(false);
+  const [auditSelection, setAuditSelection] = useState<'accurate' | 'hallucinated' | null>(null);
+  const [aiHallucinationReason, setAiHallucinationReason] = useState('');
+  const [isSavingAiAudit, setIsSavingAiAudit] = useState(false);
+  const [aiAuditSaved, setAiAuditSaved] = useState(false);
+
+  const isIssueScore = (score: any): boolean => {
+    if (!score) return false;
+    const s = String(score).trim().toLowerCase();
+    return (
+      s === 'no' ||
+      s === '0' ||
+      s === 'fail' ||
+      s === 'false' ||
+      s === 'half' ||
+      s === 'part' ||
+      s === 'partial' ||
+      s === '1' ||
+      s === '0.5'
+    );
+  };
+
+  // Parameter reasoning dropdown state:
+  // - QA: all parameters expanded by default
+  // - IR & TL: No / Half (Partial) expanded by default, others hidden until toggled
+  const [paramReasonExpanded, setParamReasonExpanded] = useState<Record<string, boolean>>({});
+
+  const isReasonOpen = (paramKey: string, score?: any): boolean => {
+    if (paramReasonExpanded[paramKey] !== undefined) {
+      return paramReasonExpanded[paramKey];
+    }
+    return isQA || isIssueScore(score);
+  };
+
+  const toggleParamReason = (paramKey: string, score?: any) => {
+    setParamReasonExpanded(prev => {
+      const currentlyOpen = prev[paramKey] !== undefined ? prev[paramKey] : (isQA || isIssueScore(score));
+      return {
+        ...prev,
+        [paramKey]: !currentlyOpen,
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!isQA || !callId) return;
+    let live = true;
+    fetch(`/api/cx/qa/mark-ai-audit?type=call&id=${encodeURIComponent(callId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!live || !d) return;
+        if (d.ai_hallucinated === true) {
+          setAuditSelection('hallucinated');
+        } else if (d.ai_hallucinated === false) {
+          setAuditSelection('accurate');
+        } else {
+          setAuditSelection(null);
+        }
+        if (d.ai_hallucination_reason) {
+          setAiHallucinationReason(d.ai_hallucination_reason);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [callId, isQA]);
+
+  const handleSaveAiAudit = async (hallucinated: boolean | null, reasonText?: string) => {
+    if (!isQA || !callId) return;
+    setIsSavingAiAudit(true);
+    setAiAuditSaved(false);
+    try {
+      const res = await fetch('/api/cx/qa/mark-ai-audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'call',
+          id: callId,
+          ai_hallucinated: hallucinated,
+          ai_hallucination_reason: reasonText !== undefined ? reasonText : aiHallucinationReason,
+        }),
+      });
+      if (res.ok) {
+        setAiAuditSaved(true);
+        setTimeout(() => setAiAuditSaved(false), 2500);
+      }
+    } catch (err) {
+      console.error('Failed to save AI audit:', err);
+    } finally {
+      setIsSavingAiAudit(false);
+    }
+  };
+
   const isJunkCall = Boolean(
     (disposition && disposition.toLowerCase().includes('junk')) ||
     (dispute?.disposition && dispute.disposition.toLowerCase().includes('junk'))
@@ -676,6 +788,9 @@ export default function CallEvalPanel({
       setCurrentIqs(newScore);
       return next;
     });
+    if (isIssueScore(val)) {
+      setParamReasonExpanded(prev => ({ ...prev, [param]: true }));
+    }
   };
 
   const handleReasoningChange = (param: string, text: string) => {
@@ -863,6 +978,10 @@ export default function CallEvalPanel({
   };
 
   const handleSubmitOverride = async () => {
+    if (isQA && !auditSelection) {
+      setIsAiAuditOpen(true);
+      return;
+    }
     setSaving(true);
     const scores: Record<string, string> = {};
     const reasoning: Record<string, string> = {};
@@ -1448,6 +1567,217 @@ export default function CallEvalPanel({
           </div>
 
           <div className="eval-scroll-s" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
+            {/* QA-only AI Evaluation Audit Dropdown */}
+            {isQA && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  borderRadius: 8,
+                  border: '1px solid #e5e7eb',
+                  background: '#ffffff',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  overflow: 'hidden',
+                }}
+              >
+                {/* Dropdown Toggle Header (default hidden/collapsed) */}
+                <button
+                  type="button"
+                  onClick={() => setIsAiAuditOpen((prev) => !prev)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: isAiAuditOpen ? '#f9fafb' : '#ffffff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#4b5563"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{
+                        transform: isAiAuditOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s ease',
+                      }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>
+                      AI Evaluation Audit <span style={{ color: '#dc2626' }}>*</span>
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {auditSelection ? (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          background: auditSelection === 'hallucinated' ? '#111827' : '#f3f4f6',
+                          color: auditSelection === 'hallucinated' ? '#ffffff' : '#374151',
+                          border: auditSelection === 'hallucinated' ? '1px solid #111827' : '1px solid #e5e7eb',
+                        }}
+                      >
+                        {auditSelection === 'hallucinated' ? 'AI Hallucinated' : 'AI Accurate'}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>
+                        Required · Select AI accuracy
+                      </span>
+                    )}
+                    {aiAuditSaved && (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#111827' }}>
+                        ✓ Saved
+                      </span>
+                    )}
+                  </div>
+                </button>
+
+                {/* Collapsible Content */}
+                {isAiAuditOpen && (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderTop: '1px solid #e5e7eb',
+                      background: '#fafafa',
+                    }}
+                  >
+                    {/* Checkboxes: AI Accurate & AI Hallucinated */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                      <label
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={auditSelection === 'accurate'}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAuditSelection('accurate');
+                              handleSaveAiAudit(false, '');
+                            } else {
+                              setAuditSelection(null);
+                              handleSaveAiAudit(null, '');
+                            }
+                          }}
+                          style={{ width: 15, height: 15, accentColor: '#111827', cursor: 'pointer' }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: auditSelection === 'accurate' ? 600 : 500,
+                            color: '#111827',
+                          }}
+                        >
+                          AI Accurate
+                        </span>
+                      </label>
+
+                      <label
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={auditSelection === 'hallucinated'}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAuditSelection('hallucinated');
+                              handleSaveAiAudit(true, aiHallucinationReason);
+                            } else {
+                              setAuditSelection(null);
+                              handleSaveAiAudit(null, '');
+                            }
+                          }}
+                          style={{ width: 15, height: 15, accentColor: '#111827', cursor: 'pointer' }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: auditSelection === 'hallucinated' ? 600 : 500,
+                            color: '#111827',
+                          }}
+                        >
+                          AI Hallucinated
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* Reason box: ONLY visible when AI Hallucinated is selected */}
+                    {auditSelection === 'hallucinated' && (
+                      <div style={{ marginTop: 12 }}>
+                        <textarea
+                          value={aiHallucinationReason}
+                          onChange={(e) => setAiHallucinationReason(e.target.value)}
+                          onBlur={() => handleSaveAiAudit(true, aiHallucinationReason)}
+                          placeholder="State reason why this evaluation was marked as AI hallucinated..."
+                          rows={2}
+                          style={{
+                            width: '100%',
+                            padding: '7px 10px',
+                            fontSize: 12,
+                            borderRadius: 6,
+                            border: '1px solid #d1d5db',
+                            background: '#ffffff',
+                            color: '#111827',
+                            fontFamily: 'inherit',
+                            resize: 'vertical',
+                            outline: 'none',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+                          <button
+                            type="button"
+                            disabled={isSavingAiAudit}
+                            onClick={() => handleSaveAiAudit(true, aiHallucinationReason)}
+                            style={{
+                              padding: '4px 12px',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              borderRadius: 6,
+                              background: '#111827',
+                              color: '#ffffff',
+                              border: 'none',
+                              cursor: isSavingAiAudit ? 'not-allowed' : 'pointer',
+                              opacity: isSavingAiAudit ? 0.6 : 1,
+                              transition: 'background 0.15s ease',
+                            }}
+                          >
+                            {isSavingAiAudit ? 'Saving…' : 'Save Reason'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             {/* SOP Communication Alert Card */}
             {sopTriggers && sopTriggers.length > 0 && (
               <div style={{
@@ -1519,70 +1849,194 @@ export default function CallEvalPanel({
               </div>
             )}
 
-            {/* Compliance Gates */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                  Compliance Gates
-                </h4>
+            {/* Compliance Gates Collapsible Section */}
+            <div
+              style={{
+                marginBottom: 12,
+                borderRadius: 8,
+                border: '1px solid var(--qa-border, #e5e7eb)',
+                background: 'var(--qa-card, #ffffff)',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Dropdown Toggle Header (default hidden/collapsed) */}
+              <button
+                type="button"
+                onClick={() => setIsComplianceOpen((prev) => !prev)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: isComplianceOpen ? 'var(--qa-fill-light, #f9fafb)' : 'var(--qa-card, #ffffff)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#4b5563"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      transform: isComplianceOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease',
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                  <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111827)' }}>
+                    Compliance Gates
+                  </h4>
+                </div>
+
                 <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>
                   {gateFail ? 'BREACHED' : 'PASS'}
                 </span>
-              </div>
-              {COMPLIANCE_GATES_LIST.map(g => {
-                const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
-                return (
-                  <div key={g.key} className="eval-gate">
-                    <div style={{ minWidth: 0 }}>
-                      <b>{g.shortLabel}</b>
-                      <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
-                    </div>
-                    <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
-                      {([
-                        { label: 'Pass', val: 'pass' as const },
-                        { label: 'Breach', val: 'fail' as const },
-                        { label: 'NA', val: 'not_applicable' as const },
-                      ]).map(opt => (
-                        <button
-                          key={opt.val} type="button" data-v={opt.val}
-                          aria-pressed={gItem.status === opt.val}
-                          disabled={isReadOnly}
-                          onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
+              </button>
 
-                    {/* Reason for compliance gate (shown only in case of breach) */}
-                    {gItem.status === 'fail' && (
-                      isReadOnly ? (
-                        gItem.reasoning ? (
-                          <div className="eval-gate-extra eval-reason">
-                            <strong>Reason: </strong>{gItem.reasoning}
-                          </div>
-                        ) : null
-                      ) : (
-                        <div className="eval-gate-extra">
-                          <div className="eval-reason-label">Reason for Breach:</div>
-                          <AutoTextarea
-                            className="eval-reason-input"
-                            value={gItem.reasoning}
-                            onChange={e => handleGateReasoningChange(g.key, e.target.value)}
-                            placeholder="Specify reason / citation for this compliance breach…"
-                            rows={2}
-                          />
+              {/* Collapsible Content */}
+              {isComplianceOpen && (
+                <div
+                  style={{
+                    padding: 14,
+                    borderTop: '1px solid var(--qa-border, #e5e7eb)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    background: 'var(--qa-gray-50, #fafafa)',
+                  }}
+                >
+                  {COMPLIANCE_GATES_LIST.map(g => {
+                    const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
+                    return (
+                      <div key={g.key} className="eval-gate">
+                        <div style={{ minWidth: 0 }}>
+                          <b>{g.shortLabel}</b>
+                          <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
                         </div>
-                      )
-                    )}
-                  </div>
-                );
-              })}
+                        <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
+                          {([
+                            { label: 'Pass', val: 'pass' as const },
+                            { label: 'Breach', val: 'fail' as const },
+                            { label: 'NA', val: 'not_applicable' as const },
+                          ]).map(opt => (
+                            <button
+                              key={opt.val} type="button" data-v={opt.val}
+                              aria-pressed={gItem.status === opt.val}
+                              disabled={isReadOnly}
+                              onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Reason for compliance gate (shown only in case of breach) */}
+                        {gItem.status === 'fail' && (
+                          isReadOnly ? (
+                            gItem.reasoning ? (
+                              <div className="eval-gate-extra eval-reason">
+                                <strong>Reason: </strong>{gItem.reasoning}
+                              </div>
+                            ) : null
+                          ) : (
+                            <div className="eval-gate-extra">
+                              <div className="eval-reason-label">Reason for Breach:</div>
+                              <AutoTextarea
+                                className="eval-reason-input"
+                                value={gItem.reasoning}
+                                onChange={e => handleGateReasoningChange(g.key, e.target.value)}
+                                placeholder="Specify reason / citation for this compliance breach…"
+                                rows={2}
+                              />
+                            </div>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Parameter List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-              {isPcg ? (
+            {/* Parameters Collapsible Section */}
+            <div
+              style={{
+                marginBottom: 12,
+                borderRadius: 8,
+                border: '1px solid var(--qa-border, #e5e7eb)',
+                background: 'var(--qa-card, #ffffff)',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Dropdown Toggle Header (default hidden/collapsed) */}
+              <button
+                type="button"
+                onClick={() => setIsParametersOpen((prev) => !prev)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: isParametersOpen ? 'var(--qa-fill-light, #f9fafb)' : 'var(--qa-card, #ffffff)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#4b5563"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      transform: isParametersOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease',
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                  <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111827)' }}>
+                    Parameters
+                  </h4>
+                </div>
+
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 border border-gray-200">
+                  {displayedIqs != null ? `IQS ${displayedIqs}%` : '10 Parameters'}
+                </span>
+              </button>
+
+              {/* Collapsible Content */}
+              {isParametersOpen && (
+                <div
+                  style={{
+                    padding: 14,
+                    borderTop: '1px solid var(--qa-border, #e5e7eb)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    background: 'var(--qa-gray-50, #fafafa)',
+                  }}
+                >
+                  {isPcg ? (
                 PCG_PARAM_GROUPS.map(grp => (
                   <div key={grp.group} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 4, borderBottom: '1px solid var(--qa-border)' }}>
@@ -1645,29 +2099,82 @@ export default function CallEvalPanel({
                             </div>
                           )}
 
-                          {isReadOnly ? (
-                            item.reasoning ? (
-                              <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4 }}>{item.reasoning}</div>
-                            ) : null
-                          ) : (
-                            <AutoTextarea
-                              value={item.reasoning}
-                              onChange={e => handleReasoningChange(p, e.target.value)}
-                              placeholder={`Reasoning or transcript quote for ${def.name}…`}
-                              style={{
-                                width: '100%',
-                                minHeight: 36,
-                                fontSize: 11,
-                                border: '1px solid var(--qa-border)',
-                                borderRadius: 6,
-                                padding: '6px 8px',
-                                outline: 'none',
-                                resize: 'vertical',
-                                fontFamily: 'inherit',
-                                marginTop: 4,
-                              }}
-                            />
-                          )}
+                          {/* Dropdown toggle for reasoning: default open for No & Partial, closed for Yes & NA */}
+                          {(() => {
+                            const isOpen = isReasonOpen(p, item.score);
+                            const hasReasonContent = Boolean(item.reasoning && item.reasoning.trim());
+                            if (isReadOnly && !hasReasonContent) return null;
+
+                            return (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'center', marginTop: 4 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleParamReason(p, item.score)}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      padding: '2px 4px',
+                                      background: 'transparent',
+                                      border: 'none',
+                                      borderRadius: 4,
+                                      cursor: 'pointer',
+                                      fontSize: 11,
+                                      fontWeight: 500,
+                                      color: 'var(--qa-text-3, #6b7280)',
+                                    }}
+                                  >
+                                    <svg
+                                      width="10"
+                                      height="10"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      style={{
+                                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                        transition: 'transform 0.15s ease',
+                                      }}
+                                    >
+                                      <polyline points="6 9 12 15 18 9" />
+                                    </svg>
+                                    <span>{isOpen ? 'Hide reason' : 'Show reason'}</span>
+                                  </button>
+                                </div>
+
+                                {isOpen && (
+                                  isReadOnly ? (
+                                    item.reasoning ? (
+                                      <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4, padding: '4px 6px', background: 'var(--qa-card, #fff)', borderRadius: 4, border: '1px solid var(--qa-border-sub)' }}>
+                                        {item.reasoning}
+                                      </div>
+                                    ) : null
+                                  ) : (
+                                    <AutoTextarea
+                                      value={item.reasoning}
+                                      onChange={e => handleReasoningChange(p, e.target.value)}
+                                      placeholder={`Reasoning or transcript quote for ${def.name}…`}
+                                      style={{
+                                        width: '100%',
+                                        minHeight: 36,
+                                        fontSize: 11,
+                                        border: '1px solid var(--qa-border)',
+                                        borderRadius: 6,
+                                        padding: '6px 8px',
+                                        outline: 'none',
+                                        resize: 'vertical',
+                                        fontFamily: 'inherit',
+                                        marginTop: 4,
+                                      }}
+                                    />
+                                  )
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       );
                     })}
@@ -1725,50 +2232,109 @@ export default function CallEvalPanel({
                         </div>
                       )}
 
-                      {isReadOnly ? (
-                        item.reasoning ? (
-                          <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4 }}>{item.reasoning}</div>
-                        ) : null
-                      ) : (
-                        <AutoTextarea
-                          value={item.reasoning}
-                          onChange={e => handleReasoningChange(p, e.target.value)}
-                          placeholder="Reasoning for this parameter score…"
-                          style={{
-                            width: '100%',
-                            minHeight: 36,
-                            fontSize: 11,
-                            border: '1px solid var(--qa-border)',
-                            borderRadius: 6,
-                            padding: '6px 8px',
-                            outline: 'none',
-                            resize: 'vertical',
-                            fontFamily: 'inherit',
-                            marginTop: 4,
-                          }}
-                        />
-                      )}
+                      {/* Dropdown toggle for reasoning: default open for No & Partial, closed for Yes & NA */}
+                      {(() => {
+                        const isOpen = isReasonOpen(p, item.score);
+                        const hasReasonContent = Boolean(item.reasoning && item.reasoning.trim());
+                        if (isReadOnly && !hasReasonContent) return null;
+
+                        return (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', marginTop: 4 }}>
+                              <button
+                                type="button"
+                                onClick={() => toggleParamReason(p, item.score)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '2px 4px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  borderRadius: 4,
+                                  cursor: 'pointer',
+                                  fontSize: 11,
+                                  fontWeight: 500,
+                                  color: 'var(--qa-text-3, #6b7280)',
+                                }}
+                              >
+                                <svg
+                                  width="10"
+                                  height="10"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  style={{
+                                    transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.15s ease',
+                                  }}
+                                >
+                                  <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                                <span>{isOpen ? 'Hide reason' : 'Show reason'}</span>
+                              </button>
+                            </div>
+
+                            {isOpen && (
+                              isReadOnly ? (
+                                item.reasoning ? (
+                                  <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4, padding: '4px 6px', background: 'var(--qa-card, #fff)', borderRadius: 4, border: '1px solid var(--qa-border-sub)' }}>
+                                    {item.reasoning}
+                                  </div>
+                                ) : null
+                              ) : (
+                                <AutoTextarea
+                                  value={item.reasoning}
+                                  onChange={e => handleReasoningChange(p, e.target.value)}
+                                  placeholder="Reasoning for this parameter score…"
+                                  style={{
+                                    width: '100%',
+                                    minHeight: 36,
+                                    fontSize: 11,
+                                    border: '1px solid var(--qa-border)',
+                                    borderRadius: 6,
+                                    padding: '6px 8px',
+                                    outline: 'none',
+                                    resize: 'vertical',
+                                    fontFamily: 'inherit',
+                                    marginTop: 4,
+                                  }}
+                                />
+                              )
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   );
                 })
               )}
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* Sticky commit footer: submit evaluation override */}
-          {!isReadOnly && (
-            <div className="eval-foot" style={{ padding: '12px 16px' }}>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={handleSubmitOverride}
-                className="eval-submit"
-                style={{ width: '100%' }}
-              >
-                {saving ? 'Saving…' : (isReviewMode ? 'Resolve Dispute & Submit Review' : 'Submit Evaluation Override')}
-              </button>
-            </div>
-          )}
+            {/* Submit evaluation override button placed directly below the 3 sections */}
+            {!isReadOnly && (
+              <div style={{ marginTop: 0 }}>
+                <button
+                  type="button"
+                  disabled={saving || (isQA && !auditSelection)}
+                  onClick={handleSubmitOverride}
+                  className="eval-submit"
+                  style={{
+                    width: '100%',
+                    opacity: saving || (isQA && !auditSelection) ? 0.45 : 1,
+                    cursor: saving || (isQA && !auditSelection) ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {saving ? 'Saving…' : (isReviewMode ? 'Resolve Dispute & Submit Review' : 'Submit Evaluation Override')}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>

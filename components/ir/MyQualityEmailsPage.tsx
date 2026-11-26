@@ -100,7 +100,13 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   );
 }
 
-export default function MyQualityEmailsPage({ agentName }: { agentName: string }) {
+interface Props {
+  agentName: string;
+  initialTab?: 'evaluated' | 'disputes' | 'reviewed';
+  mode?: 'all' | 'evaluated-only' | 'disputes-only';
+}
+
+export default function MyQualityEmailsPage({ agentName, initialTab = 'evaluated', mode = 'all' }: Props) {
   const emailParams = useEmailParameters();
   const [items, setItems] = useState<EvaluationItem[]>([]);
   const [summary, setSummary] = useState<SummaryStats | null>(null);
@@ -109,7 +115,14 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
   const [historyOpen, setHistoryOpen] = useState(false);
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>('evaluated');
+  const defaultTab = mode === 'disputes-only' ? 'disputes' : 'evaluated';
+  const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>(
+    mode === 'evaluated-only'
+      ? 'evaluated'
+      : (mode === 'disputes-only' && initialTab === 'evaluated')
+        ? 'disputes'
+        : initialTab
+  );
 
   // Filters
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
@@ -318,127 +331,49 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
       {/* ── Page Header ── */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
-          My Quality Emails
+          {mode === 'disputes-only' ? 'Email Disputes' : 'My Quality Emails'}
         </h1>
       </div>
 
       {/* ── Tabs & Interaction Bar (Exact match with MyQualityChatsPage) ── */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 20,
-          flexWrap: 'wrap',
-          gap: 16,
-        }}
-      >
-        {/* Tab Buttons */}
+      {mode !== 'evaluated-only' && (
         <div
           style={{
             display: 'flex',
-            gap: 4,
-            borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 20,
+            flexWrap: 'wrap',
+            gap: 16,
           }}
         >
-          <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
-            Evaluated Emails
-            <CountBadge count={evaluatedItems.length} active={activeTab === 'evaluated'} />
-          </button>
-          <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
-            Disputes Raised
-            <CountBadge count={disputesRaisedItems.length} active={activeTab === 'disputes'} />
-          </button>
-          <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
-            Reviewed Disputes
-            <CountBadge count={reviewedDisputesItems.length} active={activeTab === 'reviewed'} />
-          </button>
-        </div>
-
-      </div>
-
-      {/* ── KPI Cards (Evaluated tab, between the tabs and the table) ── */}
-      {activeTab === 'evaluated' && summary && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+          {/* Tab Buttons */}
           <div
             style={{
-              background: 'var(--qa-card, #FFFFFF)',
-              border: '1px solid var(--qa-border, var(--qa-border))',
-              borderRadius: 8,
-              padding: 20,
+              display: 'flex',
+              gap: 4,
+              borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
             }}
           >
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))', fontWeight: 500 }}>
-              My Quality Average
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--qa-text)', marginTop: 6, fontFamily: MONO }}>
-              {summary.avgScore ? `${summary.avgScore}%` : 'N/A'}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', marginTop: 4 }}>
-              Target: 85%+
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--qa-card, #FFFFFF)',
-              border: '1px solid var(--qa-border, var(--qa-border))',
-              borderRadius: 8,
-              padding: 20,
-            }}
-          >
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))', fontWeight: 500 }}>
-              Evaluated Replies
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--qa-text)', marginTop: 6, fontFamily: MONO }}>
-              {summary.completedCount}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', marginTop: 4 }}>
-              Batch processed
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--qa-card, #FFFFFF)',
-              border: '1px solid var(--qa-border, var(--qa-border))',
-              borderRadius: 8,
-              padding: 20,
-            }}
-          >
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))', fontWeight: 500 }}>
-              Compliance Rate
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#166534', marginTop: 6, fontFamily: MONO }}>
-              {summary.completedCount > 0
-                ? `${Math.round(((summary.completedCount - summary.complianceBreachCount) / summary.completedCount) * 100)}%`
-                : '100%'}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', marginTop: 4 }}>
-              Zero regulatory breaches
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--qa-card, #FFFFFF)',
-              border: '1px solid var(--qa-border, var(--qa-border))',
-              borderRadius: 8,
-              padding: 20,
-            }}
-          >
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))', fontWeight: 500 }}>
-              Active Disputes
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#6b21a8', marginTop: 6, fontFamily: MONO }}>
-              {summary.activeDisputesCount}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', marginTop: 4 }}>
-              Awaiting QA arbitration
-            </div>
+            {mode === 'all' && (
+              <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
+                Evaluated Emails
+                <CountBadge count={evaluatedItems.length} active={activeTab === 'evaluated'} />
+              </button>
+            )}
+            <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
+              Disputes Raised
+              <CountBadge count={disputesRaisedItems.length} active={activeTab === 'disputes'} />
+            </button>
+            <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
+              Reviewed Disputes
+              <CountBadge count={reviewedDisputesItems.length} active={activeTab === 'reviewed'} />
+            </button>
           </div>
         </div>
       )}
+
+
 
 
       {/* ── Table Container Card ── */}
@@ -824,8 +759,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                                 ? item.dispute_status !== 'Rejected' ? '#f0fdf4' : '#fef2f2'
                                                 : '#fefce8',
                                               border: `1px solid ${isReviewedDispute
-                                                  ? item.dispute_status !== 'Rejected' ? '#bbf7d0' : '#fecaca'
-                                                  : '#fef08a'
+                                                ? item.dispute_status !== 'Rejected' ? '#bbf7d0' : '#fecaca'
+                                                : '#fef08a'
                                                 }`,
                                               borderRadius: 8,
                                               padding: '12px 14px',

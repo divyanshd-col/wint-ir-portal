@@ -42,12 +42,13 @@ export async function GET(req: NextRequest) {
   const period  = searchParams.get('period') ?? '7';
   const { dateFrom, dateTo } = getDateRange(period, searchParams.get('from'), searchParams.get('to'));
 
-  // ── Resolve agent ─────────────────────────────────────────────────────────────
+  const requestedTL = searchParams.get('tl')?.trim();
   let tlAgentNames: string[];
   if (role === 'tl') {
-    let tlAgentName = dbUser?.name || configUser?.agentName;
-    if (!tlAgentName) tlAgentName = email;
+    const tlAgentName = dbUser?.name || configUser?.agentName || email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
+  } else if (role === 'admin' && requestedTL) {
+    tlAgentNames = await getAgentNamesByTL(requestedTL);
   } else if (role === 'agent') {
     let selfAgentName = dbUser?.name || configUser?.agentName;
     if (!selfAgentName && email) selfAgentName = email.split('@')[0];
@@ -57,15 +58,21 @@ export async function GET(req: NextRequest) {
     tlAgentNames = rows.map(r => r.name).sort();
   }
 
-  const requestedAgent = searchParams.get('agent');
+  const requestedAgent = searchParams.get('agent')?.trim();
   let agentName: string;
   if (role === 'agent') {
     agentName = tlAgentNames[0];
-  } else {
-    if (!requestedAgent || !tlAgentNames.includes(requestedAgent)) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+  } else if (requestedAgent) {
+    const match = tlAgentNames.find(n => n.toLowerCase().trim() === requestedAgent.toLowerCase());
+    if (match) {
+      agentName = match;
+    } else if (role === 'admin') {
+      agentName = requestedAgent;
+    } else {
+      return NextResponse.json({ error: 'Forbidden: agent not mapped to your team' }, { status: 403 });
     }
-    agentName = requestedAgent;
+  } else {
+    agentName = tlAgentNames[0];
   }
 
   // ── Fetch data for prompt ─────────────────────────────────────────────────────
@@ -94,7 +101,7 @@ export async function GET(req: NextRequest) {
         ${CHAT_PARAM_LATERAL}
         WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
           AND a.name = $3 AND s.parameters IS NOT NULL
-        GROUP BY p.key
+        GROUP BY 1
       `, [dateFrom, dateTo, agentName]),
 
       query<{ disposition: string; volume: number; iqs: number|null; parameters: any }>(`
@@ -138,7 +145,7 @@ export async function GET(req: NextRequest) {
         ${CALL_PARAM_LATERAL}
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
           AND a.name = $3 AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
-        GROUP BY p.key
+        GROUP BY 1
       `, [dateFrom, dateTo, agentName]),
 
       query<{ disposition: string; volume: number; iqs: number|null }>(`

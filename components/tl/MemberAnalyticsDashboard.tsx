@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 import DropdownSearch, { matchesSearch } from '@/components/shell/DropdownSearch';
@@ -13,13 +13,15 @@ interface WowWeek { week_start: string; csat_pct: number | null; iqs: number | n
 
 interface CatSub {
   sub_disposition: string;
-  chats_iqs: number | null; chats_volume: number; chats_resolution_seconds: number | null;
-  calls_iqs: number | null; calls_volume: number;
+  chats_iqs: number | null; chats_csat_pct: number | null; chats_volume: number; chats_resolution_seconds: number | null;
+  calls_iqs: number | null; calls_csat_pct: number | null; calls_volume: number;
+  emails_iqs: number | null; emails_csat_pct: number | null; emails_volume: number;
 }
 interface CatRow {
   disposition: string;
-  chats_iqs: number | null; chats_volume: number; chats_resolution_seconds: number | null;
-  calls_iqs: number | null; calls_volume: number;
+  chats_iqs: number | null; chats_csat_pct: number | null; chats_volume: number; chats_resolution_seconds: number | null;
+  calls_iqs: number | null; calls_csat_pct: number | null; calls_volume: number;
+  emails_iqs: number | null; emails_csat_pct: number | null; emails_volume: number;
   subs: CatSub[];
 }
 interface ChannelData { stats: StatValues; categories: CatRow[]; wow: WowWeek[]; }
@@ -30,7 +32,6 @@ interface MemberData {
   cxAverage?: { chats: CxAvg | null; calls: CxAvg | null; emails: CxAvg | null };
 }
 interface CxAvg { csat_pct: number | null; iqs: number | null; volume: number | null; }
-interface AiResult { summary: string; items: Array<{ type: string; text: string }>; }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const PERIOD_LABELS: Record<Period, string> = { '7': '7 days', '30': '30 days', custom: '' };
@@ -110,7 +111,12 @@ function Panel({ children, style }: { children: React.ReactNode; style?: React.C
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function MemberAnalyticsDashboard() {
+interface MemberAnalyticsDashboardProps {
+  tlName?: string;
+  initialAgent?: string;
+}
+
+export default function MemberAnalyticsDashboard({ tlName, initialAgent }: MemberAnalyticsDashboardProps = {}) {
   const searchParams = useSearchParams();
   const urlAgent = searchParams?.get('agent')?.trim() || '';
   const urlChannel = searchParams?.get('channel')?.trim() || '';
@@ -119,33 +125,33 @@ export default function MemberAnalyticsDashboard() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState(() => urlAgent);
+  const [selectedAgent, setSelectedAgent] = useState(() => initialAgent || urlAgent);
   const [agents, setAgents] = useState<string[]>([]);
   const [data, setData] = useState<MemberData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [wowChannel, setWowChannel] = useState<'chats' | 'calls'>(() => (urlChannel === 'calls' ? 'calls' : 'chats'));
+  const [wowChannel, setWowChannel] = useState<'chats' | 'calls' | 'emails'>(() =>
+    urlChannel === 'calls' ? 'calls' : urlChannel === 'emails' ? 'emails' : 'chats'
+  );
   const [wowTab, setWowTab] = useState<'metrics' | 'params'>('metrics');
   const [showAgentDrop, setShowAgentDrop] = useState(false);
   const [agentSearch, setAgentSearch] = useState('');
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
-  const [aiStates, setAiStates] = useState<Record<string, 'empty' | 'loading' | 'insights'>>({ chats: 'empty', calls: 'empty' });
-  const [aiResults, setAiResults] = useState<Record<string, AiResult | null>>({ chats: null, calls: null });
-  const [aiChannel, setAiChannel] = useState<'chats' | 'calls'>(() => (urlChannel === 'calls' ? 'calls' : 'chats'));
 
   const agentDropRef = useRef<HTMLDivElement>(null);
+  const lastFetchedKeyRef = useRef<string>('');
 
-  // Sync state if URL query params change
+  // Sync state if initialAgent or URL query params change
   useEffect(() => {
-    if (urlAgent && urlAgent !== selectedAgent) {
-      setSelectedAgent(urlAgent);
+    const target = initialAgent || urlAgent;
+    if (target && target !== selectedAgent) {
+      setSelectedAgent(target);
       setExpandedCats(new Set());
     }
-  }, [urlAgent]);
+  }, [initialAgent, urlAgent]);
 
   useEffect(() => {
-    if (urlChannel === 'calls' || urlChannel === 'chats') {
+    if (urlChannel === 'calls' || urlChannel === 'chats' || urlChannel === 'emails') {
       setWowChannel(urlChannel);
-      setAiChannel(urlChannel);
     }
   }, [urlChannel]);
 
@@ -153,11 +159,17 @@ export default function MemberAnalyticsDashboard() {
   useEffect(() => {
     if (period === 'custom' && (!customFrom || !customTo)) return;
 
+    const targetAgent = selectedAgent || urlAgent;
+    const currentKey = `${targetAgent || ''}_${tlName || ''}_${period}_${customFrom}_${customTo}`;
+    if (lastFetchedKeyRef.current === currentKey && data) {
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     const qs = new URLSearchParams({ period });
-    const targetAgent = selectedAgent || urlAgent;
     if (targetAgent) qs.set('agent', targetAgent);
+    if (tlName) qs.set('tl', tlName);
     if (period === 'custom' && customFrom && customTo) { qs.set('from', customFrom); qs.set('to', customTo); }
 
     fetch(`/api/cx/tl/member-analytics?${qs}`)
@@ -175,8 +187,15 @@ export default function MemberAnalyticsDashboard() {
           return;
         }
         setData(json);
-        if (json.agents?.length) setAgents(json.agents);
-        if (!selectedAgent && !urlAgent && json.agentName) {
+        lastFetchedKeyRef.current = `${json.agentName || targetAgent || ''}_${tlName || ''}_${period}_${customFrom}_${customTo}`;
+        if (json.agents?.length) {
+          setAgents(json.agents);
+          // If currently selectedAgent is not in the TL's mapped agents, sync to json.agentName
+          if (selectedAgent && !json.agents.some(a => a.toLowerCase().trim() === selectedAgent.toLowerCase().trim())) {
+            setSelectedAgent(json.agentName);
+          }
+        }
+        if (!selectedAgent && json.agentName) {
           setSelectedAgent(json.agentName);
         }
         setLoading(false);
@@ -187,7 +206,7 @@ export default function MemberAnalyticsDashboard() {
       });
 
     return () => { cancelled = true; };
-  }, [selectedAgent, urlAgent, period, customFrom, customTo]);
+  }, [selectedAgent, urlAgent, tlName, period, customFrom, customTo]);
 
   // ── Click outside agent dropdown ───────────────────────────────────────────────
   useEffect(() => {
@@ -199,12 +218,6 @@ export default function MemberAnalyticsDashboard() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-
-  // ── Reset AI state when agent or period changes ───────────────────────────────
-  useEffect(() => {
-    setAiStates({ chats: 'empty', calls: 'empty' });
-    setAiResults({ chats: null, calls: null });
-  }, [selectedAgent, period, customFrom, customTo]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
   const handlePeriod = (p: Period) => {
@@ -238,26 +251,11 @@ export default function MemberAnalyticsDashboard() {
     });
   };
 
-  const handleGenerateAI = useCallback(async () => {
-    setAiStates(prev => ({ ...prev, [aiChannel]: 'loading' }));
-    const qs = new URLSearchParams({ channel: aiChannel, period, agent: selectedAgent });
-    if (period === 'custom' && customFrom && customTo) { qs.set('from', customFrom); qs.set('to', customTo); }
-    try {
-      const res = await fetch(`/api/cx/tl/member-analytics/ai?${qs}`);
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setAiResults(prev => ({ ...prev, [aiChannel]: json }));
-      setAiStates(prev => ({ ...prev, [aiChannel]: 'insights' }));
-    } catch (err) {
-      console.error(err);
-      setAiStates(prev => ({ ...prev, [aiChannel]: 'empty' }));
-    }
-  }, [aiChannel, period, selectedAgent, customFrom, customTo]);
-
   // ── Derived data ───────────────────────────────────────────────────────────────
   const chats = data?.channels?.chats;
   const calls = data?.channels?.calls;
-  const wowData = (wowChannel === 'chats' ? chats : calls)?.wow ?? [];
+  const emails = data?.channels?.emails;
+  const wowData = (wowChannel === 'chats' ? chats : wowChannel === 'calls' ? calls : emails)?.wow ?? [];
   const wowWeeks = data?.wowWeekStarts ?? [];
   const categories = chats?.categories ?? [];
 
@@ -426,26 +424,6 @@ export default function MemberAnalyticsDashboard() {
                 ))}
               </div>
             )}
-            {!loading && (() => {
-              const avg = data?.cxAverage?.[label.toLowerCase() as 'chats' | 'calls' | 'emails'];
-              return (
-                <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--qa-border-sub)' }}>
-                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>CX average</div>
-                  <div style={{ display: 'flex', gap: 24 }}>
-                    {[
-                      { cap: 'CSAT', val: avg ? fmtPct(avg.csat_pct) : '—' },
-                      { cap: 'IQS', val: avg ? fmtPct(avg.iqs) : '—' },
-                      { cap: 'Volume / agent', val: avg?.volume != null ? fmtVol(avg.volume) : '—' },
-                    ].map(item => (
-                      <div key={item.cap} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--qa-text-2)', fontVariantNumeric: 'tabular-nums' }}>{item.val}</span>
-                        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>{item.cap}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
           </div>
         ))}
       </div>
@@ -468,17 +446,17 @@ export default function MemberAnalyticsDashboard() {
                 <tr>
                   <th colSpan={1} style={{ height: 28, background: 'var(--qa-bg)', borderBottom: 0, padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'left', position: 'sticky', top: 0, zIndex: 3 }} />
                   <th colSpan={3} style={{ height: 28, background: 'var(--qa-bg)', borderBottom: '1px solid var(--qa-border-sub)', padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'center', position: 'sticky', top: 0, zIndex: 3 }}>IQS</th>
-                  <th style={{ height: 28, background: 'var(--qa-bg)', borderBottom: 0, padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'right', position: 'sticky', top: 0, zIndex: 3 }} />
+                  <th colSpan={3} style={{ height: 28, background: 'var(--qa-bg)', borderBottom: '1px solid var(--qa-border-sub)', padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'center', position: 'sticky', top: 0, zIndex: 3 }}>CSAT</th>
                 </tr>
                 <tr>
-                  {['Category', 'Chats', 'Calls', 'Emails', 'Chat Resolution'].map((h, i) => (
-                    <th key={h} style={{
+                  {['Category', 'Chats', 'Calls', 'Emails', 'Chats', 'Calls', 'Emails'].map((h, i) => (
+                    <th key={`${h}-${i}`} style={{
                       height: 34, background: 'var(--qa-bg)', borderBottom: '1px solid var(--qa-border)',
                       fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em',
                       color: 'var(--qa-text-2)', fontWeight: 500, whiteSpace: 'nowrap',
                       padding: '0 16px', textAlign: i > 0 ? 'right' : 'left',
                       position: 'sticky', top: 28, zIndex: 2,
-                      width: i === 0 ? '34%' : undefined,
+                      width: i === 0 ? '28%' : undefined,
                     }}>{h}</th>
                   ))}
                 </tr>
@@ -487,7 +465,7 @@ export default function MemberAnalyticsDashboard() {
                 {loading ? (
                   Array.from({ length: 4 }).map((_, i) => (
                     <tr key={i}>
-                      {[34, 60, 60, 40, 80].map((w, j) => (
+                      {[34, 60, 60, 60, 60, 60, 60].map((w, j) => (
                         <td key={j} style={{ height: 46, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)' }}>
                           <Skeleton w={w} h={14} />
                         </td>
@@ -495,7 +473,7 @@ export default function MemberAnalyticsDashboard() {
                     </tr>
                   ))
                 ) : categories.length === 0 ? (
-                  <tr><td colSpan={5} style={{ height: 80, textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13 }}>No category data for this period</td></tr>
+                  <tr><td colSpan={7} style={{ height: 80, textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13 }}>No category data for this period</td></tr>
                 ) : (
                   categories.map(cat => {
                     const open = expandedCats.has(cat.disposition);
@@ -526,9 +504,17 @@ export default function MemberAnalyticsDashboard() {
                           <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: cat.calls_iqs == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
                             {fmtPct(cat.calls_iqs)}
                           </td>
-                          <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4)' }}>—</td>
-                          <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: cat.chats_resolution_seconds == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
-                            {fmtResolution(cat.chats_resolution_seconds)}
+                          <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: cat.emails_iqs == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
+                            {fmtPct(cat.emails_iqs)}
+                          </td>
+                          <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: cat.chats_csat_pct == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
+                            {fmtPct(cat.chats_csat_pct)}
+                          </td>
+                          <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: cat.calls_csat_pct == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
+                            {fmtPct(cat.calls_csat_pct)}
+                          </td>
+                          <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: cat.emails_csat_pct == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
+                            {fmtPct(cat.emails_csat_pct)}
                           </td>
                         </tr>
                         {open && cat.subs.map(sub => (
@@ -545,9 +531,17 @@ export default function MemberAnalyticsDashboard() {
                             <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: sub.calls_iqs == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
                               {fmtPct(sub.calls_iqs)}
                             </td>
-                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4)' }}>—</td>
-                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: sub.chats_resolution_seconds == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
-                              {fmtResolution(sub.chats_resolution_seconds)}
+                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: sub.emails_iqs == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
+                              {fmtPct(sub.emails_iqs)}
+                            </td>
+                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: sub.chats_csat_pct == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
+                              {fmtPct(sub.chats_csat_pct)}
+                            </td>
+                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: sub.calls_csat_pct == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
+                              {fmtPct(sub.calls_csat_pct)}
+                            </td>
+                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)', textAlign: 'right', fontFamily: 'var(--qa-mono, ui-monospace, monospace)', fontSize: 13, color: sub.emails_csat_pct == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
+                              {fmtPct(sub.emails_csat_pct)}
                             </td>
                           </tr>
                         ))}
@@ -589,14 +583,14 @@ export default function MemberAnalyticsDashboard() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>Channel</span>
               <div style={{ display: 'inline-flex', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
-                {(['chats', 'calls'] as const).map(ch => (
+                {(['chats', 'calls', 'emails'] as const).map((ch, idx) => (
                   <button key={ch} onClick={() => setWowChannel(ch)} style={{
                     height: 30, padding: '0 13px', background: wowChannel === ch ? 'var(--qa-text)' : 'transparent',
-                    border: 0, borderRight: ch === 'chats' ? '1px solid var(--qa-border)' : 'none',
+                    border: 0, borderRight: idx < 2 ? '1px solid var(--qa-border)' : 'none',
                     fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
                     color: wowChannel === ch ? '#fff' : 'var(--qa-text-2)',
                     fontWeight: wowChannel === ch ? 500 : 400,
-                  }}>{ch === 'chats' ? 'Chats' : 'Calls'}</button>
+                  }}>{ch === 'chats' ? 'Chats' : ch === 'calls' ? 'Calls' : 'Emails'}</button>
                 ))}
               </div>
             </div>
@@ -669,6 +663,12 @@ export default function MemberAnalyticsDashboard() {
                         ))}
                       </tr>
                     ))
+                  ) : wowChannel === 'emails' ? (
+                    <tr>
+                      <td colSpan={(wowWeeks.length || 5) + 1} style={{ height: 80, textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13 }}>
+                        No parameter data for emails in this period.
+                      </td>
+                    </tr>
                   ) : (
                     (wowChannel === 'calls' ? CALL_PARAM_DEFS : CHAT_PARAM_DEFS).map(param => (
                       <tr key={param.key}>
@@ -691,107 +691,6 @@ export default function MemberAnalyticsDashboard() {
           )}
         </Panel>
       </section>
-
-      {/* ── Section 4: AI Analysis ── */}
-      <section style={{ marginBottom: 32 }}>
-        <div style={{ marginBottom: 12 }}>
-          <SectionTitle>AI Analysis</SectionTitle>
-        </div>
-        <div style={{ background: 'var(--qa-bg)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>AI Analysis</h3>
-            <button
-              onClick={handleGenerateAI}
-              disabled={aiStates[aiChannel] === 'loading' || !selectedAgent}
-              style={{
-                height: 36, padding: '0 16px', borderRadius: 8, fontFamily: 'inherit', fontSize: 13,
-                fontWeight: 500, cursor: aiStates[aiChannel] === 'loading' || !selectedAgent ? 'not-allowed' : 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid var(--qa-text)',
-                background: aiStates[aiChannel] === 'loading' || !selectedAgent ? 'var(--qa-fill-med)' : 'var(--qa-text)',
-                color: aiStates[aiChannel] === 'loading' || !selectedAgent ? 'var(--qa-text-3)' : '#fff',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
-              </svg>
-              {aiStates[aiChannel] === 'insights' ? 'Regenerate' : 'Generate Analysis'}
-            </button>
-          </div>
-
-          {/* AI Channel tabs */}
-          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--qa-border)', marginBottom: 20 }}>
-            {(['chats', 'calls'] as const).map(ch => (
-              <button key={ch} onClick={() => setAiChannel(ch)} style={{
-                height: 36, padding: '0 14px', background: 'transparent', border: 0,
-                fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
-                color: aiChannel === ch ? 'var(--qa-text)' : 'var(--qa-text-2)',
-                fontWeight: aiChannel === ch ? 600 : 400,
-                borderBottom: aiChannel === ch ? '2px solid var(--qa-text)' : '2px solid transparent',
-                marginBottom: -1,
-              }}>{ch === 'chats' ? 'Chats' : 'Calls'}</button>
-            ))}
-            <button disabled style={{
-              height: 36, padding: '0 14px', background: 'transparent', border: 0,
-              fontSize: 13, fontFamily: 'inherit', cursor: 'not-allowed',
-              color: 'var(--qa-text-4)', borderBottom: '2px solid transparent', marginBottom: -1,
-            }} title="Coming soon">Emails</button>
-          </div>
-
-          {/* Loading state */}
-          {aiStates[aiChannel] === 'loading' && (
-            <div style={{ minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--qa-text-2)', fontSize: 13 }}>
-              <div style={{
-                width: 16, height: 16, border: '2px solid var(--qa-fill-med)', borderTopColor: 'var(--qa-text)',
-                borderRadius: '50%', animation: 'spin 0.7s linear infinite',
-              }} />
-              Analysing {aiChannel}…
-            </div>
-          )}
-
-          {/* Empty state */}
-          {aiStates[aiChannel] === 'empty' && (
-            <div style={{ minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center' }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--qa-text-4)" stroke="none">
-                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
-              </svg>
-              <p style={{ fontSize: 13, color: 'var(--qa-text-3)', margin: 0, maxWidth: 340 }}>
-                Click <strong>Generate Analysis</strong> to get AI-powered performance insights.
-              </p>
-            </div>
-          )}
-
-          {/* Insights */}
-          {aiStates[aiChannel] === 'insights' && aiResults[aiChannel] && (
-            <div>
-              <p style={{ fontSize: 14, color: 'var(--qa-text)', lineHeight: 1.6, margin: '0 0 18px', maxWidth: 760 }}>
-                {aiResults[aiChannel]!.summary}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {aiResults[aiChannel]!.items.map((item, i) => (
-                  <div key={i} style={{
-                    display: 'flex', gap: 12, padding: '14px 16px',
-                    background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
-                  }}>
-                    <span style={{
-                      flexShrink: 0, height: 20, padding: '0 8px', borderRadius: 999,
-                      fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
-                      display: 'inline-flex', alignItems: 'center',
-                      background: item.type === 'strength' ? 'var(--qa-text)' : item.type === 'watch' ? 'var(--qa-fill-med)' : 'transparent',
-                      color: item.type === 'strength' ? '#fff' : 'var(--qa-text)',
-                      border: item.type === 'tip' ? '1px solid var(--qa-border)' : 'none',
-                    }}>
-                      {item.type === 'strength' ? 'Strength' : item.type === 'watch' ? 'Watch' : 'Tip'}
-                    </span>
-                    <span style={{ fontSize: 13, color: 'var(--qa-text)', lineHeight: 1.5 }}>{item.text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
