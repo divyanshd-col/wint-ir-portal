@@ -1,14 +1,56 @@
 // Requires POSTGRES_URL or POSTGRES_URL_NON_POOLING env var (Vercel / Neon).
 // For Neon serverless, non-pooling connection is more reliable than PgBouncer pooled URL.
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
+import dns from 'dns';
 import { log } from '@/lib/log';
+
+// Resilient DNS resolution fallback: if local ISP / hotspot DNS refuses neon.tech, fallback to 8.8.8.8 / 1.1.1.1
+if (typeof globalThis !== 'undefined' && !(globalThis as any)._neon_dns_installed) {
+  (globalThis as any)._neon_dns_installed = true;
+  const { Resolver } = dns;
+  const fallbackResolver = new Resolver();
+  fallbackResolver.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+
+  const origLookup = dns.lookup;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (dns as any).lookup = function (hostname: string, options: any, callback?: any) {
+    let cb = callback;
+    let opt = options;
+    if (typeof options === 'function') {
+      cb = options;
+      opt = {};
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    origLookup(hostname, opt, (err: any, address: any, family: any) => {
+      if (!err && address) {
+        return cb(null, address, family);
+      }
+      if (hostname && (hostname.includes('neon.tech') || hostname.includes('aws.'))) {
+        fallbackResolver.resolve4(hostname, (rErr, addresses) => {
+          if (!rErr && addresses && addresses.length) {
+            if (opt && opt.all) {
+              return cb(null, addresses.map((a) => ({ address: a, family: 4 })));
+            }
+            return cb(null, addresses[0], 4);
+          }
+          cb(err || rErr);
+        });
+      } else {
+        cb(err, address, family);
+      }
+    });
+  };
+}
 
 const SLOW_QUERY_MS = 500;
 
-let pool: Pool | null = null;
+declare global {
+  // eslint-disable-next-line no-var
+  var _cx_db_pool: Pool | undefined;
+}
 
 export function getPool(): Pool {
-  if (!pool) {
+  if (!globalThis._cx_db_pool) {
     // Prefer non-pooling URL for serverless (avoids PgBouncer transaction-mode issues)
     const connectionString =
       process.env.POSTGRES_URL_NON_POOLING ||
@@ -18,25 +60,52 @@ export function getPool(): Pool {
       throw new Error('Missing POSTGRES_URL or POSTGRES_URL_NON_POOLING environment variable');
     }
 
-    pool = new Pool({
+    const newPool = new Pool({
       connectionString,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
       max: 10,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      connectionTimeoutMillis: 15000,
     });
 
-    pool.on('error', (err) => {
-      console.error('[db] Unexpected pool error:', err.message);
-      pool = null; // force re-creation on next call
+    newPool.on('connect', (client) => {
+      client.on('error', () => {
+        // Prevent idle client disconnection from bubbling as uncaughtException
+      });
     });
+
+    newPool.on('error', (err) => {
+      console.warn('[db] Pool error:', err.message);
+      globalThis._cx_db_pool = undefined;
+    });
+
+    globalThis._cx_db_pool = newPool;
   }
-  return pool;
+  return globalThis._cx_db_pool;
+}
+
+async function connectWithRetry(): Promise<PoolClient> {
+  try {
+    return await getPool().connect();
+  } catch (err) {
+    console.warn('[db] Connection attempt 1 failed, retrying in 300ms:', (err as Error)?.message);
+    await new Promise((r) => setTimeout(r, 300));
+    try {
+      return await getPool().connect();
+    } catch (err2) {
+      console.warn('[db] Connection attempt 2 failed, recycling pool:', (err2 as Error)?.message);
+      if (globalThis._cx_db_pool) {
+        try { await globalThis._cx_db_pool.end(); } catch {}
+        globalThis._cx_db_pool = undefined;
+      }
+      return await getPool().connect();
+    }
+  }
 }
 
 export async function query<T = any>(sql: string, params?: any[]): Promise<T[]> {
   const t0 = Date.now();
-  const client = await getPool().connect();
+  const client = await connectWithRetry();
   try {
     const result = await client.query(sql, params);
     const ms = Date.now() - t0;
@@ -61,7 +130,7 @@ export interface TxClient {
  * that must not partially apply (e.g. user creation + audit write).
  */
 export async function withTransaction<T>(fn: (tx: TxClient) => Promise<T>): Promise<T> {
-  const client = await getPool().connect();
+  const client = await connectWithRetry();
   try {
     await client.query('BEGIN');
     const tx: TxClient = {
@@ -73,6 +142,22 @@ export async function withTransaction<T>(fn: (tx: TxClient) => Promise<T>): Prom
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Runs `fn` using a single leased client from the pool.
+ * Prevents connection pool starvation when executing multiple queries.
+ */
+export async function withClient<T>(fn: (db: TxClient) => Promise<T>): Promise<T> {
+  const client = await connectWithRetry();
+  try {
+    const db: TxClient = {
+      query: async (sql, params) => (await client.query(sql, params)).rows,
+    };
+    return await fn(db);
   } finally {
     client.release();
   }

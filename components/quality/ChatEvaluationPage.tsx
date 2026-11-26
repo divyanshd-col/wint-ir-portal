@@ -12,9 +12,10 @@ type Tab = 'pending' | 'disputes' | 'reviewed' | 'unscored';
 
 interface Props {
   role?: string;
+  hideDisputes?: boolean;
 }
 
-export default function ChatEvaluationPage({ role }: Props) {
+export default function ChatEvaluationPage({ role, hideDisputes = false }: Props) {
   const searchParams = useSearchParams();
   const targetChatId = searchParams.get('chatId') || searchParams.get('chat_id') || '';
   const initialTabParam = searchParams.get('tab') as Tab | null;
@@ -26,7 +27,7 @@ export default function ChatEvaluationPage({ role }: Props) {
   const [unscoredCount,  setUnscoredCount]  = useState<number | null>(null);
   const [loadingDisp,    setLoadingDisp]    = useState(true);
   const [tab,            setTab]            = useState<Tab>(
-    initialTabParam && ['pending', 'disputes', 'reviewed', 'unscored'].includes(initialTabParam)
+    initialTabParam && ['pending', 'disputes', 'reviewed', 'unscored'].includes(initialTabParam) && !(hideDisputes && initialTabParam === 'disputes')
       ? initialTabParam
       : 'pending'
   );
@@ -93,10 +94,12 @@ export default function ChatEvaluationPage({ role }: Props) {
             Pending Review
             {pendingCount !== null && <CountBadge count={pendingCount} active={tab === 'pending'} />}
           </button>
-          <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
-            Disputes
-            {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
-          </button>
+          {!hideDisputes && (
+            <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
+              Disputes
+              {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
+            </button>
+          )}
           <button style={tabStyle(tab === 'reviewed')} onClick={() => setTab('reviewed')}>Reviewed Chats</button>
           {isAdmin && (
             <button style={tabStyle(tab === 'unscored')} onClick={() => setTab('unscored')}>
@@ -119,14 +122,16 @@ export default function ChatEvaluationPage({ role }: Props) {
         />
       </div>
 
-      <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
-        <DisputesTable
-          type="chats"
-          onCountChange={setDisputeCount}
-          agentFilter={agentFilter}
-          leadingFilter={<AgentFilterSelect value={agentFilter} onChange={v => setAgentFilter(v as typeof agentFilter)} options={[{ value: 'all', label: 'All' }, { value: 'human_only', label: 'Human Only' }, { value: 'bot_only', label: 'Bot Only' }, { value: 'has_calls', label: 'Has Calls' }]} />}
-        />
-      </div>
+      {!hideDisputes && (
+        <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
+          <DisputesTable
+            type="chats"
+            onCountChange={setDisputeCount}
+            agentFilter={agentFilter}
+            leadingFilter={<AgentFilterSelect value={agentFilter} onChange={v => setAgentFilter(v as typeof agentFilter)} options={[{ value: 'all', label: 'All' }, { value: 'human_only', label: 'Human Only' }, { value: 'bot_only', label: 'Bot Only' }, { value: 'has_calls', label: 'Has Calls' }]} />}
+          />
+        </div>
+      )}
 
       <div style={{ display: tab === 'reviewed' ? 'block' : 'none' }}>
         <ReviewedChatsTable

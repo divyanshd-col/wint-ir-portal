@@ -60,6 +60,11 @@ const NAV = [
 ];
 
 export default function IRShell({ role, name, skills, children }: IRShellProps) {
+  const nameLower = (name || '').toLowerCase();
+  if (nameLower.includes('dhanush') || nameLower.includes('harsh') || nameLower.includes('sindhu')) {
+    return <>{children}</>;
+  }
+
   return (
     <RoleShell role={role} name={name} skills={skills} navItems={NAV} roleLabel="IR Agent" mainStyle={{ overflow: 'auto' }}>
       {children}

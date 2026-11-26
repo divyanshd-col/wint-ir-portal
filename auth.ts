@@ -149,11 +149,8 @@ export const authOptions: NextAuthOptions = {
     },
 
     async redirect({ url, baseUrl }) {
-      // After sign-in, land on /quality: every role can access it and its page
-      // role-routes internally (agent → own dashboard, QA/TL/admin → team view).
-      // The old /analytics target bounced QA and agents off middleware back to /.
       if (url === baseUrl || url === `${baseUrl}/` || url === '/' || url === '') {
-        return `${baseUrl}/quality`;
+        return `${baseUrl}/`;
       }
       if (url.startsWith('/')) {
         return `${baseUrl}${url}`;

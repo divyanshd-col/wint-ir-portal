@@ -101,7 +101,7 @@ function buildWow(
     const pm = paramMap.get(w) ?? {};
     const weightedIqs = isChat
       ? (s?.iqs ?? calculateWeightedOverallIQS(pm, 'human', { roundDecimals: 1 }))
-      : null;
+      : (s?.iqs ?? null);
     return { week_start: w, csat_pct: s?.csat_pct ?? null, iqs: weightedIqs, volume: s?.volume ?? 0, params: pm };
   });
 }
@@ -111,20 +111,23 @@ interface FlatCatRow {
   disposition: string;
   sub_disposition: string | null;
   iqs: number | null;
+  csat_pct: number | null;
   volume: number;
   resolution_seconds?: number | null;
 }
 
 interface CatSub {
   sub_disposition: string;
-  chats_iqs: number | null; chats_volume: number; chats_resolution_seconds: number | null;
-  calls_iqs: number | null; calls_volume: number;
+  chats_iqs: number | null; chats_csat_pct: number | null; chats_volume: number; chats_resolution_seconds: number | null;
+  calls_iqs: number | null; calls_csat_pct: number | null; calls_volume: number;
+  emails_iqs: number | null; emails_csat_pct: number | null; emails_volume: number;
 }
 
 export interface CatRow {
   disposition: string;
-  chats_iqs: number | null; chats_volume: number; chats_resolution_seconds: number | null;
-  calls_iqs: number | null; calls_volume: number;
+  chats_iqs: number | null; chats_csat_pct: number | null; chats_volume: number; chats_resolution_seconds: number | null;
+  calls_iqs: number | null; calls_csat_pct: number | null; calls_volume: number;
+  emails_iqs: number | null; emails_csat_pct: number | null; emails_volume: number;
   subs: CatSub[];
 }
 
@@ -133,21 +136,46 @@ function buildCategories(
   chatSubs: FlatCatRow[],
   callParents: FlatCatRow[],
   callSubs: FlatCatRow[],
+  emailParents: FlatCatRow[] = [],
 ): CatRow[] {
   const map = new Map<string, CatRow>();
 
   for (const r of chatParents) {
     map.set(r.disposition, {
-      disposition: r.disposition, chats_iqs: r.iqs, chats_volume: r.volume,
-      chats_resolution_seconds: r.resolution_seconds ?? null, calls_iqs: null, calls_volume: 0, subs: [],
+      disposition: r.disposition,
+      chats_iqs: r.iqs, chats_csat_pct: r.csat_pct ?? null, chats_volume: r.volume,
+      chats_resolution_seconds: r.resolution_seconds ?? null,
+      calls_iqs: null, calls_csat_pct: null, calls_volume: 0,
+      emails_iqs: null, emails_csat_pct: null, emails_volume: 0,
+      subs: [],
     });
   }
   for (const r of callParents) {
     if (!map.has(r.disposition)) {
-      map.set(r.disposition, { disposition: r.disposition, chats_iqs: null, chats_volume: 0, chats_resolution_seconds: null, calls_iqs: r.iqs, calls_volume: r.volume, subs: [] });
+      map.set(r.disposition, {
+        disposition: r.disposition,
+        chats_iqs: null, chats_csat_pct: null, chats_volume: 0, chats_resolution_seconds: null,
+        calls_iqs: r.iqs, calls_csat_pct: r.csat_pct ?? null, calls_volume: r.volume,
+        emails_iqs: null, emails_csat_pct: null, emails_volume: 0,
+        subs: [],
+      });
     } else {
       const p = map.get(r.disposition)!;
-      p.calls_iqs = r.iqs; p.calls_volume = r.volume;
+      p.calls_iqs = r.iqs; p.calls_csat_pct = r.csat_pct ?? null; p.calls_volume = r.volume;
+    }
+  }
+  for (const r of emailParents) {
+    if (!map.has(r.disposition)) {
+      map.set(r.disposition, {
+        disposition: r.disposition,
+        chats_iqs: null, chats_csat_pct: null, chats_volume: 0, chats_resolution_seconds: null,
+        calls_iqs: null, calls_csat_pct: null, calls_volume: 0,
+        emails_iqs: r.iqs, emails_csat_pct: r.csat_pct ?? null, emails_volume: r.volume,
+        subs: [],
+      });
+    } else {
+      const p = map.get(r.disposition)!;
+      p.emails_iqs = r.iqs; p.emails_csat_pct = r.csat_pct ?? null; p.emails_volume = r.volume;
     }
   }
 
@@ -173,14 +201,72 @@ function buildCategories(
     parent.subs = Array.from(subNames).map(n => ({
       sub_disposition: n,
       chats_iqs: cs.get(n)?.iqs ?? null,
+      chats_csat_pct: cs.get(n)?.csat_pct ?? null,
       chats_volume: cs.get(n)?.volume ?? 0,
       chats_resolution_seconds: cs.get(n)?.resolution_seconds ?? null,
       calls_iqs: ls.get(n)?.iqs ?? null,
+      calls_csat_pct: ls.get(n)?.csat_pct ?? null,
       calls_volume: ls.get(n)?.volume ?? 0,
-    })).sort((a, b) => b.chats_volume - a.chats_volume);
+      emails_iqs: null,
+      emails_csat_pct: null,
+      emails_volume: 0,
+    })).sort((a, b) => (b.chats_volume + b.calls_volume) - (a.chats_volume + a.calls_volume));
   }
 
-  return Array.from(map.values()).sort((a, b) => b.chats_volume - a.chats_volume);
+  return Array.from(map.values()).sort((a, b) => (b.chats_volume + b.calls_volume + b.emails_volume) - (a.chats_volume + a.calls_volume + a.emails_volume));
+}
+
+// In-memory cache for department averages (TTL: 5 minutes)
+const cxAverageCache = new Map<string, { data: { cxChatRows: any[]; cxCallRows: any[]; cxEmailRows: any[] }; expiry: number }>();
+
+async function getCachedCxAverages(dateFrom: string, dateTo: string) {
+  const cacheKey = `${dateFrom}_${dateTo}`;
+  const hit = cxAverageCache.get(cacheKey);
+  if (hit && hit.expiry > Date.now()) {
+    return hit.data;
+  }
+  const BOTS = `('Robylon', 'Robylon AI', 'Robylon Automation')`;
+  const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch(() => fallback);
+
+  const [cxChatRows, cxCallRows, cxEmailRows] = await Promise.all([
+    safe(query<{ csat_pct: number | null; iqs: number | null; volume: number; agents: number }>(`
+      SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' OR c.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END),0)*100,1)::float AS csat_pct,
+             ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
+             COUNT(c.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
+      FROM conversations c
+      JOIN agents a ON a.id = c.agent_id
+      LEFT JOIN iqs_scores s ON s.chat_id = c.id
+      WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND a.name NOT IN ${BOTS}
+    `, [dateFrom, dateTo]), []),
+    safe(query<{ csat_pct: number | null; iqs: number | null; volume: number; agents: number }>(`
+      SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' OR c.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END),0)*100,1)::float AS csat_pct,
+             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+             )::numeric,1)::float AS iqs,
+             COUNT(cr.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
+      FROM call_recordings cr
+      LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+      LEFT JOIN conversations c ON c.id = cr.chat_id
+      LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+      JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
+      WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name NOT IN ${BOTS}
+    `, [dateFrom, dateTo]), []),
+    safe(query<{ iqs: number | null; volume: number; agents: number }>(`
+      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
+             COUNT(*)::int AS volume, COUNT(DISTINCT LOWER(TRIM(e.agent_name)))::int AS agents
+      FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
+      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
+    `, [dateFrom, dateTo]), []),
+  ]);
+
+  const data = { cxChatRows, cxCallRows, cxEmailRows };
+  cxAverageCache.set(cacheKey, { data, expiry: Date.now() + 5 * 60 * 1000 });
+  return data;
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────────
@@ -203,11 +289,13 @@ export async function GET(req: NextRequest) {
   const { dateFrom, dateTo } = getDateRange(period, searchParams.get('from'), searchParams.get('to'));
   const { wowFrom, wowTo, weeks: wowWeeks } = getWowWindow();
 
+  const requestedTL = searchParams.get('tl')?.trim();
   let tlAgentNames: string[];
   if (role === 'tl') {
-    let tlAgentName = dbUser?.name || configUser?.agentName;
-    if (!tlAgentName) tlAgentName = email;
+    const tlAgentName = dbUser?.name || configUser?.agentName || email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
+  } else if (role === 'admin' && requestedTL) {
+    tlAgentNames = await getAgentNamesByTL(requestedTL);
   } else if (role === 'agent') {
     let selfAgentName = dbUser?.name || configUser?.agentName;
     if (!selfAgentName && email) selfAgentName = email.split('@')[0];
@@ -238,259 +326,257 @@ export async function GET(req: NextRequest) {
   if (role === 'agent') {
     agentName = tlAgentNames[0];
   } else if (requestedAgent) {
-    // 1. Case-insensitive match against existing tlAgentNames
+    // Case-insensitive match against existing tlAgentNames
     const match = tlAgentNames.find(n => n.toLowerCase().trim() === requestedAgent.toLowerCase());
     if (match) {
       agentName = match;
     } else if (role === 'admin') {
-      // 2. Query database for agent across all active agents (Admin only)
-      const dbMatch = await query<{ name: string }>(`
-        SELECT name FROM agents WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND status = 'active' LIMIT 1
-      `, [requestedAgent]).catch(() => []);
-      if (dbMatch.length > 0) {
-        agentName = dbMatch[0].name;
-        if (!tlAgentNames.some(n => n.toLowerCase().trim() === agentName.toLowerCase().trim())) {
-          tlAgentNames = [agentName, ...tlAgentNames];
-        }
-      } else {
-        agentName = tlAgentNames[0];
-      }
+      agentName = requestedAgent;
     } else {
-      // TL role: strictly confined to members mapped to this TL
-      agentName = tlAgentNames[0];
+      return NextResponse.json({ error: 'Forbidden: agent not mapped to your team' }, { status: 403 });
     }
   } else {
     agentName = tlAgentNames[0];
   }
 
-  // ── E-mail stats for the member + CX-wide averages (all active agents, same period) ──────
-  // Each query is independent and failure-tolerant: a problem here must not blank the chat/call cards.
-  const BOTS = `('Robylon', 'Robylon AI', 'Robylon Automation')`;
-  const safe = <T,>(p: Promise<T>) => p.catch(() => null as T | null);
-  const extraP = Promise.all([
-    safe(query<{ iqs: number | null; volume: number }>(`
-      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric,1)::float AS iqs, COUNT(*)::int AS volume
+  // ── Queries: Run in controlled batches to protect Neon connection pool ─────────
+  const safe = <T>(p: Promise<T>, fallback: T): Promise<T> => p.catch(() => fallback);
+
+  // Department averages (cached 5 min)
+  const cxPromise = getCachedCxAverages(dateFrom, dateTo);
+
+  // Batch 1: Member Core (Emails, Chats, Calls)
+  const [emailStatRows, chatStatRows, callStatRows] = await Promise.all([
+    safe(query<{ csat_pct: number | null; iqs: number | null; volume: number }>(`
+      SELECT ROUND(COUNT(CASE WHEN e.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN e.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+             ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
+             COUNT(e.id)::int AS volume
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
+      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
         AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
-    `, [dateFrom, dateTo, agentName])),
-    safe(query<{ csat_pct: number | null; iqs: number | null; volume: number; agents: number }>(`
-      SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
-                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
+    `, [dateFrom, dateTo, agentName]), []),
+
+    safe(query<{ csat_pct: number | null; solvable_csat_pct?: number | null; unsolvable_csat_pct?: number | null; iqs: number | null; volume: number; parameters?: any }>(`
+      SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' OR c.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END),0)*100,1)::float AS csat_pct,
+             ROUND(COUNT(CASE WHEN c.csat_bifurcation = 'solvable' AND (c.csat_label = 'good' OR c.csat_score = 5) THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_bifurcation = 'solvable' AND (c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5)) THEN 1 END),0)*100,1)::float AS solvable_csat_pct,
+             ROUND(COUNT(CASE WHEN c.csat_bifurcation = 'unsolvable' AND (c.bifurcated_csat_label = 'good' OR (c.bifurcated_csat_label IS NULL AND (c.csat_label = 'good' OR c.csat_score = 5))) THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_bifurcation = 'unsolvable' AND (c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5)) THEN 1 END),0)*100,1)::float AS unsolvable_csat_pct,
              ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
-             COUNT(c.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
+             COUNT(c.id)::int AS volume,
+             jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
       FROM conversations c
       JOIN agents a ON a.id = c.agent_id
       LEFT JOIN iqs_scores s ON s.chat_id = c.id
-      WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND a.name NOT IN ${BOTS}
-    `, [dateFrom, dateTo])),
-    safe(query<{ csat_pct: number | null; iqs: number | null; volume: number; agents: number }>(`
-      SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
-                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
+      WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND a.name = $3
+    `, [dateFrom, dateTo, agentName]), []),
+
+    safe(query<{ csat_pct: number | null; iqs: number | null; volume: number }>(`
+      SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' OR c.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END),0)*100,1)::float AS csat_pct,
              ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
-               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
-                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
-                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
-             )::numeric,1)::float AS iqs,
-             COUNT(cr.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
+             WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+               AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+               AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+           )::numeric,1)::float AS iqs,
+             COUNT(cr.id)::int AS volume
       FROM call_recordings cr
       LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
       LEFT JOIN conversations c ON c.id = cr.chat_id
       LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
       JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
-      WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name NOT IN ${BOTS}
-    `, [dateFrom, dateTo])),
-    safe(query<{ iqs: number | null; volume: number; agents: number }>(`
-      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
-             COUNT(*)::int AS volume, COUNT(DISTINCT LOWER(TRIM(e.agent_name)))::int AS agents
+      WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = $3
+    `, [dateFrom, dateTo, agentName]), []),
+  ]);
+
+  // Batch 2: Categories (Chats + Calls + Emails)
+  const [chatParents, chatSubs, callParents, callSubs, emailParents] = await Promise.all([
+    safe(query<FlatCatRow & { parameters?: any }>(`
+      SELECT c.tags->>'disposition' AS disposition,
+             ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
+             ROUND(COUNT(CASE WHEN c.csat_label = 'good' OR c.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+             COUNT(c.id)::int AS volume,
+             ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
+             jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
+      FROM conversations c
+      JOIN agents a ON a.id = c.agent_id
+      LEFT JOIN iqs_scores s ON s.chat_id = c.id
+      WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
+        AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
+      GROUP BY 1 ORDER BY COUNT(c.id) DESC
+    `, [dateFrom, dateTo, agentName]), []),
+
+    safe(query<FlatCatRow & { parameters?: any }>(`
+      SELECT c.tags->>'disposition' AS disposition,
+             c.tags->>'sub_disposition' AS sub_disposition,
+             ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
+             ROUND(COUNT(CASE WHEN c.csat_label = 'good' OR c.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+             COUNT(c.id)::int AS volume,
+             ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
+             jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
+      FROM conversations c
+      JOIN agents a ON a.id = c.agent_id
+      LEFT JOIN iqs_scores s ON s.chat_id = c.id
+      WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
+        AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
+        AND c.tags->>'sub_disposition' IS NOT NULL
+      GROUP BY 1, 2 ORDER BY 1, COUNT(c.id) DESC
+    `, [dateFrom, dateTo, agentName]), []),
+
+    safe(query<FlatCatRow>(`
+      SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
+             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+             WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+               AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+               AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+           )::numeric,1)::float AS iqs,
+             ROUND(COUNT(CASE WHEN c.csat_label = 'good' OR c.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+             COUNT(cr.id)::int AS volume
+      FROM call_recordings cr
+      LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+      LEFT JOIN conversations c ON c.id = cr.chat_id
+      LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+      JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
+      WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
+        AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
+      GROUP BY 1 ORDER BY COUNT(cr.id) DESC
+    `, [dateFrom, dateTo, agentName]), []),
+
+    safe(query<FlatCatRow>(`
+      SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
+             COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') AS sub_disposition,
+             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+             WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+               AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+               AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+           )::numeric,1)::float AS iqs,
+             ROUND(COUNT(CASE WHEN c.csat_label = 'good' OR c.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+             COUNT(cr.id)::int AS volume
+      FROM call_recordings cr
+      LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+      LEFT JOIN conversations c ON c.id = cr.chat_id
+      LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+      JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
+      WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
+        AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
+        AND COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') IS NOT NULL
+      GROUP BY 1, 2 ORDER BY 1, COUNT(cr.id) DESC
+    `, [dateFrom, dateTo, agentName]), []),
+
+    safe(query<FlatCatRow>(`
+      SELECT COALESCE(NULLIF(TRIM(c.intent_l1), ''), 'Other') AS disposition,
+             ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (
+               WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%'
+             )::numeric, 1)::float AS iqs,
+             ROUND(COUNT(CASE WHEN e.csat_score = 5 THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN e.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+             COUNT(e.id)::int AS volume
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
-    `, [dateFrom, dateTo])),
+      WHERE e.evaluation_status = 'Completed'
+        AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+        AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
+      GROUP BY 1 ORDER BY COUNT(e.id) DESC
+    `, [dateFrom, dateTo, agentName]), []),
   ]);
 
-  // ── Run chats + calls queries in parallel ─────────────────────────────────────
-  const [chatsRes, callsRes] = await Promise.all([
-    Promise.all([
-      query<{ csat_pct: number | null; solvable_csat_pct?: number | null; unsolvable_csat_pct?: number | null; iqs: number | null; volume: number; parameters?: any }>(`
-        SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
-                     / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(COUNT(CASE WHEN c.csat_bifurcation = 'solvable' AND c.csat_label = 'good' THEN 1 END)::numeric
-                     / NULLIF(COUNT(CASE WHEN c.csat_bifurcation = 'solvable' AND c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS solvable_csat_pct,
-               ROUND(COUNT(CASE WHEN c.csat_bifurcation = 'unsolvable' AND c.bifurcated_csat_label = 'good' THEN 1 END)::numeric
-                     / NULLIF(COUNT(CASE WHEN c.csat_bifurcation = 'unsolvable' AND c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS unsolvable_csat_pct,
-               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
-               COUNT(c.id)::int AS volume,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
-        FROM conversations c
-        JOIN agents a ON a.id = c.agent_id
-        LEFT JOIN iqs_scores s ON s.chat_id = c.id
-        WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND a.name = $3
-      `, [dateFrom, dateTo, agentName]),
+  // Batch 3: WoW & Parameters (Chats + Calls + Emails)
+  const [chatWow, chatWowParams, chatPeriodParams, callWow, callWowParams, emailWow] = await Promise.all([
+    safe(query<{ week_start: string; csat_pct: number | null; iqs: number | null; volume: number; parameters?: any }>(`
+      SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
+             ROUND(COUNT(CASE WHEN c.csat_label='good' OR c.csat_score = 5 THEN 1 END)::numeric /
+                   NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END),0)*100,1)::float AS csat_pct,
+             ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
+             COUNT(c.id)::int AS volume,
+             jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
+      FROM conversations c
+      JOIN agents a ON a.id = c.agent_id
+      LEFT JOIN iqs_scores s ON s.chat_id = c.id
+      WHERE c.closed_at::date >= $1 AND c.closed_at::date < $2 AND a.name = $3
+      GROUP BY 1 ORDER BY 1
+    `, [wowFrom, wowTo, agentName]), []),
 
-      query<FlatCatRow & { parameters?: any }>(`
-        SELECT c.tags->>'disposition' AS disposition,
-               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
-               COUNT(c.id)::int AS volume,
-               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
-        FROM conversations c
-        JOIN agents a ON a.id = c.agent_id
-        LEFT JOIN iqs_scores s ON s.chat_id = c.id
-        WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
-          AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
-        GROUP BY 1 ORDER BY COUNT(c.id) DESC
-      `, [dateFrom, dateTo, agentName]),
-
-      query<FlatCatRow & { parameters?: any }>(`
-        SELECT c.tags->>'disposition' AS disposition,
-               c.tags->>'sub_disposition' AS sub_disposition,
-               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
-               COUNT(c.id)::int AS volume,
-               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
-        FROM conversations c
-        JOIN agents a ON a.id = c.agent_id
-        LEFT JOIN iqs_scores s ON s.chat_id = c.id
-        WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
-          AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
-          AND c.tags->>'sub_disposition' IS NOT NULL
-        GROUP BY 1, 2 ORDER BY 1, COUNT(c.id) DESC
-      `, [dateFrom, dateTo, agentName]),
-
-      query<{ week_start: string; csat_pct: number | null; iqs: number | null; volume: number; parameters?: any }>(`
-        SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
-               ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
-                     NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.iqs_score) FILTER (WHERE c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')::numeric,1)::float AS iqs,
-               COUNT(c.id)::int AS volume,
-               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')) AS parameters
-        FROM conversations c
-        JOIN agents a ON a.id = c.agent_id
-        LEFT JOIN iqs_scores s ON s.chat_id = c.id
-        WHERE c.closed_at::date >= $1 AND c.closed_at::date < $2 AND a.name = $3
-        GROUP BY 1 ORDER BY 1
-      `, [wowFrom, wowTo, agentName]),
-
-      query<{ week_start: string; param_key: string; pass_rate: number | null }>(`
-        SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
-               ${PASS_RATE_SELECT}
-        FROM iqs_scores s
-        JOIN conversations c ON c.id = s.chat_id
-        JOIN agents a ON a.id = c.agent_id
-        ${CHAT_PARAM_LATERAL}
-        WHERE c.closed_at::date >= $1 AND c.closed_at::date < $2
-          AND a.name = $3 AND s.parameters IS NOT NULL
+    safe(query<{ week_start: string; param_key: string; pass_rate: number | null }>(`
+      SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
+             ${PASS_RATE_SELECT}
+      FROM iqs_scores s
+      JOIN conversations c ON c.id = s.chat_id
+      JOIN agents a ON a.id = c.agent_id
+      ${CHAT_PARAM_LATERAL}
+      WHERE c.closed_at::date >= $1 AND c.closed_at::date < $2
+        AND a.name = $3 AND s.parameters IS NOT NULL
         GROUP BY 1, 2 ORDER BY 1
-      `, [wowFrom, wowTo, agentName]),
+    `, [wowFrom, wowTo, agentName]), []),
 
-      query<{ param_key: string; pass_rate: number | null }>(`
-        SELECT ${PASS_RATE_SELECT}
-        FROM iqs_scores s
-        JOIN conversations c ON c.id = s.chat_id
-        JOIN agents a ON a.id = c.agent_id
-        ${CHAT_PARAM_LATERAL}
-        WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
-          AND a.name = $3 AND s.parameters IS NOT NULL
-        GROUP BY 1
-      `, [dateFrom, dateTo, agentName]),
-    ]),
+    safe(query<{ param_key: string; pass_rate: number | null }>(`
+      SELECT ${PASS_RATE_SELECT}
+      FROM iqs_scores s
+      JOIN conversations c ON c.id = s.chat_id
+      JOIN agents a ON a.id = c.agent_id
+      ${CHAT_PARAM_LATERAL}
+      WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
+        AND a.name = $3 AND s.parameters IS NOT NULL
+      GROUP BY 1
+    `, [dateFrom, dateTo, agentName]), []),
 
-    Promise.all([
-      query<{ csat_pct: number | null; iqs: number | null; volume: number }>(`
-        SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
-                     / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
-               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
-                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
-                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
-             )::numeric,1)::float AS iqs,
-               COUNT(cr.id)::int AS volume
-        FROM call_recordings cr
-        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
-        LEFT JOIN conversations c ON c.id = cr.chat_id
-        LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
-        WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = $3
-      `, [dateFrom, dateTo, agentName]),
+    safe(query<{ week_start: string; csat_pct: number | null; iqs: number | null; volume: number }>(`
+      SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
+             ROUND(COUNT(CASE WHEN c.csat_label='good' OR c.csat_score = 5 THEN 1 END)::numeric /
+                   NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END),0)*100,1)::float AS csat_pct,
+             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+             WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+               AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+               AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+           )::numeric,1)::float AS iqs,
+             COUNT(cr.id)::int AS volume
+      FROM call_recordings cr
+      LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+      LEFT JOIN conversations c ON c.id = cr.chat_id
+      LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+      JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
+      WHERE cr.called_at::date >= $1 AND cr.called_at::date < $2 AND a.name = $3
+      GROUP BY 1 ORDER BY 1
+    `, [wowFrom, wowTo, agentName]), []),
 
-      query<FlatCatRow>(`
-        SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
-               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
-                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
-                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
-             )::numeric,1)::float AS iqs,
-               COUNT(cr.id)::int AS volume
-        FROM call_recordings cr
-        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
-        LEFT JOIN conversations c ON c.id = cr.chat_id
-        LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
-        WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-          AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
-        GROUP BY 1 ORDER BY COUNT(cr.id) DESC
-      `, [dateFrom, dateTo, agentName]),
+    safe(query<{ week_start: string; param_key: string; pass_rate: number | null }>(`
+      SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
+             ${PASS_RATE_SELECT}
+      FROM call_recordings cr
+      LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+      LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+      LEFT JOIN conversations c ON c.id = cr.chat_id
+      JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
+      ${CALL_PARAM_LATERAL}
+      WHERE cr.called_at::date >= $1 AND cr.called_at::date < $2
+        AND a.name = $3 AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
+      GROUP BY 1, 2 ORDER BY 1
+    `, [wowFrom, wowTo, agentName]), []),
 
-      query<FlatCatRow>(`
-        SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
-               COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') AS sub_disposition,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
-               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
-                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
-                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
-             )::numeric,1)::float AS iqs,
-               COUNT(cr.id)::int AS volume
-        FROM call_recordings cr
-        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
-        LEFT JOIN conversations c ON c.id = cr.chat_id
-        LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
-        WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-          AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
-          AND COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') IS NOT NULL
-        GROUP BY 1, 2 ORDER BY 1, COUNT(cr.id) DESC
-      `, [dateFrom, dateTo, agentName]),
-
-      query<{ week_start: string; csat_pct: number | null; iqs: number | null; volume: number }>(`
-        SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
-               ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
-                     NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
-               WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
-                 AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
-                 AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
-             )::numeric,1)::float AS iqs,
-               COUNT(cr.id)::int AS volume
-        FROM call_recordings cr
-        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
-        LEFT JOIN conversations c ON c.id = cr.chat_id
-        LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
-        WHERE cr.called_at::date >= $1 AND cr.called_at::date < $2 AND a.name = $3
-        GROUP BY 1 ORDER BY 1
-      `, [wowFrom, wowTo, agentName]),
-
-      query<{ week_start: string; param_key: string; pass_rate: number | null }>(`
-        SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
-               ${PASS_RATE_SELECT}
-        FROM call_recordings cr
-        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
-        LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        LEFT JOIN conversations c ON c.id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
-        ${CALL_PARAM_LATERAL}
-        WHERE cr.called_at::date >= $1 AND cr.called_at::date < $2
-          AND a.name = $3 AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
-        GROUP BY 1, 2 ORDER BY 1
-      `, [wowFrom, wowTo, agentName]),
-    ]),
+    safe(query<{ week_start: string; csat_pct: number | null; iqs: number | null; volume: number }>(`
+      SELECT date_trunc('week', e.sent_at)::date::text AS week_start,
+             ROUND(COUNT(CASE WHEN e.csat_score = 5 THEN 1 END)::numeric /
+                   NULLIF(COUNT(CASE WHEN e.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+             ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (
+               WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%'
+             )::numeric, 1)::float AS iqs,
+             COUNT(e.id)::int AS volume
+      FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
+      WHERE e.evaluation_status = 'Completed'
+        AND e.sent_at::date >= $1::date AND e.sent_at::date < $2::date
+        AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
+      GROUP BY 1 ORDER BY 1
+    `, [wowFrom, wowTo, agentName]), []),
   ]);
 
-  const [emailStatRows, cxChatRows, cxCallRows, cxEmailRows] = await extraP;
-  const [chatStatRows, chatParents, chatSubs, chatWow, chatWowParams, chatPeriodParams] = chatsRes;
-  const [callStatRows, callParents, callSubs, callWow, callWowParams] = callsRes;
+  const { cxChatRows, cxCallRows, cxEmailRows } = await cxPromise;
 
   for (const r of (chatParents as any[])) {
     if (r.parameters) {
@@ -519,6 +605,7 @@ export async function GET(req: NextRequest) {
     chatSubs as FlatCatRow[],
     callParents as FlatCatRow[],
     callSubs as FlatCatRow[],
+    emailParents as FlatCatRow[],
   );
 
   const chatPeriodParamMap: Record<string, number | null> = {};
@@ -569,7 +656,15 @@ export async function GET(req: NextRequest) {
         wow: buildWow(callWow as any[], callWowParams as any[], wowWeeks, false),
       },
       emails: emailStatRows
-        ? { stats: { csat_pct: null, iqs: emailStatRows[0]?.iqs ?? null, volume: emailStatRows[0]?.volume ?? 0 }, categories: [], wow: [] }
+        ? {
+            stats: {
+              csat_pct: emailStatRows[0]?.csat_pct ?? null,
+              iqs: emailStatRows[0]?.iqs ?? null,
+              volume: emailStatRows[0]?.volume ?? 0,
+            },
+            categories,
+            wow: buildWow(emailWow as any[], [], wowWeeks, false),
+          }
         : null,
     },
     // Team-wide benchmark for the same period: pooled CSAT / IQS and average volume per agent.

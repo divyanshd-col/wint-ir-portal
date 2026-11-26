@@ -14,6 +14,9 @@ export default async function AgentReportsPage() {
   if (!hasSkill({ ...(session.user as any), skills }, 'agent:reports:access')) redirect('/quality');
 
   const email = (session.user as any)?.email || '';
+  if (role.toLowerCase() === 'agent') {
+    redirect('/quality');
+  }
   const { getUserByEmail } = await import('@/lib/users');
   const dbUser = await getUserByEmail(email).catch(() => null);
   const config = await readConfig();

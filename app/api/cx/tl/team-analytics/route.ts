@@ -128,13 +128,16 @@ export async function GET(req: NextRequest) {
   `, []);
   const dbTLs = dbTLsRows.map(r => r.tl_name);
 
-  const allTLs = Array.from(new Set([...configTLs, ...dbTLs])).sort();
+  const CANONICAL_CX_TLS = ['Anusha', 'Harsh', 'Kriti', 'Neha C', 'Priya Sundar', 'Puja', 'Rishitha', 'Vedant G', 'Yashika'];
+  const allTLs = Array.from(new Set([...configTLs, ...dbTLs, ...CANONICAL_CX_TLS])).sort();
 
   // ── Resolve agent names ──────────────────────────────────────────────────────
   let agentNames: string[];
   let selectedTL: string | null = null;
 
-  if (role === 'admin') {
+  const isAdmin = role === 'admin' || (userAny as any).isAdmin;
+
+  if (isAdmin) {
     const requestedTL = searchParams.get('tl');
     selectedTL = (requestedTL && allTLs.includes(requestedTL)) ? requestedTL : (allTLs[0] ?? null);
     if (selectedTL) {
@@ -159,13 +162,13 @@ export async function GET(req: NextRequest) {
   if (agentNames.length === 0) {
     return NextResponse.json({
       dateFrom, dateTo, agentCount: 0,
-      tls: role === 'admin' ? allTLs : undefined,
+      tls: isAdmin ? allTLs : undefined,
       selectedTL,
       agents: [],
       channels: {
         chats: { team: { csat_pct: null, iqs: null, volume: 0 }, cx: { csat_pct: null, iqs: null, volume: 0 }, params: PARAM_DEFS.map(p => ({ ...p, team_score: null, cx_score: null })) },
         calls: { team: { csat_pct: null, iqs: null, volume: 0 }, cx: { csat_pct: null, iqs: null, volume: 0 }, params: PARAM_DEFS.map(p => ({ ...p, team_score: null, cx_score: null })) },
-        emails: null,
+        emails: { team: { csat_pct: null, iqs: null, volume: 0 }, cx: { csat_pct: null, iqs: null, volume: 0 }, params: [] },
       },
     });
   }
@@ -323,6 +326,49 @@ export async function GET(req: NextRequest) {
     GROUP BY a.name, p.key
   `, [dateFrom, dateTo, agentNames]);
 
+  // ── EMAILS CHANNEL ───────────────────────────────────────────────────────────
+  const lowerAgentNames = agentNames.map(n => n.trim().toLowerCase());
+  const safeEmailQuery = async <T,>(fn: Promise<T[]>) => fn.catch(() => [] as T[]);
+
+  const [[teamEmailRow], [cxEmailRow], agentEmailRows] = await Promise.all([
+    safeEmailQuery(query<{ csat_pct: number | null; iqs: number | null; volume: number }>(`
+      SELECT
+        ROUND(COUNT(CASE WHEN e.csat_score = 5 THEN 1 END)::numeric
+              / NULLIF(COUNT(CASE WHEN e.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+        ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric, 1)::float AS iqs,
+        COUNT(e.id)::int AS volume
+      FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
+      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+        AND LOWER(TRIM(e.agent_name)) = ANY($3::text[])
+    `, [dateFrom, dateTo, lowerAgentNames])),
+    safeEmailQuery(query<{ csat_pct: number | null; iqs: number | null; volume: number }>(`
+      SELECT
+        ROUND(COUNT(CASE WHEN e.csat_score = 5 THEN 1 END)::numeric
+              / NULLIF(COUNT(CASE WHEN e.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+        ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric, 1)::float AS iqs,
+        COUNT(e.id)::int AS volume
+      FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
+      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+    `, [dateFrom, dateTo])),
+    safeEmailQuery(query<{ agent_key: string; csat_pct: number | null; iqs: number | null; volume: number }>(`
+      SELECT
+        LOWER(TRIM(e.agent_name)) AS agent_key,
+        ROUND(COUNT(CASE WHEN e.csat_score = 5 THEN 1 END)::numeric
+              / NULLIF(COUNT(CASE WHEN e.csat_score IN (1,3,5) THEN 1 END), 0) * 100, 1)::float AS csat_pct,
+        ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')::numeric, 1)::float AS iqs,
+        COUNT(e.id)::int AS volume
+      FROM email_reply_evaluations e
+      LEFT JOIN email_conversations c ON c.id = e.ticket_id
+      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+        AND LOWER(TRIM(e.agent_name)) = ANY($3::text[])
+      GROUP BY LOWER(TRIM(e.agent_name))
+    `, [dateFrom, dateTo, lowerAgentNames])),
+  ]);
+
+  const emailByAgent = Object.fromEntries(agentEmailRows.map(a => [a.agent_key, a]));
+
   // ── Build response ────────────────────────────────────────────────────────────
 
   function mapToParamScores(rows: { param_key: string; pass_rate: number | null }[]) {
@@ -377,7 +423,12 @@ export async function GET(req: NextRequest) {
       volume:   callByAgent[name]?.volume ?? 0,
       params:   agentCallPM[name] ?? {},
     },
-    emails: null,
+    emails: {
+      csat_pct: emailByAgent[name.trim().toLowerCase()]?.csat_pct ?? null,
+      iqs:      emailByAgent[name.trim().toLowerCase()]?.iqs ?? null,
+      volume:   emailByAgent[name.trim().toLowerCase()]?.volume ?? 0,
+      params:   {},
+    },
   }));
 
   const paramDefs = (defs: typeof PARAM_DEFS, teamPM: Record<string, number | null>, cxPM: Record<string, number | null>) =>
@@ -390,7 +441,7 @@ export async function GET(req: NextRequest) {
     dateFrom,
     dateTo,
     agentCount: agents.length,
-    tls: role === 'admin' ? allTLs : undefined,
+    tls: isAdmin ? allTLs : undefined,
     selectedTL,
     agents,
     channels: {
@@ -404,7 +455,11 @@ export async function GET(req: NextRequest) {
         cx:   { csat_pct: cxCallRow?.csat_pct ?? null,   iqs: cxCallRow?.iqs ?? null,   volume: cxCallRow?.volume ?? 0 },
         params: paramDefs(CALL_PARAM_DEFS, teamCallPM, cxCallPM),
       },
-      emails: null,
+      emails: {
+        team: { csat_pct: teamEmailRow?.csat_pct ?? null, iqs: teamEmailRow?.iqs ?? null, volume: teamEmailRow?.volume ?? 0 },
+        cx:   { csat_pct: cxEmailRow?.csat_pct ?? null,   iqs: cxEmailRow?.iqs ?? null,   volume: cxEmailRow?.volume ?? 0 },
+        params: [],
+      },
     },
   });
 }

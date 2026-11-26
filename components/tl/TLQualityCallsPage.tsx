@@ -88,8 +88,21 @@ interface CallScoreEntry {
   disputeStatus?: string | null;
 }
 
-export default function TLQualityCallsPage() {
-  const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>('evaluated');
+interface TLQualityCallsProps {
+  initialTab?: 'evaluated' | 'disputes' | 'reviewed';
+  mode?: 'all' | 'evaluated-only' | 'disputes-only';
+  hideHeader?: boolean;
+}
+
+export default function TLQualityCallsPage({ initialTab: propInitialTab, mode = 'all', hideHeader = false }: TLQualityCallsProps = {}) {
+  const defaultTab = mode === 'disputes-only' ? 'disputes' : 'evaluated';
+  const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>(
+    mode === 'evaluated-only'
+      ? 'evaluated'
+      : propInitialTab && ['evaluated', 'disputes', 'reviewed'].includes(propInitialTab)
+        ? (mode === 'disputes-only' && propInitialTab === 'evaluated' ? 'disputes' : propInitialTab)
+        : defaultTab
+  );
 
   // Evaluated Calls State
   const [entries, setEntries] = useState<CallScoreEntry[]>([]);
@@ -346,11 +359,13 @@ export default function TLQualityCallsPage() {
   return (
     <div style={{ fontFamily: SANS }}>
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text, #111111)', margin: '0 0 6px 0' }}>
-          Quality Calls
-        </h1>
-      </div>
+      {!hideHeader && (
+        <div style={{ marginBottom: 20 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text, #111111)', margin: '0 0 6px 0' }}>
+            Quality Calls
+          </h1>
+        </div>
+      )}
 
       {actionError && (
         <div style={{ padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>
@@ -359,23 +374,27 @@ export default function TLQualityCallsPage() {
       )}
 
       {/* Tabs Bar */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto', }}>
-        <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
-          Evaluated Calls
-          <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
-        </button>
-        <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
-          Disputes Raised
-          <CountBadge count={filteredPendingDisputes.length} active={activeTab === 'disputes'} />
-        </button>
-        <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
-          Reviewed Disputes
-          <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
-        </button>
-      </div>
+      {mode !== 'evaluated-only' && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto', }}>
+          {mode === 'all' && (
+            <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
+              Evaluated Calls
+              <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
+            </button>
+          )}
+          <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
+            Disputes Raised
+            <CountBadge count={filteredPendingDisputes.length} active={activeTab === 'disputes'} />
+          </button>
+          <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
+            Reviewed Disputes
+            <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
+          </button>
+        </div>
+      )}
 
       {/* ── TAB 1: EVALUATED CALLS ────────────────────────────────────────────── */}
-      {activeTab === 'evaluated' && (
+      {(mode === 'all' || mode === 'evaluated-only') && activeTab === 'evaluated' && (
         <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
           <div className="qfilters">
@@ -613,7 +632,7 @@ export default function TLQualityCallsPage() {
       )}
 
       {/* ── TAB 2: DISPUTES RAISED (PENDING TL ACTION) ───────────────────────── */}
-      {activeTab === 'disputes' && (
+      {(mode === 'all' || mode === 'disputes-only') && activeTab === 'disputes' && (
         <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
           <div className="qfilters">
@@ -854,7 +873,7 @@ export default function TLQualityCallsPage() {
       )}
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
-      {activeTab === 'reviewed' && (
+      {(mode === 'all' || mode === 'disputes-only') && activeTab === 'reviewed' && (
         <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
           <div className="qfilters">

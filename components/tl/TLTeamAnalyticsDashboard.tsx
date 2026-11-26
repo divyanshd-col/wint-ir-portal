@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 import DropdownSearch, { matchesSearch } from '@/components/shell/DropdownSearch';
 
@@ -25,7 +26,7 @@ interface AgentData {
   name: string; ini: string;
   chats: AgentChannelData;
   calls: AgentChannelData;
-  emails: null;
+  emails: AgentChannelData;
 }
 
 interface ChannelSummary { team: ChannelStats; cx: ChannelStats; params: ParamData[]; }
@@ -34,7 +35,7 @@ interface AnalyticsData {
   dateFrom: string; dateTo: string; agentCount: number;
   tls?: string[]; selectedTL?: string | null;
   agents: AgentData[];
-  channels: { chats: ChannelSummary; calls: ChannelSummary; emails: null };
+  channels: { chats: ChannelSummary; calls: ChannelSummary; emails: ChannelSummary };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -150,7 +151,20 @@ function EmptyChannelState({ channel }: { channel: Channel }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function TLTeamAnalyticsDashboard() {
+export default function TLTeamAnalyticsDashboard({
+  onSelectAgent,
+}: {
+  onSelectAgent?: (agentName: string) => void;
+} = {}) {
+  const router = useRouter();
+  const handleSelectAgent = (agentName: string) => {
+    if (onSelectAgent) {
+      onSelectAgent(agentName);
+    } else {
+      router.push(`/tl/member-analytics?agent=${encodeURIComponent(agentName)}`);
+    }
+  };
+
   const [channel, setChannel]               = useState<Channel>('chats');
   const [period,  setPeriod]                = useState<Period>('30');
   const [customFrom, setCustomFrom]         = useState('');
@@ -215,13 +229,13 @@ export default function TLTeamAnalyticsDashboard() {
   const chSummary = data?.channels[channel];
   // Current channel data for agents
   const agentChData = (agent: AgentData): AgentChannelData | null =>
-    channel === 'emails' ? null : agent[channel];
+    agent[channel] ?? null;
 
   const breakdownChData = (agent: AgentData): AgentChannelData | null =>
-    breakdownCh === 'emails' ? null : agent[breakdownCh];
+    agent[breakdownCh] ?? null;
 
   const params = chSummary?.params ?? [];
-  const breakdownParams = (breakdownCh !== 'emails' && data?.channels[breakdownCh]?.params) || [];
+  const breakdownParams = data?.channels[breakdownCh]?.params || [];
 
   return (
     <div>
@@ -331,15 +345,6 @@ export default function TLTeamAnalyticsDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
         {loading ? (
           [0, 1, 2].map(i => <StatCardSkeleton key={i} />)
-        ) : channel === 'emails' ? (
-          [0, 1, 2].map(i => (
-            <div key={i} style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 20 }}>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-4)', marginBottom: 12 }}>
-                {['CSAT %', 'IQS', 'Emails Handled'][i]}
-              </div>
-              <span style={{ fontSize: 20, color: 'var(--qa-text-4)' }}>—</span>
-            </div>
-          ))
         ) : (
           <>
             <StatCard
@@ -360,61 +365,6 @@ export default function TLTeamAnalyticsDashboard() {
           </>
         )}
       </div>
-
-      {/* ── IQS by Parameter ──────────────────────────────────────────── */}
-      <section style={{ marginBottom: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>IQS by Parameter: Your Team</h2>
-          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
-            {periodLabel}
-          </span>
-        </div>
-
-        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
-          <div style={{
-            padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderBottom: '1px solid var(--qa-border)',
-          }}>
-            <span style={{ fontSize: 14, fontWeight: 500 }}>
-              {loading ? '…' : `${params.length} quality parameters · weighted`}
-            </span>
-          </div>
-
-          {/* Legend */}
-          <div style={{
-            display: 'flex', gap: 24, padding: '10px 20px',
-            borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, color: 'var(--qa-text-2)',
-          }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 18, height: 8, background: 'var(--qa-gray-700)', borderRadius: 999 }} />
-              Your team
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 0, height: 14, borderLeft: '2px dashed var(--qa-text-2)' }} />
-              Dept average
-            </span>
-          </div>
-
-          <div style={{ padding: '12px 20px' }}>
-            {loading ? (
-              [0,1,2,3,4].map(i => (
-                <div key={i} style={{ height: 36, display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0', borderBottom: '1px solid var(--qa-border-sub)' }}>
-                  <div style={{ width: 230, height: 14, background: 'var(--qa-fill-med)', borderRadius: 4 }} />
-                  <div style={{ flex: 1, height: 10, background: 'var(--qa-fill-med)', borderRadius: 999 }} />
-                </div>
-              ))
-            ) : channel === 'emails' ? (
-              <EmptyChannelState channel="emails" />
-            ) : params.length === 0 ? (
-              <EmptyChannelState channel={channel} />
-            ) : (
-              params.map(p => (
-                <ParamRow key={p.key} p={p} />
-              ))
-            )}
-          </div>
-        </div>
-      </section>
 
       {/* ── Team Member Performance ───────────────────────────────────── */}
       <section style={{ marginBottom: 32 }}>
@@ -475,7 +425,13 @@ export default function TLTeamAnalyticsDashboard() {
                     data.agents.map(agent => {
                       const ch = agentChData(agent);
                       return (
-                        <SummaryRow key={agent.name} agent={agent} chData={ch} activeChannel={channel} />
+                        <SummaryRow
+                          key={agent.name}
+                          agent={agent}
+                          chData={ch}
+                          activeChannel={channel}
+                          onSelectAgent={handleSelectAgent}
+                        />
                       );
                     })
                   )}
@@ -517,7 +473,19 @@ export default function TLTeamAnalyticsDashboard() {
                         const chData = breakdownChData(agent);
                         return (
                           <tr key={agent.name} style={{ borderBottom: '1px solid var(--qa-border-sub)' }}>
-                            <td style={stickyTd}>{agent.name}</td>
+                            <td style={stickyTd}>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectAgent(agent.name)}
+                                style={{
+                                  background: 'none', border: 0, padding: 0, cursor: 'pointer',
+                                  color: 'inherit', font: 'inherit', textAlign: 'left', fontWeight: 500,
+                                }}
+                                className="hover:underline"
+                              >
+                                {agent.name}
+                              </button>
+                            </td>
                             {breakdownParams.map(p => {
                               const val = chData?.params[p.key] ?? null;
                               return (
@@ -601,8 +569,8 @@ function Th({ children, left, active }: { children: React.ReactNode; left?: bool
 
 // ── SummaryRow ────────────────────────────────────────────────────────────────
 
-function SummaryRow({ agent, chData, activeChannel }: {
-  agent: AgentData; chData: AgentChannelData | null; activeChannel: Channel;
+function SummaryRow({ agent, chData, activeChannel, onSelectAgent }: {
+  agent: AgentData; chData: AgentChannelData | null; activeChannel: Channel; onSelectAgent?: (name: string) => void;
 }) {
   const numTd = (active: boolean): React.CSSProperties => ({
     ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13,
@@ -612,22 +580,31 @@ function SummaryRow({ agent, chData, activeChannel }: {
   return (
     <tr style={{ borderBottom: '1px solid var(--qa-border-sub)' }}>
       <td style={td}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          type="button"
+          onClick={() => onSelectAgent?.(agent.name)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'none', border: 0, padding: 0, cursor: 'pointer',
+            color: 'inherit', font: 'inherit', textAlign: 'left',
+          }}
+          className="hover:underline"
+        >
           <span style={{
             width: 28, height: 28, borderRadius: '50%', background: 'var(--qa-fill-med)',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)',
+            fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', flexShrink: 0,
           }}>
             {agent.ini}
           </span>
-          <span style={{ fontSize: 14 }}>{agent.name}</span>
-        </span>
+          <span style={{ fontSize: 14, fontWeight: 500 }}>{agent.name}</span>
+        </button>
       </td>
       <td style={numTd(false)}>{chData ? fmtPct(chData.csat_pct) : '—'}</td>
       <td style={numTd(false)}>{chData ? fmtIqs(chData.iqs) : '—'}</td>
       <td style={numTd(activeChannel === 'chats')}>{fmtVol(agent.chats.volume)}</td>
       <td style={numTd(activeChannel === 'calls')}>{fmtVol(agent.calls.volume)}</td>
-      <td style={numTd(activeChannel === 'emails')}>—</td>
+      <td style={numTd(activeChannel === 'emails')}>{fmtVol(agent.emails?.volume ?? 0)}</td>
     </tr>
   );
 }

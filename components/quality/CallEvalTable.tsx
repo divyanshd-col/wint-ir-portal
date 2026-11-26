@@ -163,6 +163,7 @@ export default function CallEvalTable({ leadingFilter, dispositions, onCountChan
   const [callIdSearch, setCallIdSearch] = useState(initialCallId || '');
   const [mobileSearch, setMobileSearch] = useState(initialMobile || '');
   const [debouncedMobile, setDebouncedMobile] = useState(initialMobile || '');
+  const [agentSearch, setAgentSearch] = useState('');
   const [dispFilter, setDispFilter] = useState<string[]>([]);
   const [dispSearch, setDispSearch] = useState('');
   const [iqsMin, setIqsMin] = useState('');
@@ -205,11 +206,14 @@ export default function CallEvalTable({ leadingFilter, dispositions, onCountChan
       const res = await fetch(`/api/cx/qa/calls-to-review?${params}`);
       if (!res.ok) return;
       const data = await res.json();
-      const fetchedCalls: CallToReviewRow[] = data.calls ?? [];
+      let fetchedCalls: CallToReviewRow[] = data.calls ?? [];
+      if (agentSearch.trim()) {
+        fetchedCalls = fetchedCalls.filter(c => c.agentName.toLowerCase().includes(agentSearch.toLowerCase().trim()));
+      }
       setCalls(fetchedCalls);
-      setTotal(data.total ?? 0);
+      setTotal(agentSearch.trim() ? fetchedCalls.length : (data.total ?? 0));
       setPage(pg);
-      onCountChange?.(data.total ?? 0);
+      onCountChange?.(agentSearch.trim() ? fetchedCalls.length : (data.total ?? 0));
 
       if (!autoExpandedRef.current && initialCallId) {
         autoExpandedRef.current = true;
@@ -223,7 +227,7 @@ export default function CallEvalTable({ leadingFilter, dispositions, onCountChan
     } finally {
       setLoading(false);
     }
-  }, [callIdSearch, debouncedMobile, dispFilter, iqsMin, iqsMax, statusFilter, customFrom, customTo, onCountChange, pageSize, agentFilter, initialCallId, onCallNotFound]);
+  }, [callIdSearch, debouncedMobile, agentSearch, dispFilter, iqsMin, iqsMax, statusFilter, customFrom, customTo, onCountChange, pageSize, agentFilter, initialCallId, onCallNotFound]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -290,6 +294,17 @@ export default function CallEvalTable({ leadingFilter, dispositions, onCountChan
             height: 32, padding: '0 10px', border: `1px solid ${mobileSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
             background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
             outline: 'none', width: 175
+          }}
+        />
+
+        <input
+          placeholder="Search by Agent…"
+          value={agentSearch}
+          onChange={e => setAgentSearch(e.target.value)}
+          style={{
+            height: 32, padding: '0 10px', border: `1px solid ${agentSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
+            background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
+            outline: 'none', width: 140
           }}
         />
 
