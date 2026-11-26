@@ -42,6 +42,8 @@ export function invalidateSkillsCache(): void {
 // Hardcoded fallback mappings in case DB is momentarily unreachable
 const DEFAULT_PERSONA_SKILLS: Record<string, string[]> = {
   admin: [
+    'roster:view:access', 'roster:manage:access',
+    'leave:use:access', 'leave:approve:access',
     'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
     'quality:analytics:access', 'quality:chat_eval:access', 'quality:call_eval:access',
     'tl:team_analytics:access', 'tl:member_analytics:access', 'tl:quality_chats:access',
@@ -50,11 +52,14 @@ const DEFAULT_PERSONA_SKILLS: Record<string, string[]> = {
     'tokens:view:access', 'settings:manage:access', 'users:manage:access', 'skills:manage:access',
   ],
   tl: [
+    'roster:view:access', 'roster:manage:access',
+    'leave:approve:access',
     'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
     'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
     'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
   ],
   quality: [
+    'roster:view:access',
     'chat:access', 'cx_dashboard:access', 'quality:analytics:access',
     'quality:chat_eval:access', 'quality:call_eval:access',
   ],

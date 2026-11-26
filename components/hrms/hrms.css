@@ -1,0 +1,867 @@
+/* HRMS design: the prototype's own design system tokens (colors_and_type.css) and page styles (app.css), scoped under .hrms.
+   Generated from the prototype by a one-off script. Edit this file by hand from here on. */
+/* =====================================================================
+   Wint Wealth — Bricks Design System
+   Base tokens (scales) + Semantic tokens (dark/light themes)
+
+   Token pyramid:
+     1. Base       — raw color scales: Teal, Green, Yellow, Blue, Red, Purple,
+                     Orange, Magenta, Neutral, plus Alpha Light / Alpha Dark.
+     2. Semantic   — intent-named: bg.section.default, bg.card.default,
+                     bg.feedback.error, text.primary, text.feedback.error,
+                     stroke.default, icon.accent.green, bg.button.primary, …
+     3. Component  — consumed in components. Light (default) and Dark themes
+                     flip the base values the semantic tokens point at.
+
+   Dark is primary. Attach data-theme="dark" on any root you want dark.
+   ===================================================================== */
+
+/* Fonts -------------------------------------------------------------- */
+/* Inter — brand font, loaded from local woff2 files */
+
+/* Lora + Space Grotesk + DM Mono come from Google Fonts (no brand files uploaded). */
+
+/* =====================================================================
+   BASE TOKENS — raw color scales. These never vary by theme.
+   ===================================================================== */
+.hrms {
+  /* Teal */
+  --teal-900:#002C46; --teal-800:#164C6B; --teal-700:#2C6B90; --teal-600:#438BB5;
+  --teal-500:#6FCAFF; --teal-400:#8CD5FF; --teal-300:#A9DFFF; --teal-200:#C5EAFF; --teal-100:#EEFBFF;
+
+  /* Green */
+  --green-1000:#0A1812; --green-900:#0B2117; --green-800:#0F3826; --green-700:#0B6936;
+  --green-600:#19AA4D; --green-500:#3DE86D; --green-400:#64ED8A; --green-300:#8BF1A7;
+  --green-200:#B1F6C5; --green-100:#D2F9D4; --green-50:#EFFFF0;
+
+  /* Yellow */
+  --yellow-900:#4F3A0E; --yellow-800:#745513; --yellow-700:#B57C02; --yellow-600:#D0A240;
+  --yellow-500:#FBC450; --yellow-400:#D5B475; --yellow-300:#FDDC96; --yellow-200:#FEE7BB; --yellow-100:#FFF2CD;
+
+  /* Blue */
+  --blue-1000:#091223; --blue-900:#051128; --blue-800:#0A2250; --blue-700:#103278;
+  --blue-600:#1543A0; --blue-500:#1A54C8; --blue-400:#417CF1; --blue-300:#76A4FF;
+  --blue-200:#A3BBE9; --blue-100:#D9E6FF; --blue-50:#F0F5FF;
+
+  /* Red */
+  --red-900:#3F0401; --red-800:#53120F; --red-700:#6F2522; --red-600:#95312D;
+  --red-500:#D8645D; --red-400:#FE817B; --red-300:#FFC7C5; --red-200:#FFD9D7; --red-100:#FFF2F2;
+
+  /* Purple */
+  --purple-900:#3A1659; --purple-800:#633495; --purple-700:#7C3EC3; --purple-600:#944DE7;
+  --purple-500:#A964F7; --purple-400:#C490F9; --purple-300:#DCBCFB; --purple-200:#E7D3FD; --purple-100:#F1EBFF;
+
+  /* Orange */
+  --orange-900:#461A00; --orange-800:#823006; --orange-700:#A33B04; --orange-600:#C54600;
+  --orange-500:#E65300; --orange-400:#FC823A; --orange-300:#FFB48C; --orange-200:#FEE2D4; --orange-100:#FFF0E9;
+
+  /* Magenta */
+  --magenta-900:#891869; --magenta-800:#A91A90; --magenta-700:#CA26A5; --magenta-600:#E142BC;
+  --magenta-500:#F877D2; --magenta-400:#FFACE5; --magenta-300:#FFCEF2; --magenta-200:#FEDFF3; --magenta-100:#FEEFF9;
+
+  /* Neutrals */
+  --neutral-1000:#000000; --neutral-980:#080808; --neutral-950:#101010; --neutral-920:#161616;
+  --neutral-900:#1A1A1A;  --neutral-850:#242424; --neutral-800:#333333; --neutral-700:#4B4B4B;
+  --neutral-600:#646464;  --neutral-500:#7E7E7E; --neutral-400:#979797; --neutral-300:#B1B1B1;
+  --neutral-200:#CBCBCB;  --neutral-100:#E5E5E5; --neutral-70:#EFEFEF;  --neutral-50:#F2F2F2;
+  --neutral-20:#FAFAFA;   --neutral-0:#FFFFFF;
+
+  /* Alpha — Light (white on dark) */
+  --alpha-L-005: rgba(255,255,255,0.05); --alpha-L-100: rgba(255,255,255,0.10);
+  --alpha-L-200: rgba(255,255,255,0.20); --alpha-L-300: rgba(255,255,255,0.30);
+  --alpha-L-400: rgba(255,255,255,0.40); --alpha-L-500: rgba(255,255,255,0.50);
+  --alpha-L-600: rgba(255,255,255,0.60); --alpha-L-700: rgba(255,255,255,0.70);
+  --alpha-L-800: rgba(255,255,255,0.80); --alpha-L-900: rgba(255,255,255,0.90);
+
+  /* Alpha — Dark (black on light) */
+  --alpha-D-005: rgba(0,0,0,0.05); --alpha-D-100: rgba(0,0,0,0.10);
+  --alpha-D-200: rgba(0,0,0,0.20); --alpha-D-300: rgba(0,0,0,0.30);
+  --alpha-D-400: rgba(0,0,0,0.40); --alpha-D-500: rgba(0,0,0,0.50);
+  --alpha-D-600: rgba(0,0,0,0.60); --alpha-D-700: rgba(0,0,0,0.70);
+  --alpha-D-800: rgba(0,0,0,0.80); --alpha-D-900: rgba(0,0,0,0.90);
+  --alpha-D-208: rgba(0,0,0,0.20);
+
+  /* Brand aliases — convenient handles for the most-used scale steps */
+  --wint-green:         var(--green-600); /* brand primary action green */
+  --wint-green-ink:     var(--green-800); /* ink-dark green in badges */
+  --wint-green-subtle:  var(--green-100);
+  --wint-gold:          var(--yellow-500); /* premium accent numerics on dark */
+  --wint-gold-deep:     var(--yellow-800);
+  --wint-launch-blue:   var(--blue-800);   /* launch-offer card */
+  --wint-launch-blue-2: var(--blue-1000);
+  --wint-launch-blue-hi:var(--blue-300);
+}
+
+/* =====================================================================
+   SEMANTIC TOKENS — Light theme (default)
+   Every token maps to a base-scale variable. Components must consume
+   semantic tokens (never base tokens directly) so themes flip cleanly.
+   ===================================================================== */
+.hrms,
+.hrms[data-theme="light"] {
+  /* ── Background · Section ── */
+  --bg-section-default:     var(--neutral-950);  /* (light -> neutral-0) */
+  --bg-section-emphasized:  var(--neutral-980);
+  --bg-section-subtle:      var(--neutral-920);
+  /* inverse variants */
+  --bg-section-inverse:            var(--neutral-0);
+  --bg-section-emphasized-inverse: var(--neutral-20);
+  --bg-section-subtle-inverse:     var(--neutral-50);
+
+  /* Light theme reassignments */
+  --bg-section-default:     var(--neutral-0);
+  --bg-section-emphasized:  var(--neutral-20);
+  --bg-section-subtle:      var(--neutral-50);
+  --bg-section-inverse:           var(--neutral-950);
+  --bg-section-emphasized-inverse:var(--neutral-980);
+  --bg-section-subtle-inverse:    var(--neutral-920);
+
+  /* ── Background · Card ── */
+  --bg-card-default:       var(--neutral-0);
+  --bg-card-inverse:       var(--neutral-900);
+
+  /* ── Background · Component (layered surfaces inside cards) ── */
+  --bg-component-l1:         var(--neutral-20);
+  --bg-component-l2:         var(--neutral-0);
+  --bg-component-l1-inverse: var(--neutral-900);
+  --bg-component-l2-inverse: var(--neutral-850);
+
+  /* ── Background · Overlay ── */
+  --bg-overlay-hover:    var(--alpha-D-200);
+  --bg-overlay-pressed:  var(--alpha-D-200);
+  --bg-overlay-backdrop: var(--alpha-D-800);
+  --bg-overlay-section:  var(--bg-section-default);
+
+  /* ── Background · Shimmer ── */
+  --bg-shimmer-l1:         var(--neutral-70);
+  --bg-shimmer-l2:         var(--neutral-100);
+  --bg-shimmer-l1-inverse: var(--neutral-900);
+  --bg-shimmer-l2-inverse: var(--neutral-850);
+
+  /* ── Background · Feedback ── */
+  --bg-feedback-error:             var(--red-200);
+  --bg-feedback-success:           var(--green-100);
+  --bg-feedback-warning:           var(--yellow-300);
+  --bg-feedback-info:              var(--blue-300);
+  --bg-feedback-disabled:          var(--neutral-50);
+  --bg-feedback-disabled-emphasized: var(--alpha-D-100);
+
+  /* feedback · inverse (error on cta bar, etc) */
+  --bg-feedback-error-inverse:   var(--red-500);
+  --bg-feedback-success-inverse: var(--green-800);
+  --bg-feedback-warning-inverse: var(--yellow-600);
+  --bg-feedback-info-inverse:    var(--blue-600);
+  --bg-feedback-disabled-inverse: var(--alpha-L-100);
+
+  /* feedback · common (same in both themes) */
+  --bg-feedback-error-common:   var(--red-200);
+  --bg-feedback-success-common: var(--green-100);
+  --bg-feedback-warning-common: var(--yellow-200);
+  --bg-feedback-info-common:    var(--blue-200);
+  --bg-feedback-disabled-common:var(--neutral-920);
+
+  /* ── Background · Accent blocks ── */
+  --bg-accent-blue:        var(--blue-600);
+  --bg-accent-blue-1:      var(--blue-100);
+  --bg-accent-blue-section:        var(--blue-50);
+  --bg-accent-blue-section-inverse:var(--blue-1000);
+  --bg-accent-blue-accent-1:       var(--blue-500);
+  --bg-accent-blue-accent-2:       var(--blue-300);
+
+  --bg-accent-yellow-default: var(--yellow-900);
+  --bg-accent-yellow-pressed: var(--yellow-600);
+  --bg-accent-yellow-3:       var(--yellow-200);
+  --bg-accent-yellow-soldout: var(--yellow-600);
+
+  --bg-accent-green-fully-repaid: var(--green-200);
+  --bg-accent-green-1:            var(--green-800);
+  --bg-accent-green-2:            var(--green-100);
+  --bg-accent-green-section:         var(--green-50);
+  --bg-accent-green-section-inverse: var(--green-1000);
+
+  --bg-accent-neutral-1: var(--neutral-0);
+  --bg-accent-neutral-2: var(--neutral-200);
+
+  --bg-accent-alpha-default: var(--alpha-D-100);
+
+  /* ── Background · Button ── */
+  --bg-btn-primary:           var(--neutral-1000);
+  --bg-btn-primary-hover:     var(--neutral-850);
+  --bg-btn-primary-disabled:  var(--neutral-300);
+  --bg-btn-secondary:         var(--neutral-0);
+  --bg-btn-secondary-hover:   var(--neutral-50);
+  --bg-btn-inverse:           var(--neutral-0);
+  --bg-btn-inverse-primary-hover: var(--neutral-50);
+
+  /* button · accent backgrounds */
+  --bg-btn-accent-blue:   var(--blue-700);
+  --bg-btn-accent-purple: var(--purple-900);
+  --bg-btn-accent-teal:   var(--teal-800);
+
+  /* ── Stroke (borders) ── */
+  --stroke-subtle:     var(--neutral-50);
+  --stroke-default:    var(--neutral-70);
+  --stroke-emphasized: var(--neutral-100);
+  --stroke-alpha:      var(--alpha-D-100);
+  --stroke-feedback-error: var(--red-500);
+
+  /* stroke · inverse */
+  --stroke-subtle-inverse:     var(--neutral-900);
+  --stroke-default-inverse:    var(--neutral-850);
+  --stroke-emphasized-inverse: var(--neutral-800);
+  --stroke-alpha-inverse:      var(--alpha-L-100);
+  --stroke-feedback-error-inverse: var(--red-500);
+
+  /* stroke · button */
+  --stroke-btn-default: var(--neutral-200);
+  --stroke-btn-inverse: var(--neutral-700);
+
+  /* ── Text ── */
+  --text-primary:     var(--neutral-1000);
+  --text-secondary:   var(--neutral-500);
+  --text-link:        var(--green-700);
+  --text-alpha:       var(--alpha-D-700);
+
+  /* text · inverse */
+  --text-primary-inverse:   var(--neutral-0);
+  --text-secondary-inverse: var(--neutral-500);
+  --text-link-inverse:      var(--green-500);
+  --text-alpha-inverse:     var(--alpha-L-700);
+
+  /* text · feedback */
+  --text-feedback-error:         var(--red-800);
+  --text-feedback-error-subtle:  var(--red-500);
+  --text-feedback-success:       var(--green-700);
+  --text-feedback-success-subtle:var(--green-700);
+  --text-feedback-warning:       var(--yellow-800);
+  --text-feedback-warning-subtle:var(--yellow-700);
+  --text-feedback-info:          var(--blue-800);
+  --text-feedback-info-subtle:   var(--blue-700);
+
+  /* text · accent */
+  --text-accent-blue:      var(--blue-600);
+  --text-accent-purple:    var(--purple-800);
+  --text-accent-teal:      var(--teal-800);
+  --text-accent-yellow:    var(--yellow-800);
+  --text-accent-dark-green:var(--green-900);
+
+  /* text · button */
+  --text-btn-on-primary: var(--neutral-0);
+  --text-btn-on-inverse: var(--neutral-1000);
+  --text-btn-link:       var(--green-600);
+
+  /* ── Icon ── */
+  --icon-default:         var(--neutral-300);
+  --icon-default-inverse: var(--neutral-700);
+  --icon-primary:         var(--neutral-1000);
+  --icon-primary-inverse: var(--neutral-0);
+  --icon-accent-green:    var(--green-600);
+  --icon-accent-yellow:   var(--yellow-600);
+  --icon-accent-blue:     var(--blue-600);
+  --icon-accent-neutral:  var(--neutral-600);
+}
+
+/* =====================================================================
+   SEMANTIC TOKENS — Dark theme override
+   Set data-theme="dark" on the root/element to opt in.
+   Each semantic token re-points to a different base step; the component
+   layer does not change.
+   ===================================================================== */
+.hrms[data-theme="dark"] {
+  /* BG · Section */
+  --bg-section-default:    var(--neutral-950);
+  --bg-section-emphasized: var(--neutral-980);
+  --bg-section-subtle:     var(--neutral-920);
+  --bg-section-inverse:           var(--neutral-0);
+  --bg-section-emphasized-inverse:var(--neutral-20);
+  --bg-section-subtle-inverse:    var(--neutral-50);
+
+  /* BG · Card */
+  --bg-card-default:   var(--neutral-900);
+  --bg-card-inverse:   var(--neutral-0);
+
+  /* BG · Component */
+  --bg-component-l1:         var(--neutral-900);
+  --bg-component-l2:         var(--neutral-850);
+  --bg-component-l1-inverse: var(--neutral-20);
+  --bg-component-l2-inverse: var(--neutral-0);
+
+  /* BG · Overlay */
+  --bg-overlay-hover:    var(--alpha-L-200);
+  --bg-overlay-pressed:  var(--alpha-L-200);
+  --bg-overlay-backdrop: var(--alpha-D-800);
+  --bg-overlay-section:  var(--bg-section-default);
+
+  /* BG · Shimmer */
+  --bg-shimmer-l1:         var(--neutral-900);
+  --bg-shimmer-l2:         var(--neutral-850);
+  --bg-shimmer-l1-inverse: var(--neutral-70);
+  --bg-shimmer-l2-inverse: var(--neutral-100);
+
+  /* BG · Feedback */
+  --bg-feedback-error:   var(--red-500);
+  --bg-feedback-success: var(--green-100);
+  --bg-feedback-warning: var(--yellow-600);
+  --bg-feedback-info:    var(--blue-300);
+  --bg-feedback-disabled:var(--neutral-50);
+  --bg-feedback-disabled-emphasized: var(--alpha-L-100);
+
+  --bg-feedback-error-inverse:   var(--red-200);
+  --bg-feedback-success-inverse: var(--green-100);
+  --bg-feedback-warning-inverse: var(--yellow-300);
+  --bg-feedback-info-inverse:    var(--blue-300);
+  --bg-feedback-disabled-inverse:var(--alpha-L-100);
+
+  --bg-feedback-error-common:   var(--red-200);
+  --bg-feedback-success-common: var(--green-100);
+  --bg-feedback-warning-common: var(--yellow-200);
+  --bg-feedback-info-common:    var(--blue-200);
+  --bg-feedback-disabled-common:var(--neutral-920);
+
+  /* BG · Accent */
+  --bg-accent-blue:        var(--blue-600);
+  --bg-accent-blue-1:      var(--blue-100);
+  --bg-accent-blue-section:         var(--blue-1000);
+  --bg-accent-blue-section-inverse: var(--blue-50);
+  --bg-accent-blue-accent-1: var(--blue-600);
+  --bg-accent-blue-accent-2: var(--blue-200);
+
+  --bg-accent-yellow-default: var(--yellow-600);
+  --bg-accent-yellow-pressed: var(--yellow-900);
+  --bg-accent-yellow-3:       var(--yellow-200);
+  --bg-accent-yellow-soldout: var(--yellow-800);
+
+  --bg-accent-green-fully-repaid: var(--green-800);
+  --bg-accent-green-1:            var(--green-800);
+  --bg-accent-green-2:            var(--green-100);
+  --bg-accent-green-section:         var(--green-1000);
+  --bg-accent-green-section-inverse: var(--green-50);
+
+  --bg-accent-neutral-1: var(--neutral-800);
+  --bg-accent-neutral-2: var(--neutral-700);
+
+  --bg-accent-alpha-default: var(--alpha-L-100);
+
+  /* Button */
+  --bg-btn-primary:           var(--neutral-0);
+  --bg-btn-primary-hover:     var(--neutral-50);
+  --bg-btn-primary-disabled:  var(--neutral-600);
+  --bg-btn-secondary:         var(--neutral-980);
+  --bg-btn-secondary-hover:   var(--neutral-900);
+  --bg-btn-inverse:           var(--neutral-1000);
+  --bg-btn-inverse-primary-hover: var(--neutral-850);
+
+  --bg-btn-accent-blue:   var(--blue-100);
+  --bg-btn-accent-purple: var(--purple-300);
+  --bg-btn-accent-teal:   var(--teal-200);
+
+  /* Stroke */
+  --stroke-subtle:     var(--neutral-900);
+  --stroke-default:    var(--neutral-850);
+  --stroke-emphasized: var(--neutral-800);
+  --stroke-alpha:      var(--alpha-L-100);
+  --stroke-feedback-error: var(--red-500);
+
+  --stroke-subtle-inverse:     var(--neutral-50);
+  --stroke-default-inverse:    var(--neutral-70);
+  --stroke-emphasized-inverse: var(--neutral-100);
+  --stroke-alpha-inverse:      var(--alpha-D-100);
+  --stroke-feedback-error-inverse: var(--red-500);
+
+  --stroke-btn-default: var(--neutral-700);
+  --stroke-btn-inverse: var(--neutral-200);
+
+  /* Text */
+  --text-primary:     var(--neutral-0);
+  --text-secondary:   var(--neutral-500);
+  --text-link:        var(--green-500);
+  --text-alpha:       var(--alpha-L-700);
+
+  --text-primary-inverse:   var(--neutral-1000);
+  --text-secondary-inverse: var(--neutral-500);
+  --text-link-inverse:      var(--green-700);
+  --text-alpha-inverse:     var(--alpha-D-700);
+
+  --text-feedback-error:         var(--red-800);
+  --text-feedback-error-subtle:  var(--red-500);
+  --text-feedback-success:       var(--green-700);
+  --text-feedback-success-subtle:var(--green-700);
+  --text-feedback-warning:       var(--yellow-800);
+  --text-feedback-warning-subtle:var(--yellow-700);
+  --text-feedback-info:          var(--blue-800);
+  --text-feedback-info-subtle:   var(--blue-700);
+
+  --text-accent-blue:      var(--blue-600);
+  --text-accent-purple:    var(--purple-800);
+  --text-accent-teal:      var(--teal-800);
+  --text-accent-yellow:    var(--yellow-800);
+  --text-accent-dark-green:var(--green-900);
+
+  --text-btn-on-primary: var(--neutral-1000);
+  --text-btn-on-inverse: var(--neutral-0);
+  --text-btn-link:       var(--green-600);
+
+  /* Icon */
+  --icon-default:         var(--neutral-700);
+  --icon-default-inverse: var(--neutral-300);
+  --icon-primary:         var(--neutral-0);
+  --icon-primary-inverse: var(--neutral-1000);
+  --icon-accent-green:    var(--green-600);
+  --icon-accent-yellow:   var(--yellow-600);
+  --icon-accent-blue:     var(--blue-600);
+  --icon-accent-neutral:  var(--neutral-200);
+}
+
+/* =====================================================================
+   Legacy / convenience aliases
+   Keep a short alias list so older pages (preview cards, mobile kit)
+   still resolve while we migrate consumers to semantic tokens.
+   ===================================================================== */
+.hrms {
+  --bg-app:       var(--bg-section-default);
+  --bg-surface:   var(--bg-card-default);
+  --bg-elev:      var(--bg-component-l1);
+  --fg-1:         var(--text-primary);
+  --fg-2:         var(--text-secondary);
+  --fg-3:         var(--text-secondary);
+  --fg-invert:    var(--text-primary-inverse);
+  --border-1:     var(--stroke-default);
+  --border-2:     var(--stroke-emphasized);
+  --border-strong:var(--neutral-500);
+  --accent:       var(--wint-green);
+  --accent-600:   var(--green-500);
+  --success:      var(--green-600);   --success-bg: var(--green-100);
+  --error:        var(--red-500);     --error-bg:   var(--red-100);
+  --warning:      var(--yellow-500);  --warning-bg: var(--yellow-100);
+  --info:         var(--blue-500);    --info-bg:    var(--blue-100);
+}
+
+/* === Radii ========================================================== */
+.hrms {
+  --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px;
+  --r-xl: 16px; --r-2xl: 20px; --r-3xl: 24px; --r-pill: 999px;
+}
+
+/* === Shadows ======================================================== */
+.hrms {
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-2: 0 4px 12px rgba(0,0,0,0.25);
+  --shadow-3: 0 12px 32px rgba(0,0,0,0.35);
+  --shadow-hi:0 0 0 1px rgba(255,255,255,0.06) inset;
+  --shadow-focus: 0 0 0 3px rgba(83,187,83,0.35);
+}
+
+/* === Spacing (4pt) =================================================== */
+.hrms {
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:20px;
+  --s-6:24px; --s-7:32px; --s-8:40px; --s-9:48px; --s-10:64px;
+}
+
+/* =====================================================================
+   TYPE TOKENS — Bricks system
+
+   Families
+     Primary:   Inter  — navigation, body, labels, buttons, UI headings
+     Secondary: Lora   — marketing headings, expressive sections
+     (Display numerics use Space Grotesk; Mono uses DM Mono — Wint-specific,
+      not part of the Bricks Figma but used in product.)
+
+   Responsive type — every classification ships a MOBILE and a WEB value.
+   Use the class alone (mobile default) and add `.web` on a container/root
+   to opt in to the web scale. Format below matches the Figma spec:
+     CLASSIFICATION / STYLE — mobile: size/line-height/weight · web: …
+
+     Text/Nav   Regular   10/16 Regular  · 16/16 Regular
+                Heavy     10/16 Medium   · 16/16 Medium
+
+     Text/Label Regular   12/20 Regular       (same both)
+                SemiBold  12/20 SemiBold      (same both)
+                AllCaps   12/20 SemiBold UPR  (same both)
+
+     Text/Body  Small     12/20 Regular · 14/20 Regular
+                Medium    14/20 Regular · 14/20 Regular
+
+     Text/Button Default        14/20 Medium     · 16/20 Medium
+                 Underline Sm   12/20 Regular-UL · 14/20 Regular-UL
+                 Underline Md   14/20 Regular-UL · 14/20 Regular-UL
+
+     Heading/Sans Small  14/20 SemiBold · 16/20 SemiBold
+                  Medium 16/24 SemiBold · 20/24 SemiBold
+                  Large  20/32 SemiBold · 24/24 SemiBold
+                  XLarge 32/40 SemiBold · 32/40 SemiBold
+
+     Heading/Serif Medium 16/24 Medium · 20/24 Medium
+                   Large  20/32 Medium · 24/32 Medium
+   ===================================================================== */
+.hrms {
+  --font-serif:   "Lora", "Noto Serif", Georgia, serif;     /* Secondary */
+  --font-sans:    "Inter", "Helvetica Neue", Arial, sans-serif; /* Primary */
+  --font-display: "Space Grotesk", "Inter", Arial, sans-serif;  /* big nums */
+  --font-mono:    "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --fs-10:10px; --fs-12:12px; --fs-14:14px; --fs-16:16px; --fs-18:18px;
+  --fs-20:20px; --fs-24:24px; --fs-28:28px; --fs-32:32px; --fs-40:40px;
+  --fs-48:48px; --fs-56:56px; --fs-80:80px;
+}
+
+/* =====================================================================
+   Semantic type classes — mirror Bricks Figma names 1-to-1
+   Default = MOBILE scale. Add `.web` on an ancestor for WEB scale.
+   ===================================================================== */
+
+/* ── Text/Nav ────────────────────────────────────────────────────── */
+.hrms .t-nav,
+.hrms .t-nav-regular {
+  font-family: var(--font-sans); font-weight: 400;
+  font-size: 10px; line-height: 16px;
+}
+.hrms .t-nav-heavy {
+  font-family: var(--font-sans); font-weight: 500;
+  font-size: 10px; line-height: 16px;
+}
+.hrms.web .t-nav, .hrms.web .t-nav-regular { font-size: 16px; line-height: 16px; }
+.hrms.web .t-nav-heavy                { font-size: 16px; line-height: 16px; }
+
+/* ── Text/Label ──────────────────────────────────────────────────── */
+.hrms .t-label-regular {
+  font-family: var(--font-sans); font-weight: 400;
+  font-size: 12px; line-height: 20px;
+}
+.hrms .t-label-semibold,
+.hrms .t-label {                        /* default label = SemiBold per spec */
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: 12px; line-height: 20px;
+}
+.hrms .t-label-allcaps,
+.hrms .t-overline {
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: 12px; line-height: 20px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+/* ── Text/Body ───────────────────────────────────────────────────── */
+.hrms .t-body-sm, .hrms .t-body-small {
+  font-family: var(--font-sans); font-weight: 400;
+  font-size: 12px; line-height: 20px;
+}
+.hrms .t-body, .hrms .t-body-medium {
+  font-family: var(--font-sans); font-weight: 400;
+  font-size: 14px; line-height: 20px;
+}
+.hrms.web .t-body-sm, .hrms.web .t-body-small { font-size: 14px; line-height: 20px; }
+/* medium is the same in both */
+
+/* ── Text/Button ─────────────────────────────────────────────────── */
+.hrms .t-btn, .hrms .t-btn-default {
+  font-family: var(--font-sans); font-weight: 500;
+  font-size: 14px; line-height: 20px;
+}
+.hrms .t-btn-underline-sm {
+  font-family: var(--font-sans); font-weight: 400;
+  font-size: 12px; line-height: 20px; text-decoration: underline;
+}
+.hrms .t-btn-underline-md, .hrms .t-btn-underline {
+  font-family: var(--font-sans); font-weight: 400;
+  font-size: 14px; line-height: 20px; text-decoration: underline;
+}
+.hrms.web .t-btn, .hrms.web .t-btn-default     { font-size: 16px; line-height: 20px; }
+.hrms.web .t-btn-underline-sm             { font-size: 14px; line-height: 20px; }
+/* underline-md is the same in both */
+
+/* ── Heading/Sans (Inter) ────────────────────────────────────────── */
+.hrms .t-h-sans-sm,  .hrms .t-h3-sans {
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: 14px; line-height: 20px;
+}
+.hrms .t-h-sans-md,  .hrms .t-h2-sans {
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: 16px; line-height: 24px;
+}
+.hrms .t-h-sans-lg,  .hrms .t-h1-sans {
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: 20px; line-height: 32px;
+}
+.hrms .t-h-sans-xl {
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: 32px; line-height: 40px; letter-spacing: -0.01em;
+}
+.hrms.web .t-h-sans-sm, .hrms.web .t-h3-sans { font-size: 16px; line-height: 20px; }
+.hrms.web .t-h-sans-md, .hrms.web .t-h2-sans { font-size: 20px; line-height: 24px; }
+.hrms.web .t-h-sans-lg, .hrms.web .t-h1-sans { font-size: 24px; line-height: 24px; }
+/* xl is the same in both */
+
+/* ── Heading/Serif (Lora) ────────────────────────────────────────── */
+.hrms .t-h-serif-md, .hrms .t-h3 {
+  font-family: var(--font-serif); font-weight: 500;
+  font-size: 16px; line-height: 24px;
+}
+.hrms .t-h-serif-lg, .hrms .t-h2 {
+  font-family: var(--font-serif); font-weight: 500;
+  font-size: 20px; line-height: 32px;
+}
+.hrms.web .t-h-serif-md, .hrms.web .t-h3 { font-size: 20px; line-height: 24px; }
+.hrms.web .t-h-serif-lg, .hrms.web .t-h2 { font-size: 24px; line-height: 32px; }
+
+/* Larger serif "hero" — not in Bricks spec but used by marketing */
+.hrms .t-h1 {
+  font-family: var(--font-serif); font-weight: 500;
+  font-size: 28px; line-height: 36px; letter-spacing: 0.005em;
+}
+.hrms.web .t-h1 { font-size: 40px; line-height: 48px; }
+
+/* ── Display numerics (Space Grotesk) — product-specific ─────────── */
+.hrms .t-display-sm { font-family: var(--font-display); font-weight: 700; font-size: 32px; line-height: 1.1;  letter-spacing: -0.01em; }
+.hrms .t-display    { font-family: var(--font-display); font-weight: 700; font-size: 48px; line-height: 1.05; letter-spacing: -0.02em; }
+.hrms .t-display-xl { font-family: var(--font-display); font-weight: 700; font-size: 56px; line-height: 1.05; letter-spacing: -0.02em; }
+
+/* ── Legacy aliases (kept so existing pages don't break) ─────────── */
+.hrms .t-subtitle    { font-family: var(--font-sans); font-weight: 500; font-size: 14px; line-height: 20px; color: var(--text-secondary); }
+.hrms .t-subtitle-sm { font-family: var(--font-sans); font-weight: 500; font-size: 12px; line-height: 16px; color: var(--text-secondary); }
+.hrms .t-body-lg     { font-family: var(--font-sans); font-weight: 400; font-size: 16px; line-height: 24px; }
+.hrms .t-label-sm    { font-family: var(--font-sans); font-weight: 500; font-size: 12px; line-height: 16px; }
+.hrms .t-btn-lg      { font-family: var(--font-sans); font-weight: 500; font-size: 16px; line-height: 20px; }
+.hrms .t-btn-sm      { font-family: var(--font-sans); font-weight: 500; font-size: 12px; line-height: 20px; }
+.hrms .t-value-lg    { font-family: var(--font-sans); font-weight: 700; font-size: 18px; line-height: 22px; }
+.hrms .t-value       { font-family: var(--font-sans); font-weight: 700; font-size: 16px; line-height: 20px; }
+.hrms .t-value-sm    { font-family: var(--font-sans); font-weight: 700; font-size: 14px; line-height: 18px; }
+.hrms .t-h4          { font-family: var(--font-serif); font-weight: 500; font-size: 16px; line-height: 24px; }
+.hrms .t-mono        { font-family: var(--font-mono); font-weight: 400; font-size: 12px; letter-spacing: 0; }
+
+/* =====================================================================
+   Base element defaults
+   Add class="bricks" (and optionally data-theme="dark") to opt in.
+   ===================================================================== */
+.hrms {
+  background: var(--bg-section-default);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.hrms h1 { font-family: var(--font-serif); font-weight: 500; font-size: var(--fs-28); line-height: 1.2; }
+.hrms h2 { font-family: var(--font-serif); font-weight: 500; font-size: var(--fs-20); line-height: 1.3; }
+.hrms h3 { font-family: var(--font-sans);  font-weight: 600; font-size: var(--fs-16); line-height: 1.4; }
+.hrms p  { margin: 0 0 var(--s-3) 0; color: var(--text-secondary); }
+.hrms a  { color: var(--text-link); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.hrms .mono { font-family: var(--font-mono); }
+
+.hrms,.hrms *{box-sizing:border-box}
+.hrms,.hrms{margin:0;background:var(--bg-section-default);color:var(--text-primary);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}
+.hrms{--muted:#979797;--hair:var(--stroke-default)}
+.hrms button{font-family:inherit;color:inherit}
+.hrms a{color:var(--text-link);text-underline-offset:3px}.hrms a:hover{color:var(--green-400)}
+.hrms h1,.hrms h2,.hrms h3,.hrms p{margin:0}
+.hrms .app{display:grid;grid-template-columns:248px minmax(0,1fr);grid-template-rows:56px 1fr;width:100%;max-width:1440px;min-height:100vh;margin:0 auto;background:var(--bg-section-default)}
+.hrms .top{grid-column:1/3;display:flex;align-items:center;gap:16px;padding:0 20px 0 16px;height:56px;background:var(--neutral-1000);border-bottom:1px solid var(--hair);position:sticky;top:0;z-index:40;width:100%}
+.hrms .brand{display:flex;align-items:center;gap:12px;width:240px;text-decoration:none;color:#fff}
+.hrms .brand .logo{width:168px;height:44px;overflow:hidden;position:relative;flex:none}.hrms .brand .logo img{position:absolute;width:240px;left:-32px;top:-90px}
+.hrms .brand b{font:600 12px/16px var(--font-sans);letter-spacing:.14em;color:var(--muted)}
+.hrms .spacer{flex:1}
+.hrms .viewas{display:flex;align-items:center;gap:10px;border:1px dashed var(--yellow-700);border-radius:6px;padding:5px 8px 5px 10px}
+.hrms .viewas .lbl{font:500 12px/16px var(--font-sans);color:var(--text-alpha)}
+.hrms .seg{display:flex;background:var(--neutral-900);border-radius:4px;padding:2px;gap:2px}
+.hrms .seg button{border:0;background:transparent;height:28px;padding:0 10px;border-radius:3px;font:500 12px/20px var(--font-sans);color:var(--text-alpha);cursor:pointer}
+.hrms .seg button:hover{background:var(--alpha-L-100)}.hrms .seg button.on{background:#fff;color:#000}
+.hrms .ptag{display:inline-block;font:600 10px/16px var(--font-sans);text-transform:uppercase;letter-spacing:.08em;color:var(--yellow-400);background:rgba(251,196,80,.12);padding:0 6px;border-radius:4px;white-space:nowrap}
+.hrms .iconbtn{position:relative;width:36px;height:36px;border-radius:6px;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--text-primary)}
+.hrms .iconbtn:hover{background:var(--alpha-L-100)}
+.hrms .count{position:absolute;top:2px;right:0;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--red-500);color:#000;font:700 11px/18px var(--font-sans);text-align:center}
+.hrms .profile{display:flex;align-items:center;gap:10px;border:0;background:transparent;border-radius:6px;padding:4px 8px 4px 4px;cursor:pointer;text-align:left}
+.hrms .profile:hover{background:var(--alpha-L-100)}
+.hrms .profile .nm{font:600 13px/16px var(--font-sans)}.hrms .profile .rl{font:400 12px/16px var(--font-sans);color:var(--muted)}
+.hrms .avatar{width:32px;height:32px;border-radius:50%;background:var(--neutral-800);display:grid;place-items:center;font:600 12px var(--font-sans);color:#fff;flex:none}
+.hrms .avatar.sm{width:24px;height:24px;font-size:10px}
+.hrms .pop{position:absolute;right:0;top:44px;background:var(--bg-card-default);border:1px solid var(--stroke-emphasized);border-radius:12px;box-shadow:var(--shadow-3);z-index:50;overflow:hidden}
+.hrms .menu-pop{width:220px;padding:6px}.hrms .menu-pop a,.hrms .menu-pop button{display:flex;gap:10px;align-items:center;width:100%;height:36px;padding:0 10px;border:0;background:transparent;border-radius:6px;color:var(--text-primary);text-decoration:none;font:500 14px var(--font-sans);cursor:pointer}
+.hrms .menu-pop a:hover,.hrms .menu-pop button:hover{background:var(--alpha-L-100);color:#fff}
+.hrms .menu-pop .who{padding:8px 10px;border-bottom:1px solid var(--hair);margin-bottom:6px}
+.hrms .npanel{width:420px}.hrms .nhead{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.hrms .nitem{display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--hair);position:relative}
+.hrms .nitem:last-child{border-bottom:0}.hrms .nitem.unread{background:rgba(255,255,255,.03)}
+.hrms .ndot{width:8px;height:8px;border-radius:50%;background:var(--green-500);margin-top:6px;flex:none}.hrms .ndot.read{background:transparent;border:1px solid var(--neutral-700)}
+.hrms .nitem .tx{font:400 13px/20px var(--font-sans);color:var(--text-primary)}.hrms .nitem .mt{font:400 12px/16px var(--font-sans);color:var(--muted);margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hrms .menu{position:sticky;top:56px;align-self:start;height:calc(100vh - 56px);overflow:auto;border-right:1px solid var(--hair);padding:16px 12px 24px;background:var(--bg-section-default)}
+.hrms .mgroup{margin-bottom:18px}.hrms .mgroup .t{display:flex;align-items:center;gap:8px;padding:0 12px;margin-bottom:6px;font:600 11px/16px var(--font-sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hrms .mi{display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:6px;color:var(--text-alpha);text-decoration:none;font:500 14px var(--font-sans)}
+.hrms .mi:hover{background:var(--alpha-L-100);color:#fff}.hrms .mi.on{background:var(--neutral-850);color:#fff}
+.hrms .mi .scope{margin-left:auto;font:500 11px/16px var(--font-sans);color:var(--muted)}
+.hrms .mi .count{position:static;margin-left:auto}
+.hrms main{min-width:0}.hrms .page{padding:32px 40px 72px;min-width:0}
+.hrms .ph{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:28px}
+.hrms .ph h1{font:500 32px/40px var(--font-serif);letter-spacing:.005em}.hrms .ph .sub{margin-top:6px;font:400 14px/20px var(--font-sans);color:var(--muted);max-width:720px}
+.hrms .spick{display:flex;flex-direction:column;gap:4px;min-width:280px;border:1px dashed var(--yellow-700);border-radius:8px;padding:8px 10px}
+.hrms .spick .h{display:flex;justify-content:space-between;align-items:center;font:500 12px/16px var(--font-sans);color:var(--text-alpha)}
+.hrms .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:4px;border:1px solid transparent;cursor:pointer;font:600 14px/20px var(--font-sans);letter-spacing:.01em;height:44px;padding:0 20px;white-space:nowrap;transition:background 120ms,border-color 120ms;text-decoration:none}
+.hrms .btn.sm{height:36px;padding:0 16px;font-size:12px}.hrms .btn.lg{height:52px;padding:0 24px;font-size:16px}
+.hrms .btn-primary{background:#fff;color:#000;border-color:#fff}.hrms .btn-primary:hover{background:#f2f2f2;color:#000}
+.hrms .btn-primary:disabled{background:#646464;border-color:#646464;color:rgba(255,255,255,.7);cursor:not-allowed}
+.hrms .btn-secondary{background:#101010;color:#fff;border-color:#4b4b4b}.hrms .btn-secondary:hover{background:#1a1a1a;border-color:#7e7e7e;color:#fff}
+.hrms .btn-secondary:disabled{color:#4b4b4b;border-color:#242424;cursor:not-allowed}
+.hrms .btn-tertiary{background:transparent;color:#fff;padding-left:0;padding-right:0}.hrms .btn-tertiary:hover{color:#e5e5e5}
+.hrms .field{display:flex;flex-direction:column;gap:6px}.hrms .field label{font:600 12px/16px var(--font-sans);color:#e5e5e5}.hrms .field .req{color:var(--red-400);margin-left:2px}
+.hrms .field .help{font:400 12px/16px var(--font-sans);color:var(--muted)}
+.hrms .input,.hrms select.input,.hrms textarea.input{background:#161616;border:1px solid #333;border-radius:4px;color:#fff;font:400 14px/20px var(--font-sans);padding:0 14px;height:44px;width:100%;outline:0}
+.hrms textarea.input{padding:12px 14px;height:auto;min-height:88px;resize:vertical}
+.hrms .input:hover{border-color:#4b4b4b;background:#1a1a1a}.hrms .input:focus{border-color:#fff;background:#1a1a1a;box-shadow:0 0 0 3px rgba(255,255,255,.1)}
+.hrms .input::placeholder{color:#7e7e7e}.hrms select.input.sm{height:32px;font-size:12px;padding:0 8px}
+.hrms .card{background:var(--bg-card-default);border:1px solid var(--hair);border-radius:16px;padding:20px}
+.hrms .card.flush{padding:0;overflow:hidden}
+.hrms .ov{font:600 12px/20px var(--font-sans);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.hrms .h2s{font:600 16px/24px var(--font-sans)}.hrms .mut{color:var(--muted)}.hrms .sm12{font:400 12px/20px var(--font-sans)}.hrms .b14{font:400 14px/20px var(--font-sans)}
+.hrms .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.hrms .col{display:flex;flex-direction:column;gap:12px}
+.hrms .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.hrms .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.hrms .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.hrms .mono{font-family:var(--font-mono)}
+.hrms .badge{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;font:600 12px/20px var(--font-sans);border-radius:4px;letter-spacing:.01em;white-space:nowrap}
+.hrms .badge i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.hrms .st-applied{background:transparent;color:#cbcbcb;box-shadow:inset 0 0 0 1px #7e7e7e}
+.hrms .st-inproc{background:var(--blue-700);color:var(--blue-100)}
+.hrms .st-pending{background:var(--yellow-600);color:#161616}
+.hrms .st-approved{background:var(--green-800);color:var(--green-400)}
+.hrms .st-auto-ok{background:var(--teal-800);color:var(--teal-300)}
+.hrms .st-rejected{background:var(--red-500);color:#fff}
+.hrms .st-auto-no{background:var(--orange-800);color:var(--orange-300)}
+.hrms .st-auto-can{background:var(--purple-900);color:var(--purple-300)}
+.hrms .st-cancelled{background:var(--neutral-700);color:#fff}
+.hrms .st-exit{background:var(--magenta-900);color:var(--magenta-300)}
+.hrms .st-taken{background:var(--green-100);color:var(--green-700)}
+.hrms .tag{display:inline-flex;align-items:center;gap:4px;padding:0 6px;font:600 12px/18px var(--font-sans);border-radius:4px;white-space:nowrap}
+.hrms .tag-lop{color:var(--yellow-400);box-shadow:inset 0 0 0 1px var(--yellow-600)}
+.hrms .tag-moved{color:var(--blue-300);box-shadow:inset 0 0 0 1px var(--blue-400)}
+.hrms .qd{font-family:var(--font-display);font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.hrms .qd.neg{color:var(--red-400)}
+.hrms .bal{display:flex;flex-direction:column;gap:6px;min-height:150px}
+.hrms .bal .v{font-size:40px;line-height:44px}.hrms .bal .v.gold{color:var(--yellow-400)}
+.hrms .bal .n{font:400 13px/20px var(--font-sans);color:var(--muted)}
+.hrms .bal.neg{border-color:var(--red-700)}
+.hrms .dc{width:132px;border:1px solid var(--hair);border-radius:8px;overflow:hidden;background:var(--neutral-920);display:flex;flex-direction:column;font:500 11px/14px var(--font-sans)}
+.hrms .dc.sm{width:84px}
+.hrms .dc .dn{display:flex;justify-content:space-between;align-items:center;padding:4px 8px 3px;color:#e5e5e5;font:600 13px/16px var(--font-sans)}
+.hrms .dc .dn small{font:500 10px/14px var(--font-sans);color:var(--muted)}
+.hrms .dc.today .dn span.d{background:#fff;color:#000;border-radius:10px;padding:0 6px}
+.hrms .dc.out{opacity:.4}.hrms .dc.sel{box-shadow:0 0 0 2px #fff}
+.hrms .dc .h{height:30px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:4px;border-top:1px solid rgba(255,255,255,.08);color:#cbcbcb;white-space:nowrap;overflow:hidden}
+.hrms .dc.sm .h{height:24px;padding:0 5px}.hrms .dc .h em{font-style:normal;color:var(--muted);font-size:10px}.hrms .dc .h b{font-weight:600}
+.hrms .k-work{background:transparent}
+.hrms .k-off{background:repeating-linear-gradient(135deg,#1a1a1a 0 6px,#161616 6px 12px);color:var(--muted)}
+.hrms .k-hol{background:var(--purple-900);color:var(--purple-300)}
+.hrms .k-leave{background:var(--green-800);color:var(--green-300)}
+.hrms .k-taken{background:#14291f;color:var(--green-300)}
+.hrms .k-pend{background:var(--yellow-900);color:var(--yellow-300);box-shadow:inset 0 0 0 1px var(--yellow-700);border-top-style:dashed}
+.hrms .k-lop{background:repeating-linear-gradient(135deg,var(--yellow-900) 0 6px,#3a2b0a 6px 12px);color:var(--yellow-300)}
+.hrms .k-extra{background:var(--teal-900);color:var(--teal-300)}
+.hrms .k-full{background:var(--red-800);color:var(--red-200)}
+.hrms .k-pick{background:var(--alpha-L-200);color:#fff}
+.hrms .cd{display:flex;flex-direction:column;gap:10px;border-radius:12px;padding:14px 16px;border:1px solid var(--hair);background:var(--neutral-920)}
+.hrms .cd .t{font:500 28px/32px var(--font-mono);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.hrms .bar{height:4px;border-radius:2px;background:var(--neutral-850);overflow:hidden}.hrms .bar>div{height:100%;background:var(--blue-400);transition:width 1s linear}
+.hrms .cd.dl .t{color:var(--orange-300)}.hrms .cd.dl .bar>div{background:var(--orange-400)}
+.hrms .banner{display:flex;gap:12px;align-items:flex-start;border-radius:8px;padding:12px 14px;font:400 14px/20px var(--font-sans)}
+.hrms .banner .x{flex:1}.hrms .banner b{font-weight:600}
+.hrms .bn-info{background:#11183a;color:var(--blue-100);box-shadow:inset 0 0 0 1px var(--blue-700)}
+.hrms .bn-warn{background:#2a1f0e;color:var(--yellow-200);box-shadow:inset 0 0 0 1px var(--yellow-800)}
+.hrms .bn-error{background:#2a1316;color:var(--red-200);box-shadow:inset 0 0 0 1px var(--red-600)}
+.hrms .bn-ok{background:#0e2014;color:var(--green-200);box-shadow:inset 0 0 0 1px var(--green-700)}
+.hrms .scrim{position:fixed;inset:0;background:var(--bg-overlay-backdrop);display:grid;place-items:center;z-index:100}
+.hrms .dlg{width:480px;background:var(--bg-card-default);border:1px solid var(--stroke-emphasized);border-radius:16px;padding:24px;box-shadow:var(--shadow-3)}
+.hrms .tbl{width:100%;border-collapse:collapse;font:400 14px/20px var(--font-sans)}
+.hrms .tbl th{padding:10px 16px;text-align:left;font:600 12px/16px var(--font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--hair);background:var(--neutral-920);white-space:nowrap}
+.hrms .tbl th.r,.hrms .tbl td.r{text-align:right}.hrms .tbl th.sortable{cursor:pointer}.hrms .tbl th.sortable:hover{color:#fff}
+.hrms .tbl td{padding:12px 16px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.hrms .tbl tr:last-child td{border-bottom:0}.hrms .tbl tbody tr:hover td{background:#1f1f1f}
+.hrms .tfoot{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid var(--hair);font:400 12px/20px var(--font-sans);color:var(--muted)}
+.hrms .copyid{white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;padding:0;cursor:pointer;font:500 13px/20px var(--font-mono);color:#fff}
+.hrms .copyid:hover{color:var(--green-400)}
+.hrms .tl{position:relative;display:flex;flex-direction:column}
+.hrms .tli{display:grid;grid-template-columns:20px 1fr;gap:14px;position:relative;padding-bottom:20px}
+.hrms .tli:before{content:"";position:absolute;left:9px;top:20px;bottom:0;width:1px;background:var(--neutral-800)}.hrms .tli:last-child:before{display:none}
+.hrms .tli .dot{width:20px;height:20px;border-radius:50%;background:var(--neutral-800);display:grid;place-items:center;margin-top:1px}
+.hrms .tli .dot i{width:8px;height:8px;border-radius:50%;background:#979797}
+.hrms .tli.ok .dot i{background:var(--green-400)}.hrms .tli.no .dot i{background:var(--red-400)}.hrms .tli.up .dot i{background:var(--blue-300)}.hrms .tli.warn .dot i{background:var(--yellow-500)}.hrms .tli.now .dot{box-shadow:0 0 0 3px rgba(255,255,255,.15)}
+.hrms .tli .tt{font:600 14px/20px var(--font-sans)}.hrms .tli .tm{font:400 12px/20px var(--font-sans);color:var(--muted)}
+.hrms .tli .rs{margin-top:6px;padding:8px 12px;background:var(--neutral-920);border-radius:6px;font:400 13px/20px var(--font-sans);color:#e5e5e5}
+.hrms .state{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:36px 24px}
+.hrms .state .ic{width:48px;height:48px;border-radius:50%;background:var(--neutral-850);display:grid;place-items:center;color:#cbcbcb}
+.hrms .state.err .ic{background:var(--red-800);color:var(--red-300)}
+.hrms .sk{border-radius:6px;background:linear-gradient(90deg,var(--bg-shimmer-l1) 0,var(--bg-shimmer-l2) 50%,var(--bg-shimmer-l1) 100%);background-size:200% 100%;animation:sh 1.4s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+.hrms .sec{margin-top:44px}.hrms .sec>.sh{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--hair)}
+.hrms .sec>.sh h2{font:500 22px/28px var(--font-serif)}.hrms .sec>.sh .nm{font:500 12px/16px var(--font-mono);color:var(--muted)}.hrms .sec>.sh p{margin-left:auto;font:400 13px/20px var(--font-sans);color:var(--muted);max-width:520px;text-align:right}
+.hrms .chip{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;background:var(--neutral-850);color:#e5e5e5;font:500 12px var(--font-sans);text-decoration:none;white-space:nowrap}
+.hrms a.chip:hover{background:var(--neutral-800);color:#fff}.hrms a.chip.on{background:#fff;color:#000}
+.hrms .chip.yes{background:var(--green-800);color:var(--green-300)}.hrms .chip.no{background:transparent;color:#646464;box-shadow:inset 0 0 0 1px #333}.hrms .chip.part{background:var(--teal-900);color:var(--teal-300)}
+.hrms .kv{display:grid;grid-template-columns:200px 1fr;gap:8px 16px;font:400 14px/20px var(--font-sans)}.hrms .kv dt{color:var(--muted)}.hrms .kv dd{margin:0}
+.hrms .legend{display:flex;gap:16px;flex-wrap:wrap;font:400 12px/16px var(--font-sans);color:#cbcbcb}.hrms .legend span{display:inline-flex;align-items:center;gap:6px}.hrms .legend i{width:14px;height:14px;border-radius:3px;display:inline-block;border:1px solid var(--hair)}
+.hrms .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--neutral-800);color:#fff;border-radius:8px;padding:10px 16px;font:500 14px var(--font-sans);z-index:200;box-shadow:var(--shadow-3)}
+.hrms .gate{max-width:560px;margin:80px auto;text-align:center}
+.hrms a.mi{color:var(--text-alpha);text-decoration:none}.hrms a.mi:hover,.hrms a.mi.on{color:#fff}
+.hrms a.brand{color:#fff;text-decoration:none}
+.hrms a.chip{color:#e5e5e5;text-decoration:none}.hrms a.chip:hover{color:#fff}.hrms a.chip.on{color:#000}
+.hrms .menu-pop a{color:var(--text-primary);text-decoration:none}
+.hrms a.btn{text-decoration:none}
+.hrms .tabs{display:flex;gap:28px;border-bottom:1px solid var(--hair)}.hrms .tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:12px 0;margin-bottom:-1px;font:600 14px/20px var(--font-sans);color:var(--muted);cursor:pointer;display:inline-flex;gap:8px;align-items:center}.hrms .tabs button:hover{color:#fff}.hrms .tabs button.on{color:#fff;border-bottom-color:#fff}
+.hrms .card .row>.tabs{border-bottom:0}
+.hrms .tcount{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--neutral-800);color:#fff;font:700 11px/18px var(--font-sans);text-align:center}
+.hrms .calg{display:grid;grid-template-columns:repeat(7,84px);gap:6px;justify-content:start}.hrms .calw{font:600 11px/16px var(--font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:0 4px 2px}
+.hrms .calbtn{padding:0;border:0;background:none;cursor:pointer;border-radius:8px;text-align:left;color:inherit}.hrms .calbtn:hover .dc{border-color:var(--neutral-600)}.hrms .calbtn:disabled{cursor:not-allowed}.hrms .calbtn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.hrms .iconbtn:disabled{opacity:.3;cursor:not-allowed}
+.hrms .legend i.k-off,.hrms .legend i.k-lop{background-size:auto}
+.hrms .input.ro{display:flex;align-items:center;background:var(--neutral-920);border-color:var(--hair);cursor:default}
+.hrms .pv{border:1px solid var(--hair);border-radius:12px;padding:14px 16px;background:var(--neutral-920);display:flex;flex-direction:column;gap:0}.hrms .pv.empty{padding:20px 16px;text-align:center}
+.hrms .pv .banner{margin-top:12px}
+.hrms .pvrow{display:grid;grid-template-columns:190px 1fr;gap:12px;padding:10px 0;border-top:1px dashed var(--hair);font:400 14px/20px var(--font-sans)}.hrms .pvrow b{font-weight:600}
+.hrms .hgrid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start}
+.hrms a.rqline,.hrms a.rqline{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:10px 12px;margin:0 -12px;border-radius:8px;text-decoration:none;color:inherit}.hrms a.rqline:hover{background:#1f1f1f}
+.hrms .offc{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.hrms .offrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--hair)}
+.hrms .nrow{display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-bottom:1px solid var(--hair)}.hrms .nrow:last-child{border-bottom:0}.hrms .nrow.unread{background:rgba(255,255,255,.03)}.hrms .nrow .ndot{margin-top:7px}
+.hrms .dh{font:500 28px/36px var(--font-serif)}
+.hrms .kv dd .sm12{display:block}
+.hrms input[type=date].input{color-scheme:dark}
+.hrms .pm-locked{color:#cbcbcb;box-shadow:inset 0 0 0 1px var(--neutral-700)}.hrms .pm-open{color:var(--blue-300);box-shadow:inset 0 0 0 1px var(--blue-400)}
+.hrms .apgrid{display:grid;grid-template-columns:380px minmax(0,1fr);gap:20px;align-items:start}.hrms .aplist{position:sticky;top:76px}
+.hrms .apli{display:flex;gap:12px;align-items:flex-start;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--hair);padding:14px 16px;cursor:pointer;color:inherit}.hrms .apli:hover{background:#1f1f1f}.hrms .apli.on{background:var(--neutral-850);box-shadow:inset 3px 0 0 #fff}
+.hrms .calgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+.hrms .tcal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}.hrms .tdc{width:100%}.hrms .tdc .h b{font-size:11px}.hrms .tdc .dn small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70px}
+.hrms .tbl.wk th.on{background:var(--neutral-850);color:#fff}.hrms .tbl.wk td{padding:8px 10px}.hrms .wkc{padding:4px!important;min-width:84px}.hrms .wkc>div{height:18px;border-radius:3px;margin:2px 0;font:600 10px/18px var(--font-sans);padding:0 6px;border:1px solid var(--hair)}
+.hrms .tbl.rt td,.hrms .tbl.rt th{padding:8px 10px}.hrms .tbl.rt th.rc{padding:8px 4px;text-align:center;font-size:10px;letter-spacing:.04em}.hrms .tbl.rt td.rc{padding:0;text-align:center;font:600 10px/16px var(--font-sans);border-left:1px solid var(--hair);min-width:44px;height:48px}
+.hrms .tbl.rt td.rc.past{opacity:.6}.hrms .tbl.rt .today{box-shadow:inset 0 0 0 2px #fff}.hrms .tbl.rt tr.grp td{background:var(--neutral-920);font:600 12px/16px var(--font-sans);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.hrms .tbl.rt tbody tr:hover td.rc{filter:brightness(1.15)}.hrms .tbl.rt tbody tr:hover td.k-work{background:#1f1f1f}
+.hrms .radio{display:flex;gap:10px;align-items:center;border:1px solid var(--hair);border-radius:8px;padding:10px 12px;cursor:pointer;font:400 14px/20px var(--font-sans)}.hrms .radio.on{border-color:#fff}.hrms .radio b{font-weight:600}.hrms .radio input{accent-color:#fff}.hrms .radio:has(input:disabled){opacity:.5;cursor:not-allowed}
+.hrms .tgl{width:36px;height:20px;border-radius:10px;border:0;background:var(--neutral-700);position:relative;cursor:pointer;padding:0}.hrms .tgl i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left 120ms}.hrms .tgl.on{background:var(--green-600)}.hrms .tgl.on i{left:18px}.hrms .tgl:disabled{opacity:.4;cursor:not-allowed}.hrms .tgl:focus-visible{box-shadow:0 0 0 3px rgba(83,187,83,.35);outline:0}
+.hrms .tdc .h{padding:0 6px}.hrms .tdc .h em{font-size:9px}
+.hrms .ctrlrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:20px;align-items:center;padding:14px 20px;border-top:1px solid var(--hair)}.hrms .ctrlrow:first-child{border-top:0}
+.hrms .savebar{position:sticky;bottom:16px;margin-top:16px;display:flex;gap:10px;align-items:center;padding:12px 16px;background:var(--neutral-850);border:1px solid var(--neutral-700);border-radius:12px}
+.hrms .input.chg{border-color:var(--orange-400)}.hrms .tbl.lim td{padding:6px 10px}.hrms .tbl.perm td{vertical-align:middle}
+.hrms .login{min-height:100vh;padding:32px 24px;display:flex;flex-direction:column;align-items:center}.hrms .loginc{width:420px;padding:32px}
+.hrms .loginc{overflow:hidden}.hrms .loginlogo{background:#000;margin:-32px -32px 0;padding:20px 32px;border-bottom:1px solid var(--hair)}
+
+/* ---- Portal integration (not from the prototype) ---- */
+/* The portal shrinks the page to 90% (html zoom). The design is drawn at 100%, so give it the zoom back: 0.9 x 1/0.9 = 1. */
+.hrms{zoom:calc(1 / var(--ui-zoom, 1));min-height:100vh;--font-sans:var(--font-inter),"Inter","Helvetica Neue",Arial,sans-serif;--font-serif:var(--font-lora),"Lora","Noto Serif",Georgia,serif;--font-display:var(--font-space-grotesk),"Space Grotesk","Inter",Arial,sans-serif;--font-mono:var(--font-dm-mono),"DM Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+/* The page canvas fills the width under the top bar; the prototype's own page padding is kept */
+.hrms .app{min-width:1100px}
+.hrms .hrms-link-reset{color:inherit;text-decoration:none}
+
+/* ---- Bridge for screens not yet rebuilt in the prototype's markup: the portal's older tokens, mapped to the HRMS design ---- */
+.hrms{--qa-card:var(--bg-card-default);--qa-border:var(--stroke-default);--qa-border-sub:var(--stroke-default);--qa-text:var(--text-primary);--qa-text-2:#cbcbcb;--qa-text-3:var(--muted);--qa-gray-50:var(--neutral-920);--qa-fill-light:var(--neutral-850);--qa-bg:var(--bg-section-default);--qa-on-text:#000;--accent:#fff;--accent-on:#000;--accent-active:var(--green-400);--marker:var(--green-400);--fail:var(--red-400);--fail-soft:#2a1316;--pass:var(--green-400);--page-bg:transparent}
+/* the portal's reset caps images at 100% width, which breaks the brand logo crop */
+.hrms img{max-width:none}
+
+/* ---- Roster additions (not in the prototype: search and filter bar, view switch, month grid) ---- */
+.hrms input.input.sm{height:32px;font-size:12px;padding:0 10px}
+.hrms select.input.fsel{width:auto;min-width:130px;max-width:210px}
+.hrms .input.on{border-color:#cbcbcb}
+.hrms .fsearch{position:relative;display:inline-flex;align-items:center}
+.hrms .fsearch svg{position:absolute;left:10px;color:var(--muted);pointer-events:none}
+.hrms .fsearch input.input.sm{width:220px;padding-left:32px;padding-right:28px}
+.hrms .fsearch .fx{position:absolute;right:4px;width:24px;height:24px;display:grid;place-items:center;border:0;border-radius:4px;background:transparent;color:var(--muted);cursor:pointer}
+.hrms .fsearch .fx:hover{background:var(--alpha-L-100);color:#fff}
+.hrms .rbal{border:0;background:none;padding:0;cursor:pointer;color:inherit;text-decoration:underline dotted;text-underline-offset:4px}
+.hrms .rbal:hover{color:#fff}
+.hrms .tdc{min-height:96px}
+.hrms .tdc .h{height:26px}
+.hrms .tdc .h em{font-size:10px}
+/* the prototype leaves native controls (radios, checkboxes) in the default scheme, whatever the portal's own theme is */
+.hrms{color-scheme:light}

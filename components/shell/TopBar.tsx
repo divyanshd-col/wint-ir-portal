@@ -4,7 +4,9 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { activeTab, isAuthPath, topTabs } from '@/lib/nav';
+import { activeTab, hasNavSkill, isAuthPath, topTabs } from '@/lib/nav';
+import NotificationBell from '@/components/shell/NotificationBell';
+import { isHrmsPath } from '@/components/hrms/nav';
 
 const ROLE_LABELS: Record<string, string> = { admin: 'Admin', quality: 'QA Analyst', tl: 'Team Lead', agent: 'IR Agent' };
 const THEME_KEY = 'wint_theme';
@@ -79,7 +81,7 @@ export default function TopBar() {
   const platformDomain = user?.platformDomain || 'cx';
   const activeDomain: 'cx' | 'pcg' = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
 
-  if (isAuthPath(pathname) || status === 'unauthenticated' || activeDomain === 'pcg' || pathname.startsWith('/admin/pcg-calls')) return null;
+  if (isAuthPath(pathname) || isHrmsPath(pathname) || status === 'unauthenticated' || activeDomain === 'pcg' || pathname.startsWith('/admin/pcg-calls')) return null; // the HRMS has its own top bar
   const role = user?.role ?? 'agent';
   const allTabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
   // Settings and MCP are not tabs: they are icons next to the theme toggle and open as popups.
@@ -122,6 +124,7 @@ export default function TopBar() {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
             </Link>
           )}
+          {status === 'authenticated' && (hasNavSkill(role, user?.skills, 'leave:use:access') || hasNavSkill(role, user?.skills, 'leave:approve:access')) && <NotificationBell />}
           <ThemeToggle />
           {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} />}
         </div>

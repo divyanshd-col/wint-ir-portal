@@ -29,16 +29,21 @@ interface RoleShellProps {
 
 const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
   admin: [
+    'roster:view:access', 'roster:manage:access',
+    'leave:use:access', 'leave:approve:access',
     'quality:analytics:access', 'quality:chat_eval:access', 'quality:call_eval:access',
     'tl:team_analytics:access', 'tl:member_analytics:access', 'tl:quality_chats:access',
     'tl:quality_calls:access', 'tl:reports:access', 'agent:my_analytics:access',
     'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access',
   ],
   tl: [
+    'roster:view:access', 'roster:manage:access',
+    'leave:approve:access',
     'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
     'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
   ],
   quality: [
+    'roster:view:access',
     'quality:analytics:access', 'quality:chat_eval:access', 'quality:call_eval:access',
   ],
   agent: [

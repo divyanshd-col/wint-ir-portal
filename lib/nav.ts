@@ -1,13 +1,13 @@
 /** Top-level navigation rules: which tabs a user sees, which one is active, where each role lands. Pure, so it is unit-tested. */
 
-export type TabKey = 'chat' | 'analytics' | 'quality' | 'settings' | 'pcg-calls' | 'pcg-scorecard' | 'pcg-disputes';
+export type TabKey = 'chat' | 'analytics' | 'quality' | 'roster' | 'leave' | 'settings' | 'pcg-calls' | 'pcg-scorecard' | 'pcg-disputes';
 export interface NavTab { key: TabKey; label: string; href: string }
 
 // Same defaults the sidebars use when a session carries no explicit skills.
 const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
-  tl: ['chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access', 'quality:analytics:access'],
-  quality: ['chat:access', 'cx_dashboard:access', 'quality:analytics:access'],
-  agent: ['chat:access', 'quality:analytics:access'],
+  tl: ['chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access', 'quality:analytics:access', 'roster:view:access', 'roster:manage:access', 'leave:approve:access'],
+  quality: ['chat:access', 'cx_dashboard:access', 'quality:analytics:access', 'roster:view:access'],
+  agent: ['chat:access', 'quality:analytics:access'], // Roster is off for agents for now: grant roster:view:access to the agent persona in Settings > Skills to open it
 };
 
 export function hasNavSkill(role: string | undefined, skills: string[] | undefined, req: string): boolean {
@@ -16,24 +16,28 @@ export function hasNavSkill(role: string | undefined, skills: string[] | undefin
   return effective.includes(req);
 }
 
-const TABS: (NavTab & { skill: string })[] = [
+const TABS: (NavTab & { skill: string | string[] })[] = [
   { key: 'chat',      label: 'Chat',      href: '/chat',      skill: 'chat:access' },
   { key: 'analytics', label: 'MCP', href: '/analytics', skill: 'analytics:access' },
   { key: 'quality',   label: 'Quality',   href: '/quality',   skill: 'quality:analytics:access' },
-  { key: 'settings',  label: 'Settings',  href: '/settings',  skill: 'settings:manage:access' },
+  { key: 'roster',    label: 'Roster',    href: '/roster',    skill: 'roster:view:access' },
+  { key: 'leave',     label: 'Leave',     href: '/leave',     skill: ['leave:use:access', 'leave:approve:access'] }, // off for everyone but admins (and TLs, to approve) until switched on in Settings > Skills
+  { key: 'settings',  label: 'Settings',  href: '/settings',  skill: 'settings:manage:access' }, // shown by the top bar as an icon, not a tab
 ];
 
 export function topTabs(role: string | undefined, skills: string[] | undefined, activeDomain: 'cx' | 'pcg' = 'cx'): NavTab[] {
   if (activeDomain === 'pcg') {
     return [];
   }
-  return TABS.filter((t) => hasNavSkill(role, skills, t.skill)).map(({ key, label, href }) => ({ key, label, href }));
+  return TABS.filter((t) => [t.skill].flat().some((k) => hasNavSkill(role, skills, k))).map(({ key, label, href }) => ({ key, label, href }));
 }
 
 const AREAS: [TabKey, string[]][] = [
   ['chat', ['/chat']],
   ['analytics', ['/analytics', '/call-analysis', '/cx']],
   ['quality', ['/quality', '/tl', '/agent']],
+  ['roster', ['/roster']],
+  ['leave', ['/leave']],
   ['settings', ['/settings', '/tokens']],
   ['pcg-calls', ['/admin/pcg-calls', '/pcg']],
 ];
