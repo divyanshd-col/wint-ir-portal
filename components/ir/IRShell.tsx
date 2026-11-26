@@ -60,8 +60,8 @@ const NAV = [
 ];
 
 export default function IRShell({ role, name, skills, children }: IRShellProps) {
-  const nameLower = (name || '').toLowerCase();
-  if (nameLower.includes('dhanush') || nameLower.includes('harsh') || nameLower.includes('sindhu')) {
+  const roleLower = (role || '').toLowerCase();
+  if (roleLower === 'agent' || roleLower === 'tl' || roleLower === 'quality') {
     return <>{children}</>;
   }
 
