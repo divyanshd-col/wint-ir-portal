@@ -92,11 +92,19 @@ export async function GET(req: NextRequest) {
       if (chatConv?.contact_id) {
         const windowStart = chatConv.started_at ?? new Date(Date.now() - 24 * 3600 * 1000).toISOString();
         const windowEnd   = chatConv.closed_at  ?? new Date().toISOString();
-        try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd)); } catch {}
+        try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd, chatConv.agent_id)); } catch {}
       }
 
+      // Filter out calls where call's human agent differs from chat's human agent
+      const validRecs = allRecs.filter(r => {
+        if (r.agent_id && chatConv?.agent_id && r.agent_id !== chatConv.agent_id) {
+          return false;
+        }
+        return true;
+      });
+
       let needsScoring = false;
-      for (const r of allRecs) {
+      for (const r of validRecs) {
         let isTranscribed = false;
         if (r.transcript) {
           try {

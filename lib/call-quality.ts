@@ -203,6 +203,16 @@ export const CALL_TRANSCRIPTION_PROMPT = `You are analyzing a customer service c
 Listen to the ENTIRE audio before producing any output.
 
 ══════════════════════════════════════════
+UNANSWERED CALLS, RINGING TONES & SILENCE (CRITICAL)
+══════════════════════════════════════════
+- If the call is UNANSWERED (i.e. only phone ringing tones, periodic ring-back beeps, dial tones, busy tones, IVR disconnect tone, or dead silence):
+  Return an EMPTY segment array:
+  {"language":"None","segments":[]}
+  CRITICAL: Audio models often hallucinate words like "Hello", "Hello.", or "Thank you" repeatedly over rhythmic ringing sounds or periodic beeps. DO NOT DO THIS. Rhythmic ringing pulses or dial tones are NOT human speech.
+- If only the IR Executive speaks into an unanswered line (e.g. saying "Hello? Hello?" while waiting for someone to pick up) and the INVESTOR NEVER answers or speaks:
+  Only transcribe what was genuinely spoken by human voice. NEVER hallucinate an investor response or repeat "Hello" on the ringing tones.
+
+══════════════════════════════════════════
 SPEAKER IDENTIFICATION
 ══════════════════════════════════════════
 There are exactly two speakers: IR EXECUTIVE and INVESTOR.
@@ -728,15 +738,45 @@ function fixSpeakerLabels(segments: CallSegment[]): CallSegment[] {
   });
 }
 
+// ── Clean hallucinated greeting segments (unanswered calls / ring tones) ──────
+export function cleanHallucinatedSegments(segments: CallSegment[]): CallSegment[] {
+  const speechSegs = segments.filter(s => s.type === 'speech');
+  if (speechSegs.length === 0) return segments;
+
+  const hasInvestorTurn = speechSegs.some(s => {
+    const spk = (s.speaker || '').toUpperCase();
+    return spk === 'INVESTOR' || spk === 'CUSTOMER' || spk === 'CLIENT';
+  });
+
+  // If there is genuine investor interaction, keep segments
+  if (hasInvestorTurn) return segments;
+
+  // Check if all speech turns are just short repetitive greeting tokens
+  const isGreetingOnly = (text?: string) => {
+    const cleaned = (text || '').replace(/[^\w\s]/g, '').trim().toLowerCase();
+    return !cleaned || ['hello', 'hi', 'hey', 'test', 'unclear', 'inaudible'].includes(cleaned);
+  };
+
+  const allGreetings = speechSegs.every(s => isGreetingOnly(s.text));
+
+  // If there are no investor turns and every single turn is a bare greeting ("Hello.", "Hello", etc.)
+  if (allGreetings) {
+    console.warn(`[cleanHallucinatedSegments] Stripped ${speechSegs.length} repetitive greeting segments (ringtone hallucination on unanswered call)`);
+    return [];
+  }
+
+  return segments;
+}
+
 // ── Parse transcription response ──────────────────────────────────────────────
 export function parseTranscriptionResponse(raw: string): { language: string; segments: CallSegment[] } {
   try {
     const parsed = robustJsonParse(raw);
     if (!parsed) return { language: 'English', segments: [] };
-    if (Array.isArray(parsed)) return { language: 'Unknown', segments: fixSpeakerLabels(parsed) };
+    if (Array.isArray(parsed)) return { language: 'Unknown', segments: cleanHallucinatedSegments(fixSpeakerLabels(parsed)) };
     return {
       language: parsed.language || 'English',
-      segments: fixSpeakerLabels(Array.isArray(parsed.segments) ? parsed.segments : []),
+      segments: cleanHallucinatedSegments(fixSpeakerLabels(Array.isArray(parsed.segments) ? parsed.segments : [])),
     };
   } catch {
     // Truncated JSON recovery — Gemini hit output token limit mid-response.
@@ -752,7 +792,7 @@ export function parseTranscriptionResponse(raw: string): { language: string; seg
       } catch {}
     }
     console.warn(`[parseTranscriptionResponse] Truncated JSON recovered: ${segments.length} segments, language=${language}`);
-    return { language, segments: fixSpeakerLabels(segments) };
+    return { language, segments: cleanHallucinatedSegments(fixSpeakerLabels(segments)) };
   }
 }
 

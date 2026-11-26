@@ -72,6 +72,10 @@ export const CALL_IQS_PASS_SYSTEM_PROMPT = `You are a QA evaluator for Wint Weal
 
 PARAMETER ISOLATION: score each parameter on its own definition only. A call can be excellent on one parameter and poor on another. Never let one parameter influence another.
 
+UNANSWERED / NO-CONVERSATION CALLS
+If the call never connected, was unanswered by the customer, consists only of ringing / silence, or contains no substantive conversation (e.g. rep only said "Hello?" into an empty line and hung up):
+Set EVERY parameter score to "NA". Do NOT score P5, P2, or P6 as 0 for an unanswered call where the customer never connected or spoke. All "NA" will produce a NIL (null) score.
+
 INPUTS
 - TRANSCRIPT: numbered turns with roles and per-segment tone fields.
 - STRUCTURE_EVENTS: silences (typed) and overlaps with turn positions.

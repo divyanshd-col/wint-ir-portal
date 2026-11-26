@@ -90,8 +90,9 @@ async function linkAndScoreCallsForChat(
   disposition: string,
   subDisposition: string,
   config: any,
+  agentId?: number | null,
 ): Promise<void> {
-  const unlinked = await getUnlinkedCallsForContact(contactId, startedAt, closedAt);
+  const unlinked = await getUnlinkedCallsForContact(contactId, startedAt, closedAt, agentId);
   if (!unlinked.length) return;
 
   await Promise.all(unlinked.map(c => linkCallToChat(c.id, chatId)));
@@ -214,6 +215,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
       disposition,
       subDisposition,
       config,
+      agentId,
     );
 
     if (hasTags && existingConv) {

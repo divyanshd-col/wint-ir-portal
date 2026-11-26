@@ -15,6 +15,25 @@ interface ConnectionRow {
   active: boolean;
 }
 
+interface TokenRow {
+  id: string;
+  label: string;
+  userId: number;
+  userEmail: string;
+  userName: string;
+  createdAt: string;
+  createdBy: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+interface EligibleUser {
+  user_id: number;
+  name: string;
+  email: string;
+  role: string;
+}
+
 interface Props {
   username: string;
   role: string;
@@ -30,6 +49,8 @@ interface Props {
 const cardCls = 'bg-white border border-gray-200 rounded-2xl p-6 shadow-sm';
 const btnCls =
   'inline-flex items-center gap-2 rounded-xl bg-[#1f7a4d] px-4 py-2 text-sm font-medium text-white hover:bg-[#268544] disabled:opacity-50 transition-colors';
+const inputCls =
+  'border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30';
 
 function fmtDate(s: string | null): string {
   if (!s) return '—';
@@ -59,6 +80,8 @@ export default function AnalyticsMcpClient({ username, role, isAdmin, flags, mcp
           <ConnectInstructions mcpUrl={mcpUrl} />
 
           {isAdmin && <ConnectionsManager />}
+
+          {isAdmin && <TokenManager mcpUrl={mcpUrl} />}
 
           <SafetyNote />
 
@@ -264,6 +287,213 @@ function ConnectionsManager() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TokenManager({ mcpUrl }: { mcpUrl: string }) {
+  const [tokens, setTokens] = useState<TokenRow[]>([]);
+  const [users, setUsers] = useState<EligibleUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState('');
+  const [label, setLabel] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/mcp-tokens');
+      if (!res.ok) throw new Error('Failed to load tokens');
+      const data = await res.json();
+      setTokens(data.tokens ?? []);
+      setUsers(data.eligibleUsers ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const create = async () => {
+    setError(null);
+    setNewToken(null);
+    if (!userId || !label.trim()) {
+      setError('Pick a user and enter a label.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await fetch('/api/admin/mcp-tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: Number(userId), label: label.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create token');
+      setNewToken(data.token);
+      setLabel('');
+      setUserId('');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create token');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const revoke = async (id: string) => {
+    if (!confirm('Revoke this token? Any IDE using it stops working right away.')) return;
+    try {
+      const res = await fetch(`/api/admin/mcp-tokens/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to revoke');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to revoke');
+    }
+  };
+
+  const configSnippet = (token: string) =>
+    JSON.stringify(
+      { mcpServers: { 'wint-analytics': { serverUrl: mcpUrl, headers: { Authorization: `Bearer ${token}` } } } },
+      null,
+      2,
+    );
+
+  return (
+    <div className={cardCls}>
+      <h2 className="text-base font-semibold text-gray-900">Personal access tokens (for IDEs)</h2>
+      <p className="mt-1 text-sm text-gray-600">
+        For MCP clients that connect with a token instead of the sign-in flow — like Antigravity or
+        Cursor. Generate a token for an admin or TL, then paste it into the client&apos;s config. The
+        token is shown once, so copy it right away and hand it over securely.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+          User
+          <select className={inputCls} value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <option value="">Select a user…</option>
+            {users.map((u) => (
+              <option key={u.user_id} value={u.user_id}>
+                {u.name} ({u.role}) — {u.email}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-1 flex-col gap-1 text-xs font-medium text-gray-500">
+          Label
+          <input
+            className={inputCls}
+            placeholder="e.g. Antigravity — Divyansh"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            maxLength={120}
+          />
+        </label>
+        <button type="button" onClick={create} disabled={creating} className={btnCls}>
+          {creating ? 'Generating…' : 'Generate token'}
+        </button>
+      </div>
+
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+      {newToken && (
+        <div className="mt-4 rounded-xl border border-[#1f7a4d]/30 bg-[#1f7a4d]/5 p-4">
+          <div className="text-xs font-semibold text-[#1f7a4d]">
+            Copy this now — it won&apos;t be shown again
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="min-w-0 flex-1 break-all rounded-lg bg-white px-3 py-2 font-mono text-xs text-gray-800 border border-gray-200">
+              {newToken}
+            </code>
+            <button type="button" className={btnCls} onClick={() => navigator.clipboard?.writeText(newToken)}>
+              Copy
+            </button>
+          </div>
+          <div className="mt-3 text-xs font-medium text-gray-500">
+            Antigravity — paste into <code className="font-mono">~/.gemini/config/mcp_config.json</code>:
+          </div>
+          <div className="mt-1 flex items-start gap-2">
+            <pre className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-white px-3 py-2 font-mono text-xs text-gray-800 border border-gray-200">
+              {configSnippet(newToken)}
+            </pre>
+            <button
+              type="button"
+              className={btnCls}
+              onClick={() => navigator.clipboard?.writeText(configSnippet(newToken))}
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6">
+        {loading ? (
+          <p className="text-sm text-gray-500">Loading…</p>
+        ) : tokens.length === 0 ? (
+          <p className="text-sm text-gray-500">No tokens yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-400">
+                  <th className="py-2 pr-4 font-medium">Label</th>
+                  <th className="py-2 pr-4 font-medium">User</th>
+                  <th className="py-2 pr-4 font-medium">Created</th>
+                  <th className="py-2 pr-4 font-medium">Last used</th>
+                  <th className="py-2 pr-4 font-medium">Status</th>
+                  <th className="py-2 pr-0 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {tokens.map((t) => {
+                  const revoked = !!t.revokedAt;
+                  return (
+                    <tr key={t.id} className="border-b border-gray-100 last:border-0">
+                      <td className="py-2 pr-4 text-gray-800">{t.label}</td>
+                      <td className="py-2 pr-4 text-gray-600">
+                        {t.userName}
+                        <span className="block text-xs text-gray-400">{t.userEmail}</span>
+                      </td>
+                      <td className="py-2 pr-4 text-gray-500">{fmtDate(t.createdAt)}</td>
+                      <td className="py-2 pr-4 text-gray-500">{fmtDate(t.lastUsedAt)}</td>
+                      <td className="py-2 pr-4">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${
+                            revoked
+                              ? 'border-gray-200 bg-gray-100 text-gray-500'
+                              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          }`}
+                        >
+                          {revoked ? 'Revoked' : 'Active'}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-0 text-right">
+                        {!revoked && (
+                          <button
+                            type="button"
+                            onClick={() => revoke(t.id)}
+                            className="text-xs font-medium text-red-600 hover:text-red-700"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
