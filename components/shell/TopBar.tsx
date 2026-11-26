@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { activeTab, hasNavSkill, isAuthPath, topTabs } from '@/lib/nav';
 import NotificationBell from '@/components/shell/NotificationBell';
+import { isHrmsPath } from '@/components/hrms/nav';
 
 const ROLE_LABELS: Record<string, string> = { admin: 'Admin', quality: 'QA Analyst', tl: 'Team Lead', agent: 'IR Agent' };
 const THEME_KEY = 'wint_theme';
@@ -80,7 +81,7 @@ export default function TopBar() {
   const platformDomain = user?.platformDomain || 'cx';
   const activeDomain: 'cx' | 'pcg' = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
 
-  if (isAuthPath(pathname) || status === 'unauthenticated' || activeDomain === 'pcg' || pathname.startsWith('/admin/pcg-calls')) return null;
+  if (isAuthPath(pathname) || isHrmsPath(pathname) || status === 'unauthenticated' || activeDomain === 'pcg' || pathname.startsWith('/admin/pcg-calls')) return null; // the HRMS has its own top bar
   const role = user?.role ?? 'agent';
   const allTabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
   // Settings and MCP are not tabs: they are icons next to the theme toggle and open as popups.

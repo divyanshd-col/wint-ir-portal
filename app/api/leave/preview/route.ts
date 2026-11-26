@@ -19,7 +19,7 @@ const POST_ = async (req: NextRequest) => {
   }
   const p = await computeRequest({ query }, actor.userId, input, { appliedAt: new Date(), excludeLeaveId });
   return NextResponse.json({
-    days: p.days, leave: p.leave, lop: p.lop, stretch: p.stretch, run: p.run, noticeNeeded: p.noticeNeeded, noticeGiven: p.noticeGiven,
+    days: p.days, leave: p.leave, lop: p.lop, stretch: p.stretch, run: p.run, runParts: p.runParts, noticeNeeded: p.noticeNeeded, noticeGiven: p.noticeGiven,
     outcome: p.decision.outcome, deciderText: p.deciderText, why: p.why, balance: p.balance, held: p.held, available: p.available, balanceAfter: p.balanceAfter,
     fullHalves: p.fullHalves, lopWarning: p.lopWarning, rejectCode: p.decision.outcome === 'reject' ? p.decision.code : null,
     tooLong: p.stretch > p.rules.maxLength, maxLength: p.rules.maxLength,

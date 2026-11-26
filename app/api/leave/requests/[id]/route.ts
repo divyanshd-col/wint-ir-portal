@@ -35,8 +35,8 @@ const POST_ = async (req: NextRequest, ctx: { params: Promise<{ id: string }> })
   if (response) return response;
   const b = await req.json().catch(() => ({}));
   const id = (await ctx.params).id;
-  if (b.action === 'cancel') await withTransaction(tx => cancelRequest(tx, id, actor.userId));
-  else if (b.action === 'send_to_tl') await withTransaction(tx => sendToTl(tx, id, actor.userId));
+  if (b.action === 'cancel') await withTransaction(tx => cancelRequest(tx, id, actor.userId, cleanText(b.reason)));
+  else if (b.action === 'send_to_tl') await withTransaction(tx => sendToTl(tx, id, actor.userId, cleanText(b.reason)));
   else throw new HttpError(400, 'Invalid request.');
   return NextResponse.json({ ok: true });
 };

@@ -1,5 +1,5 @@
-import RosterClient from '@/components/roster/RosterClient';
+import RosterScreen from '@/components/hrms/roster/RosterScreen';
 
 export default function RosterPage() {
-  return <RosterClient />;
+  return <RosterScreen />;
 }

@@ -46,7 +46,7 @@ async function approvedFullDays(db: Db, userId: number, excludeLeaveId?: string)
   return new Set(r.map(x => x.day));
 }
 
-async function limitFor(db: Db, role: string): Promise<(day: string, half: 'first' | 'second') => number | null> {
+export async function limitFor(db: Db, role: string): Promise<(day: string, half: 'first' | 'second') => number | null> {
   if (role !== 'agent' && role !== 'tl') return () => null; // limits are off for QA and admins
   const lim = await db.query<{ weekday: number; half: string; max_off: number }>(`SELECT weekday, half, max_off FROM limits_by_role WHERE role = $1`, [role]);
   const m = new Map(lim.map(l => [`${l.weekday}|${l.half}`, l.max_off]));
@@ -65,7 +65,7 @@ export async function tlOfPerson(db: Db, userId: number): Promise<{ userId: numb
   return r[0] ? { userId: r[0].user_id, name: r[0].name } : null;
 }
 
-async function roster(db: Db, userId: number) {
+export async function roster(db: Db, userId: number) {
   const patterns = await db.query<Pattern>(`SELECT id, label, off_weekdays, rotates FROM roster_patterns ORDER BY id`);
   const assigns = await db.query<Assignment>(`SELECT pattern_id, to_char(effective_from,'YYYY-MM-DD') AS effective_from FROM roster_assignments WHERE user_id = $1 AND cancelled_at IS NULL`, [userId]);
   const cycle = cycleOf(patterns);
@@ -88,7 +88,7 @@ export interface Preview {
   days: { day: string; half: Half; weight: number }[];
   lines: SplitLine[];
   leave: number; lop: number;
-  stretch: number; run: { from: string; to: string } | null;
+  stretch: number; run: { from: string; to: string } | null; runParts: { from: string; to: string; label: string }[];
   noticeNeeded: number; noticeGiven: number;
   decision: Decision; deciderText: string; why: string;
   balance: number; held: number; available: number; balanceAfter: number;
@@ -137,6 +137,16 @@ export async function computeRequest(db: Db, userId: number, input: ApplyInput, 
     while (away(addDays(to, 1))) to = addDays(to, 1);
     run = { from, to };
   }
+  // what makes up the days away in a row, in order: this request, week-offs, approved leave next to it
+  const runParts: Preview['runParts'] = [];
+  if (run) {
+    const mineDays = new Set(fullDays);
+    for (let d = run.from; d <= run.to; d = addDays(d, 1)) {
+      const label = mineDays.has(d) ? 'This request' : approved.has(d) ? 'Approved leave' : 'Week-off';
+      const last = runParts[runParts.length - 1];
+      if (last && last.label === label) last.to = d; else runParts.push({ from: d, to: d, label });
+    }
+  }
 
   const fullHalves: FullHalf[] = [];
   const lim = await limitFor(db, person.role);
@@ -156,7 +166,7 @@ export async function computeRequest(db: Db, userId: number, input: ApplyInput, 
   const deciderText = decision.outcome === 'auto_approve' ? 'The system, after the 5 minutes' : decision.outcome === 'reject' ? 'Rejected automatically (you can send it to your TL)'
     : decision.level === 'tl' ? `Your TL${tl ? ` (${tl.name})` : ''}` : 'An admin';
   return {
-    days, lines: split.lines, leave: split.leave, lop: split.lop, stretch: stretchEff, run, noticeNeeded: needed, noticeGiven: given,
+    days, lines: split.lines, leave: split.leave, lop: split.lop, stretch: stretchEff, run, runParts, noticeNeeded: needed, noticeGiven: given,
     decision, deciderText, why: decision.outcome === 'reject' ? decision.note : decision.why,
     balance, held, available, balanceAfter: quarter(available - split.leave), fullHalves, applicantHasTl: !!tl, tlName: tl?.name ?? null,
     lopWarning: split.lop > 0 ? `Out of ${fmtQ(total)} day${total === 1 ? '' : 's'}, ${fmtQ(split.lop)} ${split.lop === 1 ? 'day' : 'days'} will be LOP since you don’t have enough leave` : null,
@@ -246,7 +256,8 @@ export async function editRequest(db: Db, leaveId: string, userId: number, input
 }
 
 /** Cancel: in process, auto-rejected, pending, or approved before it starts. Days go back. The TL is told about an approved one. */
-export async function cancelRequest(db: Db, leaveId: string, userId: number): Promise<void> {
+export async function cancelRequest(db: Db, leaveId: string, userId: number, reason?: string): Promise<void> {
+  if (reason && reasonTooLong(reason)) throw new HttpError(400, reasonTooLong(reason)!);
   await db.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
   const r = await getRequest(db, leaveId, true);
   if (!r || r.user_id !== userId) throw new HttpError(404, 'Request not found.');
@@ -262,7 +273,7 @@ export async function cancelRequest(db: Db, leaveId: string, userId: number): Pr
     await db.query(`INSERT INTO leave_ledger (user_id, entry_type, amount, leave_id, description, created_by_user_id) VALUES ($1,'Leave days given back',$2,$3,$4,$1)`,
       [userId, amount, leaveId, `Leave cancelled before it started: ${fmtQ(amount)} day${amount === 1 ? '' : 's'} given back`]);
   }
-  await addEvent(db, leaveId, userId, 'cancelled', wasApproved ? 'Cancelled before it started. The days are back in the balance.' : 'Cancelled. The days are back in the balance.');
+  await addEvent(db, leaveId, userId, 'cancelled', wasApproved ? 'Cancelled before it started. The days are back in the balance.' : 'Cancelled. The days are back in the balance.', reason || null);
   if (wasApproved) {
     const p = await loadPerson(db, userId);
     const tl = await tlOfPerson(db, userId);
@@ -271,7 +282,8 @@ export async function cancelRequest(db: Db, leaveId: string, userId: number): Pr
 }
 
 /** The person sends an auto-rejected request to a human. It stays with the TL (an admin if they have no TL) until someone decides. */
-export async function sendToTl(db: Db, leaveId: string, userId: number): Promise<void> {
+export async function sendToTl(db: Db, leaveId: string, userId: number, reason?: string): Promise<void> {
+  if (reason && reasonTooLong(reason)) throw new HttpError(400, reasonTooLong(reason)!);
   await db.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
   const r = await getRequest(db, leaveId, true);
   if (!r || r.user_id !== userId) throw new HttpError(404, 'Request not found.');
@@ -280,7 +292,7 @@ export async function sendToTl(db: Db, leaveId: string, userId: number): Promise
   const tl = p.role === 'agent' ? await tlOfPerson(db, userId) : null;
   const level = tl ? 'tl' : 'admin';
   await db.query(`UPDATE leave_requests SET status = 'Pending for approval', with_level = $2, with_since = NOW(), sent_to_tl = TRUE, cancel_deadline = NULL WHERE leave_id = $1`, [leaveId, level]);
-  await addEvent(db, leaveId, userId, 'sent', tl ? `Sent to your TL (${tl.name})` : 'Sent to an admin');
+  await addEvent(db, leaveId, userId, 'sent', tl ? `Sent to your TL (${tl.name})` : 'Sent to an admin', reason || null);
   await notify(db, tl ? [tl.userId] : await adminIds(db, userId), `${p.name} sent ${leaveId} for a decision: ${r.reject_note ?? 'rejected by the system'}`, leaveId);
 }
 
