@@ -168,17 +168,18 @@ export async function GET(req: NextRequest) {
     }>(`
     SELECT
       COUNT(cr.id)::text                                                AS call_vol,
-      AVG(s.call_iqs_score) FILTER (
+      AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
         WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
           AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
-          AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
+          AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
       )::text                                                           AS avg_call_iqs,
-      COUNT(CASE WHEN c.csat_score = 5 THEN 1 END)::text               AS csat_good,
-      COUNT(CASE WHEN c.csat_score IN (1,3,5) THEN 1 END)::text        AS csat_total
+      COUNT(CASE WHEN c.csat_label = 'good' OR c.csat_score = 5 THEN 1 END)::text AS csat_good,
+      COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END)::text AS csat_total
     FROM call_recordings cr
-    JOIN agents a ON a.id = cr.agent_id
-    JOIN conversations c ON c.id = cr.chat_id
+    LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+    LEFT JOIN conversations c ON c.id = cr.chat_id
     LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+    JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
     WHERE a.name = $1
       AND cr.called_at::date >= $2
       AND cr.called_at::date <= $3
@@ -268,18 +269,22 @@ export async function GET(req: NextRequest) {
       SELECT
         COALESCE(cr.call_disposition, c.tags->>'disposition', 'Other') AS disposition,
         COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition', '') AS sub_disposition,
-        AVG(s.call_iqs_score)::text AS avg_iqs,
+        AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
+          WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
+            AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
+            AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+        )::text AS avg_iqs,
         COUNT(cr.id)::text AS count,
         COUNT(CASE WHEN c.csat_label = 'good' OR c.csat_score = 5 THEN 1 END)::text AS csat_good,
         COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END)::text AS csat_total
       FROM call_recordings cr
-      JOIN agents a ON a.id = cr.agent_id
+      LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
       LEFT JOIN conversations c ON c.id = cr.chat_id
       LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+      JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
       WHERE a.name = $1
         AND cr.called_at::date >= $2
         AND cr.called_at::date <= $3
-        AND s.call_iqs_score IS NOT NULL
       GROUP BY 1, 2
     `, [agentName, dateFrom, dateTo]).catch(() => []);
 
@@ -471,18 +476,23 @@ export async function GET(req: NextRequest) {
   `, [agentName, wowFrom]);
 
     const wowCallRows = await query<{
-      week_key: string; call_vol: string; avg_call_iqs: string;
+      week_key: string; call_vol: string; avg_call_iqs: string; csat_good: string; csat_total: string;
     }>(`
     SELECT
       TO_CHAR(date_trunc('week', cr.called_at), 'YYYY-MM-DD') AS week_key,
       COUNT(cr.id)::text                                        AS call_vol,
-      AVG(s.call_iqs_score) FILTER (
+      AVG(COALESCE(ce.iqs_percent, s.call_iqs_score)) FILTER (
         WHERE (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
           AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
-      )::text                                                   AS avg_call_iqs
+          AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
+      )::text                                                   AS avg_call_iqs,
+      COUNT(CASE WHEN c.csat_label = 'good' OR c.csat_score = 5 THEN 1 END)::text AS csat_good,
+      COUNT(CASE WHEN c.csat_label IS NOT NULL OR c.csat_score IN (1,3,5) THEN 1 END)::text AS csat_total
     FROM call_recordings cr
-    JOIN agents a ON a.id = cr.agent_id
+    LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+    LEFT JOIN conversations c ON c.id = cr.chat_id
     LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+    JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
     WHERE a.name = $1
       AND cr.called_at::date >= $2
     GROUP BY 1
@@ -550,7 +560,10 @@ export async function GET(req: NextRequest) {
         volume: wowKeys.map(k => parseInt(wowByKey[k]?.chat_vol ?? '0')),
       },
       calls: {
-        csat: wowKeys.map(() => null as number | null),
+        csat: wowKeys.map(k => {
+          const r = callByKey[k];
+          return r ? pctOrNull(parseInt(r.csat_good ?? '0'), parseInt(r.csat_total ?? '0')) : null;
+        }),
         iqs: wowKeys.map(k => {
           const r = callByKey[k];
           return r?.avg_call_iqs ? Math.round(parseFloat(r.avg_call_iqs)) : null;
