@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
+import { calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 
 async function resolveAgentId(dbUser: any, agentName: string): Promise<number | null> {
   if (dbUser?.user_id) {
@@ -210,8 +211,6 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
        WHERE c.agent_id = $1
          AND c.closed_at::date >= $2::date
          AND c.closed_at::date <= $3::date
-         AND (c.tags->>'disposition' IS NULL OR c.tags->>'disposition' NOT ILIKE '%junk%')
-         AND s.iqs_score IS NOT NULL
        ORDER BY s.iqs_score ASC NULLS LAST, c.closed_at DESC`,
       [agentId, weekStart, weekEnd]
     );
@@ -225,10 +224,20 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
   const chatBreaches: any[] = Array.isArray(gen.breaches) ? gen.breaches : [];
 
   const chatsHandled = chatRows.length > 0 ? chatRows.length : Number(nums.chatsHandled ?? 0);
-  const chatScores = chatRows.map((r) => Math.round(Number(r.iqs_score))).filter((n) => !Number.isNaN(n));
-  const chatsAvgScore = chatScores.length > 0
-    ? Math.round(chatScores.reduce((a, b) => a + b, 0) / chatScores.length)
-    : (nums.averageScore != null ? Number(nums.averageScore) : null);
+  const scoredNonJunkChats = chatRows.filter((r) => {
+    const isJunk = r.disposition && String(r.disposition).toLowerCase().includes('junk');
+    return !isJunk && r.iqs_score != null;
+  });
+  const chatScores = scoredNonJunkChats.map((r) => Math.round(Number(r.iqs_score))).filter((n) => !Number.isNaN(n));
+  const pooledChatParams = extractPooledParams(
+    scoredNonJunkChats.map((r) => r.parameters).filter(Boolean)
+  );
+  const weightedChatIqs = calculateWeightedOverallIQS(pooledChatParams, 'human', { roundDecimals: 1 });
+  const chatsAvgScore = weightedChatIqs != null
+    ? Math.round(weightedChatIqs)
+    : chatScores.length > 0
+      ? Math.round(chatScores.reduce((a, b) => a + b, 0) / chatScores.length)
+      : (nums.averageScore != null ? Number(nums.averageScore) : null);
   const chatsBelow85 = chatScores.length > 0
     ? chatScores.filter((s) => s < 85).length
     : Number(nums.below85Count ?? 0);
@@ -245,8 +254,8 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
     }
   }
 
-  const chatsEvidence: any[] = (chatRows.length > 0
-    ? chatRows.map((r, idx) => {
+  const chatsEvidence: any[] = (scoredNonJunkChats.length > 0
+    ? scoredNonJunkChats.map((r, idx) => {
         const sc = Math.round(Number(r.iqs_score));
         const prev = chatEvidenceFromGen.get(String(r.chat_id));
         const rawSummary = prev?.summary || '';
@@ -294,10 +303,6 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
        WHERE COALESCE(ce.agent_id, cr.agent_id, c.agent_id) = $1
          AND cr.called_at::date >= $2::date
          AND cr.called_at::date <= $3::date
-         AND (cr.call_disposition IS NULL OR cr.call_disposition NOT ILIKE '%junk%')
-         AND (cr.call_sub_disposition IS NULL OR cr.call_sub_disposition NOT ILIKE '%junk%')
-         AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
-         AND COALESCE(ce.iqs_percent, s.call_iqs_score) IS NOT NULL
        ORDER BY COALESCE(ce.iqs_percent, s.call_iqs_score) ASC NULLS LAST, cr.called_at DESC`,
       [agentId, weekStart, weekEnd]
     );
@@ -306,7 +311,12 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
   }
 
   const callsHandled = callRows.length;
-  const callScores = callRows.map((r) => Math.round(Number(r.score))).filter((n) => !Number.isNaN(n));
+  const scoredNonJunkCalls = callRows.filter((r) => {
+    const d1 = String(r.call_disposition || '').toLowerCase();
+    const d2 = String(r.call_sub_disposition || '').toLowerCase();
+    return !d1.includes('junk') && !d2.includes('junk') && r.score != null;
+  });
+  const callScores = scoredNonJunkCalls.map((r) => Math.round(Number(r.score))).filter((n) => !Number.isNaN(n));
   const callsAvgScore = callScores.length > 0 ? Math.round(callScores.reduce((a, b) => a + b, 0) / callScores.length) : null;
   const callsBelow85 = callScores.filter((s) => s < 85).length;
 
@@ -320,7 +330,7 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
   }
 
   let callsBreachesCount = 0;
-  const callsEvidence: any[] = callRows.map((r, idx) => {
+  const callsEvidence: any[] = scoredNonJunkCalls.map((r, idx) => {
     const sc = Math.round(Number(r.score));
     const hasGateFail = String(r.call_gate_result || '').toUpperCase() === 'FAIL';
     const mentions = Array.isArray(r.breach_mentions) ? r.breach_mentions : [];
@@ -356,11 +366,10 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
          c.intent_l1
        FROM email_reply_evaluations e
        LEFT JOIN email_conversations c ON c.id = e.ticket_id
-       WHERE (e.agent_id = $1 OR TRIM(e.agent_name) ILIKE $2)
+       WHERE (e.agent_id = $1 OR LOWER(TRIM(e.agent_name)) = LOWER(TRIM($2)))
          AND e.sent_at::date >= $3::date
          AND e.sent_at::date <= $4::date
-         AND (e.evaluation_status = 'Completed' OR e.quality_score IS NOT NULL)
-         AND (c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')
+         AND e.evaluation_status = 'Completed'
        ORDER BY COALESCE(e.qa_override_score, e.quality_score) ASC NULLS LAST, e.sent_at DESC`,
       [agentId, agentName, weekStart, weekEnd]
     );
@@ -369,11 +378,15 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
   }
 
   const emailsHandled = emailRows.length;
-  const emailScores = emailRows.map((r) => Math.round(Number(r.score))).filter((n) => !Number.isNaN(n));
+  const scoredNonJunkEmails = emailRows.filter((r) => {
+    const l1 = String(r.intent_l1 || '').toLowerCase();
+    return !l1.includes('junk') && r.score != null;
+  });
+  const emailScores = scoredNonJunkEmails.map((r) => Math.round(Number(r.score))).filter((n) => !Number.isNaN(n));
   const emailsAvgScore = emailScores.length > 0 ? Math.round(emailScores.reduce((a, b) => a + b, 0) / emailScores.length) : null;
   const emailsBelow85 = emailScores.filter((s) => s < 85).length;
   let emailsBreachesCount = 0;
-  const emailsEvidence: any[] = emailRows.map((r, idx) => {
+  const emailsEvidence: any[] = scoredNonJunkEmails.map((r, idx) => {
     const sc = Math.round(Number(r.score));
     if (r.compliance_passed === false) emailsBreachesCount++;
     const coaching = formatSimpleCoachingPoint('email', sc, agentName, r.parameter_scores, r.compliance_issues, r.qa_notes, idx);
