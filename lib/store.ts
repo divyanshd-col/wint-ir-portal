@@ -220,8 +220,6 @@ export async function storeSetCorrections(entries: object[]): Promise<void> {
 
 // --- IQS Score Flags (agent disputes a score, sent to quality for review) ---
 
-const IQS_FLAGS_KEY = 'wint_iqs_flags';
-
 export interface IQSChallengedParam {
   param: string;   // e.g. "Opening"
   note: string;    // agent's specific note for this param
@@ -488,9 +486,45 @@ export async function storeGetFlagThread(flagId: string): Promise<IQSFlagComment
   }
 }
 
-// --- IQS Audit Trail ---
+// --- IQS Audit Trail (PostgreSQL-backed) ---
 
-const IQS_AUDIT_KEY = 'wint_iqs_audit';
+let _storeTablesPromise: Promise<void> | null = null;
+function ensureAuditAndSkippedTables(): Promise<void> {
+  if (!_storeTablesPromise) {
+    _storeTablesPromise = Promise.all([
+      query(`
+        CREATE TABLE IF NOT EXISTS iqs_audit_log (
+          id TEXT PRIMARY KEY,
+          action TEXT NOT NULL,
+          chat_id TEXT NOT NULL,
+          actor_email TEXT NOT NULL,
+          actor_role TEXT NOT NULL,
+          ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          meta JSONB
+        );
+        CREATE INDEX IF NOT EXISTS idx_iqs_audit_log_ts ON iqs_audit_log (ts DESC);
+      `),
+      query(`
+        CREATE TABLE IF NOT EXISTS call_skipped_queue (
+          id TEXT PRIMARY KEY,
+          chat_id TEXT NOT NULL,
+          agent_name TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          skipped_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          status TEXT NOT NULL DEFAULT 'pending',
+          reviewed_by TEXT,
+          reviewed_at TIMESTAMPTZ,
+          review_note TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_call_skipped_queue_skipped_at ON call_skipped_queue (skipped_at DESC);
+      `),
+    ]).then(() => undefined).catch((e: any) => {
+      _storeTablesPromise = null;
+      log.warn('store', 'ensureAuditAndSkippedTables error', { err: e?.message ?? String(e) });
+    });
+  }
+  return _storeTablesPromise;
+}
 
 export interface IQSAuditEntry {
   id: string;
@@ -517,13 +551,57 @@ export interface IQSAuditEntry {
 
 export async function storeAppendAuditEntry(entry: IQSAuditEntry): Promise<void> {
   try {
-    await kv_pipeline([['LPUSH', IQS_AUDIT_KEY, JSON.stringify(entry)], ['LTRIM', IQS_AUDIT_KEY, '0', '1999']]);
-  } catch (e: any) { log.warn('store', 'kv audit error', { err: e?.message ?? String(e) }); }
+    await ensureAuditAndSkippedTables();
+    await query(
+      `INSERT INTO iqs_audit_log (id, action, chat_id, actor_email, actor_role, ts, meta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        entry.id,
+        entry.action,
+        String(entry.chatId),
+        entry.actorEmail,
+        entry.actorRole,
+        entry.ts || new Date().toISOString(),
+        entry.meta ? JSON.stringify(entry.meta) : null,
+      ],
+    );
+  } catch (e: any) {
+    log.warn('store', 'pg audit error', { err: e?.message ?? String(e) });
+  }
 }
 
 export async function storeGetAuditEntries(limit = 200): Promise<IQSAuditEntry[]> {
-  const raw = await kv_lrange(IQS_AUDIT_KEY, 0, limit - 1);
-  return raw.map(r => { try { return JSON.parse(r) as IQSAuditEntry; } catch { return null; } }).filter(Boolean) as IQSAuditEntry[];
+  try {
+    await ensureAuditAndSkippedTables();
+    const rows = await query<{
+      id: string;
+      action: IQSAuditEntry['action'];
+      chatId: string;
+      actorEmail: string;
+      actorRole: string;
+      ts: string;
+      meta: Record<string, any> | null;
+    }>(
+      `SELECT id, action, chat_id AS "chatId", actor_email AS "actorEmail", actor_role AS "actorRole", ts, meta
+       FROM iqs_audit_log
+       ORDER BY ts DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return rows.map(r => ({
+      id: r.id,
+      action: r.action,
+      chatId: r.chatId,
+      actorEmail: r.actorEmail,
+      actorRole: r.actorRole,
+      ts: r.ts ? new Date(r.ts).toISOString() : '',
+      ...(r.meta ? { meta: r.meta } : {}),
+    }));
+  } catch (e: any) {
+    log.warn('store', 'pg get audit error', { err: e?.message ?? String(e) });
+    return [];
+  }
 }
 
 export const storeGetAuditLog = storeGetAuditEntries;
@@ -670,9 +748,7 @@ export async function storeSetConversations(username: string, convs: SavedConver
   await kv_set(`convs:${username}`, JSON.stringify(convs));
 }
 
-// ── Call-skipped chats (chats pending manual QA review) ────────────────────
-
-const CALL_SKIPPED_KEY = 'wint_call_skipped';
+// ── Call-skipped chats (chats pending manual QA review, PostgreSQL-backed) ─────
 
 export interface CallSkippedEntry {
   id: string;
@@ -688,40 +764,101 @@ export interface CallSkippedEntry {
 
 export async function storeAppendCallSkipped(entry: CallSkippedEntry): Promise<void> {
   try {
-    await kv_pipeline([['LPUSH', CALL_SKIPPED_KEY, JSON.stringify(entry)], ['LTRIM', CALL_SKIPPED_KEY, '0', '999']]);
-  } catch {}
-}
-
-// --- QA Review Status (per-chat review tracking for pending IQS < 80% chats) ---
-
-const QA_REVIEW_PREFIX = 'wint_qa_review:';
-
-export async function storeGetQAReview(chatId: string): Promise<{ reviewedBy: string; reviewedAt: string; reviewNote: string } | null> {
-  const val = await kv_get(`${QA_REVIEW_PREFIX}${chatId}`);
-  if (!val) return null;
-  try { return JSON.parse(val); } catch { return null; }
-}
-
-export async function storeSetQAReview(chatId: string, data: { reviewedBy: string; reviewedAt: string; reviewNote: string }): Promise<void> {
-  await kv_set(`${QA_REVIEW_PREFIX}${chatId}`, JSON.stringify(data));
+    await ensureAuditAndSkippedTables();
+    await query(
+      `INSERT INTO call_skipped_queue (id, chat_id, agent_name, reason, skipped_at, status, reviewed_by, reviewed_at, review_note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        entry.id,
+        String(entry.chatId),
+        entry.agentName || '',
+        entry.reason || '',
+        entry.skippedAt || new Date().toISOString(),
+        entry.status || 'pending',
+        entry.reviewedBy || null,
+        entry.reviewedAt || null,
+        entry.reviewNote || null,
+      ],
+    );
+  } catch (e: any) {
+    log.warn('store', 'pg append call_skipped error', { err: e?.message ?? String(e) });
+  }
 }
 
 export async function storeGetCallSkipped(): Promise<string[]> {
-  return kv_lrange(CALL_SKIPPED_KEY, 0, -1);
+  try {
+    await ensureAuditAndSkippedTables();
+    const rows = await query<{
+      id: string;
+      chatId: string;
+      agentName: string;
+      reason: string;
+      skippedAt: string;
+      status: 'pending' | 'reviewed';
+      reviewedBy: string | null;
+      reviewedAt: string | null;
+      reviewNote: string | null;
+    }>(
+      `SELECT id, chat_id AS "chatId", agent_name AS "agentName", reason, skipped_at AS "skippedAt",
+              status, reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt", review_note AS "reviewNote"
+       FROM call_skipped_queue
+       ORDER BY skipped_at DESC
+       LIMIT 1000`,
+    );
+    return rows.map(r => JSON.stringify({
+      id: r.id,
+      chatId: r.chatId,
+      agentName: r.agentName,
+      reason: r.reason,
+      skippedAt: r.skippedAt ? new Date(r.skippedAt).toISOString() : '',
+      status: r.status,
+      ...(r.reviewedBy ? { reviewedBy: r.reviewedBy } : {}),
+      ...(r.reviewedAt ? { reviewedAt: new Date(r.reviewedAt).toISOString() } : {}),
+      ...(r.reviewNote ? { reviewNote: r.reviewNote } : {}),
+    }));
+  } catch (e: any) {
+    log.warn('store', 'pg get call_skipped error', { err: e?.message ?? String(e) });
+    return [];
+  }
 }
 
 export async function storeUpdateCallSkipped(
   id: string,
   updates: Partial<Pick<CallSkippedEntry, 'status' | 'reviewedBy' | 'reviewedAt' | 'reviewNote'>>,
 ): Promise<boolean> {
-  if (!ready()) return false;
-  const all = await storeGetCallSkipped();
-  const idx = all.findIndex(raw => { try { return JSON.parse(raw).id === id; } catch { return false; } });
-  if (idx < 0) return false;
   try {
-    const entry = { ...JSON.parse(all[idx]), ...updates };
-    await kv_pipeline([['LSET', CALL_SKIPPED_KEY, String(idx), JSON.stringify(entry)]]);
-    return true;
-  } catch { return false; }
+    await ensureAuditAndSkippedTables();
+    const fields: string[] = [];
+    const params: any[] = [id];
+
+    if (updates.status !== undefined) {
+      params.push(updates.status);
+      fields.push(`status = $${params.length}`);
+    }
+    if (updates.reviewedBy !== undefined) {
+      params.push(updates.reviewedBy);
+      fields.push(`reviewed_by = $${params.length}`);
+    }
+    if (updates.reviewedAt !== undefined) {
+      params.push(updates.reviewedAt);
+      fields.push(`reviewed_at = $${params.length}`);
+    }
+    if (updates.reviewNote !== undefined) {
+      params.push(updates.reviewNote);
+      fields.push(`review_note = $${params.length}`);
+    }
+
+    if (fields.length === 0) return true;
+
+    const res = await query(
+      `UPDATE call_skipped_queue SET ${fields.join(', ')} WHERE id = $1 RETURNING id`,
+      params,
+    );
+    return res.length > 0;
+  } catch (e: any) {
+    log.warn('store', 'pg update call_skipped error', { err: e?.message ?? String(e) });
+    return false;
+  }
 }
 

@@ -69,7 +69,7 @@ const CHAT_SUMMARY_SELECT = `
 const CHAT_PARAM_SELECT = `
   p.key AS param_key,
   ROUND(
-    SUM(CASE WHEN p.val->>'score' = 'true' THEN 1 WHEN p.val->>'score' = '0.5' THEN 0.5 ELSE 0 END)::numeric
+    SUM(CASE WHEN p.val->>'score' IN ('true', '1', 'Yes') THEN 1 WHEN p.val->>'score' IN ('0.5', 'Half') THEN 0.5 ELSE 0 END)::numeric
     / NULLIF(
         COUNT(*) FILTER (WHERE p.val->>'score' IS NOT NULL AND p.val->>'score' NOT IN ('null','')),
         0
@@ -197,6 +197,7 @@ export async function GET(req: NextRequest) {
     ${CHAT_PARAM_LATERAL}
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
       AND a.name = ANY($3) AND s.parameters IS NOT NULL
+      AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
     GROUP BY p.key
   `, [dateFrom, dateTo, agentNames]);
 
@@ -205,6 +206,7 @@ export async function GET(req: NextRequest) {
     FROM ${CHAT_PARAM_FROM}
     ${CHAT_PARAM_LATERAL}
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND s.parameters IS NOT NULL
+      AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
     GROUP BY p.key
   `, [dateFrom, dateTo]);
 
@@ -224,6 +226,7 @@ export async function GET(req: NextRequest) {
     ${CHAT_PARAM_LATERAL}
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
       AND a.name = ANY($3) AND s.parameters IS NOT NULL
+      AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
     GROUP BY a.name, p.key
   `, [dateFrom, dateTo, agentNames]);
 
@@ -339,7 +342,7 @@ export async function GET(req: NextRequest) {
         COUNT(e.id)::int AS volume
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+      WHERE e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
         AND LOWER(TRIM(e.agent_name)) = ANY($3::text[])
     `, [dateFrom, dateTo, lowerAgentNames])),
     safeEmailQuery(query<{ csat_pct: number | null; iqs: number | null; volume: number }>(`
@@ -350,7 +353,7 @@ export async function GET(req: NextRequest) {
         COUNT(e.id)::int AS volume
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+      WHERE e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
     `, [dateFrom, dateTo])),
     safeEmailQuery(query<{ agent_key: string; csat_pct: number | null; iqs: number | null; volume: number }>(`
       SELECT
@@ -361,7 +364,7 @@ export async function GET(req: NextRequest) {
         COUNT(e.id)::int AS volume
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+      WHERE e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
         AND LOWER(TRIM(e.agent_name)) = ANY($3::text[])
       GROUP BY LOWER(TRIM(e.agent_name))
     `, [dateFrom, dateTo, lowerAgentNames])),

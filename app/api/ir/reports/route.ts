@@ -369,7 +369,6 @@ async function enrichDhanushLatestScorecard(report: any, agentId: number, agentN
        WHERE (e.agent_id = $1 OR LOWER(TRIM(e.agent_name)) = LOWER(TRIM($2)))
          AND e.sent_at::date >= $3::date
          AND e.sent_at::date <= $4::date
-         AND e.evaluation_status = 'Completed'
        ORDER BY COALESCE(e.qa_override_score, e.quality_score) ASC NULLS LAST, e.sent_at DESC`,
       [agentId, agentName, weekStart, weekEnd]
     );

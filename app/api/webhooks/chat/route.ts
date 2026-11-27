@@ -40,10 +40,12 @@ import {
   getConversation,
   isScored,
   getUnlinkedCallsForContact,
+  findClosedConversationForCall,
   linkCallToChat,
   insertCallRecording,
   updateCallRecordingMetrics,
   updateCallDisposition,
+  recordCallPipelineFailure,
   saveRobylonWebhookPayload,
 } from '@/lib/robylon/db';
 import { storeHasProcessedEvent, storeMarkProcessedEvent } from '@/lib/store';
@@ -586,15 +588,36 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
           }
         }
 
-        // ── Step 6: Chunking removed ─────────────────────────────────────────
+        // ── Step 6: Two-way link — if the chat already closed before this call arrived, link & score now ──
+        if (contactId) {
+          try {
+            const convRow = await findClosedConversationForCall(contactId, calledAt, agentId);
+            if (convRow) {
+              await linkCallToChat(callId, convRow.id);
+              const conv = await getConversation(convRow.id);
+              const tags = conv?.tags as any;
+              const chatDisp = tags?.disposition || '';
+              const chatSub  = tags?.sub_disposition || '';
+              if (conv && chatDisp) {
+                const msgs = Array.isArray(conv.transcript) ? conv.transcript
+                  : Array.isArray((conv.transcript as any)?.messages) ? (conv.transcript as any).messages : [];
+                const chatText = transcriptFromJsonb(msgs);
+                await scoreLinkedCallsForChat(conv.id, chatText, chatDisp, chatSub, config);
+                console.log(`[webhook] Two-way linked & scored call ${callId} → chat ${conv.id}`);
+              } else {
+                console.log(`[webhook] Two-way linked call ${callId} → chat ${convRow.id} (awaiting tags)`);
+              }
+            }
+          } catch (linkErr: any) {
+            console.warn(`[webhook] Two-way link/score failed for call ${callId}:`, linkErr.message);
+          }
+        }
       }
     } catch (err: any) {
       console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
-      try {
-        await query(`UPDATE call_recordings SET transcript = NULL, status = 'failed' WHERE id = $1`, [callId]);
-      } catch (dbErr: any) {
-        console.error(`[webhook] Failed to update failed call status for ${callId}:`, dbErr.message);
-      }
+      await recordCallPipelineFailure(callId, err.message).catch(dbErr => {
+        console.error(`[webhook] Failed to record call failure for ${callId}:`, dbErr.message);
+      });
     }
   })());
 
