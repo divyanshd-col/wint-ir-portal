@@ -149,7 +149,7 @@ export default function TopBar() {
 
   const defaultAllTabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
   // For Dhanush and Harsh: top pill toggles are removed in favor of the Home landing page and the top-right Home icon
-  const tabs = isCustomUser ? [] : defaultAllTabs.filter((t) => t.key !== 'settings' && t.key !== 'analytics');
+  const tabs = isCustomUser ? [] : defaultAllTabs.filter((t) => t.key !== 'settings' && t.key !== 'analytics' && t.key !== 'roster' && t.key !== 'leave');
   const canOpenSettings = !isCustomUser && defaultAllTabs.some((t) => t.key === 'settings');
   const canOpenMcp = !isCustomUser && defaultAllTabs.some((t) => t.key === 'analytics');
   const current = activeTab(pathname);
