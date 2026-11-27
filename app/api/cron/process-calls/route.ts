@@ -2,7 +2,10 @@ const ROUTE = 'cron/process-calls';
 import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
+import { ensureRetryColumns, recordCallPipelineFailure } from '@/lib/robylon/db';
 import { runCallPipeline } from '@/lib/scoring/call-pipeline';
+
+export const maxDuration = 300;
 
 async function _GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -14,14 +17,18 @@ async function _GET(req: NextRequest) {
     }
   }
 
-  // 1. Fetch unprocessed calls (either received/stored OR linked/transcribed without evaluation)
+  await ensureRetryColumns();
+
+  // 1. Fetch unprocessed calls from the last 7 days with < 3 failed retries
   const pendingCalls = await query(`
     SELECT cr.id, cr.status
     FROM call_recordings cr
     LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
     WHERE cr.status IN ('received', 'stored', 'linked', 'transcribed')
       AND (ce.call_id IS NULL OR cr.status IN ('received', 'stored'))
-    ORDER BY cr.called_at ASC
+      AND cr.called_at >= NOW() - INTERVAL '7 days'
+      AND COALESCE(cr.retry_count, 0) < 3
+    ORDER BY cr.called_at DESC
     LIMIT 10
   `);
 
@@ -35,12 +42,7 @@ async function _GET(req: NextRequest) {
     } catch (err: any) {
       log.error(ROUTE, `[cron] Error processing call ${call.id}: ${err.message}`);
       results.push({ callId: call.id, success: false, error: err.message });
-      
-      // Update status to failed in DB to prevent infinite retry loops in same batch
-      await query(
-        `UPDATE call_recordings SET status = 'failed_pipeline', updated_at = NOW() WHERE id = $1`,
-        [call.id]
-      ).catch(() => {});
+      await recordCallPipelineFailure(call.id, err.message).catch(() => {});
     }
   }
 

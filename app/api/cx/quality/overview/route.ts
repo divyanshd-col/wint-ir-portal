@@ -97,14 +97,14 @@ export async function GET(req: NextRequest) {
   const paramRows = await query(`
     SELECT
       p.key AS param_name,
-      COUNT(*) FILTER (WHERE (p.val->>'score') = 'false') AS fail_count,
-      COUNT(*) FILTER (WHERE (p.val->>'score') = 'true')  AS pass_count,
+      COUNT(*) FILTER (WHERE (p.val->>'score') IN ('false', '0', 'No')) AS fail_count,
+      COUNT(*) FILTER (WHERE (p.val->>'score') IN ('true', '1', 'Yes'))  AS pass_count,
       COUNT(*) FILTER (
         WHERE p.val->>'score' IS NOT NULL
           AND p.val->>'score' NOT IN ('null','')
       ) AS scored_count,
       ROUND(
-        COUNT(*) FILTER (WHERE (p.val->>'score') = 'false')::numeric
+        COUNT(*) FILTER (WHERE (p.val->>'score') IN ('false', '0', 'No'))::numeric
         / NULLIF(COUNT(*) FILTER (
             WHERE p.val->>'score' IS NOT NULL
               AND p.val->>'score' NOT IN ('null','')

@@ -2,6 +2,23 @@ import { query } from '@/lib/cx/db';
 import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY } from '@/lib/param-keys';
 import { PARAM_ORDER, calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 
+let _retryColsPromise: Promise<void> | null = null;
+/** Ensure additive retry-tracking columns exist on conversations & call_recordings (safe with main). */
+export function ensureRetryColumns(): Promise<void> {
+  if (!_retryColsPromise) {
+    _retryColsPromise = Promise.all([
+      query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS scoring_retry_count INT NOT NULL DEFAULT 0`, []),
+      query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS scoring_last_error TEXT`, []),
+      query(`ALTER TABLE call_recordings ADD COLUMN IF NOT EXISTS retry_count INT NOT NULL DEFAULT 0`, []),
+      query(`ALTER TABLE call_recordings ADD COLUMN IF NOT EXISTS last_error TEXT`, []),
+    ]).then(() => undefined).catch(err => {
+      _retryColsPromise = null;
+      console.warn('[robylon/db] ensureRetryColumns failed:', err?.message);
+    });
+  }
+  return _retryColsPromise;
+}
+
 // Builds the per-parameter "fail count" SELECT columns for the v4 human rubric.
 // Two correctness points vs the old hardcoded SQL:
 //  1. Compare the score as TEXT (`->>'score' = 'false'`), never `::boolean` — v4
@@ -461,6 +478,7 @@ export async function claimCallForScoring(callId: string): Promise<boolean> {
 }
 
 export async function getConversationsWithUnscoredLinkedCalls(): Promise<ConversationRow[]> {
+  await ensureRetryColumns();
   await query(`
     UPDATE call_recordings SET status = 'linked', updated_at = NOW()
     WHERE status = 'scoring' AND updated_at < NOW() - INTERVAL '30 minutes'
@@ -469,9 +487,53 @@ export async function getConversationsWithUnscoredLinkedCalls(): Promise<Convers
     SELECT DISTINCT c.* FROM conversations c
     JOIN call_recordings cr ON cr.chat_id = c.id
     WHERE cr.status = 'linked' AND c.tags IS NOT NULL
+      AND cr.called_at >= NOW() - INTERVAL '7 days'
+      AND COALESCE(cr.retry_count, 0) < 3
       AND c.closed_at < NOW() - INTERVAL '30 minutes'
-    ORDER BY c.closed_at ASC LIMIT 50
+    ORDER BY c.closed_at DESC LIMIT 50
   `, []);
+}
+
+/** Record a scoring failure on linked calls for a chat; mark as 'failed' after 3 attempts. */
+export async function recordLinkedCallsScoringFailure(chatId: string, errorMsg: string): Promise<void> {
+  await ensureRetryColumns();
+  await query(`
+    UPDATE call_recordings
+    SET retry_count = COALESCE(retry_count, 0) + 1,
+        last_error = $2,
+        status = CASE WHEN COALESCE(retry_count, 0) + 1 >= 3 THEN 'failed' ELSE 'linked' END,
+        updated_at = NOW()
+    WHERE chat_id = $1 AND status IN ('linked', 'scoring')
+  `, [chatId, errorMsg.slice(0, 500)]);
+}
+
+/** Get stranded calls from the last 7 days (stuck transcribing, pending_link, received, stored) with < 3 retries. */
+export async function getStrandedCallsLast7Days(limit = 20): Promise<CallRecordingRow[]> {
+  await ensureRetryColumns();
+  return query<CallRecordingRow>(`
+    SELECT * FROM call_recordings
+    WHERE called_at >= NOW() - INTERVAL '7 days'
+      AND COALESCE(retry_count, 0) < 3
+      AND (
+        (status = 'pending_link' AND updated_at < NOW() - INTERVAL '15 minutes')
+        OR (status IN ('received', 'stored', 'transcribing') AND updated_at < NOW() - INTERVAL '30 minutes')
+      )
+    ORDER BY called_at DESC
+    LIMIT $1
+  `, [limit]);
+}
+
+/** Record a pipeline/transcription failure on a call recording; mark 'failed' after 3 attempts. */
+export async function recordCallPipelineFailure(callId: string, errorMsg: string): Promise<void> {
+  await ensureRetryColumns();
+  await query(`
+    UPDATE call_recordings
+    SET retry_count = COALESCE(retry_count, 0) + 1,
+        last_error = $2,
+        status = CASE WHEN COALESCE(retry_count, 0) + 1 >= 3 THEN 'failed_pipeline' ELSE status END,
+        updated_at = NOW()
+    WHERE id = $1
+  `, [callId, errorMsg.slice(0, 500)]);
 }
 
 export async function isScored(chatId: string): Promise<boolean> {
@@ -984,8 +1046,9 @@ export async function getScoredConversationsWeeklyParams(opts: GetScoredConversa
   });
 }
 
-/** Get conversations ready to score (have transcript but no iqs_scores row or text leg unscored) */
+/** Get conversations ready to score (have transcript, no iqs_scores row, and < 3 failed retries) */
 export async function getUnscoredConversations(minHoursOld = 12, limit = 50, fromDate?: string): Promise<ConversationRow[]> {
+  await ensureRetryColumns();
   const params: any[] = [minHoursOld, limit];
   const fromClause = fromDate ? `AND c.closed_at >= $3::timestamptz` : '';
   if (fromDate) params.push(fromDate);
@@ -994,7 +1057,8 @@ export async function getUnscoredConversations(minHoursOld = 12, limit = 50, fro
     SELECT c.*
     FROM conversations c
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
-    WHERE (s.chat_id IS NULL OR (s.iqs_score IS NULL AND s.status = 'skipped'))
+    WHERE s.chat_id IS NULL
+      AND COALESCE(c.scoring_retry_count, 0) < 3
       AND c.transcript IS NOT NULL
       AND (
         (jsonb_typeof(c.transcript) = 'array' AND jsonb_array_length(c.transcript) > 0)
@@ -1002,9 +1066,29 @@ export async function getUnscoredConversations(minHoursOld = 12, limit = 50, fro
       )
       AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
       ${fromClause}
-    ORDER BY c.closed_at ASC
+    ORDER BY COALESCE(c.scoring_retry_count, 0) ASC, c.closed_at DESC
     LIMIT $2
   `, params);
+}
+
+/** Record a scoring failure on a conversation; insert a 'failed' sentinel after 3 attempts so it stops retrying. */
+export async function recordChatScoringFailure(chatId: string, errorMsg: string): Promise<void> {
+  await ensureRetryColumns();
+  const rows = await query<{ scoring_retry_count: number }>(`
+    UPDATE conversations
+    SET scoring_retry_count = COALESCE(scoring_retry_count, 0) + 1,
+        scoring_last_error = $2
+    WHERE id = $1
+    RETURNING scoring_retry_count
+  `, [chatId, errorMsg.slice(0, 500)]);
+  const retries = rows[0]?.scoring_retry_count ?? 0;
+  if (retries >= 3) {
+    await query(`
+      INSERT INTO iqs_scores (chat_id, model_version, scored_at, status)
+      VALUES ($1, $2, NOW(), 'failed')
+      ON CONFLICT (chat_id) DO NOTHING
+    `, [chatId, `failed:${errorMsg.slice(0, 80)}`]);
+  }
 }
 
 /**
@@ -1233,15 +1317,15 @@ export async function getUnlinkedCallsForContact(
     SELECT * FROM call_recordings
     WHERE contact_id = $1
       AND chat_id IS NULL
-      AND called_at >= $2::timestamptz
-      AND called_at <= $3::timestamptz
+      AND called_at >= ($2::timestamptz - INTERVAL '10 minutes')
+      AND called_at <= ($3::timestamptz + INTERVAL '10 minutes')
       ${agentClause}
     ORDER BY called_at ASC
   `, params);
 }
 
 /** Find the closed conversation that a call belongs to, for self-linking after late transcription.
- *  Matches a conversation whose exact window (started_at → closed_at) contains the call. */
+ *  Matches a conversation whose window (with ±10 min grace buffer) contains the call. */
 export async function findClosedConversationForCall(
   contactId: number,
   calledAt: string,
@@ -1256,11 +1340,11 @@ export async function findClosedConversationForCall(
   const rows = await query<{ id: string }>(`
     SELECT id FROM conversations
     WHERE contact_id = $1
-      AND started_at <= $2::timestamptz
-      AND closed_at >= $2::timestamptz
+      AND started_at <= ($2::timestamptz + INTERVAL '10 minutes')
+      AND closed_at >= ($2::timestamptz - INTERVAL '10 minutes')
       AND closed_at IS NOT NULL
       ${agentClause}
-    ORDER BY started_at DESC
+    ORDER BY ABS(EXTRACT(EPOCH FROM (closed_at - $2::timestamptz))) ASC
     LIMIT 1
   `, params);
   return rows[0] ?? null;
