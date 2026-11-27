@@ -199,7 +199,6 @@ export async function GET(req: NextRequest) {
     WHERE TRIM(e.agent_name) ILIKE $1
       AND e.sent_at::date >= $2
       AND e.sent_at::date <= $3
-      AND (e.evaluation_status = 'Completed' OR e.quality_score IS NOT NULL)
   `, [agentName, dateFrom, dateTo]).catch(err => {
       console.warn('[my-analytics] emailStatRows error:', err);
       return [];
@@ -302,7 +301,6 @@ export async function GET(req: NextRequest) {
       WHERE TRIM(e.agent_name) ILIKE $1
         AND e.sent_at::date >= $2
         AND e.sent_at::date <= $3
-        AND (e.evaluation_status = 'Completed' OR e.quality_score IS NOT NULL)
         AND (c.intent_l1 IS NULL OR c.intent_l1 NOT ILIKE '%junk%')
       GROUP BY 1
     `, [agentName, dateFrom, dateTo]).catch(() => []);
@@ -511,7 +509,6 @@ export async function GET(req: NextRequest) {
     LEFT JOIN email_conversations c ON c.id = e.ticket_id
     WHERE TRIM(e.agent_name) ILIKE $1
       AND e.sent_at::date >= $2
-      AND (e.evaluation_status = 'Completed' OR e.quality_score IS NOT NULL)
     GROUP BY 1
   `, [agentName, wowFrom]).catch(() => []);
 
@@ -531,19 +528,11 @@ export async function GET(req: NextRequest) {
     for (const r of wowRows) {
       const wk = r.week_key;
       if (!wk || !wowParamMap[wk] || !Array.isArray(r.parameters)) continue;
-      for (const paramObj of r.parameters) {
-        if (!paramObj) continue;
-        for (const [rawKey, val] of Object.entries(paramObj as Record<string, any>)) {
-          if (rawKey.startsWith('__')) continue;
-          const pk = normalizeParamKey(rawKey);
-          if (!PARAM_ORDER.includes(pk)) continue;
-          if (!wowParamMap[wk][pk]) wowParamMap[wk][pk] = { yes: 0, total: 0 };
-          const score = val?.score;
-          if (score === true || score === 'Yes') { wowParamMap[wk][pk].yes++; wowParamMap[wk][pk].total++; }
-          else if (score === 0.5 || score === 'Half') { wowParamMap[wk][pk].yes += 0.5; wowParamMap[wk][pk].total++; }
-          else if (score === false || score === 'No') { wowParamMap[wk][pk].total++; }
-          // NA: skip (doesn't affect pass rate)
-        }
+      const pooled = extractPooledParamsFromRawArray(r.parameters);
+      for (const [pk, pval] of Object.entries(pooled)) {
+        if (!wowParamMap[wk][pk]) wowParamMap[wk][pk] = { yes: 0, total: 0 };
+        wowParamMap[wk][pk].yes += pval.yes;
+        wowParamMap[wk][pk].total += pval.total;
       }
     }
 

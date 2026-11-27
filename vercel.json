@@ -20,6 +20,12 @@
     },
     "app/api/cron/process-pcg-chat-evaluations/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/process-pending-scores/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/process-calls/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [

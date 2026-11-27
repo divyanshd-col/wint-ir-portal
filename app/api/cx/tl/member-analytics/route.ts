@@ -77,7 +77,7 @@ export const CALL_PARAM_LATERAL = `
 // boolean: that cast raises on v4's 0.5 half-scores and 500s the request.
 export const PASS_RATE_SELECT = `
   p.key AS param_key,
-  ROUND(SUM(CASE WHEN p.val->>'score'='true' THEN 1 WHEN p.val->>'score'='0.5' THEN 0.5 ELSE 0 END)::numeric
+  ROUND(SUM(CASE WHEN p.val->>'score' IN ('true','1','Yes') THEN 1 WHEN p.val->>'score' IN ('0.5','Half') THEN 0.5 ELSE 0 END)::numeric
         / NULLIF(COUNT(*) FILTER (WHERE p.val->>'score' IS NOT NULL AND p.val->>'score' NOT IN ('null','')),0)*100,1)::float AS pass_rate
 `;
 
@@ -260,7 +260,7 @@ async function getCachedCxAverages(dateFrom: string, dateTo: string) {
              COUNT(*)::int AS volume, COUNT(DISTINCT LOWER(TRIM(e.agent_name)))::int AS agents
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
+      WHERE e.sent_at::date >= $1 AND e.sent_at::date <= $2
     `, [dateFrom, dateTo]), []),
   ]);
 
@@ -354,7 +354,7 @@ export async function GET(req: NextRequest) {
              COUNT(e.id)::int AS volume
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+      WHERE e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
         AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
     `, [dateFrom, dateTo, agentName]), []),
 
@@ -480,8 +480,7 @@ export async function GET(req: NextRequest) {
              COUNT(e.id)::int AS volume
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed'
-        AND e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
+      WHERE e.sent_at::date >= $1::date AND e.sent_at::date <= $2::date
         AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
       GROUP BY 1 ORDER BY COUNT(e.id) DESC
     `, [dateFrom, dateTo, agentName]), []),
@@ -512,6 +511,7 @@ export async function GET(req: NextRequest) {
       ${CHAT_PARAM_LATERAL}
       WHERE c.closed_at::date >= $1 AND c.closed_at::date < $2
         AND a.name = $3 AND s.parameters IS NOT NULL
+        AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
         GROUP BY 1, 2 ORDER BY 1
     `, [wowFrom, wowTo, agentName]), []),
 
@@ -523,6 +523,7 @@ export async function GET(req: NextRequest) {
       ${CHAT_PARAM_LATERAL}
       WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
         AND a.name = $3 AND s.parameters IS NOT NULL
+        AND (c.tags IS NULL OR c.tags::text NOT ILIKE '%junk%')
       GROUP BY 1
     `, [dateFrom, dateTo, agentName]), []),
 
@@ -569,8 +570,7 @@ export async function GET(req: NextRequest) {
              COUNT(e.id)::int AS volume
       FROM email_reply_evaluations e
       LEFT JOIN email_conversations c ON c.id = e.ticket_id
-      WHERE e.evaluation_status = 'Completed'
-        AND e.sent_at::date >= $1::date AND e.sent_at::date < $2::date
+      WHERE e.sent_at::date >= $1::date AND e.sent_at::date < $2::date
         AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
       GROUP BY 1 ORDER BY 1
     `, [wowFrom, wowTo, agentName]), []),
