@@ -538,7 +538,7 @@ ${HOLIDAY_LIST.map((h) => `• ${h.displayDate} (${h.day}): ${h.name} - ${h.note
       iconBgClass: 'bg-white text-gray-800',
       icon: <CalendarIcon />,
     },
-  ];
+  ].filter(app => app.id !== 'roster' && app.id !== 'leave');
 
   return (
     <div className="quality-shell-container">
