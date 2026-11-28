@@ -589,7 +589,7 @@ export default function TLQualityCallsPage({ initialTab: propInitialTab, mode = 
                             gates={call.gates}
                             iqsScores={call.rawParameters || { scores: call.scores, evidence: call.reasoning }}
                             mode="view"
-                            allowRaiseDispute={true}
+                            allowRaiseDispute={false}
                             onDisputeRaised={() => fetchEvaluatedCalls()}
                             onDone={() => fetchEvaluatedCalls()}
                             onClose={() => setExpandedCallId(null)}
