@@ -423,7 +423,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                     gates={(chat as any).gates}
                     mobileNumber={chat.mobileNumber}
                     mode="view"
-                    allowRaiseDispute={true}
+                    allowRaiseDispute={false}
                     onDisputeRaised={() => fetchChats(page)}
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
